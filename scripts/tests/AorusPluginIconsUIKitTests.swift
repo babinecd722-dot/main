@@ -282,6 +282,8 @@ private enum AorusPluginIconsUIKitTests {
         guard let window = (UIApplication.shared.delegate as? AorusPluginIconsTestApplication)?.window else {
             fatalError("The native theme regression requires the application's visible window")
         }
+        checks += runBubbleBitmapRegression()
+        checks += await runRGBRegression(window: window)
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks
         print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")

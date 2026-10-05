@@ -16,7 +16,7 @@ import Foundation
 /// theme at once. A plugin that stops takes its layer with it.
 public enum AorusPluginAppearance {
     public enum Kind: Equatable {
-        /// `RRGGBB` or `RRGGBBAA`, with or without `#`.
+        /// `RRGGBB`, `RRGGBBAA`, or animated `RGB` / `RGB:AA`.
         case color
         /// One colour, or a list of up to this many for a gradient.
         case colors(Int)
@@ -119,6 +119,8 @@ public enum AorusPluginAppearance {
             Key("message.rankPlate", .flag, "The rounded plate under a title"),
             Key("message.hideRank", .flag, "No titles or labels beside names"),
             Key("message.rankCase", .choice(["asIs", "upper", "lower"]), "Letter case of titles and labels"),
+            Key("message.hideTime", .flag, "Hide only the message time; delivery, views and reactions remain"),
+            Key("presence.seconds", .flag, "Show exact last-seen timestamps with seconds when available"),
             Key("message.hideAvatar", .flag, "No avatars beside messages in groups"),
             Key("message.textWeight", .choice(["light", "regular", "medium", "semibold"]), "Weight of message text"),
 
@@ -420,13 +422,13 @@ public enum AorusPluginAppearance {
     private static func normalized(_ value: Any, kind: Kind) -> Result<Any, Problem> {
         switch kind {
         case .color:
-            guard let text = value as? String, let color = normalizedColor(text) else {
+            guard let text = value as? String, let color = normalizedAppearanceColor(text) else {
                 return .failure(Problem(reason: "expected a colour such as \"5B4DFF\" or \"5B4DFFCC\""))
             }
             return .success(color)
         case let .colors(limit):
             if let text = value as? String {
-                guard let color = normalizedColor(text) else {
+                guard let color = normalizedAppearanceColor(text) else {
                     return .failure(Problem(reason: "expected a colour such as \"5B4DFF\""))
                 }
                 return .success([color])
@@ -436,7 +438,7 @@ public enum AorusPluginAppearance {
             }
             var colors: [String] = []
             for item in list {
-                guard let text = item as? String, let color = normalizedColor(text) else {
+                guard let text = item as? String, let color = normalizedAppearanceColor(text) else {
                     return .failure(Problem(reason: "every colour in the list must look like \"5B4DFF\""))
                 }
                 colors.append(color)
@@ -462,6 +464,13 @@ public enum AorusPluginAppearance {
             }
             return .success(text)
         }
+    }
+
+    private static func normalizedAppearanceColor(_ text: String) -> String? {
+        let token = text.trimmingCharacters(in: .whitespaces).uppercased()
+        if token == "RGB" { return token }
+        if token.count == 6, token.hasPrefix("RGB:"), token.suffix(2).unicodeScalars.allSatisfy({ hexDigits.contains($0) }) { return token }
+        return normalizedColor(text)
     }
 
     /// `RRGGBB` or `RRGGBBAA` in capitals, or nil for anything else.

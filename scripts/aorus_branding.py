@@ -18343,6 +18343,9 @@ public enum AorusPluginAppearanceValues {
         if let own = UserDefaults.standard.dictionary(forKey: messageLookKey), !own.isEmpty {
             values.merge(own, uniquingKeysWith: { _, own in own })
         }
+        if let seconds = UserDefaults.standard.object(forKey: "aorusgram_presence_seconds") as? NSNumber {
+            values["presence.seconds"] = seconds.boolValue
+        }
         if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
             values = [:]
         }
@@ -18441,7 +18444,14 @@ public enum AorusPluginAppearanceValues {
         } else {
             return nil
         }
-        let colors = list.compactMap { parseColor($0) }
+        let colors: [UIColor]
+        if list.count == 1, let token = list.first, AorusRGBColors.isRGB(token) {
+            colors = [0.0, 0.12, 0.24].compactMap { AorusRGBColors.color(token, offset: $0) }
+        } else {
+            colors = list.enumerated().compactMap { index, text in
+                AorusRGBColors.color(text, offset: Double(index) * 0.12) ?? parseColor(text)
+            }
+        }
         return colors.isEmpty ? nil : colors
     }
 
@@ -18480,6 +18490,7 @@ public enum AorusPluginAppearanceValues {
     }
 
     private static func parseColor(_ text: String) -> UIColor? {
+        if let color = AorusRGBColors.color(text) { return color }
         guard text.count == 6 || text.count == 8, let raw = UInt64(text, radix: 16) else {
             return nil
         }
@@ -18705,7 +18716,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         func components(_ source: PresentationThemeBubbleColorComponents) -> PresentationThemeBubbleColorComponents {
             var updated = source.withUpdated(fill: fill, highlightedFill: pc("highlight"), stroke: pc("stroke"), reactionInactiveBackground: pc("reaction"), reactionInactiveForeground: pc("reactionText"), reactionActiveBackground: pc("reactionSelected"), reactionActiveForeground: pc("reactionSelectedText"))
             if let opacity, opacity < 1.0 {
-                updated = updated.withUpdated(fill: updated.fill.map { $0.withMultipliedAlpha(opacity) }, highlightedFill: updated.highlightedFill.withMultipliedAlpha(opacity))
+                updated = updated.withUpdated(fill: updated.fill.map { AorusRGBColors.withAlpha($0, multipliedBy: opacity) }, highlightedFill: updated.highlightedFill.withMultipliedAlpha(opacity))
             }
             if let shadowStrength {
                 // Soft and close under a light shadow, deeper and further under a strong one;
@@ -18960,7 +18971,7 @@ def patch_plugin_appearance(tg: Path) -> None:
             "                            // AorusGram: the tint the person or a plugin gave the glass, for the panes the app\n"
             "                            // draws plainly. A pane Telegram gives a colour of its own keeps it: that colour\n"
             "                            // means something.\n"
-            "                            if tintColor.kind == .panel || tintColor.kind == .clear, let aorusTint = AorusGlassStyle.current(dark: isDark).tint {\n"
+            "                            if tintColor.kind == .panel || tintColor.kind == .clear, let aorusTint = AorusGlassStyle.current(dark: isDark).tint, !AorusRGBColors.isAnimated(aorusTint) {\n"
             "                                glassEffectValue.tintColor = aorusTint\n"
             "                            }\n"
             "                            glassEffect = glassEffectValue\n"
@@ -20158,7 +20169,7 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
             fill = []
         }
         // The native glass takes the tint itself; the older glass and a plate are tinted here.
-        let tint: UIColor? = drawnPlainly && (style.replacesGlass || self.nativeView == nil) ? style.tint : nil
+        let tint: UIColor? = drawnPlainly && (style.replacesGlass || self.nativeView == nil || style.tint.map(AorusRGBColors.isAnimated) == true) ? style.tint : nil
         // With the glass turned off in AorusGram's settings, what surrounds the glass goes with
         // it; a plate is not glass and stays.
         let glassShown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
@@ -30659,6 +30670,10 @@ def main() -> None:
     # After patch_glass_global_toggle and patch_plugin_appearance, whose lines it moves, and
     # patch_message_settings, beside whose install line it installs its own.
     patch_bubble_settings(tg)
+    from aorus_message_details import patch_message_details
+    patch_message_details(tg)
+    from aorus_rgb_colors import patch_rgb_colors
+    patch_rgb_colors(tg)
     # After the glass toggle and Interface 2.0, which rewrite parts of the menus it styles.
     patch_glass_everywhere(tg)
     # After every patch of the message nodes: it anchors on the side buttons and the deleted

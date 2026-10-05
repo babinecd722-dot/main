@@ -1051,6 +1051,7 @@ func aorusLookHex(_ color: UIColor) -> String {
 }
 
 func aorusLookColor(_ hex: String) -> UIColor? {
+    if let color = AorusRGBColors.color(hex) { return color }
     let text = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
     guard text.count == 6 || text.count == 8, let raw = UInt64(text, radix: 16) else {
         return nil
@@ -1496,6 +1497,7 @@ final class AorusLookSwatchView: UIView {
         self.fillLayer.frame = bounds
         self.fillLayer.path = UIBezierPath(ovalIn: inner).cgPath
         self.fillLayer.fillColor = fill.cgColor
+        AorusRGBColors.animate(self.fillLayer, keyPath: "fillColor", colors: [fill])
         self.edgeLayer.frame = bounds
         self.edgeLayer.path = UIBezierPath(ovalIn: inner.insetBy(dx: 0.5, dy: 0.5)).cgPath
         self.edgeLayer.strokeColor = (edge ?? .clear).cgColor
@@ -1519,7 +1521,7 @@ final class AorusLookSwatchView: UIView {
     }
 }
 
-/// A row of colours to choose from: Telegram's own colour first, then the palette, then any
+/// A row of colours: Telegram's own colour first, then RGB, the palette and any
 /// colour at all from the system picker.
 final class AorusLookSwatchesItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
@@ -1540,15 +1542,16 @@ final class AorusLookSwatchesItem: ListViewItem, ItemListItem {
         self.custom = custom
     }
 
-    /// Which circle is chosen: 0 for Telegram's colour, then the palette, then the picker's.
+    /// Which circle is chosen: 0 for Telegram's colour, 1 for RGB, then the palette and picker.
     var selectedIndex: Int {
         guard let selected = self.selected?.uppercased() else {
             return 0
         }
         if let index = self.palette.firstIndex(where: { $0.uppercased() == selected || $0.uppercased() + "FF" == selected }) {
-            return index + 1
+            return index + 2
         }
-        return self.palette.count + 1
+        if AorusRGBColors.isRGB(selected) { return 1 }
+        return self.palette.count + 2
     }
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -1621,10 +1624,14 @@ final class AorusLookSwatchesItemNode: AorusLookRowNode {
             self.pendingIndex = 0
             self.refresh(animated: true)
             item.picked(nil)
-        } else if index <= item.palette.count {
+        } else if index == 1 {
             self.pendingIndex = index
             self.refresh(animated: true)
-            item.picked(item.palette[index - 1])
+            item.picked("RGB")
+        } else if index <= item.palette.count + 1 {
+            self.pendingIndex = index
+            self.refresh(animated: true)
+            item.picked(item.palette[index - 2])
         } else {
             item.custom()
         }
@@ -1642,9 +1649,9 @@ final class AorusLookSwatchesItemNode: AorusLookRowNode {
         titleLabel.text = item.title
         valueLabel.font = aorusLookValueFont(item.presentationData)
         valueLabel.textColor = theme.list.itemSecondaryTextColor
-        valueLabel.text = item.selected.map { "#" + $0.uppercased() } ?? aorusL("По умолчанию", "Default")
+        valueLabel.text = item.selected.map { AorusRGBColors.isRGB($0) ? "RGB" : "#" + $0.uppercased() } ?? aorusL("По умолчанию", "Default")
 
-        let count = item.palette.count + 2
+        let count = item.palette.count + 3
         while self.swatches.count < count {
             let swatch = AorusLookSwatchView(frame: CGRect())
             self.view.addSubview(swatch)
@@ -1682,8 +1689,11 @@ final class AorusLookSwatchesItemNode: AorusLookRowNode {
             let isSelected = index == selectedIndex
             if index == 0 {
                 swatch.update(fill: neutral, glyph: resetGlyph, glyphColor: theme.list.itemSecondaryTextColor, edge: nil, ring: isSelected ? theme.list.itemAccentColor : nil, rainbow: false, animated: animated || changed)
-            } else if index <= item.palette.count {
-                let color = aorusLookColor(item.palette[index - 1]) ?? .gray
+            } else if index == 1 {
+                let color = AorusRGBColors.color("RGB")!
+                swatch.update(fill: color, glyph: nil, glyphColor: .clear, edge: nil, ring: isSelected ? theme.list.itemAccentColor : nil, rainbow: false, animated: animated || changed)
+            } else if index <= item.palette.count + 1 {
+                let color = aorusLookColor(item.palette[index - 2]) ?? .gray
                 let luminance = aorusLookLuminance(color)
                 let faint = abs(luminance - cardLuminance) < 0.12
                 swatch.update(fill: color, glyph: nil, glyphColor: .clear, edge: faint ? edgeColor : nil, ring: isSelected ? (faint ? theme.list.itemSecondaryTextColor : color) : nil, rainbow: false, animated: animated || changed)
@@ -2091,6 +2101,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
     case preview(AorusLookPreview)
     case shapeHeader(String)
     case tails(String, Bool)
+    case hideTime(String, Bool)
     case radius(String, CGFloat)
     case merge(String, Bool)
     /// The join radius, and the most it can be: the corner radius itself.
@@ -2126,7 +2137,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
         switch self {
         case .preview:
             return AorusMessageSettingsSection.preview.rawValue
-        case .shapeHeader, .tails, .radius, .merge, .radiusSmall, .width, .shapeFooter:
+        case .shapeHeader, .tails, .hideTime, .radius, .merge, .radiusSmall, .width, .shapeFooter:
             return AorusMessageSettingsSection.shape.rawValue
         case .colorsHeader, .side, .transparency, .shadow, .color, .colorsFooter:
             return AorusMessageSettingsSection.colors.rawValue
@@ -2151,16 +2162,18 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return 10
         case .tails:
             return 11
-        case .radius:
+        case .hideTime:
             return 12
-        case .merge:
+        case .radius:
             return 13
-        case .radiusSmall:
+        case .merge:
             return 14
-        case .width:
+        case .radiusSmall:
             return 15
-        case .shapeFooter:
+        case .width:
             return 16
+        case .shapeFooter:
+            return 17
         case .colorsHeader:
             return 20
         case .side:
@@ -2230,6 +2243,10 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
         case let .tails(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.tails", value)
+            })
+        case let .hideTime(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.setShape("message.hideTime", value)
             })
         case let .radius(title, value):
             // Half a point at a time, so the corners round off smoothly under the finger.
@@ -2341,6 +2358,7 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, pre
 
     entries.append(.shapeHeader(aorusL("ФОРМА", "SHAPE")))
     entries.append(.tails(aorusL("Хвостик", "Tail"), corners.hasTails))
+    entries.append(.hideTime(aorusL("Скрыть время", "Hide Time"), AorusPluginAppearanceValues.flag("message.hideTime", in: values) ?? false))
     entries.append(.radius(aorusL("Скругление углов", "Corner Radius"), min(16.0, corners.mainRadius)))
     entries.append(.merge(aorusL("Слитные сообщения", "Join Consecutive Messages"), corners.mergeBubbleCorners))
     // Where messages join can be as round as their corners and no rounder, so the slider ends

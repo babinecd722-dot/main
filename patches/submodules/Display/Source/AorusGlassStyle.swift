@@ -606,15 +606,20 @@ public final class AorusGlassDecorationView: UIView {
         self.fillLayer.isHidden = fill.isEmpty
         if !fill.isEmpty {
             self.fillLayer.colors = aorusGlassGradientColors(fill)
+            AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: fill.count == 1 ? [fill[0], fill[0]] : fill)
             aorusGlassSetPath(self.fillMask, outlines.outline, transition: pathTransition)
+        } else {
+            AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: [])
         }
 
         if let tint {
             self.tintLayer.isHidden = false
             self.tintLayer.fillColor = tint.cgColor
+            AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [tint])
             aorusGlassSetPath(self.tintLayer, outlines.outline, transition: pathTransition)
         } else {
             self.tintLayer.isHidden = true
+            AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [])
         }
 
         // A pixel pane has no highlight. Light drawn on its flat plate — a row under the top
@@ -652,6 +657,7 @@ public final class AorusGlassDecorationView: UIView {
         if style.border.isEmpty {
             self.borderContainer.isHidden = true
             self.borderGradient.removeAnimation(forKey: "aorusMotion")
+            AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: [])
         } else {
             self.borderContainer.isHidden = false
             let width = outlines.borderWidth
@@ -726,6 +732,7 @@ public final class AorusGlassDecorationView: UIView {
                 self.borderGradient.position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
             }
             self.borderGradient.colors = aorusGlassGradientColors(colors)
+            AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: colors.count == 1 ? [colors[0], colors[0]] : colors)
         }
 
         CATransaction.commit()
@@ -802,12 +809,14 @@ public final class AorusGlassHaloView: UIView {
             self.glowLayer.isHidden = false
             transition.updateFrame(layer: self.glowLayer, frame: bounds)
             self.glowLayer.shadowColor = glow.cgColor
+            AorusRGBColors.animate(self.glowLayer, keyPath: "shadowColor", colors: [glow])
             self.glowLayer.shadowOpacity = 1.0
             self.glowLayer.shadowRadius = glowRadius
             self.glowLayer.shadowOffset = CGSize()
             aorusGlassSetShadowPath(self.glowLayer, outlines.outline, transition: pathTransition)
         } else {
             self.glowLayer.isHidden = true
+            AorusRGBColors.animate(self.glowLayer, keyPath: "shadowColor", colors: [])
         }
 
         CATransaction.commit()
@@ -1049,7 +1058,8 @@ public final class AorusGlassSurface: NSObject {
             }
         }
         let effect = UIGlassEffect(style: clear ? .clear : .regular)
-        effect.tintColor = (self.drawnPlainly ? style.tint : nil) ?? defaultTint
+        let tint = self.drawnPlainly ? style.tint : nil
+        effect.tintColor = tint.map(AorusRGBColors.isAnimated) == true ? defaultTint : (tint ?? defaultTint)
         return effect
     }
 
@@ -1059,7 +1069,7 @@ public final class AorusGlassSurface: NSObject {
         }
         let style = self.style
         let fill: [UIColor] = style.replacesGlass && self.drawnPlainly ? style.plate(clear: self.isClear, isDark: self.isDark) : (self.drawnPlainly ? style.fill : [])
-        let tint: UIColor? = self.drawnPlainly && (style.replacesGlass || !self.materialTakes) ? style.tint : nil
+        let tint: UIColor? = self.drawnPlainly && (style.replacesGlass || !self.materialTakes || style.tint.map(AorusRGBColors.isAnimated) == true) ? style.tint : nil
         // With the glass turned off in AorusGram's settings, what surrounds it goes too, as it
         // does around every other pane; a plate is not glass and stays.
         let glassShown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true

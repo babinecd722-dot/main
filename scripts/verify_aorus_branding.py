@@ -48,7 +48,9 @@ def drawn_own_icon_names(tg: Path) -> set[str]:
 
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
+    from aorus_message_details import verify_message_details
     err: list[str] = []
+    err.extend(verify_message_details(tg))
     from aorus_local_profile import verify_local_profile
     err.extend(verify_local_profile(tg))
     from aorus_navigation_icons import verify_navigation_icons
@@ -3990,7 +3992,7 @@ def main() -> None:
         core_text = appearance_core.read_text(encoding="utf-8")
         drawn = "".join(
             path.read_text(encoding="utf-8")
-            for path in (presentation_data, glass_component, glass_style, settings_resources, profile_header, bubble_node, chat_presentation)
+            for path in (presentation_data, glass_component, glass_style, settings_resources, profile_header, bubble_node, chat_presentation, tg / "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift", tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift")
         )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")

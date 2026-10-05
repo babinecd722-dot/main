@@ -1008,6 +1008,8 @@ jobs:
           #     long-press and tap menus and the action sheets are routed through it by
           #     aorus_branding.py; the glass module adds its own shapes to it.
           cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
@@ -1130,6 +1132,9 @@ jobs:
 
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
+
+      - name: Native message details preflight
+        run: python3 aorusgram/scripts/message_details_check.py aorusgram --telegram-source telegram-ios
 
       - name: Plugin native screen links preflight
         run: python3 aorusgram/scripts/plugin_screens_check.py aorusgram

@@ -854,6 +854,7 @@ private let aorusGlassLines: [String] = ["solid", "dashed", "dotted"]
 private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
     case preview(AorusBubblePreview)
     case materialHeader(String)
+    case exactOnline(String, Bool)
     case material(Int)
     case roundness(String, CGFloat)
     case pixelSize(String, CGFloat)
@@ -888,7 +889,7 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
 
     var section: ItemListSectionId {
         switch self {
-        case .preview:
+        case .preview, .exactOnline:
             return AorusBubbleSettingsSection.preview.rawValue
         case .materialHeader, .material, .roundness, .pixelSize, .pixelIcons, .pixelIconSize, .materialFooter:
             return AorusBubbleSettingsSection.material.rawValue
@@ -913,6 +914,8 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return 0
         case .materialHeader:
             return 10
+        case .exactOnline:
+            return 1
         case .material:
             return 11
         case .pixelSize:
@@ -991,6 +994,11 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .materialFooter(text), let .colorsFooter(text), let .outlineFooter(text), let .lightFooter(text), let .iconsFooter(text), let .resetFooter(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .exactOnline(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                UserDefaults.standard.set(value, forKey: "aorusgram_presence_seconds")
+                NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
+            })
         case let .material(index):
             let font = Font.medium(14.0)
             let options = [aorusL("Стекло", "Glass"), aorusL("Прозрачное", "Transparent"), aorusL("Плотное", "Solid"), aorusL("Пиксели", "Pixel")].map { AorusLookSegmentOption(text: $0, font: font) }
@@ -1113,6 +1121,8 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
 
     entries.append(.preview(AorusBubblePreview(theme: presentationData.theme, corners: presentationData.chatBubbleCorners, wallpaper: presentationData.chatWallpaper, sample: sample)))
 
+    entries.append(.exactOnline(aorusL("Показывать точное время онлайна", "Show Exact Last Seen"), AorusPluginAppearanceValues.flag("presence.seconds", in: AorusPluginAppearanceValues.current()) ?? false))
+
     entries.append(.materialHeader(aorusL("МАТЕРИАЛ", "MATERIAL")))
     let material = AorusPluginAppearanceValues.string("glass.style", dark: dark, in: values) ?? "regular"
     let plate = material == "solid" || material == "pixel"
@@ -1141,7 +1151,7 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     entries.append(.color(0, AorusLookColorRow(key: "glass.tint", stop: 0, title: plate ? aorusL("Оттенок", "Tint") : aorusL("Оттенок стекла", "Glass Tint"), palette: .glassTint, selected: tint.first, dark: dark)))
     if let drawnTint = AorusPluginAppearanceValues.color("glass.tint", dark: dark, in: values) {
         let alpha = drawnTint.cgColor.alpha
-        let base = String(aorusLookHex(drawnTint.withAlphaComponent(1.0)).prefix(6))
+        let base = tint.first.map { AorusRGBColors.isRGB($0) } == true ? "RGB:" : String(aorusLookHex(drawnTint.withAlphaComponent(1.0)).prefix(6))
         entries.append(.tintStrength(aorusL("Сила оттенка", "Tint Strength"), max(0.05, min(0.9, alpha)), base))
     }
     let fill = aorusGlassColors("glass.fill", dark: dark)
@@ -1393,7 +1403,14 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
             aorusSetPixelIcons(on)
         },
         setColor: { row, hex in
-            aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)
+            let dark = screen.theme?.overallDarkAppearance ?? row.dark
+            let color: String?
+            if hex == "RGB", row.palette == .glassTint {
+                color = dark ? "RGB:4D" : "RGB:40"
+            } else {
+                color = hex
+            }
+            aorusGlassStoreColor(row, color, dark: dark)
         },
         setTintStrength: { base, strength in
             let alpha = Int((max(0.0, min(1.0, strength)) * 255.0).rounded())

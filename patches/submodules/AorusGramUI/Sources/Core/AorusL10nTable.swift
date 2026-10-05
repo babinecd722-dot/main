@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Hide Time": "Nascondi l’ora",
+        "Show Exact Last Seen": "Mostra l’ultimo accesso esatto",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La trasparenza del colore del bagliore ne determina l’intensità. Le capsule pixel proiettano un’ombra netta, come nei vecchi giochi. Non hanno riflesso.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Nella modalità pixel le icone sono pixel. Un altro stile di icone si può scegliere disattivando Icone pixel qui sopra.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel è la modalità pixel per tutta l'app: capsule a gradini, menu e fogli delle azioni e, con Icone pixel attive, tutte le icone, disegnate come le disegna lo stile pixel dei plugin.",
@@ -1020,6 +1022,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Hide Time": "Ukryj godzinę",
+        "Show Exact Last Seen": "Pokaż dokładny czas ostatniej aktywności",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Przezroczystość koloru poświaty określa jej siłę. Pikselowe kapsuły rzucają ostry cień, jak w starych grach. Nie mają odblasku.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "W trybie pikselowym ikony są pikselowe. Inny styl ikon można wybrać po wyłączeniu pikselowych ikon powyżej.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksele to tryb pikselowy w całej aplikacji: schodkowe kapsuły, menu i arkusze akcji, a z włączonymi pikselowymi ikonami — każda ikona, rysowana tak jak w pikselowym stylu wtyczek.",
@@ -1987,6 +1991,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Hide Time": "Tijd verbergen",
+        "Show Exact Last Seen": "Exacte tijd van laatst gezien tonen",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "De transparantie van de gloedkleur bepaalt de sterkte. Pixelcapsules werpen een harde schaduw, zoals in oude games. Glans hebben ze niet.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "In de pixelmodus zijn de iconen pixelig. Een andere iconstijl kies je zodra Pixeliconen hierboven uit staat.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel is de pixelmodus voor de hele app: getrapte capsules, menu's en actiebladen en, met Pixeliconen aan, elk icoon, getekend zoals de pixelstijl van plug-ins dat doet.",
@@ -2954,6 +2960,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Hide Time": "Amaga l’hora",
+        "Show Exact Last Seen": "Mostra l’última connexió exacta",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparència del color del resplendor en fixa la intensitat. Les càpsules de píxels projecten una ombra dura, com als jocs antics. No tenen lluïssor.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el mode de píxels les icones són de píxels. Es pot triar un altre estil d'icones desactivant Icones de píxels a dalt.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxels és el mode de píxels per a tota l'aplicació: càpsules esglaonades, menús i fulls d'accions i, amb Icones de píxels activades, totes les icones, dibuixades com ho fa l'estil de píxels dels connectors.",
@@ -3921,6 +3929,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Hide Time": "Sembunyikan waktu",
+        "Show Exact Last Seen": "Tampilkan waktu terakhir dilihat secara tepat",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparansi warna pendar menentukan kekuatannya. Kapsul piksel memberi bayangan tegas, seperti gim lawas. Kilau tidak ada.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mode piksel, ikon berpiksel. Gaya ikon lain dapat dipilih setelah Ikon piksel di atas dimatikan.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel adalah mode piksel untuk seluruh aplikasi: kapsul bertangga, menu dan lembar tindakan, dan dengan Ikon piksel aktif, setiap ikon, digambar seperti gaya piksel plugin.",
@@ -4888,6 +4898,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Hide Time": "Sembunyikan masa",
+        "Show Exact Last Seen": "Tunjukkan masa terakhir dilihat yang tepat",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Kelutsinaran warna cahaya menentukan kekuatannya. Kapsul piksel menghasilkan bayang tajam, seperti permainan lama. Kilauan tiada.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mod piksel, ikon adalah piksel. Gaya ikon lain boleh dipilih selepas Ikon piksel di atas dimatikan.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel ialah mod piksel untuk seluruh aplikasi: kapsul bertangga, menu dan helaian tindakan dan, dengan Ikon piksel dihidupkan, setiap ikon, dilukis seperti gaya piksel pemalam.",
@@ -5855,6 +5867,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Hide Time": "Схаваць час",
+        "Show Exact Last Seen": "Паказваць дакладны час апошняй актыўнасці",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Празрыстасць колеру свячэння задае яго сілу. У піксельных капсул цень рэзкая, як у старых гульнях. Бліку ў іх няма.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельным рэжыме іконкі піксельныя. Іншы стыль іконак можна выбраць, выключыўшы «Піксельныя іконкі» вышэй.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельны рэжым ва ўсёй праграме: ступеньчатыя капсулы, меню і аркушы дзеянняў, а з «Піксельнымі іконкамі» — і ўсе іконкі, як іх малюе піксельны стыль плагінаў.",
@@ -6822,6 +6836,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Hide Time": "Vaqtni yashirish",
+        "Show Exact Last Seen": "Oxirgi faollik vaqtini aniq ko‘rsatish",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Nur rangining shaffofligi uning kuchini belgilaydi. Piksel kapsulalar eski o‘yinlardagidek keskin soya tashlaydi. Ularda yaltiroq yo‘q.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel rejimida belgilar pikselli. Boshqa belgilar uslubini tanlash uchun yuqoridagi «Piksel belgilar»ni o‘chiring.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel — butun ilova uchun piksel rejimi: zinapoyali kapsulalar, menyular va amallar varaqlari, «Piksel belgilar» yoqilganda esa barcha belgilar ham, plaginlarning piksel uslubi chizganidek.",
@@ -7789,6 +7805,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Hide Time": "시간 숨기기",
+        "Show Exact Last Seen": "정확한 마지막 접속 시간 표시",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "발광 색의 투명도가 세기를 정합니다. 픽셀 캡슐은 옛날 게임처럼 선명한 그림자를 드리웁니다. 하이라이트는 없습니다.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "픽셀 모드에서는 아이콘이 픽셀로 그려집니다. 위의 픽셀 아이콘을 끄면 다른 아이콘 스타일을 고를 수 있습니다.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "픽셀은 앱 전체의 픽셀 모드입니다. 계단식 캡슐, 메뉴와 작업 시트, 그리고 픽셀 아이콘을 켜면 모든 아이콘이 플러그인의 픽셀 스타일처럼 그려집니다.",
@@ -8756,6 +8774,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Hide Time": "إخفاء الوقت",
+        "Show Exact Last Seen": "عرض وقت آخر ظهور بالدقة",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "تحدد شفافية لون التوهج قوته. تُلقي الكبسولات البكسلية ظلًا حادًا كما في الألعاب القديمة. ولا لمعة لها.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "في وضع البكسل تكون الأيقونات بكسلية. يمكن اختيار نمط أيقونات آخر بعد إيقاف الأيقونات البكسلية أعلاه.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "البكسل هو وضع البكسل للتطبيق كله: كبسولات متدرجة، والقوائم وأوراق الإجراءات، ومع تفعيل الأيقونات البكسلية كل الأيقونات، مرسومة كما يرسمها نمط البكسل في الإضافات.",
@@ -9723,6 +9743,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Hide Time": "پنهان کردن زمان",
+        "Show Exact Last Seen": "نمایش زمان دقیق آخرین بازدید",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "شفافیت رنگ درخشش شدت آن را تعیین می‌کند. کپسول‌های پیکسلی سایه‌ای تیز دارند، مثل بازی‌های قدیمی. برق ندارند.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "در حالت پیکسلی نمادها پیکسلی‌اند. با خاموش کردن نمادهای پیکسلی در بالا می‌توانید سبک دیگری انتخاب کنید.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "پیکسل حالت پیکسلی برای کل برنامه است: کپسول‌های پله‌ای، منوها و برگه‌های عمل و، با روشن بودن نمادهای پیکسلی، همهٔ نمادها، همان‌طور که سبک پیکسلی افزونه‌ها می‌کشد.",
@@ -10690,6 +10712,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Hide Time": "Уақытты жасыру",
+        "Show Exact Last Seen": "Соңғы кіру уақытын дәл көрсету",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Жарқыл түсінің мөлдірлігі оның күшін белгілейді. Пиксель капсулалардың көлеңкесі ескі ойындардағыдай анық. Оларда жылтыр жоқ.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Пиксель режимінде белгішелер пиксельді. Басқа белгіше стилін жоғарыдағы «Пиксель белгішелерді» өшіріп таңдауға болады.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксель — бүкіл қолданбаға арналған пиксель режимі: сатылы капсулалар, мәзірлер мен әрекет парақтары, ал «Пиксель белгішелер» қосулы болса — барлық белгішелер де, плагиндердің пиксель стилі салатындай.",
@@ -11657,6 +11681,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Hide Time": "隐藏时间",
+        "Show Exact Last Seen": "显示精确的最后上线时间",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "发光颜色的透明度决定其强度。像素胶囊会投下硬朗的阴影，就像老游戏里那样。也没有高光。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下图标为像素风格。关闭上方的“像素图标”后即可选择其他图标样式。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整个应用的像素模式：阶梯状胶囊、菜单和操作表，开启“像素图标”后还有所有图标，绘制方式与插件的像素样式相同。",
@@ -12625,6 +12651,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Hide Time": "隱藏時間",
+        "Show Exact Last Seen": "顯示精確的最後上線時間",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "發光顏色的透明度決定其強度。像素膠囊會投下硬朗的陰影，就像老遊戲裡那樣。也沒有高光。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下圖示為像素風格。關閉上方的「像素圖示」後即可選擇其他圖示樣式。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整個應用程式的像素模式：階梯狀膠囊、選單與動作表，開啟「像素圖示」後還有所有圖示，繪製方式與外掛的像素樣式相同。",
@@ -13592,6 +13620,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Hide Time": "時刻を非表示",
+        "Show Exact Last Seen": "最終オンライン時刻を秒まで表示",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "光彩の色の透明度で強さが決まります。ピクセルのカプセルは昔のゲームのようなくっきりした影を落とします。ハイライトはありません。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "ピクセルモードではアイコンはピクセルになります。上のピクセルアイコンをオフにすると、別のアイコンスタイルを選べます。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "ピクセルはアプリ全体のピクセルモードです。階段状のカプセル、メニューとアクションシート、そしてピクセルアイコンをオンにするとすべてのアイコンが、プラグインのピクセルスタイルと同じように描かれます。",
@@ -14559,6 +14589,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Hide Time": "Piilota aika",
+        "Show Exact Last Seen": "Näytä tarkka viimeksi nähty aika",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Hehkun värin läpinäkyvyys määrää sen voimakkuuden. Pikselikapselit luovat terävän varjon kuin vanhoissa peleissä. Kiiltoa niissä ei ole.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pikselitilassa kuvakkeet ovat pikseleitä. Toisen kuvaketyylin voi valita, kun yllä oleva Pikselikuvakkeet on pois päältä.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikselit on koko sovelluksen pikselitila: porrastetut kapselit, valikot ja toimintoarkit sekä, kun Pikselikuvakkeet on päällä, jokainen kuvake piirrettynä kuten liitännäisten pikselityyli piirtää.",
@@ -15526,6 +15558,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Hide Time": "הסתרת השעה",
+        "Show Exact Last Seen": "הצגת זמן מדויק של חיבור אחרון",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "השקיפות של צבע הזוהר קובעת את עוצמתו. קפסולות פיקסלים מטילות צל חד, כמו במשחקים ישנים. אין להן ברק.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "במצב פיקסלים הסמלים פיקסליים. אפשר לבחור סגנון סמלים אחר אחרי כיבוי סמלי הפיקסלים למעלה.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "פיקסלים הוא מצב הפיקסלים לכל האפליקציה: קפסולות מדורגות, תפריטים וגיליונות פעולות, וכשסמלי פיקסלים פעילים — כל סמל, מצויר כפי שסגנון הפיקסלים של התוספים מצייר.",
@@ -16493,6 +16527,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Hide Time": "Sakrij vrijeme",
+        "Show Exact Last Seen": "Prikaži točno vrijeme posljednje aktivnosti",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Prozirnost boje sjaja određuje njegovu jačinu. Pikselne kapsule bacaju oštru sjenu, kao u starim igrama. Odsjaja nemaju.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "U pikselnom načinu ikone su pikselne. Drugi stil ikona možete odabrati kad isključite pikselne ikone iznad.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikseli su pikselni način za cijelu aplikaciju: stepenaste kapsule, izbornici i listovi radnji te, s uključenim pikselnim ikonama, svaka ikona, nacrtana kao što je crta pikselni stil dodataka.",
@@ -17460,6 +17496,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Hide Time": "Сакриј време",
+        "Show Exact Last Seen": "Прикажи тачно време последње активности",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Провидност боје сјаја одређује његову јачину. Пикселне капсуле бацају оштру сенку, као у старим играма. Одсјаја немају.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У пикселном режиму иконе су пикселне. Други стил икона можете изабрати када искључите пикселне иконе изнад.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксели су пикселни режим за целу апликацију: степенасте капсуле, менији и листови радњи и, са укљученим пикселним иконама, свака икона, нацртана као што је црта пикселни стил додатака.",
@@ -18427,6 +18465,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Hide Time": "Skrýt čas",
+        "Show Exact Last Seen": "Zobrazit přesný čas poslední aktivity",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Průhlednost barvy záře určuje její sílu. Pixelové kapsle vrhají ostrý stín jako ve starých hrách. Odlesk nemají.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovém režimu jsou ikony pixelové. Jiný styl ikon lze zvolit po vypnutí pixelových ikon výše.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely jsou pixelový režim pro celou aplikaci: stupňovité kapsle, nabídky a listy akcí a se zapnutými pixelovými ikonami i každá ikona, kreslená jako pixelovým stylem pluginů.",
@@ -19394,6 +19434,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Hide Time": "Skryť čas",
+        "Show Exact Last Seen": "Zobraziť presný čas poslednej aktivity",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Priehľadnosť farby žiary určuje jej silu. Pixelové kapsuly vrhajú ostrý tieň ako v starých hrách. Odlesk nemajú.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovom režime sú ikony pixelové. Iný štýl ikon môžete zvoliť po vypnutí pixelových ikon vyššie.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely sú pixelový režim pre celú aplikáciu: stupňovité kapsuly, ponuky a hárky akcií a so zapnutými pixelovými ikonami aj každá ikona, kreslená ako pixelovým štýlom pluginov.",
@@ -20361,6 +20403,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Hide Time": "Ascunde ora",
+        "Show Exact Last Seen": "Arată ora exactă a ultimei activități",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparența culorii strălucirii îi stabilește intensitatea. Capsulele pixel aruncă o umbră netă, ca în jocurile vechi. Nu au strălucire.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "În modul pixel pictogramele sunt pixelate. Alt stil de pictograme se poate alege după ce dezactivezi Pictograme pixelate mai sus.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel este modul pixel pentru toată aplicația: capsule în trepte, meniuri și foi de acțiuni și, cu Pictograme pixelate activate, fiecare pictogramă, desenată cum o desenează stilul pixel al pluginurilor.",
@@ -21328,6 +21372,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Hide Time": "Idő elrejtése",
+        "Show Exact Last Seen": "Pontos utolsó aktivitás mutatása",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A ragyogás színének átlátszósága adja meg az erősségét. A pixeles kapszulák éles árnyékot vetnek, mint a régi játékokban. Csillanásuk nincs.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pixeles módban az ikonok pixelesek. Más ikonstílus a fenti Pixeles ikonok kikapcsolása után választható.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "A Pixel az egész alkalmazás pixeles módja: lépcsős kapszulák, menük és műveletlapok, bekapcsolt pixeles ikonokkal pedig minden ikon, úgy rajzolva, ahogy a bővítmények pixeles stílusa rajzolja.",
@@ -22295,6 +22341,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Hide Time": "Skjul tidspunkt",
+        "Show Exact Last Seen": "Vis nøyaktig sist sett-tid",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Gjennomsiktigheten i glødfargen bestemmer styrken. Pikselkapsler kaster en skarp skygge, som i gamle spill. Lysglimt har de ikke.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pikselmodus er ikonene pikselert. En annen ikonstil kan velges når Pikselikoner over er av.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel er pikselmodus for hele appen: trappede kapsler, menyer og handlingsark og, med Pikselikoner på, hvert ikon, tegnet slik programtilleggenes pikselstil tegner dem.",
@@ -23262,6 +23310,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Hide Time": "Dölj tid",
+        "Show Exact Last Seen": "Visa exakt tid för senast sedd",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Glödfärgens genomskinlighet avgör styrkan. Pixelkapslar kastar en skarp skugga, som i gamla spel. Glansdager har de inte.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pixelläget är symbolerna pixliga. En annan symbolstil kan väljas när Pixelsymboler ovan är av.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel är pixelläget för hela appen: trappstegade kapslar, menyer och åtgärdsblad och, med Pixelsymboler på, varje symbol, ritad som tilläggens pixelstil ritar den.",
@@ -24229,6 +24279,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Hide Time": "Ẩn thời gian",
+        "Show Exact Last Seen": "Hiển thị chính xác thời gian truy cập gần nhất",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Độ trong suốt của màu phát sáng quyết định độ mạnh. Viên nang điểm ảnh đổ bóng sắc nét như trò chơi cổ điển. Chúng không có ánh sáng.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Ở chế độ điểm ảnh, biểu tượng là điểm ảnh. Có thể chọn kiểu biểu tượng khác sau khi tắt Biểu tượng điểm ảnh ở trên.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Điểm ảnh là chế độ điểm ảnh cho toàn ứng dụng: viên nang bậc thang, menu và bảng tác vụ, và khi bật Biểu tượng điểm ảnh, mọi biểu tượng được vẽ như kiểu điểm ảnh của plugin.",
@@ -25196,6 +25248,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Hide Time": "Приховати час",
+        "Show Exact Last Seen": "Показувати точний час останньої активності",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Прозорість кольору сяйва задає його силу. Піксельні капсули мають різку тінь, як у старих іграх. Відблиску в них немає.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельному режимі іконки піксельні. Інший стиль іконок можна вибрати, вимкнувши «Піксельні іконки» вище.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельний режим у всьому застосунку: ступінчасті капсули, меню й аркуші дій, а з «Піксельними іконками» — і всі іконки, як їх малює піксельний стиль плагінів.",
@@ -26172,6 +26226,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Hide Time": "Ocultar hora",
+        "Show Exact Last Seen": "Mostrar la última conexión exacta",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparencia del color del resplandor fija su intensidad. Las cápsulas de píxeles proyectan una sombra dura, como en los juegos antiguos. No tienen brillo.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el modo píxel los iconos son de píxeles. Se puede elegir otro estilo de iconos al desactivar Iconos de píxeles arriba.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxel es el modo píxel para toda la app: cápsulas escalonadas, menús y hojas de acciones y, con Iconos de píxeles activados, cada icono, dibujado como lo dibuja el estilo píxel de los plugins.",
@@ -27148,6 +27204,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Hide Time": "Ocultar hora",
+        "Show Exact Last Seen": "Mostrar a última conexão exata",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A transparência da cor do brilho define a intensidade. As cápsulas pixel projetam uma sombra marcada, como nos jogos antigos. Não têm reflexo.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "No modo pixel os ícones são de pixel. Outro estilo de ícones pode ser escolhido desativando Ícones de pixel acima.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel é o modo pixel para o app inteiro: cápsulas em degraus, menus e folhas de ações e, com Ícones de pixel ativados, todos os ícones, desenhados como o estilo pixel dos plugins os desenha.",
@@ -28124,6 +28182,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Hide Time": "Uhrzeit ausblenden",
+        "Show Exact Last Seen": "Genaue Zeit von zuletzt online anzeigen",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Die Transparenz der Leuchtfarbe bestimmt ihre Stärke. Pixelkapseln werfen einen harten Schatten wie in alten Spielen. Glanzlicht haben sie keins.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Im Pixelmodus sind die Symbole pixelig. Einen anderen Symbolstil wählst du, sobald Pixelsymbole oben aus ist.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel ist der Pixelmodus für die ganze App: gestufte Kapseln, Menüs und Aktionsblätter und, mit eingeschalteten Pixelsymbolen, jedes Symbol, so gezeichnet wie der Pixelstil von Plugins.",
@@ -29100,6 +29160,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Hide Time": "Masquer l’heure",
+        "Show Exact Last Seen": "Afficher l’heure exacte de la dernière connexion",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparence de la couleur du halo en règle l’intensité. Les capsules pixel projettent une ombre nette, comme dans les vieux jeux. Elles n'ont pas de reflet.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En mode pixel, les icônes sont en pixels. Un autre style d'icônes se choisit une fois Icônes en pixels désactivé plus haut.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel est le mode pixel pour toute l'app : capsules en escalier, menus et feuilles d'actions et, avec Icônes en pixels activé, chaque icône, dessinée comme le style pixel des plugins la dessine.",
@@ -30076,6 +30138,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Hide Time": "Saati gizle",
+        "Show Exact Last Seen": "Son görülme saatini tam göster",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Parıltı renginin saydamlığı gücünü belirler. Piksel kapsüller eski oyunlardaki gibi keskin gölge düşürür. Parlamaları yoktur.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel modunda simgeler pikseldir. Yukarıdaki Piksel simgeler kapatılınca başka bir simge stili seçilebilir.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel, tüm uygulama için piksel modudur: basamaklı kapsüller, menüler ve eylem sayfaları ve Piksel simgeler açıkken her simge, eklentilerin piksel stilinin çizdiği gibi.",
