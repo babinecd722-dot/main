@@ -86,6 +86,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginPickUser(_ pluginId: String, title: String?, completion: @escaping (Result<[String: Any]?, Error>) -> Void)
     func pluginOpenProfile(_ pluginId: String, peerId: Int64, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginOpenAppSettings(_ pluginId: String, section: String?, completion: @escaping (Result<Void, Error>) -> Void)
+    func pluginOpenScreen(_ pluginId: String, screen: AorusPluginScreen, style: String, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginDeleteLocalMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginSetAutoSwitch(_ pluginId: String, enabled: Bool, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String])
@@ -149,6 +150,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onPickUser: ((String) -> [String: Any]?)?
     public var onOpenProfile: ((String, Int64) -> Void)?
     public var onOpenAppSettings: ((String, String?) -> Void)?
+    public var onOpenScreen: ((String, AorusPluginScreen, String) -> Void)?
     public var onDeleteLocalMessage: ((String, Int64, Int32, Int32) -> Void)?
     public var onSetAutoSwitch: ((String, Bool) -> Void)?
     public var onStringOverridesChanged: ((String, [String: String]) -> Void)?
@@ -252,6 +254,14 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginOpenAppSettings(_ pluginId: String, section: String?, completion: @escaping (Result<Void, Error>) -> Void) {
         onOpenAppSettings?(pluginId, section)
+        completion(.success(()))
+    }
+    open func pluginOpenScreen(_ pluginId: String, screen: AorusPluginScreen, style: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let onOpenScreen else {
+            completion(.failure(AorusPluginRequestError("Screen navigation is unavailable")))
+            return
+        }
+        onOpenScreen(pluginId, screen, style)
         completion(.success(()))
     }
     open func pluginDeleteLocalMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -1639,7 +1649,8 @@ public final class AorusPluginSandbox {
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.settingsIntegration) else { return false }
             let data = Data(json.utf8)
             guard let shortcuts = AorusPluginSettingsShortcut.validated(from: data) else { return false }
-            if shortcuts.contains(where: { $0.url != nil }), !self.permissions.contains(.inAppBrowser) { return false }
+            if shortcuts.contains(where: { $0.url.map { AorusPluginScreen.resolve($0) == nil } ?? false }), !self.permissions.contains(.inAppBrowser) { return false }
+            if shortcuts.contains(where: { $0.url.flatMap(AorusPluginScreen.resolve) != nil }), !self.permissions.contains(.appCustomization) { return false }
             if self.publishes { self.hostServices.pluginSettingsShortcutsChanged(pluginId, shortcuts: shortcuts) }
             return true
         }
@@ -2206,6 +2217,28 @@ public final class AorusPluginSandbox {
             host.pluginOpenProfile(pluginId, peerId: peerId) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
+        case "navigation.screens":
+            settle(id, with: .success(AorusPluginScreen.allCases.map { ["id": $0.rawValue, "link": $0.link] }))
+        case "navigation.screenLink":
+            guard let value = string("screen"), let screen = AorusPluginScreen.resolve(value) else {
+                settle(id, with: .failure(AorusPluginRequestError("Unknown screen")))
+                return
+            }
+            settle(id, with: .success(screen.link))
+        case "navigation.openScreen":
+            guard require(.appCustomization, id: id) else { return }
+            guard let value = string("screen"), let screen = AorusPluginScreen.resolve(value) else {
+                settle(id, with: .failure(AorusPluginRequestError("Unknown screen")))
+                return
+            }
+            let style = string("style") ?? "push"
+            guard ["push", "sheet", "fullScreen"].contains(style) else {
+                settle(id, with: .failure(AorusPluginRequestError("Unsupported screen presentation style")))
+                return
+            }
+            host.pluginOpenScreen(pluginId, screen: screen, style: style) { [weak self] result in
+                self?.settle(id, with: result.map { _ -> Any? in nil })
+            }
         case "navigation.openSettings":
             guard require(.appCustomization, id: id) else { return }
             host.pluginOpenAppSettings(pluginId, section: string("section")) { [weak self] result in
@@ -2626,10 +2659,14 @@ public final class AorusPluginSandbox {
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
         case "browser.open":
-            guard require(.inAppBrowser, id: id) else { return }
             guard let url = string("url"), !url.isEmpty, url.count <= 2_048 else {
                 settle(id, with: .failure(AorusPluginRequestError("url is required")))
                 return
+            }
+            if AorusPluginScreen.resolve(url) != nil {
+                guard require(.appCustomization, id: id) else { return }
+            } else {
+                guard require(.inAppBrowser, id: id) else { return }
             }
             host.pluginOpenURL(pluginId, url: url) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })

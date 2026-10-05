@@ -30633,6 +30633,8 @@ def main() -> None:
     patch_wall_tab(tg)
     # After the Wall: it rewrites the tab assembly this one extends.
     patch_plugin_tabs(tg)
+    from aorus_plugin_screens import patch_plugin_screens
+    patch_plugin_screens(tg)
     patch_wall_exclusion_swipe(tg)
     # After the Wall patches: they anchor on the same two chat-controller lifecycle
     # methods, and their anchors span the lines this one inserts.

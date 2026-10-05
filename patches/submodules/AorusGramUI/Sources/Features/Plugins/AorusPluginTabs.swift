@@ -81,7 +81,7 @@ public final class AorusPluginTabHost {
         for item in AorusPluginRuntimeManager.shared.pluginTabs() {
             // A tab keeps its controller for as long as it leads to the same place. A new title
             // or glyph is drawn on the controller it already has.
-            let key = [item.pluginId, item.tab.id, item.tab.url ?? "", item.tab.pageId ?? ""].joined(separator: "\u{1}")
+            let key = [item.pluginId, item.tab.id, item.tab.url ?? "", item.tab.pageId ?? "", item.tab.screen ?? ""].joined(separator: "\u{1}")
             let entry: Entry
             if let existing = entries[key] {
                 existing.tab = item.tab
@@ -100,6 +100,10 @@ public final class AorusPluginTabHost {
     }
 
     private func makeEntry(pluginId: String, tab: AorusPluginTab) -> Entry? {
+        if let value = tab.screen, let screen = AorusPluginScreen.resolve(value) {
+            guard let controller = AorusPluginScreenRoutes.make(context: context, pluginId: pluginId, screen: screen) else { return nil }
+            return Entry(pluginId: pluginId, tab: tab, controller: controller)
+        }
         if let pageId = tab.pageId {
             guard let page = AorusPluginRuntimeManager.shared.page(pluginId: pluginId, pageId: pageId) else { return nil }
             let controller = AorusPluginPageController(context: context, pluginId: pluginId, page: page)

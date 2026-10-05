@@ -156,7 +156,7 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 | `contextMenu` | Действие в меню сообщения | `aorus.integrations.contextMenu.register`, `aorus.ui.addMessageContextAction` |
 | `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, `aorus.tabs.register` с `url`, строки с ссылками |
 | `artificialIntelligence` | Запросы к AorusAI | `aorus.ai.` |
-| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент, оформление и иконки всего приложения, установка и экспорт плагинов | `aorus.files.installPlugin/exportPlugin`, `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.icons.set/style/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
+| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент, оформление и иконки всего приложения, установка и экспорт плагинов | `aorus.files.installPlugin/exportPlugin`, `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.icons.set/style/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings/openScreen`, `aorus.app.openSettings`, событие `appSettingsChanged` |
 | `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.`, событие `connectionChanged` |
 | `telegramProxy` | Список и переключение прокси Telegram | `aorus.telegramProxy.` |
 | `pluginMessaging` | Сообщения другим плагинам и от них | `aorus.plugins.emit/on`, `aorus.on('pluginMessage'…)` |
@@ -473,6 +473,55 @@ await aorus.navigation.openSettings('privacy');
 системный выбор человека: плагин, которому нужно знать, с кем работать, просит приложение
 спросить, вместо того чтобы получить всю адресную книгу. Если человек закрыл выбор, ответ —
 `null`.
+
+### Экраны клиента
+
+```js
+const screens = await aorus.navigation.screens();
+const link = await aorus.navigation.screenLink('plugins');
+await aorus.navigation.openScreen(link);
+await aorus.navigation.openScreen('plugins.documentation', { style: 'sheet' });
+
+const remove = aorus.tabs.register({
+    id: 'plugins', title: 'Плагины', icon: 'puzzlepiece.extension', screen: 'plugins'
+});
+// remove() убирает вкладку.
+```
+
+`screens()` возвращает каталог `{ id, link }`. `screenLink(id)` возвращает внутреннюю
+ссылку вида `aorus://screen/plugins`. `openScreen` принимает id или такую ссылку;
+`style` — `push` (обычная навигация), `sheet` или `fullScreen`. Кнопка «Назад», свайп,
+тема и действия экрана остаются нативными. Вызов завершается после добавления экрана
+в навигацию, а не после его закрытия.
+
+| Экраны | id |
+| --- | --- |
+| Плагины и справочник | `plugins`, `plugins.documentation` |
+| Текущий плагин | `plugin.details`, `plugin.settings`, `plugin.console`, `plugin.editor`, `plugin.permissions`, `plugin.appearance` |
+| Настройки AorusGram | `aorus`, `aorus.privacy`, `aorus.interface`, `aorus.tabs`, `aorus.messages`, `aorus.voice`, `aorus.video`, `aorus.calls`, `aorus.wall`, `aorus.performance`, `aorus.device`, `aorus.bypass`, `aorus.antiSpoof`, `aorus.backup`, `aorus.code`, `aorus.other` |
+| Оформление | `bubbles`, `messageAppearance`, `font` |
+| Инструменты AorusGram | `masks`, `voiceTwin`, `wallSettings`, `antiSpam`, `quickReplies`, `autoFormat`, `fakeGifts`, `chatLocks`, `accountBackup`, `ai` |
+| Настройки Telegram | `settings`, `settings.privacy`, `settings.notifications`, `settings.data`, `settings.appearance`, `settings.language`, `settings.folders`, `settings.proxy`, `settings.stickers` |
+| Основные экраны | `chats`, `contacts`, `calls`, `wall` |
+
+`plugin.*` относится к плагину, который вызывает API или объявляет вкладку.
+`aorus.messages` — раздел настроек сообщений, `messageAppearance` — экран оформления
+сообщений. `ai` — список разговоров AorusAI.
+`openSettings()` открывает AorusGram; `openSettings('privacy')` — его раздел приватности.
+Неизвестный экран, раздел или стиль отклоняет вызов с ошибкой.
+
+Вкладка принимает ровно одно из `screen`, `pageId`, `url`. В `screen` можно передать id
+или внутреннюю ссылку; ссылка в `url` тоже открывает нативный экран. Каждая вкладка
+сохраняет собственный экземпляр экрана при смене значка, заголовка и значка счётчика;
+смена маршрута создаёт новый. Действуют те же ограничения числа вкладок и та же функция
+удаления, что для страниц плагинов.
+
+Внутренние ссылки также принимают `aorus.navigation.openUrl`, `aorus.app.openURL`,
+`aorus.ui.openURL`, `aorus.browser.open`, строки `link` и ярлыки настроек с `url`.
+Для открытия экрана и его вкладки нужно `appCustomization`; для строки или ярлыка —
+также обычное разрешение их контейнера. `inAppBrowser` нужно только для сайта.
+`siteIcon` к внутренней ссылке не применяется. Каталог и создание ссылки разрешений
+не требуют. Это ссылки навигации плагинов внутри клиента.
 
 ### Страница сайта внутри приложения
 
@@ -1025,7 +1074,7 @@ const removeSection = aorus.profile.addSection({
 
 Ярлык с разделом AorusGram не повторяется в основных настройках Telegram, а ярлык по
 умолчанию не повторяется в настройках AorusGram. Ярлык с `url` открывает сайт страницей
-внутри приложения (раздел 12).
+внутри приложения либо экран клиента по внутренней ссылке (раздел 12).
 
 Поля ярлыка:
 
@@ -1033,7 +1082,7 @@ const removeSection = aorus.profile.addSection({
 |---|---|
 | `id`, `title` | Обязательные. `id` — латиница, цифры, `_ . -`, до 64 символов |
 | `subtitle` | Текст справа в строке |
-| `pageId` или `url` | Ровно одно из двух: свой экран плагина или сайт |
+| `pageId` или `url` | Ровно одно из двух: свой экран плагина или ссылка на сайт либо экран клиента |
 | `icon` | Значок из каталога (ниже). Незнакомое имя рисуется значком по умолчанию |
 | `color` | Цвет плитки `RRGGBB` для этого ярлыка. Без него — цвет плагина |
 | `siteIcon` | `true` — вместо значка иконка самого сайта. Только вместе с `url` и только в основных настройках Telegram (`placement: 'plugins'`), иначе ярлык не принимается |

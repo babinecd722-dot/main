@@ -3231,6 +3231,15 @@ public enum AorusPluginPrelude {
                 }
             }),
             navigation: freeze({
+                screens: function () { return request('navigation.screens', {}); },
+                screenLink: function (screen) { return request('navigation.screenLink', { screen: requireString(screen, 'screen') }); },
+                openScreen: function (screen, options) {
+                    var opts = optionalObject(options, 'options');
+                    if (Array.isArray(opts)) { throw typeError('options must be an object'); }
+                    var style = opts.style === undefined ? 'push' : requireString(opts.style, 'style');
+                    if (['push', 'sheet', 'fullScreen'].indexOf(style) < 0) { throw typeError('Unsupported screen presentation style'); }
+                    return request('navigation.openScreen', { screen: requireString(screen, 'screen'), style: style });
+                },
                 openChat: function (peerId) {
                     var target = toPeerId(peerId);
                     return request('chats.open', { peerId: target === 'me' ? null : target, toSelf: target === 'me' });

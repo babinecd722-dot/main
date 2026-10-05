@@ -549,7 +549,7 @@ public final class AorusPluginRuntimeManager {
     /// same tabs must not cost that.
     private func publishTabsIfChanged() {
         let keys = pluginTabs().map { item in
-            [item.pluginId, item.tab.id, item.tab.title, item.tab.icon ?? "", item.tab.url ?? "", item.tab.pageId ?? ""].joined(separator: "\u{1}")
+            [item.pluginId, item.tab.id, item.tab.title, item.tab.icon ?? "", item.tab.url ?? "", item.tab.pageId ?? "", item.tab.screen ?? ""].joined(separator: "\u{1}")
         }
         lock.lock()
         let changed = keys != publishedTabKeys
@@ -1503,6 +1503,10 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginOpenURL(_ pluginId: String, url: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        if let screen = AorusPluginScreen.resolve(url) {
+            pluginOpenScreen(pluginId, screen: screen, style: "push", completion: completion)
+            return
+        }
         guard manager?.isPermissionGranted(.inAppBrowser, pluginId: pluginId) == true else {
             completion(.failure(AorusPluginRequestError("In-app browser permission is not granted")))
             return
@@ -2763,20 +2767,42 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginOpenAppSettings(_ pluginId: String, section: String?, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let screen = AorusPluginScreen.settingsSection(section) else {
+            completion(.failure(AorusPluginRequestError("Unknown settings section")))
+            return
+        }
+        pluginOpenScreen(pluginId, screen: screen, style: "push", completion: completion)
+    }
+
+    func pluginOpenScreen(_ pluginId: String, screen: AorusPluginScreen, style: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard ["push", "sheet", "fullScreen"].contains(style) else {
+            completion(.failure(AorusPluginRequestError("Unsupported screen presentation style")))
+            return
+        }
         guard AorusPluginEntitlement.isAllowed,
               manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else {
             completion(.failure(AorusPluginRequestError("App customization permission is not granted")))
             return
         }
         DispatchQueue.main.async {
-            guard let navigation = self.topNavigationController() else {
+            guard self.pluginExecutionAllowed,
+                  self.manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true,
+                  let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
-            // The settings screen is built by the module that can see the three screens it
-            // links to; this asks for it rather than reaching for what it cannot import. A
-            // build where nobody has registered it yet still opens something useful.
-            let controller = AorusSettingsRoute.make(self.context) ?? aorusPluginsController(context: self.context)
+            guard let controller = AorusPluginScreenRoutes.make(context: self.context, pluginId: pluginId, screen: screen) else {
+                completion(.failure(AorusPluginRequestError("Screen is unavailable: " + screen.rawValue)))
+                return
+            }
+            switch style {
+            case "push": break
+            case "sheet": controller.navigationPresentation = .modal
+            case "fullScreen": controller.navigationPresentation = .flatModal
+            default:
+                completion(.failure(AorusPluginRequestError("Unsupported screen presentation style")))
+                return
+            }
             navigation.pushViewController(controller)
             completion(.success(()))
         }

@@ -15,6 +15,21 @@ public func aorusPluginsTitle() -> String {
     return AorusPluginUIString.plugins.text
 }
 
+func aorusPluginManagementScreen(context: AccountContext, pluginId: String, screen: AorusPluginScreen) -> ViewController? {
+    if screen == .plugins { return aorusPluginsController(context: context) }
+    if screen == .documentation { return AorusPluginDocsController(context: context) }
+    guard let record = AorusPluginStore.shared.load(id: pluginId) else { return nil }
+    switch screen {
+    case .pluginDetails: return AorusPluginDetailController(context: context, record: record)
+    case .pluginSettings: return AorusPluginSettingsController(context: context, record: record)
+    case .pluginConsole: return AorusPluginConsoleController(context: context, record: record)
+    case .pluginEditor: return AorusPluginEditorController(context: context, record: record)
+    case .pluginPermissions: return AorusPluginPermissionsController(context: context, record: record)
+    case .pluginAppearance: return AorusPluginMetadataController(context: context, record: record)
+    default: return nil
+    }
+}
+
 // Every string this screen shows goes through `aorusL`, the same helper and the same table as
 // the rest of AorusGram's own UI. The release verifier walks those call sites and requires a
 // translation for each one in all 32 further languages, so a plugin screen can never be the
@@ -2875,6 +2890,21 @@ private enum AorusPluginDocumentation {
 
             App API дает безопасный доступ к состоянию интерфейса, текущему аккаунту, навигации по чатам, страницам сайтов, системному меню отправки и тактильному отклику. Действия проходят через проверяемый нативный broker и отдельные разрешения.
 
+            Экраны клиента
+            const screens = await aorus.navigation.screens()
+            const link = await aorus.navigation.screenLink('plugins')
+            await aorus.navigation.openScreen(link)
+            await aorus.navigation.openScreen('plugins.documentation', { style: 'sheet' })
+            const remove = aorus.tabs.register({ id: 'plugins', title: 'Плагины', icon: 'puzzlepiece.extension', screen: 'plugins' })
+            screens возвращает каталог { id, link }. screenLink создаёт внутреннюю ссылку aorus://screen/plugins. openScreen принимает id или ссылку, style — push, sheet или fullScreen. Вызов завершается после добавления экрана в навигацию. Кнопка «Назад», свайп, тема и действия остаются нативными.
+            Плагины: plugins, plugins.documentation. Экраны текущего плагина: plugin.details, plugin.settings, plugin.console, plugin.editor, plugin.permissions, plugin.appearance.
+            AorusGram: aorus, aorus.privacy, aorus.interface, aorus.tabs, aorus.messages, aorus.voice, aorus.video, aorus.calls, aorus.wall, aorus.performance, aorus.device, aorus.bypass, aorus.antiSpoof, aorus.backup, aorus.code, aorus.other.
+            Оформление: bubbles, messageAppearance, font. Инструменты: masks, voiceTwin, wallSettings, antiSpam, quickReplies, autoFormat, fakeGifts, chatLocks, accountBackup, ai.
+            Telegram: settings, settings.privacy, settings.notifications, settings.data, settings.appearance, settings.language, settings.folders, settings.proxy, settings.stickers. Основные экраны: chats, contacts, calls, wall.
+            plugin.* относится к плагину, который вызывает API или объявляет вкладку. aorus.messages — раздел настроек сообщений, messageAppearance — их оформление; ai — разговоры AorusAI. openSettings() открывает AorusGram, openSettings('privacy') — его раздел приватности. Неизвестный экран, раздел или стиль возвращает ошибку.
+            Вкладка принимает ровно одно из screen, pageId, url. screen — id или внутренняя ссылка; такая ссылка в url тоже открывает экран. Заголовок, значок и счётчик меняются без пересоздания экрана; новый маршрут создаёт новый экземпляр. remove() убирает вкладку. Число вкладок ограничено так же, как для страниц плагинов.
+            Внутренние ссылки принимают также navigation.openUrl, app.openURL, ui.openURL, browser.open, строки link и ярлыки настроек с url. Открытие экрана и его вкладка требуют appCustomization, строка и ярлык — также обычное разрешение контейнера. inAppBrowser нужен только для сайта; siteIcon к внутренней ссылке не применяется. Каталог и создание ссылки разрешений не требуют. Ссылки используются внутри клиента.
+
             Страница сайта
             aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, строка link и ярлык с url открывают сайт не в Safari, а страницей внутри приложения: с панелью навигации приложения, в его теме и с названием сайта в заголовке. Адреса нет нигде — ни строки адреса, ни домена, ни меню ссылки по долгому нажатию, ни «Открыть в Safari».
             Cookie и данные сайтов хранятся на диске: вход на сайт сохраняется между открытиями и после перезапуска. Свайп от края идёт назад по истории сайта, а когда идти некуда — закрывает страницу. Потянуть вниз — обновить. Ссылки t.me открываются в Telegram, tel:, mailto: и App Store — только по нажатию. Каждый переход проверяется: loopback и локальная сеть отклоняются.
@@ -3266,6 +3296,21 @@ private enum AorusPluginDocumentation {
 
     The App API provides safe access to interface state, the current account, chat navigation, site pages, system share sheet and haptics. Actions use the validated native broker and separate permissions.
 
+    Client screens
+    const screens = await aorus.navigation.screens()
+    const link = await aorus.navigation.screenLink('plugins')
+    await aorus.navigation.openScreen(link)
+    await aorus.navigation.openScreen('plugins.documentation', { style: 'sheet' })
+    const remove = aorus.tabs.register({ id: 'plugins', title: 'Plugins', icon: 'puzzlepiece.extension', screen: 'plugins' })
+    screens returns the catalogue { id, link }. screenLink makes an internal link such as aorus://screen/plugins. openScreen takes an id or a link; style is push, sheet or fullScreen. Its Promise settles after the screen joins the navigation stack. Back, the swipe gesture, the theme and the screen's actions remain native.
+    Plugins: plugins, plugins.documentation. The current plugin: plugin.details, plugin.settings, plugin.console, plugin.editor, plugin.permissions, plugin.appearance.
+    AorusGram: aorus, aorus.privacy, aorus.interface, aorus.tabs, aorus.messages, aorus.voice, aorus.video, aorus.calls, aorus.wall, aorus.performance, aorus.device, aorus.bypass, aorus.antiSpoof, aorus.backup, aorus.code, aorus.other.
+    Appearance: bubbles, messageAppearance, font. Tools: masks, voiceTwin, wallSettings, antiSpam, quickReplies, autoFormat, fakeGifts, chatLocks, accountBackup, ai.
+    Telegram: settings, settings.privacy, settings.notifications, settings.data, settings.appearance, settings.language, settings.folders, settings.proxy, settings.stickers. Main screens: chats, contacts, calls, wall.
+    plugin.* belongs to the calling plugin or the plugin declaring the tab. aorus.messages is the message settings section, messageAppearance is the message appearance screen; ai is the AorusAI conversation list. openSettings() opens AorusGram, openSettings('privacy') opens its privacy section. An unknown screen, section or style rejects the call.
+    A tab takes exactly one of screen, pageId or url. screen takes an id or an internal link; such a link in url opens the native screen too. Title, icon and badge changes keep the screen's instance; a new destination creates a new one. remove() takes the tab away. The tab count limits are the same as for plugin pages.
+    Internal links also work with navigation.openUrl, app.openURL, ui.openURL, browser.open, link rows and settings shortcuts with url. Opening a screen and putting it in a tab need appCustomization; rows and shortcuts also need their container's usual permission. inAppBrowser is only needed for a website; siteIcon does not apply to internal links. Listing screens and creating a link need no permission. These links navigate inside the client.
+
     Site page
     aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, a link row and a url shortcut open the site not in Safari but as a page of the app: under the app's own navigation bar, in its theme, titled with the site's own name. There is no address anywhere: no address bar, no domain, no link menu on a long press, no Open in Safari.
     Cookies and site data are kept on disk, so a sign-in survives between visits and across relaunches. Swiping from the edge goes back through the site's history, and closes the page when there is nothing to go back to. Pull down to reload. t.me links open in Telegram; tel:, mailto: and App Store links open only on a tap. Every navigation is checked: loopback and local addresses are refused.
@@ -3296,7 +3341,7 @@ private enum AorusPluginDocumentation {
     aorus.tabs.register({ id: 'feed', title: 'Feed', icon: 'newspaper', pageId: 'feed' })
     aorus.tabs.setBadge('feed', 3)
     aorus.tabs.setBadge('feed', null)
-    A tab goes into the bottom bar after Settings: with url it is a site drawn as a page of the app, with pageId one of the plugin's screens from definePages, one or the other. Two tabs across all plugins, a title of up to 24 characters, a glyph from the catalogue. The badge is Telegram's own red circle: a count (over 99 is "99+"), true for a dot, a short text, or null to clear it. Until the plugin sets one, a site's tab shows the site's own count, from navigator.setAppBadge or a "(3)" at the start of its title. The site loads as soon as its tab appears, so the count is there before the first visit. A site in a tab does not start sound or video by itself and pauses them when the tab leaves the screen; it opens Telegram links only on a tap or while its tab is on screen. Needs appCustomization, plus inAppBrowser for a site and customUI for a screen. When the plugin stops, its tabs leave the bar.
+    A tab goes into the bottom bar after Settings: with url it is a site drawn as a page of the app, with pageId one of the plugin's screens from definePages, with screen a native client screen; exactly one of the three. Two tabs across all plugins, a title of up to 24 characters, a glyph from the catalogue. The badge is Telegram's own red circle: a count (over 99 is "99+"), true for a dot, a short text, or null to clear it. Until the plugin sets one, a site's tab shows the site's own count, from navigator.setAppBadge or a "(3)" at the start of its title. The site loads as soon as its tab appears, so the count is there before the first visit. A site in a tab does not start sound or video by itself and pauses them when the tab leaves the screen; it opens Telegram links only on a tap or while its tab is on screen. Needs appCustomization, plus inAppBrowser for a site and customUI for a plugin page. When the plugin stops, its tabs leave the bar.
 
     Appearance
     aorus.appearance.set({ 'bubble.outgoing.fill': ['5B4DFF', '8E7CFF'], 'bubble.radius': 20, 'header.background': '0B0B0FCC', 'badge.unread': 'FF2D55', 'glass.tint': 'FFFFFF22', 'font.chat': 'large' })

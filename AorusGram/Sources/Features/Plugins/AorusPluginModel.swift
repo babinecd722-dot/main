@@ -328,6 +328,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "aorus.icons.set", "aorus.icons.style", "aorus.icons.reset",
                 "aorus.theme.setAccentColor", "aorus.theme.resetAccentColor",
                 "aorus.navigation.openSettings", "aorus.app.openSettings",
+                "aorus.navigation.openScreen",
+                "aorus://screen/",
             ]),
             (.connectionControl, ["aorus.proxy."]),
             (.accountSwitching, ["aorus.accounts."]),
@@ -440,8 +442,22 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
         let key = source as NSString
         if let cached = requestedCache.object(forKey: key) { return cached.permissions }
         let text = probeText(source)
+        // A native tab needs app customisation, not the website grant. Only a flat,
+        // explicit screen definition is omitted from the browser probe; an indirect
+        // definition keeps the ordinary recommendation and the broker decides at runtime.
+        var browserText = text
+        if let nativeTabs = try? NSRegularExpression(pattern: #"aorus\.tabs\.register\(\s*\{[^{}]*\bscreen\s*:[^{}]*\}\s*\)"#),
+           let otherTarget = try? NSRegularExpression(pattern: #"\b(?:url|pageId)\s*:"#) {
+            for match in nativeTabs.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+                let call = (text as NSString).substring(with: match.range)
+                if otherTarget.firstMatch(in: call, range: NSRange(call.startIndex..., in: call)) == nil {
+                    browserText = (browserText as NSString).replacingCharacters(in: match.range, with: "")
+                }
+            }
+        }
         var requested = Set(sourceProbes.compactMap { permission, needles in
-            needles.contains(where: text.contains) ? permission : nil
+            let probe = permission == .inAppBrowser ? browserText : text
+            return needles.contains(where: probe.contains) ? permission : nil
         })
         for event in subscribedEvents(source) {
             if let permission = eventPermissions[event] { requested.insert(permission) }
@@ -694,9 +710,11 @@ public struct AorusPluginUIPage: Codable, Equatable {
                     }
                     guard validateKind(&row) else { return nil }
                     if row.kind == .link {
-                        guard let value = row.url, let url = URL(string: value),
-                              let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https"),
-                              url.host?.isEmpty == false else { return nil }
+                        guard let value = row.url else { return nil }
+                        if AorusPluginScreen.resolve(value) == nil {
+                            guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+                                  (scheme == "http" || scheme == "https"), url.host?.isEmpty == false else { return nil }
+                        }
                     }
                     if row.kind == .slider || row.kind == .stepper {
                         let minimum = row.minimum ?? 0
@@ -892,8 +910,13 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
             }
             item.url = item.url.map { String($0.prefix(2_048)) }
             if let value = item.url {
-                guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
-                      (scheme == "http" || scheme == "https"), url.host?.isEmpty == false else { return nil }
+                if let screen = AorusPluginScreen.resolve(value) {
+                    guard !item.siteIcon else { return nil }
+                    item.url = screen.link
+                } else {
+                    guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
+                          (scheme == "http" || scheme == "https"), url.host?.isEmpty == false else { return nil }
+                }
             }
             // A site's icon needs a site, and is drawn only in Telegram's settings list.
             if item.siteIcon, item.url == nil || !item.isInTelegramSettings { return nil }
@@ -903,12 +926,52 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
     }
 }
 
-/// A tab a plugin puts into the bottom bar, next to Chats, Calls and Settings: a site, drawn
-/// as a page of the app, or one of the plugin's own screens.
-///
-/// The bar has room for so much, so a plugin gets two tabs and all plugins together get
-/// `maximumTotal`; the rest wait. The icon is always a glyph from the catalogue — a site's own
-/// icon is for the settings list, where rows are tiles, not for a bar of line glyphs.
+/// Stable native destinations shared by the navigation API and plugin UI containers.
+public enum AorusPluginScreen: String, CaseIterable, Codable {
+    case plugins, documentation = "plugins.documentation"
+    case pluginDetails = "plugin.details", pluginSettings = "plugin.settings"
+    case pluginConsole = "plugin.console", pluginEditor = "plugin.editor"
+    case pluginPermissions = "plugin.permissions", pluginAppearance = "plugin.appearance"
+    case aorus, privacy = "aorus.privacy", interface = "aorus.interface"
+    case tabs = "aorus.tabs", messages = "aorus.messages", voice = "aorus.voice"
+    case video = "aorus.video", calls = "aorus.calls", wall = "aorus.wall"
+    case performance = "aorus.performance"
+    case device = "aorus.device", bypass = "aorus.bypass", antiSpoof = "aorus.antiSpoof"
+    case backup = "aorus.backup", code = "aorus.code", other = "aorus.other"
+    case bubbles, messageAppearance, font, masks, voiceTwin, wallSettings
+    case antiSpam, quickReplies, autoFormat, fakeGifts, chatLocks, accountBackup, ai
+    case settings, settingsPrivacy = "settings.privacy", notifications = "settings.notifications"
+    case data = "settings.data", appearance = "settings.appearance", language = "settings.language"
+    case folders = "settings.folders", proxy = "settings.proxy", stickers = "settings.stickers"
+    case chats, contacts, recentCalls = "calls", feed = "wall"
+
+    public var link: String { "aorus://screen/" + rawValue }
+
+    /// The same identifier is accepted by the navigation API and by a native tab.
+    public static func resolve(_ value: String) -> AorusPluginScreen? {
+        if let screen = Self(rawValue: value) { return screen }
+        guard value.count <= 256, let url = URLComponents(string: value),
+              url.scheme?.lowercased() == "aorus", url.host?.lowercased() == "screen",
+              url.user == nil, url.password == nil, url.port == nil,
+              url.query == nil, url.fragment == nil,
+              url.percentEncodedPath == url.path, url.path.hasPrefix("/"),
+              url.path.dropFirst().contains("/") == false else { return nil }
+        return Self(rawValue: String(url.path.dropFirst()))
+    }
+
+    public static func settingsSection(_ section: String?) -> AorusPluginScreen? {
+        guard let section, !section.isEmpty else { return .aorus }
+        if section == "plugins" { return .plugins }
+        if section == "ui" { return .interface }
+        if section == "misc" { return .other }
+        guard let screen = Self.resolve(section.hasPrefix("aorus.") ? section : "aorus." + section),
+              screen.rawValue.hasPrefix("aorus.") else { return nil }
+        return screen
+    }
+}
+
+/// A website, a custom plugin page or a native client screen in the bottom bar.
+/// Each plugin and all plugins together retain the existing two-tab limit.
 public struct AorusPluginTab: Codable, Equatable {
     public static let maximumPerPlugin = 2
     public static let maximumTotal = 2
@@ -918,13 +981,15 @@ public struct AorusPluginTab: Codable, Equatable {
     public var icon: String?
     public var pageId: String?
     public var url: String?
+    public var screen: String?
 
-    public init(id: String, title: String, icon: String? = nil, pageId: String? = nil, url: String? = nil) {
+    public init(id: String, title: String, icon: String? = nil, pageId: String? = nil, url: String? = nil, screen: String? = nil) {
         self.id = id
         self.title = title
         self.icon = icon
         self.pageId = pageId
         self.url = url
+        self.screen = screen
     }
 
     public static func validated(from data: Data) -> [AorusPluginTab]? {
@@ -937,7 +1002,7 @@ public struct AorusPluginTab: Codable, Equatable {
             var item = items[index]
             guard identifier?.firstMatch(in: item.id, range: NSRange(location: 0, length: item.id.utf16.count)) != nil,
                   ids.insert(item.id).inserted,
-                  (item.pageId != nil) != (item.url != nil) else { return nil }
+                  [item.pageId, item.url, item.screen].compactMap({ $0 }).count == 1 else { return nil }
             let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
             // A tab title sits under a glyph in a bar shared with four others.
@@ -946,10 +1011,20 @@ public struct AorusPluginTab: Codable, Equatable {
             if let pageId = item.pageId,
                identifier?.firstMatch(in: pageId, range: NSRange(location: 0, length: pageId.utf16.count)) == nil { return nil }
             if let value = item.url {
+                if let target = AorusPluginScreen.resolve(value) {
+                    item.screen = target.rawValue
+                    item.url = nil
+                    items[index] = item
+                    continue
+                }
                 let bounded = String(value.prefix(2_048))
                 guard let url = URL(string: bounded), let scheme = url.scheme?.lowercased(),
                       scheme == "http" || scheme == "https", url.host?.isEmpty == false else { return nil }
                 item.url = bounded
+            }
+            if let value = item.screen {
+                guard let target = AorusPluginScreen.resolve(value) else { return nil }
+                item.screen = target.rawValue
             }
             items[index] = item
         }

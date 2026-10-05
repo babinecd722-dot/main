@@ -921,6 +921,25 @@ aorus.chat.current().then(function (value) {
         });
     });
 }).then(async function () {
+    globalThis.__answers['navigation.screens'] = [{ id: 'plugins', link: 'aorus://screen/plugins' }];
+    globalThis.__answers['navigation.screenLink'] = 'aorus://screen/plugins';
+    const screenCatalogue = await aorus.navigation.screens();
+    check('screen catalogue did not cross the broker', screenCatalogue[0].id === 'plugins');
+    const nativeLink = await aorus.navigation.screenLink('plugins');
+    check('screenLink lost its destination', lastRequest('navigation.screenLink').screen === 'plugins' && nativeLink === 'aorus://screen/plugins');
+    for (const style of ['push', 'sheet', 'fullScreen']) {
+        await aorus.navigation.openScreen(nativeLink, { style });
+        check('native screen presentation did not cross the broker', lastRequest('navigation.openScreen').screen === nativeLink && lastRequest('navigation.openScreen').style === style);
+    }
+    await aorus.navigation.openScreen('plugins');
+    check('default screen presentation is not push', lastRequest('navigation.openScreen').style === 'push');
+    throws('missing native destination was accepted', () => aorus.navigation.openScreen());
+    throws('unknown presentation style was accepted', () => aorus.navigation.openScreen('plugins', { style: 'other' }));
+    throws('array screen options were accepted', () => aorus.navigation.openScreen('plugins', []));
+    const removeNativeTab = aorus.tabs.register({ id: 'native', title: 'Plugins', screen: nativeLink });
+    check('native tab route was lost', lastTabs().some(tab => tab.id === 'native' && tab.screen === nativeLink));
+    removeNativeTab();
+    check('native tab disposer left its tab behind', !lastTabs().some(tab => tab.id === 'native'));
     globalThis.__answers['ai.ask'] = { text: 'Answer', artifacts: [] };
     const chat = aorus.ai.createChat();
     const thread = chat.threadId();

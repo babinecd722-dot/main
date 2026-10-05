@@ -1246,7 +1246,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
 // MARK: - Public factory
 
-public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes) -> ViewController {
+public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes, section: String? = nil) -> ViewController {
     // License gate: opening the AorusGram settings while the subscription is locked
     // routes to the purchase/subscription screen instead (LicenseGate handles the
     // notification). Fail-open — an active user (flag absent/false) is never affected.
@@ -1684,7 +1684,17 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             // own ListViewItems and take a PresentationTheme directly, so they have to ask for it
             // here. Handed the raw theme they paint an opaque card -- which is what put a grey
             // block behind the interval sliders on top of the pane of glass behind the section.
-            let entries = aorusEntries(state: state, theme: presentationData.theme.aorusGlassListTheme, l10n: l10n)
+            var entries = aorusEntries(state: state, theme: presentationData.theme.aorusGlassListTheme, l10n: l10n)
+            let sections: [String: AorusSection] = [
+                "privacy": .privacy, "interface": .ui, "tabs": .tabs,
+                "messages": .editLocal, "voice": .voiceMessages, "video": .videoMessages,
+                "calls": .calls, "wall": .wall, "performance": .performance,
+                "device": .deviceSpoof, "bypass": .bypass, "antiSpoof": .antiSpoof,
+                "backup": .accountBackup, "code": .aorusCode, "other": .misc
+            ]
+            if let section, let selected = sections[section] {
+                entries = entries.filter { $0.section == selected.rawValue }
+            }
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text("AorusGram"),

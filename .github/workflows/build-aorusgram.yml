@@ -952,6 +952,7 @@ jobs:
           # The two install functions patch_plugin_hook_sites calls from the chat controller.
           # Without this file the call sites are injected and nothing defines them.
           cp $PATCHES/submodules/TelegramUI/Sources/AorusPluginHookInstall.swift $TG/submodules/TelegramUI/Sources/
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusPluginScreenRoutes.swift $TG/submodules/TelegramUI/Sources/
 
           # 8. Copy the AorusGram SOCKS5 call-proxy reader into TelegramCallsUI (the
           #    call-start sites are patched to use it by aorus_branding.py).
@@ -1129,6 +1130,9 @@ jobs:
 
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
+
+      - name: Plugin native screen links preflight
+        run: python3 aorusgram/scripts/plugin_screens_check.py aorusgram
 
       # A property of ours whose name a Telegram base class already uses is read by Swift
       # as an attempt to override it, and fails the module compile. It cannot be seen from
@@ -1463,6 +1467,9 @@ jobs:
           fi
 
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
+
+      - name: Verify release IPA
+        run: python3 aorusgram/scripts/ipa_check.py "$RUNNER_TEMP/AorusGram-unsigned.ipa" --build "$GITHUB_RUN_NUMBER"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

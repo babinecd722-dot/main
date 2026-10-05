@@ -55,6 +55,8 @@ def main() -> None:
     err.extend(verify_navigation_icons(tg))
     from aorus_native_theme import verify_native_theme
     err.extend(verify_native_theme(tg))
+    from aorus_plugin_screens import verify_plugin_screens
+    err.extend(verify_plugin_screens(tg))
 
     here = Path(__file__).resolve().parent
     branding_source = (here / "aorus_branding.py").read_text(encoding="utf-8")

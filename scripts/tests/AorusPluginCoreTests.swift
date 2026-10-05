@@ -2285,6 +2285,34 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(themeResults["theme"] == .string("night/5B4DFF/dark"), "the theme reaches a plugin without any grant, like isDark always has")
     themeSandbox.stop()
 
+    // The actual JavaScriptCore broker validates the destination before reaching native UI.
+    let screenHost = AorusPluginNullHost()
+    var openedScreens: [(String, AorusPluginScreen, String)] = []
+    var screenResults: [String: AorusPluginJSONValue] = [:]
+    screenHost.onOpenScreen = { openedScreens.append(($0, $1, $2)) }
+    screenHost.onStorageChanged = { _, values in screenResults = values }
+    let screenSource = """
+    aorus.on('start', async function () {
+        const catalogue = await aorus.navigation.screens();
+        aorus.storage.set('count', catalogue.length);
+        const link = await aorus.navigation.screenLink('plugins');
+        await aorus.navigation.openScreen(link, { style: 'sheet' });
+        try { await aorus.navigation.openScreen('unknown'); } catch (error) { aorus.storage.set('unknown', error.message); }
+        await aorus.navigation.openScreen('plugins.documentation');
+        aorus.tabs.register({ id: 'native', title: 'Plugins', screen: 'plugins' });
+        aorus.storage.set('done', true);
+    });
+    """
+    let screenSandbox = AorusPluginSandbox(manifest: AorusPluginManifest(name: "Screens"), source: screenSource, host: screenHost, permissions: [.appCustomization])
+    let screensStarted = DispatchSemaphore(value: 0)
+    screenSandbox.start { error in expect(error == nil, "screen navigation plugin starts"); screensStarted.signal() }
+    _ = screensStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.3)
+    expect(openedScreens.count == 2 && openedScreens.first?.1 == .plugins && openedScreens.first?.2 == "sheet" && openedScreens.last?.1 == .documentation, "screen routes and presentation reach the native host; invalid route does not")
+    expect(screenResults["unknown"] == .string("Unknown screen"), "unknown native route rejects without breaking the next call")
+    expect(screenResults["done"] == .bool(true), "native screen tabs require no browser or custom-page grant")
+    screenSandbox.stop()
+
     // A plugin with nowhere to write is told so rather than writing somewhere else.
     let noFilesHost = AorusPluginNullHost()
     var noFilesResults: [String: AorusPluginJSONValue] = [:]
