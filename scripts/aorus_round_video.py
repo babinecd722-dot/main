@@ -333,7 +333,7 @@ def patch_enqueue(tg: Path) -> None:
     replace(enqueue, '                    for attribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {', '''                    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {
                         let attribute: MessageAttribute
                         if let round = requestedAttribute as? AorusRoundVideoMessageAttribute,
-                           mediaList.contains(where: { ($0 as? TelegramMediaFile)?.isInstantVideo == true }),
+                           (mediaReference?.media as? TelegramMediaFile)?.isInstantVideo == true,
                            !requestedAttributes.contains(where: { $0 is OutgoingScheduleInfoMessageAttribute }) {
                             attribute = round.started(at: Date().timeIntervalSince1970)
                         } else if requestedAttribute is AorusRoundVideoMessageAttribute {

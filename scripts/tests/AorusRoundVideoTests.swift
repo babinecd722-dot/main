@@ -8,6 +8,24 @@ import SwiftSignalKit
         if !value() { fatalError(message) }
     }
     static func main() {
+        for duration in [0.0, 0.5, 10.0, 60.0] {
+            for circle in [false, true] { for scheduled in [false, true] { for attached in [false, true] {
+                let request = AorusRoundVideoMessageAttribute(duration: duration, deadline: 123)
+                let schedule = OutgoingScheduleInfoMessageAttribute()
+                let requested: [MessageAttribute] = scheduled ? [request, schedule] : [request]
+                let before = Date().timeIntervalSince1970
+                let outgoing = nativeRoundEnqueueAttributes(mediaReference: attached ? ControlledMediaReference(media: TelegramMediaFile(circle)) : nil, requestedAttributes: requested)
+                let after = Date().timeIntervalSince1970
+                let recording = outgoing.compactMap { $0 as? AorusRoundVideoMessageAttribute }.first
+                expect((recording != nil) == (circle && attached && !scheduled), "native transaction delays only an attached, unscheduled circle")
+                expect(outgoing.contains(where: { $0 is OutgoingScheduleInfoMessageAttribute }) == scheduled, "native schedule remains independent")
+                if let recording {
+                    expect(recording.duration == duration, "native enqueue retains the clip duration")
+                    expect(recording.deadline >= before + duration && recording.deadline <= after + duration, "deadline starts at the actual enqueue transaction")
+                    expect(recording !== request, "a new send gets its own persisted deadline")
+                }
+            } } }
+        }
         for duration in [-100.0, -0.0, 0.01, 0.5, 1.0, 59.99, 60.0, 61.0, 600.0, .nan, .infinity, -.infinity] {
             let state = AorusRoundVideoMessageAttribute(duration: duration)
             expect(state.duration.isFinite && state.duration >= 0 && state.duration <= 60, "bounded recording duration")

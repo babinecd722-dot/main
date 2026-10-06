@@ -20,6 +20,13 @@ public final class PostboxEncoder {
     public func encodeDouble(_ value: Double, forKey: String) { values[forKey] = value }
 }
 public final class TelegramMediaFile { public let isInstantVideo: Bool; public init(_ round: Bool) { isInstantVideo = round } }
+struct ControlledMediaReference { let media: AnyObject }
+final class OutgoingScheduleInfoMessageAttribute: MessageAttribute {
+    init() {}
+    required init(decoder: PostboxDecoder) {}
+    func encode(_ encoder: PostboxEncoder) {}
+}
+func filterMessageAttributesForOutgoingMessage(_ attributes: [MessageAttribute]) -> [MessageAttribute] { attributes }
 public struct MessageFlags { public let isSending: Bool }
 public struct Message {
     public let flags: MessageFlags
@@ -29,6 +36,25 @@ public struct Message {
 }
 enum PendingMessageUploadedContentResult { case progress(Double); case content(Int) }
 enum PendingMessageUploadError: Error { case generic }
+'''
+
+
+def native_enqueue_source(tg: Path) -> str:
+    source = (tg / 'submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift').read_text()
+    start = source.index('                    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {')
+    end = source.index('                        if let attribute = attribute as? AutoremoveTimeoutMessageAttribute {', start)
+    # Compile the native decision with the transaction's bindings in their real order.
+    # mediaList is deliberately built after attributes, as in Telegram's transaction.
+    return '''import Foundation
+func nativeRoundEnqueueAttributes(mediaReference: ControlledMediaReference?, requestedAttributes: [MessageAttribute]) -> [MessageAttribute] {
+    var attributes: [MessageAttribute] = []
+''' + source[start:end] + '''        attributes.append(attribute)
+    }
+    var mediaList: [AnyObject] = []
+    if let mediaReference { mediaList.append(mediaReference.media) }
+    _ = mediaList
+    return attributes
+}
 '''
 
 
@@ -66,8 +92,10 @@ def main():
         attribute = work / 'AorusRoundVideoMessageAttribute.swift'
         actual = args.repo / 'patches/submodules/TelegramCore/Sources/SyncCore/AorusRoundVideoMessageAttribute.swift'
         attribute.write_text(actual.read_text().replace('import Postbox\n', ''))
+        enqueue = work / 'NativeRoundEnqueue.swift'
+        enqueue.write_text(native_enqueue_source(args.telegram_source))
         binary = work / 'tests'
-        subprocess.run(common + ['-warnings-as-errors', '-I', str(work), '-L', str(work), '-lSwiftSignalKit', '-Xlinker', '-rpath', '-Xlinker', str(work), str(fixture), str(attribute), str(args.repo / 'scripts/tests/AorusRoundVideoTests.swift'), '-o', str(binary)], check=True)
+        subprocess.run(common + ['-warnings-as-errors', '-I', str(work), '-L', str(work), '-lSwiftSignalKit', '-Xlinker', '-rpath', '-Xlinker', str(work), str(fixture), str(attribute), str(enqueue), str(args.repo / 'scripts/tests/AorusRoundVideoTests.swift'), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True, timeout=20)
 
 
