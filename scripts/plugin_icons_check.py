@@ -183,22 +183,32 @@ def main():
                 try:
                     # UIKit's screen configuration requires a real application launch;
                     # simctl spawn of a command-line tool can wait indefinitely on it.
-                    result = subprocess.run(["xcrun", "simctl", "launch", "--console", "--terminate-running-process", device["udid"], bundle_id], capture_output=True, text=True, timeout=120)
+                    for attempt in range(2):
+                        try:
+                            result = subprocess.run(["xcrun", "simctl", "launch", "--console", "--terminate-running-process", device["udid"], bundle_id], capture_output=True, text=True, timeout=120)
+                            break
+                        except subprocess.TimeoutExpired as failure:
+                            outputs = [output.decode(errors="replace") if isinstance(output, bytes) else output for output in [failure.stdout, failure.stderr] if output]
+                            for output in outputs:
+                                print(output, flush=True)
+                            # Simulator processes share the host kernel; a sample identifies the
+                            # exact UIKit call that failed to return instead of hiding the timeout.
+                            processes = subprocess.run(["pgrep", "-f", executable.name], capture_output=True, text=True)
+                            for pid in processes.stdout.split():
+                                subprocess.run(["sample", pid, "1", "1"], timeout=15, check=False)
+                            # A freshly booted simulator sometimes never starts the application:
+                            # its first line, printed before any assertion, never arrives. Only
+                            # that case is launched once more; a test that started and hung fails.
+                            started = any("UIKit icons: starting" in output for output in outputs)
+                            if started or attempt == 1:
+                                raise
+                            print("The simulator did not start the UIKit test application; launching it again", flush=True)
+                            subprocess.run(["xcrun", "simctl", "terminate", device["udid"], bundle_id], check=False)
                     print(result.stdout, end="", flush=True)
                     print(result.stderr, end="", flush=True)
                     result.check_returncode()
                     if "UIKit icon resolver passed:" not in result.stdout:
                         raise RuntimeError("The UIKit application exited without completing its assertions")
-                except subprocess.TimeoutExpired as failure:
-                    for output in [failure.stdout, failure.stderr]:
-                        if output:
-                            print(output.decode(errors="replace") if isinstance(output, bytes) else output, flush=True)
-                    # Simulator processes share the host kernel; a sample identifies the
-                    # exact UIKit call that failed to return instead of hiding the timeout.
-                    processes = subprocess.run(["pgrep", "-f", executable.name], capture_output=True, text=True)
-                    for pid in processes.stdout.split():
-                        subprocess.run(["sample", pid, "1", "1"], timeout=15, check=False)
-                    raise
                 finally:
                     subprocess.run(["xcrun", "simctl", "uninstall", device["udid"], bundle_id], check=False)
             finally:
