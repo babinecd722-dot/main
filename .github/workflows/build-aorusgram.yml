@@ -1132,14 +1132,14 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
 
+      - name: Native round video sending preflight
+        run: python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
+
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
 
       - name: Native message details preflight
         run: python3 aorusgram/scripts/message_details_check.py aorusgram --telegram-source telegram-ios
-
-      - name: Native round video sending preflight
-        run: python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
 
       - name: Plugin native screen links preflight
         run: python3 aorusgram/scripts/plugin_screens_check.py aorusgram

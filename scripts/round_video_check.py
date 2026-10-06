@@ -53,6 +53,14 @@ def main():
         suffix = 'dylib' if platform.system() == 'Darwin' else 'so'
         library = work / ('libSwiftSignalKit.' + suffix)
         common = [args.swiftc, '-module-cache-path', str(work / 'cache')]
+        from round_video_uikit_fixtures import badge_source
+        badges = work / 'NativeBadgeMetrics.swift'
+        badges.write_text(badge_source(args.telegram_source).replace('import UIKit\n', 'import Foundation\n'))
+        badge_main = work / 'main.swift'
+        badge_main.write_text('print("Cutout badge metrics passed: \\(runBadgeMetricsRegression()) assertions")\n')
+        badge_binary = work / 'badge-tests'
+        subprocess.run(common + ['-warnings-as-errors', str(badges), str(args.repo / 'scripts/tests/AorusBadgeMetricsTests.swift'), str(badge_main), '-o', str(badge_binary)], check=True)
+        subprocess.run([str(badge_binary)], check=True, timeout=20)
         subprocess.run(common + ['-suppress-warnings', '-emit-module', '-emit-library', '-module-name', 'SwiftSignalKit', '-o', str(library)] + paths, check=True)
         fixture = work / 'Fixtures.swift'; fixture.write_text(FIXTURES)
         attribute = work / 'AorusRoundVideoMessageAttribute.swift'

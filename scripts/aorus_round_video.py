@@ -204,6 +204,7 @@ def patch_round_video(tg: Path) -> None:
         editorTabPressed(tab);''')
     replace(interface, '            strongSelf->_muteButton.hidden = !sendableAsGif;', '''            strongSelf->_muteButton.hidden = !sendableAsGif;
             strongSelf->_aorusRoundButton.hidden = !sendableAsGif || ([strongSelf->_currentItem isKindOfClass:[TGMediaPickerGalleryItem class]] && ((TGMediaPickerGalleryItem *)strongSelf->_currentItem).asFile) || strongSelf.onlyCrop;
+            [strongSelf setNeedsLayout];
 ''')
     replace(interface, '    _muteButton.selected = adjustments.sendAsGif;', '''    _muteButton.selected = adjustments.sendAsGif;
     TGVideoEditAdjustments *aorusVideo = [adjustments isKindOfClass:[TGVideoEditAdjustments class]] ? (TGVideoEditAdjustments *)adjustments : nil;
@@ -386,7 +387,16 @@ def patch_countdown(tg: Path) -> None:
 
 def patch_badge(tg: Path) -> None:
     path = tg / 'submodules/Display/Source/DeviceMetrics.swift'
-    replace(path, '            case .iPhoneX, .iPhoneXSMax, .iPhoneXr, .iPhone12Mini, .iPhone12, .iPhone12ProMax:', '            case .iPhoneX, .iPhoneXSMax, .iPhoneXr, .iPhone12Mini, .iPhone12, .iPhone12ProMax, .iPhone13Mini, .iPhone13, .iPhone13Pro, .iPhone13ProMax:')
+    old_notch = '''    public var hasTopNotch: Bool {
+        switch self {
+            case .iPhoneX, .iPhoneXSMax, .iPhoneXr, .iPhone12Mini, .iPhone12, .iPhone12ProMax:
+                return true
+            default:
+                return false
+        }
+    }'''
+    new_notch = old_notch.replace('.iPhone12ProMax:', '.iPhone12ProMax, .iPhone13Mini, .iPhone13, .iPhone13Pro, .iPhone13ProMax:')
+    replace(path, old_notch, new_notch)
     replace(path, '''        if case .iPhoneX = self {
             return false
         }
