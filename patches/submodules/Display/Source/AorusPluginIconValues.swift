@@ -85,6 +85,9 @@ public enum AorusPluginIconValues {
     private static var ownCache: [String: [(original: UIImage, result: UIImage)]] = [:]
     private static var symbolCache: [String: UIImage] = [:]
     private static var installed = false
+    /// The main screen's scale, read on the main thread at launch. UIScreen belongs to the
+    /// main thread, and icons are also drawn on background queues.
+    private static var screenScale: CGFloat = 3.0
     private static var styledImageKey: UInt8 = 0
     private static var originalImageKey: UInt8 = 0
     private static var symbolSourceKey: UInt8 = 0
@@ -105,6 +108,12 @@ public enum AorusPluginIconValues {
         installed = true
         lock.unlock()
         if first {
+            if Thread.isMainThread {
+                let scale = UIScreen.main.scale
+                lock.lock()
+                screenScale = scale
+                lock.unlock()
+            }
             setAppBundleImageResolver(AorusBundleIconResolver())
             UIImage.aorusInstallSymbolResolver()
             memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { _ in
@@ -436,7 +445,10 @@ public enum AorusPluginIconValues {
         let size = original.size
         // Symbols are vectors at scale 1. Rasterize at the screen's scale so UIKit does not
         // soften the pixel grid when the bitmap is displayed on a Retina screen.
-        let scale = original.isSymbolImage ? max(original.scale, UIScreen.main.scale) : max(1.0, original.scale)
+        lock.lock()
+        let displayScale = screenScale
+        lock.unlock()
+        let scale = original.isSymbolImage ? max(original.scale, displayScale) : max(1.0, original.scale)
         guard size.width >= 1.0, size.height >= 1.0, size.width <= 2048.0, size.height <= 2048.0 else {
             return nil
         }
@@ -2102,6 +2114,10 @@ public enum AorusPluginIconValues {
     /// strokes along their middle, its wide parts by area with the narrow gaps and small holes
     /// in them kept open. `shape` and `weight` are on the padded canvas.
     private static func pixelShape(_ shape: [Bool], weight: [Float], grid: PixelGrid, axes: PixelAxes) -> [Bool] {
+        return pixelJoinParts(shape, weight: weight, grid: grid, blocks: pixelShapeBlocks(shape, weight: weight, grid: grid, axes: axes))
+    }
+
+    private static func pixelShapeBlocks(_ shape: [Bool], weight: [Float], grid: PixelGrid, axes: PixelAxes) -> [Bool] {
         let cell = Float(grid.cell)
         let area = cell * cell
         let paddedWidth = grid.paddedWidth
@@ -2277,20 +2293,15 @@ public enum AorusPluginIconValues {
                 return least
             }
             if brushes[label] == 1 {
-                // Follow the middle as one connected path of blocks. Diamond intersection
-                // misses short corner segments and leaves gaps in rings and stray pixels.
-                var x = Int(ax.rounded(.down)), y = Int(ay.rounded(.down))
-                let endX = Int(bx.rounded(.down)), endY = Int(by.rounded(.down))
-                let dx = abs(endX - x), dy = -abs(endY - y)
-                let stepX = x < endX ? 1 : -1, stepY = y < endY ? 1 : -1
-                var error = dx + dy
-                while true {
-                    grid.set(&blocks, x, y, true)
-                    hit[label] = true
-                    if x == endX && y == endY { break }
-                    let twice = 2 * error
-                    if twice >= dy { error += dy; x += stepX }
-                    if twice <= dx { error += dx; y += stepY }
+                // The blocks whose diamond the middle passes through: one block per step, so a
+                // slanted line is a single stair. Stepping from block to block by the rounded
+                // ends instead doubles the stair wherever two segments meet. A part this leaves
+                // in pieces is joined again by pixelJoinParts.
+                for column in Int(min(ax, bx).rounded(.down)) ... Int(max(ax, bx).rounded(.down)) {
+                    for row in Int(min(ay, by).rounded(.down)) ... Int(max(ay, by).rounded(.down)) where nearest(Float(column) + 0.5, Float(row) + 0.5) < 0.5 {
+                        grid.set(&blocks, column, row, true)
+                        hit[label] = true
+                    }
                 }
             } else {
                 for cornerX in Int((min(ax, bx) + 0.5).rounded(.down)) ... Int((max(ax, bx) + 0.5).rounded(.down)) {
@@ -2339,6 +2350,173 @@ public enum AorusPluginIconValues {
             }
         }
         return blocks
+    }
+
+    /// A part that is one piece in the icon stays one piece in blocks. Where the blocks of one
+    /// part of ink fall apart — a curve whose width leaves every block under half covered, the
+    /// joint of a filled area and a stroke — the pieces are joined by the cheapest chain of
+    /// blocks that part's ink reaches, the ones it covers most first. Separate parts are never
+    /// joined, so a gap the icon draws stays a gap.
+    private static func pixelJoinParts(_ shape: [Bool], weight: [Float], grid: PixelGrid, blocks: [Bool]) -> [Bool] {
+        let paddedWidth = grid.paddedWidth
+        let padding = grid.padding
+        let parts = connectedParts(shape, width: paddedWidth, height: grid.paddedHeight, diagonal: true)
+        let blockCount = grid.columns * grid.rows
+        guard parts.count > 0, blockCount > 0 else {
+            return blocks
+        }
+        // Each block belongs to the part with the most ink in it.
+        var cover = [[Int: Float]](repeating: [:], count: blockCount)
+        for y in 0 ..< grid.height {
+            for x in 0 ..< grid.width {
+                let index = (y + padding) * paddedWidth + x + padding
+                let label = Int(parts.labels[index])
+                let block = grid.block(x, y)
+                if label > 0, block >= 0, block < blockCount {
+                    cover[block][label, default: 0.0] += weight[index]
+                }
+            }
+        }
+        var owner = [Int](repeating: 0, count: blockCount)
+        var ownInk = [Float](repeating: 0.0, count: blockCount)
+        var owned = [[Int]](repeating: [], count: parts.count + 1)
+        for block in 0 ..< blockCount {
+            for (label, ink) in cover[block] where ink > ownInk[block] || (ink == ownInk[block] && label < owner[block]) {
+                owner[block] = label
+                ownInk[block] = ink
+            }
+            if owner[block] > 0 {
+                owned[owner[block]].append(block)
+            }
+        }
+        let area = Float(grid.cell * grid.cell)
+        let columns = grid.columns
+        let rows = grid.rows
+        func neighbours(_ block: Int) -> [Int] {
+            let column = block % columns
+            let row = block / columns
+            var result: [Int] = []
+            for dy in -1 ... 1 {
+                for dx in -1 ... 1 where dx != 0 || dy != 0 {
+                    let nextColumn = column + dx
+                    let nextRow = row + dy
+                    if nextColumn >= 0, nextColumn < columns, nextRow >= 0, nextRow < rows {
+                        result.append(nextRow * columns + nextColumn)
+                    }
+                }
+            }
+            return result
+        }
+
+        var result = blocks
+        for label in 1 ..< parts.count + 1 where owned[label].filter({ result[$0] }).count > 1 {
+            while true {
+                // The drawn pieces of this part.
+                var piece = [Int](repeating: 0, count: blockCount)
+                var pieces = 0
+                for start in owned[label] where result[start] && piece[start] == 0 {
+                    pieces += 1
+                    piece[start] = pieces
+                    var stack = [start]
+                    while let block = stack.popLast() {
+                        for next in neighbours(block) where result[next] && owner[next] == label && piece[next] == 0 {
+                            piece[next] = pieces
+                            stack.append(next)
+                        }
+                    }
+                }
+                if pieces < 2 {
+                    break
+                }
+                // From the first piece to the nearest other one through this part's blocks.
+                var cost = [Float](repeating: .greatestFiniteMagnitude, count: blockCount)
+                var previous = [Int](repeating: -1, count: blockCount)
+                var queue = PixelQueue()
+                for block in owned[label] where piece[block] == 1 {
+                    cost[block] = 0.0
+                    queue.push(0.0, block)
+                }
+                var reached = -1
+                while let entry = queue.pop() {
+                    let spent = entry.cost
+                    let block = entry.block
+                    if spent > cost[block] {
+                        continue
+                    }
+                    if piece[block] > 1 {
+                        reached = block
+                        break
+                    }
+                    for next in neighbours(block) where owner[next] == label && piece[next] != 1 {
+                        let step: Float = piece[next] > 1 ? 0.0 : 2.0 - min(1.0, ownInk[next] / area)
+                        if spent + step < cost[next] - 0.000001 {
+                            cost[next] = spent + step
+                            previous[next] = block
+                            queue.push(spent + step, next)
+                        }
+                    }
+                }
+                if reached < 0 {
+                    break
+                }
+                var block = previous[reached]
+                while block >= 0 {
+                    result[block] = true
+                    block = previous[block]
+                }
+            }
+        }
+        return result
+    }
+
+    /// The cheapest unfinished block first, for pixelJoinParts.
+    private struct PixelQueue {
+        private var items: [(cost: Float, block: Int)] = []
+
+        mutating func push(_ cost: Float, _ block: Int) {
+            self.items.append((cost, block))
+            var child = self.items.count - 1
+            while child > 0 {
+                let parent = (child - 1) / 2
+                guard PixelQueue.before(self.items[child], self.items[parent]) else {
+                    break
+                }
+                self.items.swapAt(child, parent)
+                child = parent
+            }
+        }
+
+        mutating func pop() -> (cost: Float, block: Int)? {
+            guard let first = self.items.first else {
+                return nil
+            }
+            let last = self.items.removeLast()
+            if !self.items.isEmpty {
+                self.items[0] = last
+                var parent = 0
+                while true {
+                    let left = 2 * parent + 1
+                    let right = left + 1
+                    var smallest = parent
+                    if left < self.items.count && PixelQueue.before(self.items[left], self.items[smallest]) {
+                        smallest = left
+                    }
+                    if right < self.items.count && PixelQueue.before(self.items[right], self.items[smallest]) {
+                        smallest = right
+                    }
+                    if smallest == parent {
+                        break
+                    }
+                    self.items.swapAt(parent, smallest)
+                    parent = smallest
+                }
+            }
+            return first
+        }
+
+        private static func before(_ lhs: (cost: Float, block: Int), _ rhs: (cost: Float, block: Int)) -> Bool {
+            return lhs.cost != rhs.cost ? lhs.cost < rhs.cost : lhs.block < rhs.block
+        }
     }
 
     /// Small dots and rings: parts at most three and a half blocks across that fill most of

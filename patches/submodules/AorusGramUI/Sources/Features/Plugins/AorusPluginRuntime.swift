@@ -2330,6 +2330,10 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             // A plugin never reaches into anybody's documents: it is handed one file, by
             // name, the same as one it wrote itself.
             guard self.filePicker == nil else { completion(.failure(AorusPluginRequestError("A file picker is already open"))); return }
+            guard presenter.presentedViewController == nil, !presenter.isBeingDismissed, !presenter.isBeingPresented else {
+                completion(.failure(AorusPluginRequestError("Another screen is opening or closing; try again")))
+                return
+            }
             let delegate = AorusPluginFilePickerDelegate(directory: directory) { [weak self] result in
                 self?.filePicker = nil
                 completion(result)
@@ -2339,6 +2343,11 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             picker.delegate = delegate
             picker.allowsMultipleSelection = false
             presenter.present(picker, animated: true)
+            // UIKit drops a presentation it cannot start without telling the delegate. Such a
+            // picker must answer now, or every later pick is refused as already open.
+            if picker.presentingViewController == nil {
+                delegate.abandon(AorusPluginRequestError("The file picker could not be shown"))
+            }
         }
     }
 
@@ -2510,67 +2519,88 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     completion(.success(["pluginId": manifest.id, "name": manifest.name, "enabled": NSNumber(value: false)])); return
                 }
                 guard let names = payload["names"] as? [String], !names.isEmpty, names.count <= 10, Set(names).count == names.count else { throw AorusPluginRequestError("Choose 1 to 10 files") }
-                let data: [(String, Data)] = try names.map { name in
-                    guard let bytes = files.readData(name) else { throw AorusPluginRequestError("No such file: \(name)") }
-                    return ((name as NSString).lastPathComponent, bytes)
+                let sharing = action == "files.share"
+                // A send is checked before anything is copied: a wrong chat or option must not
+                // cost ten file copies.
+                let target: PeerId?
+                let sendOptions: AorusPluginFileSendOptions?
+                if sharing {
+                    target = nil
+                    sendOptions = nil
+                } else {
+                    if payload["toSelf"] as? Bool == true { target = context.account.peerId }
+                    else if let value = payload["peerId"] as? String, let id = Int64(value) { target = PeerId(id) }
+                    else { throw AorusPluginRequestError("peerId is required") }
+                    sendOptions = try AorusPluginFileSendOptions(payload["options"] as? [String: Any] ?? [:])
                 }
-                var shareDirectory: URL?
-                var shareURLs: [URL] = []
-                if action == "files.share" {
-                    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-share").appendingPathComponent(UUID().uuidString)
-                    do {
-                        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                        for (index, entry) in data.enumerated() {
-                            let folder = directory.appendingPathComponent(String(index))
+                // Files are copied on disk, never read into memory: ten files at the 32 MB
+                // limit would otherwise be held at once. The copies are what the share menu
+                // and the upload see, so a later write by the plugin changes neither.
+                let shareDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-share").appendingPathComponent(UUID().uuidString)
+                var staged: [(name: String, url: URL, size: Int)] = []
+                do {
+                    for (index, name) in names.enumerated() {
+                        let fileName = (name as NSString).lastPathComponent
+                        let url: URL
+                        if sharing {
+                            // The share menu shows the file's own name, so each copy gets a folder.
+                            let folder = shareDirectory.appendingPathComponent(String(index))
                             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                            let url = folder.appendingPathComponent(entry.0)
-                            try entry.1.write(to: url, options: .atomic)
-                            shareURLs.append(url)
+                            url = folder.appendingPathComponent(fileName)
+                        } else {
+                            // The media box moves this file into its own store; nothing is left behind.
+                            url = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-send-" + UUID().uuidString)
                         }
-                        shareDirectory = directory
-                    } catch { try? FileManager.default.removeItem(at: directory); throw error }
+                        let size = try files.copyFile(name, to: url)
+                        staged.append((fileName, url, size))
+                    }
+                } catch {
+                    if sharing { try? FileManager.default.removeItem(at: shareDirectory) }
+                    else { for entry in staged { try? FileManager.default.removeItem(at: entry.url) } }
+                    throw error
                 }
-                let stagedDirectory = shareDirectory
-                let stagedURLs = shareURLs
+                let stagedFiles = staged
+                let discardStaged: () -> Void = {
+                    if sharing { try? FileManager.default.removeItem(at: shareDirectory) }
+                    else { for entry in stagedFiles { try? FileManager.default.removeItem(at: entry.url) } }
+                }
                 DispatchQueue.main.async {
                     guard self.context.account.id == context.account.id, AorusPluginEntitlement.isAllowed,
                           self.manager?.isPermissionGranted(permission, pluginId: pluginId) == true else {
-                        if let directory = stagedDirectory { try? FileManager.default.removeItem(at: directory) }
+                        discardStaged()
                         completion(.failure(AorusPluginRequestError("Account or plugin permission changed"))); return
                     }
-                    do {
-                        if let directory = stagedDirectory {
-                            self.presentShare(items: stagedURLs, cleanup: { try? FileManager.default.removeItem(at: directory) }) { result in
-                                completion(result.map { ["presented": NSNumber(value: true)] })
-                            }
-                            return
+                    if sharing {
+                        self.presentShare(items: stagedFiles.map { $0.url }, cleanup: { try? FileManager.default.removeItem(at: shareDirectory) }) { result in
+                            completion(result.map { ["presented": NSNumber(value: true)] })
                         }
-                        let target: PeerId
-                        if payload["toSelf"] as? Bool == true { target = context.account.peerId }
-                        else if let value = payload["peerId"] as? String, let id = Int64(value) { target = PeerId(id) }
-                        else { throw AorusPluginRequestError("peerId is required") }
-                        let options = try AorusPluginFileSendOptions(payload["options"] as? [String: Any] ?? [:])
-                        var attributes: [MessageAttribute] = []
-                        if options.silent { attributes.append(NotificationInfoMessageAttribute(flags: .muted)) }
-                        if let timestamp = options.scheduleAt { attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: timestamp, repeatPeriod: nil)) }
-                        let reply = options.replyTo.map { EngineMessageReplySubject(messageId: MessageId(peerId: target, namespace: Namespaces.Message.Cloud, id: $0), quote: nil, innerSubject: nil) }
-                        let messages: [EnqueueMessage] = data.enumerated().map { index, entry in
-                            let id = Int64.random(in: Int64.min...Int64.max)
-                            let resource = LocalFileMediaResource(fileId: id, size: Int64(entry.1.count))
-                            context.account.postbox.mediaBox.storeResourceData(resource.id, data: entry.1)
-                            var mime = "application/octet-stream"
-                            if #available(iOS 14.0, *) { mime = UTType(filenameExtension: (entry.0 as NSString).pathExtension)?.preferredMIMEType ?? mime }
-                            let file = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil,
-                                resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil,
-                                mimeType: mime, size: Int64(entry.1.count), attributes: [.FileName(fileName: entry.0)], alternativeRepresentations: [])
-                            return .message(text: index == 0 ? options.caption : "", attributes: attributes, inlineStickers: [:], mediaReference: .standalone(media: file),
-                                threadId: options.threadId, replyToMessageId: index == 0 ? reply : nil, replyToStoryId: nil, localGroupingKey: nil,
-                                correlationId: nil, bubbleUpEmojiOrStickersets: [])
-                        }
-                        let _ = enqueueMessages(account: context.account, peerId: target, messages: messages).start(next: { ids in
-                            completion(.success(["queued": NSNumber(value: true), "messageIds": ids.compactMap { $0 }.map { ["id": NSNumber(value: $0.id), "namespace": NSNumber(value: $0.namespace), "peerId": String($0.peerId.toInt64())] }]))
-                        })
-                    } catch { completion(.failure(error)) }
+                        return
+                    }
+                    guard let target, let options = sendOptions else {
+                        discardStaged()
+                        completion(.failure(AorusPluginRequestError("peerId is required"))); return
+                    }
+                    var attributes: [MessageAttribute] = []
+                    if options.silent { attributes.append(NotificationInfoMessageAttribute(flags: .muted)) }
+                    if let timestamp = options.scheduleAt { attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: timestamp, repeatPeriod: nil)) }
+                    let reply = options.replyTo.map { EngineMessageReplySubject(messageId: MessageId(peerId: target, namespace: Namespaces.Message.Cloud, id: $0), quote: nil, innerSubject: nil) }
+                    let messages: [EnqueueMessage] = stagedFiles.enumerated().map { index, entry in
+                        let id = Int64.random(in: Int64.min...Int64.max)
+                        let resource = LocalFileMediaResource(fileId: id, size: Int64(entry.size))
+                        // The move runs on the media box's queue, ahead of the upload that reads it.
+                        context.account.postbox.mediaBox.moveResourceData(resource.id, fromTempPath: entry.url.path)
+                        var mime = "application/octet-stream"
+                        if #available(iOS 14.0, *) { mime = UTType(filenameExtension: (entry.name as NSString).pathExtension)?.preferredMIMEType ?? mime }
+                        let file = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil,
+                            resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil,
+                            mimeType: mime, size: Int64(entry.size), attributes: [.FileName(fileName: entry.name)], alternativeRepresentations: [])
+                        return .message(text: index == 0 ? options.caption : "", attributes: attributes, inlineStickers: [:], mediaReference: .standalone(media: file),
+                            threadId: options.threadId, replyToMessageId: index == 0 ? reply : nil, replyToStoryId: nil, localGroupingKey: nil,
+                            correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                    }
+                    let _ = enqueueMessages(account: context.account, peerId: target, messages: messages).start(next: { ids in
+                        completion(.success(["queued": NSNumber(value: true), "messageIds": ids.compactMap { $0 }.map { ["id": NSNumber(value: $0.id), "namespace": NSNumber(value: $0.namespace), "peerId": String($0.peerId.toInt64())] }]))
+                    })
                 }
             } catch { completion(.failure(error)) }
         }
@@ -2791,7 +2821,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
-            guard let controller = AorusPluginScreenRoutes.make(context: self.context, pluginId: pluginId, screen: screen) else {
+            guard let controller = AorusPluginScreenRoutes.make(context: self.context, pluginId: pluginId, screen: screen, isTabRoot: false) else {
                 completion(.failure(AorusPluginRequestError("Screen is unavailable: " + screen.rawValue)))
                 return
             }
@@ -3834,6 +3864,11 @@ final class AorusPluginFilePickerDelegate: NSObject, UIDocumentPickerDelegate {
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         finish(.success(nil))
+    }
+
+    /// The picker never reached the screen; the request ends here and later callbacks are ignored.
+    func abandon(_ error: Error) {
+        finish(.failure(error))
     }
 }
 

@@ -22,7 +22,11 @@ public struct AorusSystemSymbol: View {
     public var body: some View {
         let _ = self.iconRevision
         return Group {
-            if let image = AorusPluginIconValues.symbol(self.name, pointSize: self.pointSize, weight: self.weight) {
+            if !AorusPluginIconValues.affects("SFSymbols/" + self.name) {
+                // Nothing restyles this symbol: SwiftUI's own image keeps Dynamic Type, the
+                // surrounding font and symbol effects such as the recording pulse.
+                Image(systemName: self.name)
+            } else if let image = AorusPluginIconValues.symbol(self.name, pointSize: self.pointSize, weight: self.weight) {
                 Image(uiImage: image).interpolation(.none).renderingMode(image.renderingMode == .alwaysOriginal ? .original : .template)
             } else {
                 Image(systemName: self.name)

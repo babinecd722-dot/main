@@ -63,13 +63,16 @@ public struct PresentationStrings {
                 }
             }
         }
-        for clock in ["14:27", "14:27:10", "2:27:10 PM", ""] {
-            expect(AorusMessageDetails.statusText(clock, hideTime: true).isEmpty, "clock hidden")
-            expect(AorusMessageDetails.statusText(clock, hideTime: false) == clock, "clock restored")
+        AorusPluginAppearanceValues.values = ["message.hideTime": true]
+        expect(AorusMessageDetails.hidesTime, "hidden time follows the appearance value")
+        AorusPluginAppearanceValues.values = ["message.hideTime": false]
+        expect(!AorusMessageDetails.hidesTime, "time shown when switched off")
+        AorusPluginAppearanceValues.values = [:]
+        expect(!AorusMessageDetails.hidesTime, "time shown by default")
+        for clock in ["14:27", "14:27:10", "2:27:10 PM"] {
             for author in ["Alice", "Алиса", "Team, Alice"] {
-                let signature = author + ", " + clock
-                expect(AorusMessageDetails.statusText(signature, hideTime: true) == author, "signature preserved")
-                expect(AorusMessageDetails.statusText(signature, hideTime: false) == signature, "signature/clock restored")
+                expect(AorusMessageDetails.signed(author, clock) == author + ", " + clock, "signature and clock as Telegram joins them")
+                expect(AorusMessageDetails.signed(author, "") == author, "a hidden clock leaves the signature without a separator")
             }
         }
         let strings = PresentationStrings()

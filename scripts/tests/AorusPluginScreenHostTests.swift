@@ -16,8 +16,10 @@ private final class ScreenManager {
 private enum AorusPluginScreenRoutes {
     static var available = true
     static var last: (String, String, AorusPluginScreen)?
-    static func make(context: String, pluginId: String, screen: AorusPluginScreen) -> ScreenController? {
+    static var lastIsTabRoot: Bool?
+    static func make(context: String, pluginId: String, screen: AorusPluginScreen, isTabRoot: Bool) -> ScreenController? {
         last = (context, pluginId, screen)
+        lastIsTabRoot = isTabRoot
         return available ? ScreenController() : nil
     }
 }
@@ -47,6 +49,7 @@ private final class ScreenHostProbe {
                 expect(success(await open(host, screen, style)), "native route completes after navigation")
                 expect(host.navigation!.controllers.count == count + 1, "route pushes exactly one fresh controller")
                 expect(AorusPluginScreenRoutes.last?.0 == host.context && AorusPluginScreenRoutes.last?.1 == "plugin-id" && AorusPluginScreenRoutes.last?.2 == screen, "factory receives the current account, calling plugin and exact route")
+                expect(AorusPluginScreenRoutes.lastIsTabRoot == false, "an opened screen is built to sit above another screen, with Back or Close")
                 let presentation = host.navigation!.controllers.last!.navigationPresentation
                 expect(presentation == (style == "push" ? .push : style == "sheet" ? .modal : .flatModal), "native presentation style is preserved")
             }

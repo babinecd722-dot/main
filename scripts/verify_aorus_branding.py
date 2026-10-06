@@ -3992,7 +3992,7 @@ def main() -> None:
         core_text = appearance_core.read_text(encoding="utf-8")
         drawn = "".join(
             path.read_text(encoding="utf-8")
-            for path in (presentation_data, glass_component, glass_style, settings_resources, profile_header, bubble_node, chat_presentation, tg / "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift", tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift")
+            for path in (presentation_data, glass_component, glass_style, settings_resources, profile_header, bubble_node, chat_presentation, tg / "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift", tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift", tg / "submodules/Display/Source/AorusMessageDetails.swift")
         )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")

@@ -101,7 +101,7 @@ public final class AorusPluginTabHost {
 
     private func makeEntry(pluginId: String, tab: AorusPluginTab) -> Entry? {
         if let value = tab.screen, let screen = AorusPluginScreen.resolve(value) {
-            guard let controller = AorusPluginScreenRoutes.make(context: context, pluginId: pluginId, screen: screen) else { return nil }
+            guard let controller = AorusPluginScreenRoutes.make(context: context, pluginId: pluginId, screen: screen, isTabRoot: true) else { return nil }
             return Entry(pluginId: pluginId, tab: tab, controller: controller)
         }
         if let pageId = tab.pageId {

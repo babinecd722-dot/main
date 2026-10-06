@@ -37,8 +37,7 @@ def patch_message_details(tg: Path) -> None:
         fallback = "            } else if !item.presentationData.chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag(\"bubble.tails\", in: AorusPluginAppearanceValues.current()) != false {\n                backgroundType = .incoming(.Extracted)\n"
         item.write_text(content.replace(old, fallback, 1))
 
-    status = tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift"
-    replace_once(status, "            let updatedDateText = arguments.dateText\n", "            // AorusGram: only the time is hidden; views, edited, delivery and reactions remain.\n            let updatedDateText = AorusMessageDetails.statusText(arguments.dateText, hideTime: AorusPluginAppearanceValues.flag(\"message.hideTime\", in: AorusPluginAppearanceValues.current()) ?? false)\n")
+    patch_hidden_time(tg)
 
     presence = tg / "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift"
     content = presence.read_text()
@@ -69,6 +68,49 @@ def patch_message_details(tg: Path) -> None:
     replace_once(presence, anchor, precise)
 
 
+def patch_hidden_time(tg: Path) -> None:
+    """Leave the clock out where Telegram builds a message's status text.
+
+    Cutting it out of the finished string cannot work in every language: a format joins the
+    date and time with its own words, a signature can hold a comma, and "sponsored" has no
+    clock at all. Here each format keeps what is not a time."""
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift"
+    text = path.read_text()
+    marker = "    // AorusGram: a hidden clock leaves signatures, dates and labels in place.\n"
+    if marker in text:
+        return
+    if "import Display\n" not in text:
+        text = text.replace("import Foundation\n", "import Foundation\nimport Display\n", 1)
+
+    def line_with(prefix: str) -> str:
+        found = [line for line in text.split("\n") if line.startswith(prefix)]
+        if len(found) != 1:
+            raise RuntimeError(f"MessageDetails: expected one status line starting {prefix.strip()!r}, got {len(found)}")
+        return found[0]
+
+    first = line_with("    var dateText = stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat")
+    text = text.replace(first, first + "\n" + marker
+        + "    // A scheduled message keeps its time: the time is what it shows.\n"
+        + "    let aorusHidesTime = AorusMessageDetails.hidesTime && message.scheduleTime == nil\n"
+        + "    if aorusHidesTime {\n"
+        + "        dateText = \"\"\n"
+        + "    }", 1)
+    for prefix, hidden in [
+        ("                dateText = strings.Message_EditTodayFullDateFormat(", "strings.Conversation_MessageEditedLabel"),
+        ("                dateText = strings.Message_EditFullDateFormat(", "strings.Conversation_MessageEditedLabel + \" \" + dayText"),
+        ("            dateText = strings.Message_FullDateFormat(", "dayText"),
+        ("        dateText = strings.Message_ImportedDateFormat(", "dateStringForDay(strings: strings, dateTimeFormat: dateTimeFormat, timestamp: forwardInfo.date)"),
+    ]:
+        line = line_with(prefix)
+        indent, value = line.split("dateText = ", 1)
+        text = text.replace(line, f"{indent}dateText = aorusHidesTime ? {hidden} : {value}", 1)
+    signed = '            dateText = "\\(authorTitle), \\(dateText)"'
+    if text.count(signed) != 1:
+        raise RuntimeError("MessageDetails: signature format moved")
+    text = text.replace(signed, "            dateText = AorusMessageDetails.signed(authorTitle, dateText)", 1)
+    path.write_text(text)
+
+
 def verify_message_details(tg: Path) -> list[str]:
     repo = Path(__file__).resolve().parent.parent
     errors: list[str] = []
@@ -80,13 +122,14 @@ def verify_message_details(tg: Path) -> list[str]:
     checks = {
         "submodules/TelegramPresentationData/Sources/ChatMessageBubbleImages.swift": {"drawTail = drawTail && aorusTails": 2},
         "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift": {'AorusPluginAppearanceValues.flag("presence.seconds"': 1, "withSeconds: true": 1},
-        "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift": {"AorusMessageDetails.statusText(arguments.dateText": 1, "AorusRGBColors.drawImage(on: node.layer": 2},
+        "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift": {"AorusRGBColors.drawImage(on: node.layer": 2},
+        "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift": {"let aorusHidesTime = AorusMessageDetails.hidesTime && message.scheduleTime == nil": 1, "dateText = aorusHidesTime ? ": 4, "AorusMessageDetails.signed(authorTitle, dateText)": 1},
         "submodules/Display/Source/TextNode.swift": {"AorusRGBColors.prepareText(inputText)": 1, "AorusRGBColors.drawRun(run,": 3, "private func aorusTrackRGB()": 2, "self.cachedLayout?.aorusHasRGB == true": 2, "fileprivate var aorusHasRGB: Bool": 1, "AorusRGBColors.resolved(blockQuote.tintColor)": 6, "AorusRGBColors.prepareText(title)": 1, "existingString.isEqual(to: AorusRGBColors.prepareText(string))": 2, "AorusRGBColors.sameSource(": 6},
         "submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift": {"public func updateRGB(": 1, "mask: bubbleMaskForType(type, graphics: graphics)": 1, "AorusRGBColors.maskInk(stroke)": 1},
         "submodules/TextFormat/Sources/StringWithAppliedEntities.swift": {"AorusRGBColors.withAlpha(baseQuoteTintColor, multipliedBy: 0.1)": 1},
         "submodules/TelegramUI/Components/Chat/MessageInlineBlockBackgroundView/Sources/MessageInlineBlockBackgroundView.swift": {"AorusRGBColors.tintImage(": 9, 'keyPath: "contentsMultiplyColor"': 2, 'keyPath: "backgroundColor"': 2},
         "submodules/TelegramUI/Components/Chat/ChatMessageReplyInfoNode/Sources/ChatMessageReplyInfoNode.swift": {"AorusRGBColors.tintImage(quoteIconView": 1, "AorusRGBColors.tintImage(expiredStoryIconView": 1},
-        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift": {"strongSelf.backgroundNode.updateRGB(": 1, 'chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag("bubble.tails"': 1},
+        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift": {"strongSelf.backgroundNode.updateRGB(": 1, "aorusRGBFill || strongSelf.backgroundNode.isHidden": 1, "hasHiddenBackground || self.backgroundNode.aorusHasRGBFill": 1, 'chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag("bubble.tails"': 1},
     }
     for filename, markers in checks.items():
         path = tg / filename

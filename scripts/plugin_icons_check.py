@@ -12,7 +12,8 @@ import tempfile
 
 FUNCTIONS = ["Pixels", "PixelGrid", "PixelAxes", "PixelStamp", "connectedParts", "squaredDistances",
              "pixelated", "pixelFloorDivide", "pixelModulo", "pixelBounds", "pixelThin",
-             "pixelPartsTouching", "pixelShape", "pixelStamps", "pixelPalette"]
+             "pixelPartsTouching", "pixelShape", "pixelShapeBlocks", "pixelJoinParts", "PixelQueue",
+             "pixelStamps", "pixelPalette"]
 APP_BUNDLE = """
 import UIKit
 public protocol AppBundleImageResolver: AnyObject {

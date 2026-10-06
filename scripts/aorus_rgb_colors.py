@@ -150,6 +150,11 @@ def patch_rgb_colors(tg: Path) -> None:
     private var aorusRGBFill: AorusRGBGradientView?
     private var aorusRGBStroke: AorusRGBGradientView?
 
+    /// The RGB fill replaces the wallpaper backdrop behind this bubble.
+    public var aorusHasRGBFill: Bool {
+        return self.aorusRGBFill != nil
+    }
+
     /// The fill and outline use the same masks, joins and stretch points as native bubbles.
     public func updateRGB(dark: Bool, type: ChatMessageBackgroundType, graphics: PrincipalThemeEssentialGraphics) -> Bool {
         let side: String
@@ -212,7 +217,10 @@ def patch_rgb_colors(tg: Path) -> None:
 
     item = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     anchor = "        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: hasWallpaper, graphics: graphics)\n"
-    replace_once(item, anchor, anchor + "        // AorusGram: RGB is drawn only in this bubble; no theme/layout refresh per frame.\n        strongSelf.backgroundWallpaperNode.isHidden = strongSelf.backgroundNode.updateRGB(dark: item.presentationData.theme.theme.overallDarkAppearance, type: backgroundType, graphics: graphics)\n")
+    # The wallpaper backdrop stays hidden while Telegram hides the bubble for media shown in
+    # the gallery: updateHiddenMedia owns that state, and a layout must not undo it.
+    replace_once(item, anchor, anchor + "        // AorusGram: RGB is drawn only in this bubble; no theme/layout refresh per frame.\n        let aorusRGBFill = strongSelf.backgroundNode.updateRGB(dark: item.presentationData.theme.theme.overallDarkAppearance, type: backgroundType, graphics: graphics)\n        strongSelf.backgroundWallpaperNode.isHidden = aorusRGBFill || strongSelf.backgroundNode.isHidden\n")
+    replace_once(item, "        self.backgroundWallpaperNode.isHidden = hasHiddenBackground\n", "        self.backgroundWallpaperNode.isHidden = hasHiddenBackground || self.backgroundNode.aorusHasRGBFill\n")
 
     status = tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift"
     anchor = "                        var reactionOffset: CGFloat = leftOffset + leftInset - reactionInset + backgroundInsets.left\n"

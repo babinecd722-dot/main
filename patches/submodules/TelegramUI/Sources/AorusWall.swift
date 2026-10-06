@@ -1466,6 +1466,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
     public var hashtagSearchResultsUpdate: ((SearchMessagesResult, SearchMessagesState)) -> Void = { _ in }
     public var openSettings: (() -> Void)?
+    /// The Wall's own tab keeps Refresh in the left corner. Opened above another screen,
+    /// that corner is Back or Close, and Refresh sits beside the settings gear.
+    public var refreshInLeftCorner = true
     public var badgeUpdated: ((Int) -> Void)? {
         didSet {
             if let badgeUpdated {
@@ -1652,6 +1655,24 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
     }
 
+    fileprivate func makeRefreshItem() -> UIBarButtonItem {
+        return UIBarButtonItem(
+            title: AorusL10n.current.wallRefresh,
+            style: .plain,
+            target: self,
+            action: #selector(AorusWallChatContents.refreshWall)
+        )
+    }
+
+    fileprivate func makeSettingsItem() -> UIBarButtonItem {
+        return UIBarButtonItem(
+            image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
+            style: .plain,
+            target: self,
+            action: #selector(AorusWallChatContents.openWallSettings)
+        )
+    }
+
     @objc public func refreshWall() {
         self.impl.with { impl in
             impl.refresh()
@@ -1677,30 +1698,36 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // spinner while loading — and since the Wall starts out loading, entering it
             // showed no gear at all until a refresh finished. Keep the gear permanently and
             // convey loading through the refresh button instead.
-            if controller.navigationItem.leftBarButtonItem == nil {
-                controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
-                    title: AorusL10n.current.wallRefresh,
-                    style: .plain,
-                    target: self,
-                    action: #selector(AorusWallChatContents.refreshWall)
-                )
+            let refreshItem: UIBarButtonItem?
+            if self.refreshInLeftCorner {
+                if controller.navigationItem.leftBarButtonItem == nil {
+                    controller.navigationItem.leftBarButtonItem = self.makeRefreshItem()
+                }
+                refreshItem = controller.navigationItem.leftBarButtonItem
+                if controller.navigationItem.rightBarButtonItem?.image == nil {
+                    controller.navigationItem.rightBarButtonItem = self.makeSettingsItem()
+                }
+            } else {
+                let current = controller.navigationItem.rightBarButtonItems ?? []
+                var items = current
+                if !items.contains(where: { $0.action == #selector(AorusWallChatContents.openWallSettings) }) {
+                    items.insert(self.makeSettingsItem(), at: 0)
+                }
+                if !items.contains(where: { $0.action == #selector(AorusWallChatContents.refreshWall) }) {
+                    items.append(self.makeRefreshItem())
+                }
+                if items.count != current.count {
+                    controller.navigationItem.rightBarButtonItems = items
+                }
+                refreshItem = items.first(where: { $0.action == #selector(AorusWallChatContents.refreshWall) })
             }
-            controller.navigationItem.leftBarButtonItem?.isEnabled = !searching
-
-            if controller.navigationItem.rightBarButtonItem?.image == nil {
-                controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
-                    image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
-                    style: .plain,
-                    target: self,
-                    action: #selector(AorusWallChatContents.openWallSettings)
-                )
-            }
+            refreshItem?.isEnabled = !searching
 
             // Language can change at runtime, so refresh the titles here rather than leaving
             // whatever was resolved when the tab was built.
             let aorusL10n = AorusL10n(presentationData.strings.baseLanguageCode)
             controller.tabBarItem.title = aorusL10n.wallTitle
-            controller.navigationItem.leftBarButtonItem?.title = aorusL10n.wallRefresh
+            refreshItem?.title = aorusL10n.wallRefresh
 
             // The tab bar draws plain images untinted, so recolour the house on theme changes.
             // A plugin's icons reach it the way they reach Telegram's tabs: replaced or styled.
@@ -1794,9 +1821,10 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
     }
 }
 
-public func makeAorusWallController(context: AccountContext) -> ViewController {
+public func makeAorusWallController(context: AccountContext, isTabRoot: Bool = true) -> ViewController {
     aorusInstallWallCacheCleanup(context: context)
     let contents = AorusWallChatContents(context: context)
+    contents.refreshInLeftCorner = isTabRoot
     let controller = context.sharedContext.makeChatController(
         context: context,
         chatLocation: .customChatContents,
@@ -1806,20 +1834,14 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
         params: nil
     )
 
-    controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
-        title: AorusL10n.current.wallRefresh,
-        style: .plain,
-        target: contents,
-        action: #selector(AorusWallChatContents.refreshWall)
-    )
-    // Seed the gear immediately so it is present on the very first frame; bindNavigation
-    // keeps it in place afterwards.
-    controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
-        image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
-        style: .plain,
-        target: contents,
-        action: #selector(AorusWallChatContents.openWallSettings)
-    )
+    // Seed both buttons immediately so they are present on the very first frame;
+    // bindNavigation keeps them in place afterwards.
+    if isTabRoot {
+        controller.navigationItem.leftBarButtonItem = contents.makeRefreshItem()
+        controller.navigationItem.rightBarButtonItem = contents.makeSettingsItem()
+    } else {
+        controller.navigationItem.rightBarButtonItems = [contents.makeSettingsItem(), contents.makeRefreshItem()]
+    }
     contents.bindNavigation(controller: controller, context: context)
 
     contents.openSettings = { [weak controller] in

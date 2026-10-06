@@ -275,7 +275,13 @@ final class AorusPluginNetworkBroker: NSObject, URLSessionTaskDelegate, @uncheck
             return
         }
         request.httpMethod = method
-        request.timeoutInterval = max(0.1, min(120, (payload["timeout"] as? NSNumber)?.doubleValue ?? 30))
+        // API 1.0 took milliseconds (`timeout: 30000`), 1.2 takes seconds up to 120. A value
+        // above 120 can only be the old unit, so plugins written for 1.0 keep their timeout.
+        var timeout = (payload["timeout"] as? NSNumber)?.doubleValue ?? 30
+        if timeout > 120 {
+            timeout /= 1000
+        }
+        request.timeoutInterval = max(0.1, min(120, timeout))
         request.cachePolicy = .reloadIgnoringLocalCacheData
         Self.headers(payload, request: &request)
         if let base64 = payload["base64"] as? String {

@@ -88,6 +88,11 @@ private enum AorusPluginFilesTests {
         try files.write("append.txt", text: "")
         DispatchQueue.concurrentPerform(iterations: 100) { _ in try! files.appendData("append.txt", data: Data([65])) }
         expect(files.readData("append.txt")?.count == 100, "atomic concurrent appends")
+        do { try files.appendData("Проекты", data: Data([1])); fatalError("Append to a directory accepted") } catch {}
+        let copiedOut = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: copiedOut) }
+        expect(try files.copyFile("append.txt", to: copiedOut) == 100 && (try? Data(contentsOf: copiedOut)) == Data(repeating: 65, count: 100), "a file is copied out whole without reading it into memory")
+        do { try files.copyFile("Проекты", to: copiedOut.appendingPathExtension("dir")); fatalError("A directory was copied out as a file") } catch {}
         expect(try files.readRange("append.txt", offset: 98, length: 20) == Data([65,65]), "range short final read")
         expect(try files.readRange("append.txt", offset: 1000, length: 20) == Data(), "range beyond EOF")
         expect(try files.perform("files.readChunk", payload: ["name":"append.txt", "offset":98, "length":20]) as? [String:Any] != nil, "chunk metadata")

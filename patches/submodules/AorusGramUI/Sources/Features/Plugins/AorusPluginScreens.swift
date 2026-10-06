@@ -5,15 +5,21 @@ import AorusGram
 
 /// Native factories stay in the modules that already build these screens. No controller is
 /// borrowed from another tab or navigation stack: each destination has its own instance.
+///
+/// `isTabRoot` says where the instance lives. A plugin tab is the root of its own tab, the
+/// way Telegram's Chats, Contacts, Calls and Settings are. Anything opened with
+/// `openScreen` sits above another screen, and its left corner belongs to Back or Close:
+/// the tab-root controls those screens put there (Edit, Sort, QR code, Refresh) move or
+/// give way, so a pushed, sheet or full-screen destination can always be left.
 public enum AorusPluginScreenRoutes {
     private static let lock = NSLock()
-    private static var builder: ((AccountContext, AorusPluginScreen) -> ViewController?)?
+    private static var builder: ((AccountContext, AorusPluginScreen, Bool) -> ViewController?)?
 
-    public static func register(_ value: @escaping (AccountContext, AorusPluginScreen) -> ViewController?) {
+    public static func register(_ value: @escaping (AccountContext, AorusPluginScreen, Bool) -> ViewController?) {
         lock.lock(); builder = value; lock.unlock()
     }
 
-    public static func make(context: AccountContext, pluginId: String, screen: AorusPluginScreen) -> ViewController? {
+    public static func make(context: AccountContext, pluginId: String, screen: AorusPluginScreen, isTabRoot: Bool) -> ViewController? {
         assert(Thread.isMainThread)
         switch screen {
         case .plugins, .documentation, .pluginDetails, .pluginSettings, .pluginConsole,
@@ -34,7 +40,7 @@ public enum AorusPluginScreenRoutes {
         case .ai: return aorusAIConversationListController(context: context)
         default:
             lock.lock(); let value = builder; lock.unlock()
-            return value?(context, screen)
+            return value?(context, screen, isTabRoot)
         }
     }
 }

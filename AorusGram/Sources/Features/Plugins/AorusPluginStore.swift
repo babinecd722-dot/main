@@ -701,14 +701,48 @@ public struct AorusPluginFiles {
         }
     }
 
+    /// Adds bytes at the end of the file in place. Rewriting the whole file for every
+    /// chunk made a 32 MB file assembled in 1 MB pieces cost half a gigabyte of writes.
     public func appendData(_ name: String, data: Data) throws {
         try locked {
-            let existing = try info(name)
-            let loaded = readData(name)
-            if existing != nil && loaded == nil { throw FileError.io("Could not read the file to append") }
-            let previous = loaded ?? Data()
-            guard data.count <= Self.maximumFileBytes - previous.count else { throw FileError.tooLarge }
-            try writeData(name, data: previous + data)
+            guard let existing = try info(name) else {
+                // A new file is an ordinary write: same parent and quota rules.
+                try writeData(name, data: data)
+                return
+            }
+            guard existing["type"] as? String == "file" else { throw FileError.io("The path is a directory") }
+            let size = (existing["size"] as? NSNumber)?.intValue ?? 0
+            guard data.count <= Self.maximumFileBytes - size else { throw FileError.tooLarge }
+            try checkQuota(additionalBytes: data.count, additionalCount: 0)
+            guard !data.isEmpty else { return }
+            let target = try fileURL(name)
+            if #available(iOS 13.4, macOS 10.15.4, *) {
+                let handle = try FileHandle(forWritingTo: target)
+                defer { try? handle.close() }
+                let end = try handle.seekToEnd()
+                do {
+                    try handle.write(contentsOf: data)
+                } catch {
+                    // A failed write never leaves part of a chunk behind.
+                    try? handle.truncate(atOffset: end)
+                    throw error
+                }
+            } else {
+                guard let previous = readData(name) else { throw FileError.io("Could not read the file to append") }
+                try writeData(name, data: previous + data)
+            }
+        }
+    }
+
+    /// Copies one regular file out of the directory without reading it into memory. The copy
+    /// is taken under the same lock as writes, so it never sees a file half-written.
+    @discardableResult public func copyFile(_ name: String, to destination: URL) throws -> Int {
+        try locked {
+            guard let entry = try info(name), entry["type"] as? String == "file" else { throw FileError.io("No such file: \(name)") }
+            let size = (entry["size"] as? NSNumber)?.intValue ?? 0
+            guard size <= Self.maximumFileBytes else { throw FileError.tooLarge }
+            try FileManager.default.copyItem(at: try fileURL(name), to: destination)
+            return size
         }
     }
 
