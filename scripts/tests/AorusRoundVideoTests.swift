@@ -1,0 +1,86 @@
+import Foundation
+import SwiftSignalKit
+
+@main enum AorusRoundVideoTests {
+    static var checks = 0
+    static func expect(_ value: @autoclosure () -> Bool, _ message: String) {
+        checks += 1
+        if !value() { fatalError(message) }
+    }
+    static func main() {
+        for duration in [-100.0, -0.0, 0.01, 0.5, 1.0, 59.99, 60.0, 61.0, 600.0, .nan, .infinity, -.infinity] {
+            let state = AorusRoundVideoMessageAttribute(duration: duration)
+            expect(state.duration.isFinite && state.duration >= 0 && state.duration <= 60, "bounded recording duration")
+            expect(state.remaining(at: 100) == 0, "unstarted metadata cannot delay an upload")
+            let started = state.started(at: 100)
+            expect(started.remaining(at: 100) == state.duration, "starts at the enqueue time")
+            expect(started.remaining(at: 99) <= 60, "a changed clock cannot create an unbounded countdown")
+            expect(started.remaining(at: 161) == 0, "deadline expires")
+            expect(started.remaining(at: .nan) == 0, "invalid clock is rejected")
+            let encoder = PostboxEncoder(); started.encode(encoder)
+            let restored = AorusRoundVideoMessageAttribute(decoder: PostboxDecoder(encoder.values))
+            expect(restored.duration == started.duration && restored.deadline == started.deadline, "Postbox round-trip")
+            expect(restored.remaining(at: 120) == started.remaining(at: 120), "restart retains the same deadline")
+        }
+        let old = AorusRoundVideoMessageAttribute(decoder: PostboxDecoder([:]))
+        expect(old.duration == 0 && old.deadline == 0, "old message without metadata")
+        let corrupt = AorusRoundVideoMessageAttribute(decoder: PostboxDecoder(["d": .infinity, "t": .nan]))
+        expect(corrupt.duration == 0 && corrupt.deadline == 0, "invalid persisted data is inert")
+        for duration in 1...60 {
+            let state = AorusRoundVideoMessageAttribute(duration: Double(duration)).started(at: 1000.125)
+            for elapsed in 0...65 {
+                expect(state.remaining(at: 1000.125 + Double(elapsed)) == max(0, Double(duration - elapsed)), "countdown ticks independently of the displayed chat")
+            }
+        }
+        let state = AorusRoundVideoMessageAttribute(duration: 10).started(at: 100)
+        for sending in [false, true] { for acknowledged in [false, true] { for circle in [false, true] {
+            let message = Message(flags: MessageFlags(isSending: sending), isSentOrAcknowledged: acknowledged, media: [TelegramMediaFile(circle)], attributes: [state])
+            expect((message.aorusRoundVideoSending != nil) == (sending && !acknowledged && circle), "only an unsent circle owns the recording status")
+        } } }
+        let queue = Queue()
+        let start = Date().timeIntervalSince1970
+        let recording = AorusRoundVideoMessageAttribute(duration: 0.3).started(at: start)
+        let progress = Atomic(value: false)
+        let content = Atomic(value: false)
+        let completion = DispatchSemaphore(value: 0)
+        let source = Signal<PendingMessageUploadedContentResult, PendingMessageUploadError> { subscriber in
+            subscriber.putNext(.progress(0.5)); subscriber.putNext(.content(42)); subscriber.putCompletion()
+            return EmptyDisposable
+        }
+        let disposable = aorusRoundVideoUploadSignal(source, round: recording, queue: queue).start(next: { result in
+            switch result {
+            case .progress: let _ = progress.swap(true)
+            case let .content(value):
+                expect(value == 42, "uploaded native content is preserved")
+                expect(Date().timeIntervalSince1970 >= recording.deadline - 0.01, "a circle cannot send before the deadline")
+                let _ = content.swap(true)
+            }
+        }, completed: { completion.signal() })
+        expect(progress.with { $0 }, "upload progress remains live during recording")
+        expect(!content.with { $0 }, "ready upload waits for the recording deadline")
+        expect(completion.wait(timeout: .now() + 3) == .success, "native delay and mapToSignal finish")
+        expect(content.with { $0 }, "content emits when the recording is finished")
+        disposable.dispose()
+        let cancelled = Atomic(value: false)
+        let pending = aorusRoundVideoUploadSignal(source, round: AorusRoundVideoMessageAttribute(duration: 0.2).started(at: Date().timeIntervalSince1970), queue: queue).start(next: { result in
+            if case .content = result { let _ = cancelled.swap(true) }
+        })
+        pending.dispose()
+        let settled = DispatchSemaphore(value: 0)
+        queue.after(0.35) { settled.signal() }
+        expect(settled.wait(timeout: .now() + 3) == .success, "cancelled timer settles")
+        expect(!cancelled.with { $0 }, "deleting a pending circle cannot send a delayed result")
+        let expired = DispatchSemaphore(value: 0)
+        let expiredDisposable = aorusRoundVideoUploadSignal(source, round: AorusRoundVideoMessageAttribute(duration: 1).started(at: start - 5), queue: queue).start(next: { result in
+            if case .content = result { expired.signal() }
+        })
+        expect(expired.wait(timeout: .now() + 1) == .success, "a restored, expired circle sends immediately")
+        expiredDisposable.dispose()
+        let error = DispatchSemaphore(value: 0)
+        let failed = Signal<PendingMessageUploadedContentResult, PendingMessageUploadError>.fail(.generic)
+        let failedDisposable = aorusRoundVideoUploadSignal(failed, round: recording, queue: queue).start(error: { _ in error.signal() })
+        expect(error.wait(timeout: .now() + 1) == .success, "native upload errors are delivered without waiting")
+        failedDisposable.dispose()
+        print("Native round video sending passed: \(checks) assertions")
+    }
+}

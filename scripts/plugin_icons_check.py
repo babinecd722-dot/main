@@ -147,8 +147,14 @@ def main():
             bubbles.write_text(native_bitmap_source(args.telegram_source))
             quotes = work / "NativeQuotePainter.swift"
             quotes.write_text(native_rgb_quote_source(args.telegram_source))
+            from round_video_uikit_fixtures import badge_source, objc_source
+            badges = work / "NativeBadgeMetrics.swift"
+            badges.write_text(badge_source(args.telegram_source))
+            native_editor = work / "NativeRoundEditor.m"
+            native_editor.write_text(objc_source(args.telegram_source))
+            countdown = args.repo / "patches/submodules/Display/Source/AorusRoundVideoCountdownView.swift"
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer), str(swiftui), str(rgb)], check=True)
+            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer), str(swiftui), str(rgb), str(countdown), str(badges)], check=True)
             print("Icon resolver UIKit SDK type-check passed", flush=True)
             # Exercise Objective-C dispatch and all three UIKit initializers, rather than
             # trusting a type-check to establish that method exchange actually runs.
@@ -177,7 +183,9 @@ def main():
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(rgb), str(bubbles), str(quotes), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                editor_object = work / "NativeRoundEditor.o"
+                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(native_editor), "-o", str(editor_object)], check=True)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(editor_object), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:

@@ -30674,6 +30674,8 @@ def main() -> None:
     patch_message_details(tg)
     from aorus_rgb_colors import patch_rgb_colors
     patch_rgb_colors(tg)
+    from aorus_round_video import patch_round_video
+    patch_round_video(tg)
     # After the glass toggle and Interface 2.0, which rewrite parts of the menus it styles.
     patch_glass_everywhere(tg)
     # After every patch of the message nodes: it anchors on the side buttons and the deleted

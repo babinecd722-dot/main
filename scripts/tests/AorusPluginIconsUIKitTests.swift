@@ -283,6 +283,7 @@ private enum AorusPluginIconsUIKitTests {
             fatalError("The native theme regression requires the application's visible window")
         }
         checks += runBubbleBitmapRegression()
+        checks += await runRoundVideoUIKitRegression(window: window)
         checks += await runRGBRegression(window: window)
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks

@@ -811,6 +811,7 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusPluginAccountUpdates.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarRating.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/SyncCore/AorusRoundVideoMessageAttribute.swift $TG/submodules/TelegramCore/Sources/SyncCore/
 
           # 0. AorusGram core (ClientSpoofManager, AorusGramBootstrap, etc.) — must link into TelegramUI
           mkdir -p $TG/submodules/AorusGram
@@ -1010,6 +1011,7 @@ jobs:
           cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusRoundVideoCountdownView.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
@@ -1135,6 +1137,9 @@ jobs:
 
       - name: Native message details preflight
         run: python3 aorusgram/scripts/message_details_check.py aorusgram --telegram-source telegram-ios
+
+      - name: Native round video sending preflight
+        run: python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
 
       - name: Plugin native screen links preflight
         run: python3 aorusgram/scripts/plugin_screens_check.py aorusgram
