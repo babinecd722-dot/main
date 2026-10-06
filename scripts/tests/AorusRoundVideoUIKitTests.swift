@@ -2,6 +2,50 @@ import UIKit
 
 @_silgen_name("AorusNativeRoundEditorTests") private func nativeRoundEditorTests() -> Int32
 
+@MainActor private final class CountdownLifetime {
+    weak var view: AorusRoundVideoCountdownView?
+}
+
+// Keep the async test frame and UIKit's temporary references outside the lifetime check.
+@MainActor private func runCountdownBehavior(window: UIWindow, lifetime: CountdownLifetime) async -> Int {
+    var checks = 0
+    func expect(_ value: @autoclosure () -> Bool, _ message: String) {
+        checks += 1
+        if !value() { fatalError(message) }
+    }
+    let videoFrame = CGRect(x: 20, y: 30, width: 240, height: 240)
+    var view: AorusRoundVideoCountdownView? = AorusRoundVideoCountdownView(frame: .zero)
+    lifetime.view = view
+    view!.update(deadline: Date().timeIntervalSince1970 + 59.9, videoFrame: videoFrame)
+    expect(view!.accessibilityLabel == "60" && !view!.isHidden, "whole-second native countdown")
+    expect(view!.frame.midX == videoFrame.midX, "timer stays centered over the note")
+    expect(!view!.isUserInteractionEnabled && view!.isAccessibilityElement, "timer does not intercept playback or send cancellation")
+    expect(view!.subviews.count == 2, "one icon and one label")
+    let image = view!.subviews.compactMap { $0 as? UIImageView }.first!
+    expect(image.image != nil && image.tintColor == .white, "native timer is visible on dark and light chat themes")
+    window.addSubview(view!)
+    for seconds in 1...60 {
+        view!.update(deadline: Date().timeIntervalSince1970 + Double(seconds) - 0.05, videoFrame: videoFrame)
+        expect(view!.accessibilityLabel == String(seconds), "remaining seconds are rounded up")
+        expect(view!.subviews.count == 2 && view!.frame.midX == videoFrame.midX, "reusing a pending message keeps one correctly placed countdown")
+    }
+    view!.update(deadline: Date().timeIntervalSince1970 + 0.15, videoFrame: videoFrame)
+    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+    try? await Task.sleep(nanoseconds: 250_000_000)
+    expect(!view!.isHidden, "background stops redraw work")
+    NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+    expect(view!.isHidden, "returning to the foreground uses the real deadline")
+    view!.update(deadline: .nan, videoFrame: videoFrame)
+    expect(view!.isHidden, "invalid deadline is hidden")
+    view!.update(deadline: Date().timeIntervalSince1970 + 0.1, videoFrame: videoFrame)
+    try? await Task.sleep(nanoseconds: 350_000_000)
+    expect(view!.isHidden, "active countdown expires without a chat layout refresh")
+    view!.update(deadline: Date().timeIntervalSince1970 + 5, videoFrame: videoFrame)
+    view!.removeFromSuperview()
+    view = nil
+    return checks
+}
+
 @MainActor func runRoundVideoUIKitRegression(window: UIWindow) async -> Int {
     var checks = 0
     func expect(_ value: @autoclosure () -> Bool, _ message: String) {
@@ -30,37 +74,14 @@ import UIKit
             }
         } } } }
     }
-    let videoFrame = CGRect(x: 20, y: 30, width: 240, height: 240)
-    var view: AorusRoundVideoCountdownView? = AorusRoundVideoCountdownView(frame: .zero)
-    weak var weakView = view
-    view!.update(deadline: Date().timeIntervalSince1970 + 59.9, videoFrame: videoFrame)
-    expect(view!.accessibilityLabel == "60" && !view!.isHidden, "whole-second native countdown")
-    expect(view!.frame.midX == videoFrame.midX, "timer stays centered over the note")
-    expect(!view!.isUserInteractionEnabled && view!.isAccessibilityElement, "timer does not intercept playback or send cancellation")
-    expect(view!.subviews.count == 2, "one icon and one label")
-    let image = view!.subviews.compactMap { $0 as? UIImageView }.first!
-    expect(image.image != nil && image.tintColor == .white, "native timer is visible on dark and light chat themes")
-    window.addSubview(view!)
-    for seconds in 1...60 {
-        view!.update(deadline: Date().timeIntervalSince1970 + Double(seconds) - 0.05, videoFrame: videoFrame)
-        expect(view!.accessibilityLabel == String(seconds), "remaining seconds are rounded up")
-        expect(view!.subviews.count == 2 && view!.frame.midX == videoFrame.midX, "reusing a pending message keeps one correctly placed countdown")
+    let lifetime = CountdownLifetime()
+    checks += await runCountdownBehavior(window: window, lifetime: lifetime)
+    for _ in 0..<40 {
+        let retained = autoreleasepool { lifetime.view != nil }
+        if !retained { break }
+        try? await Task.sleep(nanoseconds: 50_000_000)
     }
-    view!.update(deadline: Date().timeIntervalSince1970 + 0.15, videoFrame: videoFrame)
-    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
-    try? await Task.sleep(nanoseconds: 250_000_000)
-    expect(!view!.isHidden, "background stops redraw work")
-    NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
-    expect(view!.isHidden, "returning to the foreground uses the real deadline")
-    view!.update(deadline: .nan, videoFrame: videoFrame)
-    expect(view!.isHidden, "invalid deadline is hidden")
-    view!.update(deadline: Date().timeIntervalSince1970 + 0.1, videoFrame: videoFrame)
-    try? await Task.sleep(nanoseconds: 350_000_000)
-    expect(view!.isHidden, "active countdown expires without a chat layout refresh")
-    view!.update(deadline: Date().timeIntervalSince1970 + 5, videoFrame: videoFrame)
-    view!.removeFromSuperview()
-    view = nil
-    expect(weakView == nil, "a removed note is not retained by its timer or observers")
+    expect(lifetime.view == nil, "a removed note is not retained by its timer or observers")
     print("Native round video editor and cutout badges passed: \(checks) assertions (\(native) native Objective-C editor assertions)")
     return checks
 }
