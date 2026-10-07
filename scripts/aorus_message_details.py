@@ -30,12 +30,11 @@ def patch_message_details(tg: Path) -> None:
                 raise RuntimeError("MessageDetails: bubble geometry endpoint moved")
             text = text.replace(end, "    drawTail = drawTail && aorusTails\n\n" + end, 1)
         bubbles.write_text(text)
-    item = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
-    old = "            } else if !item.presentationData.chatBubbleCorners.hasTails {\n                backgroundType = .incoming(.Extracted)\n"
-    content = item.read_text()
-    if old in content:
-        fallback = "            } else if !item.presentationData.chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag(\"bubble.tails\", in: AorusPluginAppearanceValues.current()) != false {\n                backgroundType = .incoming(.Extracted)\n"
-        item.write_text(content.replace(old, fallback, 1))
+    # The tail setting has a field of its own. Telegram's hasTails = false is the tailless
+    # preview of a link: it turns an incoming bubble into the extracted shape and drops the
+    # time, delivery status, views and reactions from text, link and rich-data messages.
+    presentation = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
+    replace_once(presentation, "    public var hasTails: Bool\n", "    public var hasTails: Bool\n    /// AorusGram: the bubble is drawn without its tail; layout and status are unchanged.\n    public var aorusHidesTails: Bool = false\n")
 
     patch_hidden_time(tg)
 
@@ -121,6 +120,8 @@ def verify_message_details(tg: Path) -> list[str]:
             errors.append(f"MessageDetails: {name} differs from the reviewed renderer")
     checks = {
         "submodules/TelegramPresentationData/Sources/ChatMessageBubbleImages.swift": {"drawTail = drawTail && aorusTails": 2},
+        # The tail setting never reaches Telegram's tailless preview mode.
+        "submodules/TelegramPresentationData/Sources/PresentationData.swift": {"public var aorusHidesTails: Bool = false": 1, "result.aorusHidesTails = !tails": 1, "result.hasTails = tails": 0},
         "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift": {'AorusPluginAppearanceValues.flag("presence.seconds"': 1, "withSeconds: true": 1},
         "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift": {"AorusRGBColors.drawImage(on: node.layer": 2},
         "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift": {"let aorusHidesTime = AorusMessageDetails.hidesTime && message.scheduleTime == nil": 1, "dateText = aorusHidesTime ? ": 4, "AorusMessageDetails.signed(authorTitle, dateText)": 1},
@@ -129,7 +130,7 @@ def verify_message_details(tg: Path) -> list[str]:
         "submodules/TextFormat/Sources/StringWithAppliedEntities.swift": {"AorusRGBColors.withAlpha(baseQuoteTintColor, multipliedBy: 0.1)": 1},
         "submodules/TelegramUI/Components/Chat/MessageInlineBlockBackgroundView/Sources/MessageInlineBlockBackgroundView.swift": {"AorusRGBColors.tintImage(": 9, 'keyPath: "contentsMultiplyColor"': 2, 'keyPath: "backgroundColor"': 2},
         "submodules/TelegramUI/Components/Chat/ChatMessageReplyInfoNode/Sources/ChatMessageReplyInfoNode.swift": {"AorusRGBColors.tintImage(quoteIconView": 1, "AorusRGBColors.tintImage(expiredStoryIconView": 1},
-        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift": {"strongSelf.backgroundNode.updateRGB(": 1, "aorusRGBFill || strongSelf.backgroundNode.isHidden": 1, "hasHiddenBackground || self.backgroundNode.aorusHasRGBFill": 1, 'chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag("bubble.tails"': 1},
+        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift": {"strongSelf.backgroundNode.updateRGB(": 1, "aorusRGBFill || strongSelf.backgroundNode.isHidden": 1, "hasHiddenBackground || self.backgroundNode.aorusHasRGBFill": 1},
     }
     for filename, markers in checks.items():
         path = tg / filename

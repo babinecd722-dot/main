@@ -5,6 +5,7 @@ public enum AorusPluginAppearanceValues {
     static var values: [String: Any] = [:]
     public static func current() -> [String: Any] { values }
     public static func flag(_ key: String, in values: [String: Any]) -> Bool? { values[key] as? Bool }
+    public static func number(_ key: String, in values: [String: Any]) -> CGFloat? { (values[key] as? NSNumber).map { CGFloat($0.doubleValue) } }
 }
 public enum EnginePeer {
     public struct Presence {
@@ -63,6 +64,22 @@ public struct PresentationStrings {
                 }
             }
         }
+        // Telegram reads hasTails = false as the tailless preview of a link and leaves out the
+        // time, the status and the reactions of text, link and rich-data messages.
+        let corners = PresentationChatBubbleCorners(mainRadius: 16.0, auxiliaryRadius: 8.0, mergeBubbleCorners: true)
+        AorusPluginAppearanceValues.values = ["bubble.tails": false]
+        let tailless = aorusPluginBubbleCorners(corners)
+        expect(tailless.hasTails, "hiding tails keeps Telegram's status line on every message")
+        expect(tailless.aorusHidesTails, "hiding tails is recorded in the bubble shape")
+        AorusPluginAppearanceValues.values = ["bubble.tails": true]
+        let tailed = aorusPluginBubbleCorners(corners)
+        expect(tailed.hasTails && !tailed.aorusHidesTails, "tails shown")
+        expect(tailed != tailless, "the bubble graphics, cached by shape, are drawn again when the tail changes")
+        AorusPluginAppearanceValues.values = [:]
+        expect(aorusPluginBubbleCorners(corners) == corners, "no setting leaves Telegram's shape")
+        let preview = PresentationChatBubbleCorners(mainRadius: 16.0, auxiliaryRadius: 8.0, mergeBubbleCorners: true, hasTails: false)
+        AorusPluginAppearanceValues.values = ["bubble.tails": true]
+        expect(!aorusPluginBubbleCorners(preview).hasTails, "a tailless link preview stays a preview")
         AorusPluginAppearanceValues.values = ["message.hideTime": true]
         expect(AorusMessageDetails.hidesTime, "hidden time follows the appearance value")
         AorusPluginAppearanceValues.values = ["message.hideTime": false]

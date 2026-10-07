@@ -21,6 +21,8 @@ def native_source(tg: Path) -> str:
                (presentation, "public struct PresentationDateTimeFormat"),
                (presentation, "public enum PresentationTimeFormat"),
                (presentation, "public enum PresentationDateFormat"),
+               (presentation, "public struct PresentationChatBubbleCorners"),
+               (presentation, "public func aorusPluginBubbleCorners("),
                (dates, "public func stringForShortTimestamp("),
                (dates, "public func stringForMessageTimestamp("),
                (presence, "public func stringForTimestamp(day: Int32, month: Int32, year:"),

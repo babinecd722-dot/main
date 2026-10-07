@@ -18864,8 +18864,11 @@ public func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -
     if let merge = AorusPluginAppearanceValues.flag("bubble.mergeCorners", in: values) {
         result.mergeBubbleCorners = merge
     }
+    // Telegram's own hasTails = false is the tailless preview of a link, which also leaves
+    // out a message's time, status and reactions. The tail setting only stops the tail from
+    // being drawn, and is part of the shape the bubble graphics are cached by.
     if let tails = AorusPluginAppearanceValues.flag("bubble.tails", in: values) {
-        result.hasTails = tails
+        result.aorusHidesTails = !tails
     }
     // Where bubbles join is never rounder than their outer corners: a join radius past the
     // corner radius would round the joined corners more than the free ones, and every place

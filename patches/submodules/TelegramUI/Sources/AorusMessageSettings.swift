@@ -2357,7 +2357,7 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, pre
     entries.append(.preview(AorusLookPreview(theme: previewTheme, fontSize: fontSize, corners: corners, wallpaper: presentationData.chatWallpaper, sample: sample, outgoing: state.outgoing, revision: revision)))
 
     entries.append(.shapeHeader(aorusL("ФОРМА", "SHAPE")))
-    entries.append(.tails(aorusL("Хвостик", "Tail"), corners.hasTails))
+    entries.append(.tails(aorusL("Хвостик", "Tail"), !corners.aorusHidesTails))
     entries.append(.hideTime(aorusL("Скрыть время", "Hide Time"), AorusPluginAppearanceValues.flag("message.hideTime", in: values) ?? false))
     entries.append(.radius(aorusL("Скругление углов", "Corner Radius"), min(16.0, corners.mainRadius)))
     entries.append(.merge(aorusL("Слитные сообщения", "Join Consecutive Messages"), corners.mergeBubbleCorners))
