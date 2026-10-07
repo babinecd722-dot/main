@@ -96,9 +96,16 @@ def main():
     parser.add_argument('--telegram-source', type=Path, required=True)
     parser.add_argument('--swiftc', default='swiftc')
     args = parser.parse_args()
-    from aorus_round_video import verify_round_video
+    from aorus_round_video import patch_round_video, verify_round_video
     errors = verify_round_video(args.telegram_source)
     if errors: raise RuntimeError('\n'.join(errors))
+    # Tooltips extend installed handlers later in branding. Replaying the circle
+    # patch must preserve them without adding another selector or timer action.
+    interface = args.telegram_source / 'submodules/LegacyComponents/Sources/TGMediaPickerGalleryInterfaceView.m'
+    original = interface.read_bytes()
+    patch_round_video(args.telegram_source)
+    if interface.read_bytes() != original:
+        raise RuntimeError('RoundVideo: patch replay changed the installed gallery handlers')
     with tempfile.TemporaryDirectory(prefix='aorus-round-video-') as directory:
         work = Path(directory)
         sources = args.telegram_source / 'submodules/SSignalKit/SwiftSignalKit/Source'

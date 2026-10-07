@@ -3,8 +3,16 @@ from pathlib import Path
 import shutil
 
 
-def replace(path: Path, old: str, new: str, count: int = 1) -> None:
+def replace(path: Path, old: str, new: str, count: int = 1, marker: str | None = None) -> None:
     text = path.read_text()
+    # A later tooltip patch extends these two handlers. Their unique declarations,
+    # rather than the original body, identify an already installed handler.
+    if marker is not None:
+        installed = text.count(marker)
+        if installed == count:
+            return
+        if installed != 0:
+            raise RuntimeError(f"RoundVideo: {path.name}: duplicate marker {marker!r}")
     if text.count(new) == count:
         return
     if text.count(old) != count:
@@ -202,7 +210,7 @@ def patch_round_video(tg: Path) -> None:
                 [(TGMediaPickerGalleryVideoItemView *)strongSelf->_currentItemView aorusToggleRealisticSending];
             return;
         }
-        editorTabPressed(tab);''')
+        editorTabPressed(tab);''', marker='        if (tab == TGPhotoEditorRealisticSendingTab) {')
     replace(interface, '            strongSelf->_muteButton.hidden = !sendableAsGif;', '''            strongSelf->_muteButton.hidden = !sendableAsGif;
             strongSelf->_aorusRoundButton.hidden = !sendableAsGif || ([strongSelf->_currentItem isKindOfClass:[TGMediaPickerGalleryItem class]] && ((TGMediaPickerGalleryItem *)strongSelf->_currentItem).asFile) || strongSelf.onlyCrop;
             [strongSelf setNeedsLayout];
@@ -224,7 +232,7 @@ def patch_round_video(tg: Path) -> None:
 }
 
 - (void)toggleSendAsGif
-{''')
+{''', marker='- (void)aorusToggleRoundVideo\n{')
     replace(interface, '    _muteButton.frame = [self _muteButtonFrameForOrientation:orientation screenEdges:screenEdges hasHeaderView:true];', '''    _muteButton.frame = [self _muteButtonFrameForOrientation:orientation screenEdges:screenEdges hasHeaderView:true];
     if (!_aorusRoundButton.hidden && CGRectGetMaxX(_muteButton.frame) + 48.0 > screenEdges.right - _safeAreaInset.right) {
         _muteButton.frame = CGRectOffset(_muteButton.frame, -48.0, 0.0);
