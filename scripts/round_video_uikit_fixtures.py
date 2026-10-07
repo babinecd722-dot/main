@@ -51,6 +51,10 @@ def objc_source(tg: Path) -> str:
     drawing_mask = drawing[mask_start:mask_end]
     preview = (lc / 'Sources/TGPhotoEditorPreviewView.m').read_text()
     radius = next(line for line in preview.splitlines() if 'self.layer.cornerRadius = self.aorusRoundVideo' in line)
+    converter = (lc / 'Sources/TGMediaVideoConverter.m').read_text()
+    conversion_methods = '\n'.join(declaration(converter, prefix) for prefix in ['+ (CGSize)dimensionsFor:', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize\n', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize rotateSideward:'])
+    maximum_size = declaration(converter, '+ (CGSize)maximumSizeForPreset:')
+    fit_size = declaration((lc / 'Sources/TGImageUtils.mm').read_text(), 'CGSize TGFitSizeF(')
     return '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + '''
 static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
     return fabs(a.origin.x-b.origin.x) <= epsilon && fabs(a.origin.y-b.origin.y) <= epsilon && fabs(a.size.width-b.size.width) <= epsilon && fabs(a.size.height-b.size.height) <= epsilon;
@@ -112,6 +116,24 @@ static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
 ''' + methods + '''
 @end
 @class RoundItem;
+static CGFloat CGFloor(CGFloat value) { return floor(value); }
+static bool TGOrientationIsSideward(UIImageOrientation orientation, void *unused) { return orientation == UIImageOrientationLeft || orientation == UIImageOrientationRight; }
+''' + fit_size + '''
+@interface TGMediaVideoConversionPresetSettings: NSObject
++ (CGSize)maximumSizeForPreset:(TGMediaVideoConversionPreset)preset;
+@end
+@implementation TGMediaVideoConversionPresetSettings
+''' + maximum_size + '''
+@end
+#define TGMediaVideoEditAdjustments TGVideoEditAdjustments
+@interface TGMediaVideoConverter: NSObject
++ (CGSize)dimensionsFor:(CGSize)dimensions adjustments:(TGVideoEditAdjustments *)adjustments preset:(TGMediaVideoConversionPreset)preset;
++ (CGSize)_renderSizeWithCropSize:(CGSize)size;
++ (CGSize)_renderSizeWithCropSize:(CGSize)size rotateSideward:(bool)sideward;
+@end
+@implementation TGMediaVideoConverter
+''' + conversion_methods + '''
+@end
 @interface RoundPhotoEditor: NSObject {
     bool _forVideo;
     TGVideoEditAdjustments *_initialAdjustments;
@@ -221,6 +243,21 @@ static void applyRoundDrawingMask(RoundPhotoEditor *_photoEditor, UIView *_scrol
 @end
 int AorusNativeRoundEditorTests(void) {
     checks = 0;
+    for (int odd = 0; odd < 4; odd++) {
+        CGSize source = CGSizeMake(1921 + odd * 0.25,1081 + odd * 0.5);
+        RoundGallery *gallery = [[RoundGallery alloc] initWithSize:source duration:30];
+        [gallery aorusToggleRoundVideo];
+        TGVideoEditAdjustments *circle = gallery.item.editingContext.current;
+        expect(CGRectEqualToRect(CGRectIntegral(circle.cropRect),circle.cropRect), "fractional source frames cannot produce a rectangular encoded note");
+        for (int preset = TGMediaVideoConversionPresetCompressedVeryLow; preset <= TGMediaVideoConversionPresetCompressedVeryHigh; preset++) {
+            CGSize encoded = [TGMediaVideoConverter dimensionsFor:source adjustments:circle preset:(TGMediaVideoConversionPreset)preset];
+            expect(encoded.width == encoded.height && encoded.width <= 640 && encoded.width > 0, "actual native dimensions remain square and compatible at every quality");
+            expect(fmod(encoded.width,16) == 0, "note dimensions retain native encoder block alignment");
+        }
+        [gallery aorusToggleRoundVideo];
+        CGSize restored = [TGMediaVideoConverter dimensionsFor:source adjustments:gallery.item.editingContext.current preset:TGMediaVideoConversionPresetCompressedVeryHigh];
+        expect(MAX(restored.width,restored.height) > 640, "ordinary video keeps its original resolution range");
+    }
     for (int orientation = 0; orientation < 4; orientation++) {
         for (int mirrored = 0; mirrored < 2; mirrored++) {
             for (int ratio = 0; ratio < 3; ratio++) {

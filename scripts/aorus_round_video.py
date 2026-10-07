@@ -78,7 +78,7 @@ def patch_round_video(tg: Path) -> None:
             CGRect crop = video.cropRect;
             CGFloat side = MIN(crop.size.width, crop.size.height);
             if (side <= 0.0) { crop = CGRectMake(0, 0, video.originalSize.width, video.originalSize.height); side = MIN(crop.size.width, crop.size.height); }
-            crop = CGRectMake(CGRectGetMidX(crop) - side / 2.0, CGRectGetMidY(crop) - side / 2.0, side, side);
+            crop = CGRectMake(floor(CGRectGetMidX(crop) - side / 2.0), floor(CGRectGetMidY(crop) - side / 2.0), floor(side), floor(side));
             NSTimeInterval end = video.trimEndValue > video.trimStartValue ? video.trimEndValue : item.originalDuration;
             TGVideoEditAdjustments *circle = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:video.originalSize cropRect:crop cropOrientation:video.cropOrientation cropRotation:video.cropRotation cropLockedAspectRatio:1.0 cropMirrored:video.cropMirrored trimStartValue:video.trimStartValue trimEndValue:MIN(end, video.trimStartValue + 60.0) toolValues:video.toolValues paintingData:video.paintingData sendAsGif:false preset:video.preset];
             [circle aorusCopyRoundModeFrom:video];
@@ -114,7 +114,7 @@ def patch_round_video(tg: Path) -> None:
     TGMediaVideoConversionPreset savedPreset = preset == TGMediaVideoConversionPresetAnimation ? TGMediaVideoConversionPresetCompressedDefault : preset;
     if (round) {
         CGFloat side = MIN(crop.size.width, crop.size.height);
-        crop = CGRectMake(CGRectGetMidX(crop) - side / 2.0, CGRectGetMidY(crop) - side / 2.0, side, side);
+        crop = CGRectMake(floor(CGRectGetMidX(crop) - side / 2.0), floor(CGRectGetMidY(crop) - side / 2.0), floor(side), floor(side));
         aspect = 1.0;
         preset = TGMediaVideoConversionPresetCompressedVeryHigh;
     } else {
@@ -286,7 +286,15 @@ def patch_round_editor(tg: Path) -> None:
     replace(fetch, '                                if alwaysUseModernPipeline {', '                                if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo {')
     replace(fetch, '                    if alwaysUseModernPipeline && !isImage {', '                    if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo {')
     converter = lc / 'Sources/TGMediaVideoConverter.m'
+    replace(converter, '    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:preset];', '''    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:preset];
+    if (adjustments.aorusRoundVideo) {
+        maxDimensions = CGSizeMake(MIN(maxDimensions.width, 640.0), MIN(maxDimensions.height, 640.0));
+    }''', 2)
     replace(converter, '    if ([adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])', '    if (adjustments.aorusRoundVideo || [adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])')
+    replace(lc / 'Sources/TGMediaPickerGalleryInterfaceView.m', '        [_portraitToolbarView setQualityButtonIsPhoto:isPhoto highQuality:isHd videoPreset:preset];', '''        if (aorusVideo.aorusRoundVideo && preset > TGMediaVideoConversionPresetCompressedLow) preset = TGMediaVideoConversionPresetCompressedLow;
+        [_portraitToolbarView setQualityButtonIsPhoto:isPhoto highQuality:isHd videoPreset:preset];''')
+    replace(lc / 'Sources/TGPhotoQualityController.m', '    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:self.preset];', '''    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:self.preset];
+    if (_photoEditor.aorusRoundVideo) maxDimensions = CGSizeMake(MIN(maxDimensions.width, 640.0), MIN(maxDimensions.height, 640.0));''')
     # Cached document attributes are immutable: never reuse the opposite media kind.
     upload = tg / 'submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift'
     replace(upload, '                if !forceReupload, let file = media as? TelegramMediaFile, let resource = file.resource as? CloudDocumentMediaResource, let fileReference = resource.fileReference {', '                if !forceReupload, let cachedFile = media as? TelegramMediaFile, cachedFile.isInstantVideo == file.isInstantVideo, let resource = cachedFile.resource as? CloudDocumentMediaResource, let fileReference = resource.fileReference {\n                    let file = cachedFile')
@@ -463,6 +471,7 @@ def verify_round_video(tg: Path) -> list[str]:
         'LegacyComponents/Sources/PGPhotoEditor.m': ['[result aorusCopyRoundModeFrom:initialAdjustments]', 'self.cropRotation = videoAdjustments.cropRotation;'],
         'LegacyComponents/Sources/TGPhotoEditorPreviewView.m': ['self.layer.cornerRadius = self.aorusRoundVideo'],
         'LegacyComponents/Sources/TGPhotoDrawingController.m': ['if (_photoEditor.aorusRoundVideo)', '_scrollContainerView.layer.mask = circle'],
+        'LegacyComponents/Sources/TGMediaVideoConverter.m': ['MIN(maxDimensions.width, 640.0)', 'if (adjustments.aorusRoundVideo || [adjustments trimApplied]'],
         'TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift': ['if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo', 'if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'],
         'TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift': ['cachedFile.isInstantVideo == file.isInstantVideo'],
         'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh'],
