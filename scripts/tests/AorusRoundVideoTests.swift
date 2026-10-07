@@ -8,6 +8,36 @@ import SwiftSignalKit
         if !value() { fatalError(message) }
     }
     static func main() {
+        let recordingQueue = Queue(name: "round-recording-test")
+        let refreshes = Atomic(value: 0)
+        let disposedRequests = Atomic(value: 0)
+        let finished = DispatchSemaphore(value: 0)
+        let shortRound = AorusRoundVideoMessageAttribute(duration: 0.16).started(at: Date().timeIntervalSince1970)
+        let lease = aorusRoundVideoRecordingSignal(round: shortRound, queue: recordingQueue, refreshInterval: 0.035, activity: {
+            _ = refreshes.modify { $0 + 1 }
+            return Signal { _ in ActionDisposable { _ = disposedRequests.modify { $0 + 1 } } }
+        }).start(completed: { finished.signal() })
+        expect(refreshes.with { $0 } == 1, "recording request starts immediately")
+        expect(finished.wait(timeout: .now() + 1) == .success, "recording completes at the persisted deadline")
+        let finalRefreshes = refreshes.with { $0 }
+        expect(finalRefreshes >= 2, "recording requests refresh during the countdown")
+        expect(disposedRequests.with { $0 } == finalRefreshes, "deadline disposes every recording request")
+        lease.dispose()
+        let cancelledLease = aorusRoundVideoRecordingSignal(round: AorusRoundVideoMessageAttribute(duration: 10).started(at: Date().timeIntervalSince1970), queue: recordingQueue, refreshInterval: 0.02, activity: {
+            _ = refreshes.modify { $0 + 1 }
+            return .complete()
+        }).start()
+        cancelledLease.dispose()
+        let stopped = refreshes.with { $0 }
+        let barrier = DispatchSemaphore(value: 0)
+        recordingQueue.after(0.08) { barrier.signal() }
+        expect(barrier.wait(timeout: .now() + 1) == .success && refreshes.with { $0 } == stopped, "cancelling the lease stops all subsequent requests")
+        let expiredLease = aorusRoundVideoRecordingSignal(round: AorusRoundVideoMessageAttribute(duration: 1, deadline: 1), queue: recordingQueue, activity: {
+            _ = refreshes.modify { $0 + 1 }
+            return .complete()
+        }).start()
+        expiredLease.dispose()
+        expect(refreshes.with { $0 } == stopped, "expired recording sends no activity")
         for duration in [0.0, 0.5, 10.0, 60.0] {
             for circle in [false, true] { for scheduled in [false, true] { for attached in [false, true] {
                 let request = AorusRoundVideoMessageAttribute(duration: duration, deadline: 123)

@@ -371,6 +371,9 @@ public enum AorusPluginMarketPermission {
         "plugin.perm.effects", "plugin.perm.clipboard", "plugin.perm.accounts",
         "plugin.perm.proxy", "plugin.perm.features", "plugin.perm.ai",
         "plugin.perm.browser", "plugin.perm.ui", "plugin.perm.context_menu",
+        "plugin.perm.mtproto", "plugin.perm.dialogs", "plugin.perm.send_messages",
+        "plugin.perm.app_customization", "plugin.perm.custom_ui",
+        "plugin.perm.outgoing_messages", "plugin.perm.websocket",
     ]
 
     public static func isKnown(_ key: String) -> Bool { keys.contains(key) }
@@ -391,6 +394,13 @@ public enum AorusPluginMarketPermission {
         case "plugin.perm.browser": return .inAppBrowser
         case "plugin.perm.ui": return .customUI
         case "plugin.perm.context_menu": return .contextMenu
+        case "plugin.perm.mtproto": return .mtproto
+        case "plugin.perm.dialogs": return .dialogs
+        case "plugin.perm.send_messages": return .sendMessages
+        case "plugin.perm.app_customization": return .appCustomization
+        case "plugin.perm.custom_ui": return .customUI
+        case "plugin.perm.outgoing_messages": return .outgoingMessages
+        case "plugin.perm.websocket": return .network
         default: return nil
         }
     }
@@ -401,6 +411,21 @@ public enum AorusPluginMarketPermission {
         let requested = AorusPluginPermission.requestedBySource(source)
         var result: [String] = []
         for key in keys {
+            // These wire keys describe a narrower API than their local grant.
+            // Keep each description tied to the API the source actually uses.
+            switch key {
+            case "plugin.perm.send_messages":
+                if source.contains("aorus.files.send") { result.append(key) }
+                continue
+            case "plugin.perm.websocket":
+                if source.contains("aorus.ws.open") { result.append(key) }
+                continue
+            case "plugin.perm.outgoing_messages":
+                if source.contains("aorus.commands.") || source.contains("aorus.command(") { result.append(key) }
+                continue
+            default:
+                break
+            }
             if let permission = local(key) {
                 if requested.contains(permission) { result.append(key) }
             } else if key == "plugin.perm.clipboard" {

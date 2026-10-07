@@ -2573,6 +2573,17 @@ expect(AorusPluginMarketDraft(data: Data("{\"ok\":true,\"code\":\"   \"}".utf8))
 let publishKeys = AorusPluginMarketPermission.keys(forSource: "aorus.http.fetch('https://example.com'); aorus.effects.start('w', 'snow'); aorus.clipboard.read();")
 expect(publishKeys.contains("plugin.perm.http") && publishKeys.contains("plugin.perm.effects") && publishKeys.contains("plugin.perm.clipboard"), "a source's permissions are sent as the server's keys")
 expect(AorusPluginMarketPermission.keys.allSatisfy { AorusPluginMarketPermission.local($0) != nil || $0 == "plugin.perm.commands" || $0 == "plugin.perm.clipboard" }, "every key but commands and clipboard reads as a local permission")
+let addedMarketPermissions = ["plugin.perm.mtproto", "plugin.perm.dialogs", "plugin.perm.send_messages", "plugin.perm.app_customization", "plugin.perm.custom_ui", "plugin.perm.outgoing_messages", "plugin.perm.websocket"]
+expect(AorusPluginMarketPermission.keys.count == 22 && Set(AorusPluginMarketPermission.keys).count == 22, "Market accepts the original 15 and seven distinct new permission IDs")
+expect(!AorusPluginMarketPermission.isKnown("plugin.perm.in_app_browser"), "browser keeps its existing wire ID")
+let allPermissionsData = try! JSONSerialization.data(withJSONObject: ["ok": true, "plugin": ["id": "com.example.full", "version": "1.0.0", "name": "Full", "status": "approved", "permissions": AorusPluginMarketPermission.keys + addedMarketPermissions + ["plugin.perm.in_app_browser"]]])
+expect(AorusPluginMarketCard.single(from: allPermissionsData)?.permissions == AorusPluginMarketPermission.keys, "a server card retains all 22 IDs in order, removes duplicates, and rejects unknown IDs")
+let commandOnlyKeys = AorusPluginMarketPermission.keys(forSource: "aorus.commands.register('ping', () => 'pong');")
+expect(commandOnlyKeys.contains("plugin.perm.outgoing_messages") && !commandOnlyKeys.contains("plugin.perm.send_messages"), "command replies do not imply file sending")
+let socketOnlyKeys = AorusPluginMarketPermission.keys(forSource: "aorus.ws.open('s', 'wss://example.com');")
+expect(socketOnlyKeys.contains("plugin.perm.websocket") && !socketOnlyKeys.contains("plugin.perm.send_messages"), "socket publishing includes its specific wire ID")
+expect(!AorusPluginMarketPermission.keys(forSource: "aorus.messages.send({text: 'hello'});").contains("plugin.perm.send_messages"), "ordinary message sending does not imply plugin-file sending")
+expect(AorusPluginMarketPermission.keys(forSource: "aorus.files.send('file');").contains("plugin.perm.send_messages"), "plugin-file sending publishes its distinct permission")
 
 // The store keeps a valid market link and drops one that breaks the contract.
 expect(AorusPluginStore.validatedMarketLink(AorusPluginMarketLink(id: "com.me.a", version: "1.0.0", isOwn: true)) != nil, "a valid market link is kept")

@@ -63,6 +63,7 @@ def patch_round_video(tg: Path) -> None:
     replace(m, '    adjustments->_videoStartValue = videoStartValue;', '    adjustments->_videoStartValue = videoStartValue;\n    [adjustments aorusCopyRoundModeFrom:self];')
     replace(m, '    return ![self cropAppliedForAvatar:false] && ![self toolsApplied] && ![self hasPainting];', '    return !self.aorusRoundVideo && ![self cropAppliedForAvatar:false] && ![self toolsApplied] && ![self hasPainting];')
     replace(m, '    if (self.sendAsGif != adjustments.sendAsGif)', '    if (self.aorusRoundVideo != adjustments.aorusRoundVideo || self.aorusRealisticSending != adjustments.aorusRealisticSending)\n        return false;\n    if (self.sendAsGif != adjustments.sendAsGif)')
+    patch_round_zoom(lc)
     assets = lc / 'Sources/TGMediaAssetsController.m'
     replace(assets, '    if (patchedAdjustments == nil)\n        return videoAdjustments;', '    if (patchedAdjustments == nil)\n        return videoAdjustments;\n    [patchedAdjustments aorusCopyRoundModeFrom:videoAdjustments];')
     context = lc / "Sources/TGMediaEditingContext.m"
@@ -273,10 +274,13 @@ def patch_round_editor(tg: Path) -> None:
     replace(drawing, '\n    _scrollContainerView.frame = CGRectMake(containerFrame.origin.x, containerFrame.origin.y + offsetHeight, containerFrame.size.width, containerFrame.size.height);', '''
     _scrollContainerView.frame = CGRectMake(containerFrame.origin.x, containerFrame.origin.y + offsetHeight, containerFrame.size.width, containerFrame.size.height);
     if (_photoEditor.aorusRoundVideo) {
-        CAShapeLayer *circle = [CAShapeLayer layer];
+        CAShapeLayer *circle = [_scrollContainerView.layer.mask isKindOfClass:[CAShapeLayer class]] ? (CAShapeLayer *)_scrollContainerView.layer.mask : [CAShapeLayer layer];
+        [CATransaction begin];
+        [CATransaction setDisableActions:true];
         circle.frame = _scrollContainerView.bounds;
         circle.path = [UIBezierPath bezierPathWithOvalInRect:[previewView convertRect:previewView.bounds toView:_scrollContainerView]].CGPath;
         _scrollContainerView.layer.mask = circle;
+        [CATransaction commit];
     } else {
         _scrollContainerView.layer.mask = nil;
     }''')
@@ -412,7 +416,80 @@ def patch_enqueue(tg: Path) -> None:
                         }''')
 
 
+def patch_round_zoom(lc: Path) -> None:
+    tabs = lc / 'Sources/TGPhotoEditorTabController.m'
+    replace(tabs, '    if ([editorValues cropAppliedForAvatar:forAvatar])\n        highlightedButtons |= TGPhotoEditorCropTab;', '''    bool aorusRound = !forAvatar && [editorValues isKindOfClass:[TGVideoEditAdjustments class]] && ((TGVideoEditAdjustments *)editorValues).aorusRoundVideo;
+    if (!aorusRound && [editorValues cropAppliedForAvatar:forAvatar])
+        highlightedButtons |= TGPhotoEditorCropTab;''')
+    video = lc / 'Sources/TGMediaPickerGalleryVideoItemView.m'
+    replace(video, '@interface TGMediaPickerGalleryVideoItemView() <TGMediaPickerGalleryVideoScrubberDataSource, TGMediaPickerGalleryVideoScrubberDelegate>', '''static CGRect AorusRoundVideoZoomCrop(CGRect crop, CGSize originalSize, CGFloat scale)
+{
+    CGFloat originalSide = MIN(originalSize.width, originalSize.height);
+    CGFloat initialSide = MIN(crop.size.width, crop.size.height);
+    if (!isfinite(scale) || scale <= 0.0 || originalSide < 1.0 || initialSide < 1.0)
+        return crop;
+    CGFloat side = floor(MAX(MAX(1.0, originalSide / 10.0), MIN(originalSide, initialSide / scale)));
+    CGFloat x = floor(MAX(0.0, MIN(originalSize.width - side, CGRectGetMidX(crop) - side / 2.0)));
+    CGFloat y = floor(MAX(0.0, MIN(originalSize.height - side, CGRectGetMidY(crop) - side / 2.0)));
+    return CGRectMake(x, y, side, side);
+}
+
+@interface TGMediaPickerGalleryVideoItemView() <TGMediaPickerGalleryVideoScrubberDataSource, TGMediaPickerGalleryVideoScrubberDelegate, UIGestureRecognizerDelegate>''')
+    replace(video, '    UITapGestureRecognizer *_tapGestureRecognizer;', '    UITapGestureRecognizer *_tapGestureRecognizer;\n    UIPinchGestureRecognizer *_aorusRoundPinch;\n    TGVideoEditAdjustments *_aorusZoomAdjustments;')
+    replace(video, '    bool itemChanged = ![item isEqual:self.item];', '''    bool itemChanged = ![item isEqual:self.item];
+    if (itemChanged) {
+        _aorusZoomAdjustments = nil;
+        _aorusRoundPinch.enabled = false;
+        _aorusRoundPinch.enabled = true;
+    }''')
+    replace(video, '        _playerView.clipsToBounds = true;', '''        _playerView.clipsToBounds = true;
+        _aorusRoundPinch = [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(aorusPinchRoundVideo:)];
+        _aorusRoundPinch.delegate = self;
+        [_playerView addGestureRecognizer:_aorusRoundPinch];''')
+    replace(video, '- (void)_layoutPlayerView\n{', '''- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer
+{
+    if (gestureRecognizer == _aorusRoundPinch) {
+        TGVideoEditAdjustments *adjustments = (TGVideoEditAdjustments *)[self.item.editingContext adjustmentsForItem:self.item.editableMediaItem];
+        return self.gesturesEnabled && adjustments.aorusRoundVideo && !_downloadRequired;
+    }
+    return true;
+}
+
+- (void)aorusPinchRoundVideo:(UIPinchGestureRecognizer *)gesture
+{
+    if (gesture.state == UIGestureRecognizerStateBegan)
+        _aorusZoomAdjustments = (TGVideoEditAdjustments *)[self.item.editingContext adjustmentsForItem:self.item.editableMediaItem];
+    TGVideoEditAdjustments *old = _aorusZoomAdjustments;
+    if (!old.aorusRoundVideo)
+        return;
+    if (gesture.state == UIGestureRecognizerStateCancelled || gesture.state == UIGestureRecognizerStateFailed) {
+        _aorusZoomAdjustments = nil;
+        [self _layoutPlayerView];
+        return;
+    }
+    CGRect crop = AorusRoundVideoZoomCrop(old.cropRect, old.originalSize, gesture.scale);
+    // Reuse the native player and entity layout during the gesture; commit only once.
+    [self _layoutPlayerViewWithCropRect:crop videoFrameSize:crop.size orientation:old.cropOrientation mirrored:old.cropMirrored];
+    if (gesture.state == UIGestureRecognizerStateEnded) {
+        if (!CGRectEqualToRect(crop, old.cropRect)) {
+            TGVideoEditAdjustments *next = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:old.originalSize cropRect:crop cropOrientation:old.cropOrientation cropRotation:old.cropRotation cropLockedAspectRatio:1.0 cropMirrored:old.cropMirrored trimStartValue:old.trimStartValue trimEndValue:old.trimEndValue toolValues:old.toolValues paintingData:old.paintingData sendAsGif:false preset:old.preset];
+            [next aorusCopyRoundModeFrom:old];
+            [self.item.editingContext setAdjustments:next forItem:self.item.editableMediaItem];
+        }
+        _aorusZoomAdjustments = nil;
+        [self _layoutPlayerView];
+    }
+}
+
+- (void)_layoutPlayerView
+{''')
+
+
 def patch_pending(tg: Path) -> None:
+    activities = tg / 'submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift'
+    replace(activities, 'private func requestActivity(postbox: Postbox, network: Network, accountPeerId: PeerId, peerId: PeerId, threadId: Int64?, activity: PeerInputActivity?) -> Signal<Void, NoError> {', 'func requestActivity(postbox: Postbox, network: Network, accountPeerId: PeerId, peerId: PeerId, threadId: Int64?, activity: PeerInputActivity?, aorusRoundVideoRecording: Bool = false) -> Signal<Void, NoError> {\n    let aorusPublishRecording = aorusRoundVideoRecording && activity == .recordingInstantVideo')
+    replace(activities, '    if aorusGhostActive {', '    if aorusGhostActive && !aorusPublishRecording {')
+    replace(activities, '            if let _ = peer as? TelegramUser {', '            if let _ = peer as? TelegramUser, !aorusPublishRecording {')
     path = tg / 'submodules/TelegramCore/Sources/State/PendingMessageManager.swift'
     replace(path, '    let postponeDisposable = MetaDisposable()', '    let postponeDisposable = MetaDisposable()\n    let aorusRecordingDisposable = MetaDisposable()')
     replace(path, '                    context.postponeDisposable.dispose()', '                    context.postponeDisposable.dispose()\n                    context.aorusRecordingDisposable.dispose()')
@@ -421,10 +498,15 @@ def patch_pending(tg: Path) -> None:
                     if let round = message.aorusRoundVideoSending {
                         let remaining = round.remaining(at: Date().timeIntervalSince1970)
                         if remaining > 0.0 {
-                            messageContext.activityType = .recordingInstantVideo
+                            // The explicit realistic-send option publishes recording even when
+                            // cached presence is offline or ordinary typing is hidden.
+                            messageContext.activityType = nil
+                            messageContext.activityDisposable.set(nil)
                             let space = PeerActivitySpace(peerId: message.id.peerId, category: message.threadId.map { .thread($0) } ?? .global)
-                            strongSelf.addContextActivityIfNeeded(messageContext, peerId: space)
-                            messageContext.aorusRecordingDisposable.set((Signal<Void, NoError>.single(()) |> delay(remaining, queue: strongSelf.queue)).start(next: { [weak strongSelf, weak messageContext] _ in
+                            messageContext.aorusRecordingDisposable.set(aorusRoundVideoRecordingSignal(round: round, queue: strongSelf.queue, activity: { [weak strongSelf] in
+                                guard let strongSelf else { return .complete() }
+                                return requestActivity(postbox: strongSelf.postbox, network: strongSelf.network, accountPeerId: strongSelf.accountPeerId, peerId: message.id.peerId, threadId: message.threadId, activity: .recordingInstantVideo, aorusRoundVideoRecording: true)
+                            }).start(completed: { [weak strongSelf, weak messageContext] in
                                 guard let strongSelf, let messageContext else { return }
                                 messageContext.activityType = .uploadingInstantVideo(progress: 0)
                                 strongSelf.addContextActivityIfNeeded(messageContext, peerId: space)
@@ -487,12 +569,14 @@ def verify_round_video(tg: Path) -> list[str]:
         'LegacyComponents/Sources/TGMediaVideoConverter.m': ['MIN(maxDimensions.width, 640.0)', 'if (adjustments.aorusRoundVideo || [adjustments trimApplied]'],
         'TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift': ['if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo', 'if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'],
         'TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift': ['cachedFile.isInstantVideo == file.isInstantVideo'],
-        'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh'],
+        'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh', 'static CGRect AorusRoundVideoZoomCrop(', 'aorusPinchRoundVideo:', '_aorusRoundPinch.delegate = self;', '_aorusZoomAdjustments = nil;'],
+        'LegacyComponents/Sources/TGPhotoEditorTabController.m': ['bool aorusRound = !forAvatar', 'if (!aorusRound && [editorValues cropAppliedForAvatar:forAvatar])'],
         'LegacyComponents/Sources/TGMediaPickerGalleryInterfaceView.m': ['_aorusRoundButton.frame = CGRectOffset(_muteButton.frame, 48.0, 0.0)', 'if (tab == TGPhotoEditorRealisticSendingTab)'],
         'MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift': ['.qualityTab,\n    .realisticSendingTab,\n    .timerTab,', 'case 640:\n            label = "640"'],
         'LegacyMediaPickerUI/Sources/LegacyMediaPickers.swift': ['[.instantRoundVideo, .supportsStreaming]', 'localGroupingKey: aorusRound ? nil : item.groupedId'],
         'TelegramCore/Sources/PendingMessages/EnqueueMessage.swift': ['round.started(at: Date().timeIntervalSince1970)'],
-        'TelegramCore/Sources/State/PendingMessageManager.swift': ['messageContext.activityType = .recordingInstantVideo', 'aorusRoundVideoUploadSignal(originalUploadSignal, round: round, queue: strongSelf.queue)', 'context.aorusRecordingDisposable.dispose()'],
+        'TelegramCore/Sources/State/PendingMessageManager.swift': ['aorusRoundVideoRecordingSignal(round: round', 'activity: .recordingInstantVideo, aorusRoundVideoRecording: true', 'aorusRoundVideoUploadSignal(originalUploadSignal, round: round, queue: strongSelf.queue)', 'context.aorusRecordingDisposable.dispose()'],
+        'TelegramCore/Sources/State/ManagedLocalInputActivities.swift': ['aorusRoundVideoRecording && activity == .recordingInstantVideo', 'aorusGhostActive && !aorusPublishRecording', 'TelegramUser, !aorusPublishRecording'],
         'TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode/Sources/ChatMessageInteractiveInstantVideoNode.swift': ['countdown.update(deadline: round.deadline, videoFrame: displayVideoFrame)'],
         'Display/Source/DeviceMetrics.swift': ['if self.hasTopNotch || self.hasDynamicIsland { return true }'],
     }

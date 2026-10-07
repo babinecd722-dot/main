@@ -45,6 +45,39 @@ func aorusRoundVideoUploadSignal(_ signal: Signal<PendingMessageUploadedContentR
     }
 }
 
+/// A recording lease sends immediately, refreshes before Telegram's typing timeout,
+/// and releases both the in-flight request and its timers at the persisted deadline.
+func aorusRoundVideoRecordingSignal(round: AorusRoundVideoMessageAttribute, queue: Queue, refreshInterval: Double = 4.0, activity: @escaping () -> Signal<Void, NoError>) -> Signal<Void, NoError> {
+    return Signal { subscriber in
+        let remaining = round.remaining(at: Date().timeIntervalSince1970)
+        guard remaining > 0.0 else {
+            subscriber.putCompletion()
+            return EmptyDisposable
+        }
+        let request = MetaDisposable()
+        let refresh = SwiftSignalKit.Timer(timeout: max(0.01, refreshInterval), repeat: true, completion: { timer in
+            if round.remaining(at: Date().timeIntervalSince1970) > 0.0 {
+                request.set(activity().start())
+            } else {
+                timer.invalidate()
+            }
+        }, queue: queue)
+        let finish = SwiftSignalKit.Timer(timeout: remaining, repeat: false, completion: {
+            refresh.invalidate()
+            request.dispose()
+            subscriber.putCompletion()
+        }, queue: queue)
+        request.set(activity().start())
+        refresh.start()
+        finish.start()
+        return ActionDisposable {
+            refresh.invalidate()
+            finish.invalidate()
+            request.dispose()
+        }
+    }
+}
+
 public extension Message {
     var aorusRoundVideoSending: AorusRoundVideoMessageAttribute? {
         guard self.flags.isSending, !self.isSentOrAcknowledged,

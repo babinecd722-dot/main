@@ -306,6 +306,33 @@ enum AorusPluginMarketDrawing {
             return ("command", .systemIndigo, AorusPluginMarketText.commandsTitle, AorusPluginMarketText.commandsBody)
         case "plugin.perm.clipboard":
             return ("doc.on.clipboard", .systemGray, AorusPluginMarketText.clipboardTitle, AorusPluginMarketText.clipboardBody)
+        case "plugin.perm.mtproto":
+            return ("antenna.radiowaves.left.and.right", .systemPurple,
+                    permissionTitle(.mtproto), permissionSummary(.mtproto) + " aorus.mtproto.")
+        case "plugin.perm.dialogs":
+            return ("square.and.arrow.up", .systemBlue,
+                    aorusL("Выбор файлов и общий доступ", "File Picker and Sharing"),
+                    aorusL("Системный выбор файла и меню «Поделиться».", "System file picker and share sheet.") + " aorus.files.pick, aorus.files.share.")
+        case "plugin.perm.send_messages":
+            return ("doc.fill", .systemBlue,
+                    aorusL("Отправка файлов", "Send Files"),
+                    aorusL("Отправка файлов плагина документами.", "Send plugin files as documents.") + " aorus.files.send.")
+        case "plugin.perm.app_customization":
+            return ("paintbrush.fill", .systemPink,
+                    permissionTitle(.appCustomization),
+                    aorusL("Оформление, замена иконок, открытие экранов, свои вкладки, установка и экспорт плагинов.", "Style the client, replace icons, open screens, add tabs, and install or export plugins."))
+        case "plugin.perm.custom_ui":
+            return ("rectangle.on.rectangle", .systemTeal,
+                    permissionTitle(.customUI),
+                    aorusL("Вкладки и экраны, построенные плагином.", "Tabs and screens built by the plugin."))
+        case "plugin.perm.outgoing_messages":
+            return ("arrowshape.turn.up.left.fill", .systemOrange,
+                    aorusL("Ответы на команды", "Command Replies"),
+                    aorusL("Ответ команды отправляется в тот же чат; произвольная отправка сообщений не предоставляется.", "Send a command's reply to the same chat; does not allow arbitrary messages."))
+        case "plugin.perm.websocket":
+            return ("arrow.left.arrow.right", .systemGreen,
+                    "WebSocket",
+                    aorusL("Одновременно доступны не более двух сокетов.", "Up to two sockets at a time.") + " aorus.ws.open.")
         default:
             break
         }

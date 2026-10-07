@@ -53,6 +53,15 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "File Picker and Sharing": "Selezione e condivisione file",
+        "System file picker and share sheet.": "Selettore file e menu di condivisione di sistema.",
+        "Send Files": "Invio file",
+        "Send plugin files as documents.": "Invia i file del plugin come documenti.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personalizza il client, sostituisci le icone, apri schermate, aggiungi schede e installa o esporta plugin.",
+        "Tabs and screens built by the plugin.": "Schede e schermate create dal plugin.",
+        "Command Replies": "Risposte ai comandi",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Invia la risposta di un comando nella stessa chat; non consente messaggi arbitrari.",
+        "Up to two sockets at a time.": "Fino a due socket contemporaneamente.",
         "Hide Time": "Nascondi l’ora",
         "Show Exact Last Seen": "Mostra l’ultimo accesso esatto",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La trasparenza del colore del bagliore ne determina l’intensità. Le capsule pixel proiettano un’ombra netta, come nei vecchi giochi. Non hanno riflesso.",
@@ -1022,6 +1031,15 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "File Picker and Sharing": "Wybór i udostępnianie plików",
+        "System file picker and share sheet.": "Systemowy wybór plików i menu udostępniania.",
+        "Send Files": "Wysyłanie plików",
+        "Send plugin files as documents.": "Wysyłaj pliki wtyczki jako dokumenty.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Zmieniaj wygląd klienta i ikony, otwieraj ekrany, dodawaj karty oraz instaluj lub eksportuj wtyczki.",
+        "Tabs and screens built by the plugin.": "Karty i ekrany utworzone przez wtyczkę.",
+        "Command Replies": "Odpowiedzi na polecenia",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Wyślij odpowiedź na polecenie do tego samego czatu; nie pozwala na dowolne wiadomości.",
+        "Up to two sockets at a time.": "Maksymalnie dwa gniazda jednocześnie.",
         "Hide Time": "Ukryj godzinę",
         "Show Exact Last Seen": "Pokaż dokładny czas ostatniej aktywności",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Przezroczystość koloru poświaty określa jej siłę. Pikselowe kapsuły rzucają ostry cień, jak w starych grach. Nie mają odblasku.",
@@ -1991,6 +2009,15 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "File Picker and Sharing": "Bestanden kiezen en delen",
+        "System file picker and share sheet.": "Systeembestandskiezer en deelmenu.",
+        "Send Files": "Bestanden versturen",
+        "Send plugin files as documents.": "Verstuur pluginbestanden als documenten.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Pas de client aan, vervang pictogrammen, open schermen, voeg tabbladen toe en installeer of exporteer plugins.",
+        "Tabs and screens built by the plugin.": "Tabbladen en schermen gemaakt door de plugin.",
+        "Command Replies": "Antwoorden op opdrachten",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Verstuur het antwoord op een opdracht naar dezelfde chat; staat geen willekeurige berichten toe.",
+        "Up to two sockets at a time.": "Maximaal twee sockets tegelijk.",
         "Hide Time": "Tijd verbergen",
         "Show Exact Last Seen": "Exacte tijd van laatst gezien tonen",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "De transparantie van de gloedkleur bepaalt de sterkte. Pixelcapsules werpen een harde schaduw, zoals in oude games. Glans hebben ze niet.",
@@ -2960,6 +2987,15 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "File Picker and Sharing": "Selecció i compartició de fitxers",
+        "System file picker and share sheet.": "Selector de fitxers i menú de compartició del sistema.",
+        "Send Files": "Enviament de fitxers",
+        "Send plugin files as documents.": "Envia els fitxers del connector com a documents.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personalitza el client, substitueix icones, obre pantalles, afegeix pestanyes i instal·la o exporta connectors.",
+        "Tabs and screens built by the plugin.": "Pestanyes i pantalles creades pel connector.",
+        "Command Replies": "Respostes a ordres",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Envia la resposta d’una ordre al mateix xat; no permet missatges arbitraris.",
+        "Up to two sockets at a time.": "Fins a dos sòcols alhora.",
         "Hide Time": "Amaga l’hora",
         "Show Exact Last Seen": "Mostra l’última connexió exacta",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparència del color del resplendor en fixa la intensitat. Les càpsules de píxels projecten una ombra dura, com als jocs antics. No tenen lluïssor.",
@@ -3929,6 +3965,15 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "File Picker and Sharing": "Pemilihan dan Berbagi File",
+        "System file picker and share sheet.": "Pemilih file dan menu berbagi sistem.",
+        "Send Files": "Kirim File",
+        "Send plugin files as documents.": "Kirim file plugin sebagai dokumen.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Sesuaikan tampilan klien, ganti ikon, buka layar, tambahkan tab, serta instal atau ekspor plugin.",
+        "Tabs and screens built by the plugin.": "Tab dan layar yang dibuat oleh plugin.",
+        "Command Replies": "Balasan Perintah",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Kirim balasan perintah ke obrolan yang sama; tidak mengizinkan pesan sembarang.",
+        "Up to two sockets at a time.": "Maksimal dua soket sekaligus.",
         "Hide Time": "Sembunyikan waktu",
         "Show Exact Last Seen": "Tampilkan waktu terakhir dilihat secara tepat",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparansi warna pendar menentukan kekuatannya. Kapsul piksel memberi bayangan tegas, seperti gim lawas. Kilau tidak ada.",
@@ -4898,6 +4943,15 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "File Picker and Sharing": "Pemilihan dan Perkongsian Fail",
+        "System file picker and share sheet.": "Pemilih fail dan menu perkongsian sistem.",
+        "Send Files": "Hantar Fail",
+        "Send plugin files as documents.": "Hantar fail pemalam sebagai dokumen.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Ubah rupa klien, gantikan ikon, buka skrin, tambah tab dan pasang atau eksport pemalam.",
+        "Tabs and screens built by the plugin.": "Tab dan skrin yang dibina oleh pemalam.",
+        "Command Replies": "Balasan Arahan",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Hantar balasan arahan ke sembang yang sama; tidak membenarkan mesej sewenang-wenangnya.",
+        "Up to two sockets at a time.": "Sehingga dua soket pada satu masa.",
         "Hide Time": "Sembunyikan masa",
         "Show Exact Last Seen": "Tunjukkan masa terakhir dilihat yang tepat",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Kelutsinaran warna cahaya menentukan kekuatannya. Kapsul piksel menghasilkan bayang tajam, seperti permainan lama. Kilauan tiada.",
@@ -5867,6 +5921,15 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "File Picker and Sharing": "Выбар і абагульванне файлаў",
+        "System file picker and share sheet.": "Сістэмны выбар файлаў і меню абагульвання.",
+        "Send Files": "Адпраўка файлаў",
+        "Send plugin files as documents.": "Адпраўка файлаў плагіна як дакументаў.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Афармленне кліента, замена значкоў, адкрыццё экранаў, свае ўкладкі, усталяванне і экспарт плагінаў.",
+        "Tabs and screens built by the plugin.": "Укладкі і экраны, створаныя плагінам.",
+        "Command Replies": "Адказы на каманды",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Адказ каманды адпраўляецца ў той жа чат; адвольная адпраўка паведамленняў не дазваляецца.",
+        "Up to two sockets at a time.": "Не больш за два сокеты адначасова.",
         "Hide Time": "Схаваць час",
         "Show Exact Last Seen": "Паказваць дакладны час апошняй актыўнасці",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Празрыстасць колеру свячэння задае яго сілу. У піксельных капсул цень рэзкая, як у старых гульнях. Бліку ў іх няма.",
@@ -6836,6 +6899,15 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "File Picker and Sharing": "Fayl tanlash va ulashish",
+        "System file picker and share sheet.": "Tizim fayl tanlagichi va ulashish menyusi.",
+        "Send Files": "Fayllarni yuborish",
+        "Send plugin files as documents.": "Plagin fayllarini hujjat sifatida yuborish.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Mijoz ko‘rinishini sozlash, ikonkalarni almashtirish, ekranlarni ochish, varaqlar qo‘shish va plaginlarni o‘rnatish yoki eksport qilish.",
+        "Tabs and screens built by the plugin.": "Plagin yaratgan varaqlar va ekranlar.",
+        "Command Replies": "Buyruqlarga javoblar",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Buyruq javobini shu chatga yuborish; ixtiyoriy xabarlarni yuborishga ruxsat bermaydi.",
+        "Up to two sockets at a time.": "Bir vaqtda ko‘pi bilan ikkita soket.",
         "Hide Time": "Vaqtni yashirish",
         "Show Exact Last Seen": "Oxirgi faollik vaqtini aniq ko‘rsatish",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Nur rangining shaffofligi uning kuchini belgilaydi. Piksel kapsulalar eski o‘yinlardagidek keskin soya tashlaydi. Ularda yaltiroq yo‘q.",
@@ -7805,6 +7877,15 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "File Picker and Sharing": "파일 선택 및 공유",
+        "System file picker and share sheet.": "시스템 파일 선택기와 공유 메뉴.",
+        "Send Files": "파일 보내기",
+        "Send plugin files as documents.": "플러그인 파일을 문서로 보냅니다.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "클라이언트 스타일과 아이콘을 변경하고, 화면을 열고, 탭을 추가하며, 플러그인을 설치하거나 내보냅니다.",
+        "Tabs and screens built by the plugin.": "플러그인이 만든 탭과 화면.",
+        "Command Replies": "명령 답장",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "명령의 답장을 같은 채팅에 보냅니다. 임의의 메시지 전송은 허용하지 않습니다.",
+        "Up to two sockets at a time.": "동시에 최대 두 개의 소켓.",
         "Hide Time": "시간 숨기기",
         "Show Exact Last Seen": "정확한 마지막 접속 시간 표시",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "발광 색의 투명도가 세기를 정합니다. 픽셀 캡슐은 옛날 게임처럼 선명한 그림자를 드리웁니다. 하이라이트는 없습니다.",
@@ -8774,6 +8855,15 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "File Picker and Sharing": "اختيار الملفات ومشاركتها",
+        "System file picker and share sheet.": "منتقي الملفات وقائمة المشاركة في النظام.",
+        "Send Files": "إرسال الملفات",
+        "Send plugin files as documents.": "إرسال ملفات الإضافة كمستندات.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "تخصيص مظهر التطبيق واستبدال الأيقونات وفتح الشاشات وإضافة علامات تبويب وتثبيت الإضافات أو تصديرها.",
+        "Tabs and screens built by the plugin.": "علامات تبويب وشاشات تنشئها الإضافة.",
+        "Command Replies": "الردود على الأوامر",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "إرسال رد الأمر إلى المحادثة نفسها؛ لا يسمح بإرسال رسائل عشوائية.",
+        "Up to two sockets at a time.": "اتصالان بالمقابس كحد أقصى في الوقت نفسه.",
         "Hide Time": "إخفاء الوقت",
         "Show Exact Last Seen": "عرض وقت آخر ظهور بالدقة",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "تحدد شفافية لون التوهج قوته. تُلقي الكبسولات البكسلية ظلًا حادًا كما في الألعاب القديمة. ولا لمعة لها.",
@@ -9743,6 +9833,15 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "File Picker and Sharing": "انتخاب و اشتراک‌گذاری فایل",
+        "System file picker and share sheet.": "انتخابگر فایل و منوی اشتراک‌گذاری سیستم.",
+        "Send Files": "ارسال فایل‌ها",
+        "Send plugin files as documents.": "ارسال فایل‌های افزونه به‌صورت سند.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "تغییر ظاهر برنامه، جایگزینی آیکون‌ها، باز کردن صفحه‌ها، افزودن زبانه‌ها و نصب یا خروجی گرفتن از افزونه‌ها.",
+        "Tabs and screens built by the plugin.": "زبانه‌ها و صفحه‌های ساخته‌شده توسط افزونه.",
+        "Command Replies": "پاسخ به فرمان‌ها",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "پاسخ فرمان را به همان گفتگو ارسال می‌کند؛ اجازه ارسال پیام‌های دلخواه را نمی‌دهد.",
+        "Up to two sockets at a time.": "حداکثر دو سوکت هم‌زمان.",
         "Hide Time": "پنهان کردن زمان",
         "Show Exact Last Seen": "نمایش زمان دقیق آخرین بازدید",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "شفافیت رنگ درخشش شدت آن را تعیین می‌کند. کپسول‌های پیکسلی سایه‌ای تیز دارند، مثل بازی‌های قدیمی. برق ندارند.",
@@ -10712,6 +10811,15 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "File Picker and Sharing": "Файлдарды таңдау және бөлісу",
+        "System file picker and share sheet.": "Жүйелік файл таңдау құралы және бөлісу мәзірі.",
+        "Send Files": "Файлдарды жіберу",
+        "Send plugin files as documents.": "Плагин файлдарын құжат ретінде жіберу.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Клиент көрінісін баптау, белгішелерді ауыстыру, экрандарды ашу, қойындылар қосу және плагиндерді орнату немесе экспорттау.",
+        "Tabs and screens built by the plugin.": "Плагин жасаған қойындылар мен экрандар.",
+        "Command Replies": "Пәрмендерге жауаптар",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Пәрмен жауабын сол чатқа жібереді; кез келген хабарды жіберуге рұқсат бермейді.",
+        "Up to two sockets at a time.": "Бір уақытта ең көбі екі сокет.",
         "Hide Time": "Уақытты жасыру",
         "Show Exact Last Seen": "Соңғы кіру уақытын дәл көрсету",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Жарқыл түсінің мөлдірлігі оның күшін белгілейді. Пиксель капсулалардың көлеңкесі ескі ойындардағыдай анық. Оларда жылтыр жоқ.",
@@ -11681,6 +11789,15 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "File Picker and Sharing": "文件选择与分享",
+        "System file picker and share sheet.": "系统文件选择器和分享菜单。",
+        "Send Files": "发送文件",
+        "Send plugin files as documents.": "将插件文件作为文档发送。",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "自定义客户端外观、替换图标、打开页面、添加标签页，以及安装或导出插件。",
+        "Tabs and screens built by the plugin.": "插件构建的标签页和页面。",
+        "Command Replies": "命令回复",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "将命令回复发送到同一聊天；不允许任意发送消息。",
+        "Up to two sockets at a time.": "同时最多开启两个套接字。",
         "Hide Time": "隐藏时间",
         "Show Exact Last Seen": "显示精确的最后上线时间",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "发光颜色的透明度决定其强度。像素胶囊会投下硬朗的阴影，就像老游戏里那样。也没有高光。",
@@ -12651,6 +12768,15 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "File Picker and Sharing": "檔案選擇與分享",
+        "System file picker and share sheet.": "系統檔案選擇器和分享選單。",
+        "Send Files": "傳送檔案",
+        "Send plugin files as documents.": "將外掛檔案作為文件傳送。",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "自訂用戶端外觀、替換圖示、開啟頁面、新增分頁，以及安裝或匯出外掛。",
+        "Tabs and screens built by the plugin.": "外掛建立的分頁和頁面。",
+        "Command Replies": "指令回覆",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "將指令回覆傳送至同一聊天；不允許任意傳送訊息。",
+        "Up to two sockets at a time.": "同時最多開啟兩個通訊端。",
         "Hide Time": "隱藏時間",
         "Show Exact Last Seen": "顯示精確的最後上線時間",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "發光顏色的透明度決定其強度。像素膠囊會投下硬朗的陰影，就像老遊戲裡那樣。也沒有高光。",
@@ -13620,6 +13746,15 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "File Picker and Sharing": "ファイルの選択と共有",
+        "System file picker and share sheet.": "システムのファイル選択と共有メニュー。",
+        "Send Files": "ファイルを送信",
+        "Send plugin files as documents.": "プラグインのファイルを文書として送信します。",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "クライアントの外観変更、アイコンの置換、画面の表示、タブの追加、プラグインのインストールや書き出し。",
+        "Tabs and screens built by the plugin.": "プラグインが作成したタブと画面。",
+        "Command Replies": "コマンドへの返信",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "コマンドへの返信を同じチャットに送信します。任意のメッセージ送信は許可しません。",
+        "Up to two sockets at a time.": "同時に最大2つのソケット。",
         "Hide Time": "時刻を非表示",
         "Show Exact Last Seen": "最終オンライン時刻を秒まで表示",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "光彩の色の透明度で強さが決まります。ピクセルのカプセルは昔のゲームのようなくっきりした影を落とします。ハイライトはありません。",
@@ -14589,6 +14724,15 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "File Picker and Sharing": "Tiedostojen valinta ja jakaminen",
+        "System file picker and share sheet.": "Järjestelmän tiedostovalitsin ja jakovalikko.",
+        "Send Files": "Lähetä tiedostoja",
+        "Send plugin files as documents.": "Lähetä lisäosan tiedostoja asiakirjoina.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Muokkaa sovelluksen ulkoasua, vaihda kuvakkeita, avaa näkymiä, lisää välilehtiä ja asenna tai vie lisäosia.",
+        "Tabs and screens built by the plugin.": "Lisäosan luomat välilehdet ja näkymät.",
+        "Command Replies": "Vastaukset komentoihin",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Lähetä komennon vastaus samaan keskusteluun; ei salli mielivaltaisia viestejä.",
+        "Up to two sockets at a time.": "Enintään kaksi socket-yhteyttä kerrallaan.",
         "Hide Time": "Piilota aika",
         "Show Exact Last Seen": "Näytä tarkka viimeksi nähty aika",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Hehkun värin läpinäkyvyys määrää sen voimakkuuden. Pikselikapselit luovat terävän varjon kuin vanhoissa peleissä. Kiiltoa niissä ei ole.",
@@ -15558,6 +15702,15 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "File Picker and Sharing": "בחירת קבצים ושיתוף",
+        "System file picker and share sheet.": "בורר הקבצים ותפריט השיתוף של המערכת.",
+        "Send Files": "שליחת קבצים",
+        "Send plugin files as documents.": "שליחת קובצי התוסף כמסמכים.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "התאמת עיצוב היישום, החלפת סמלים, פתיחת מסכים, הוספת לשוניות והתקנה או ייצוא של תוספים.",
+        "Tabs and screens built by the plugin.": "לשוניות ומסכים שנבנו על ידי התוסף.",
+        "Command Replies": "תשובות לפקודות",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "שליחת תשובת הפקודה לאותו צ׳אט; לא מאפשר שליחת הודעות שרירותיות.",
+        "Up to two sockets at a time.": "עד שני שקעים בו־זמנית.",
         "Hide Time": "הסתרת השעה",
         "Show Exact Last Seen": "הצגת זמן מדויק של חיבור אחרון",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "השקיפות של צבע הזוהר קובעת את עוצמתו. קפסולות פיקסלים מטילות צל חד, כמו במשחקים ישנים. אין להן ברק.",
@@ -16527,6 +16680,15 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "File Picker and Sharing": "Odabir i dijeljenje datoteka",
+        "System file picker and share sheet.": "Sistemski odabir datoteka i izbornik dijeljenja.",
+        "Send Files": "Slanje datoteka",
+        "Send plugin files as documents.": "Šalje datoteke dodatka kao dokumente.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Prilagodba izgleda klijenta, zamjena ikona, otvaranje zaslona, dodavanje kartica te instalacija ili izvoz dodataka.",
+        "Tabs and screens built by the plugin.": "Kartice i zasloni koje je izradio dodatak.",
+        "Command Replies": "Odgovori na naredbe",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Šalje odgovor na naredbu u isti razgovor; ne dopušta proizvoljne poruke.",
+        "Up to two sockets at a time.": "Najviše dvije socket veze istodobno.",
         "Hide Time": "Sakrij vrijeme",
         "Show Exact Last Seen": "Prikaži točno vrijeme posljednje aktivnosti",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Prozirnost boje sjaja određuje njegovu jačinu. Pikselne kapsule bacaju oštru sjenu, kao u starim igrama. Odsjaja nemaju.",
@@ -17496,6 +17658,15 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "File Picker and Sharing": "Избор и дељење датотека",
+        "System file picker and share sheet.": "Системски избор датотека и мени за дељење.",
+        "Send Files": "Слање датотека",
+        "Send plugin files as documents.": "Шаље датотеке додатка као документе.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Прилагођавање изгледа клијента, замена икона, отварање екрана, додавање картица и инсталирање или извоз додатака.",
+        "Tabs and screens built by the plugin.": "Картице и екрани које је направио додатак.",
+        "Command Replies": "Одговори на команде",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Шаље одговор на команду у исти разговор; не дозвољава произвољне поруке.",
+        "Up to two sockets at a time.": "Највише две сокет везе истовремено.",
         "Hide Time": "Сакриј време",
         "Show Exact Last Seen": "Прикажи тачно време последње активности",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Провидност боје сјаја одређује његову јачину. Пикселне капсуле бацају оштру сенку, као у старим играма. Одсјаја немају.",
@@ -18465,6 +18636,15 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "File Picker and Sharing": "Výběr a sdílení souborů",
+        "System file picker and share sheet.": "Systémový výběr souborů a nabídka sdílení.",
+        "Send Files": "Odesílání souborů",
+        "Send plugin files as documents.": "Odesílá soubory pluginu jako dokumenty.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Úprava vzhledu klienta, nahrazení ikon, otevírání obrazovek, přidávání karet a instalace nebo export pluginů.",
+        "Tabs and screens built by the plugin.": "Karty a obrazovky vytvořené pluginem.",
+        "Command Replies": "Odpovědi na příkazy",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Odesílá odpověď na příkaz do stejného chatu; neumožňuje libovolné zprávy.",
+        "Up to two sockets at a time.": "Nejvýše dva sockety současně.",
         "Hide Time": "Skrýt čas",
         "Show Exact Last Seen": "Zobrazit přesný čas poslední aktivity",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Průhlednost barvy záře určuje její sílu. Pixelové kapsle vrhají ostrý stín jako ve starých hrách. Odlesk nemají.",
@@ -19434,6 +19614,15 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "File Picker and Sharing": "Výber a zdieľanie súborov",
+        "System file picker and share sheet.": "Systémový výber súborov a ponuka zdieľania.",
+        "Send Files": "Odosielanie súborov",
+        "Send plugin files as documents.": "Odosiela súbory pluginu ako dokumenty.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Úprava vzhľadu klienta, výmena ikon, otváranie obrazoviek, pridávanie kariet a inštalácia alebo export pluginov.",
+        "Tabs and screens built by the plugin.": "Karty a obrazovky vytvorené pluginom.",
+        "Command Replies": "Odpovede na príkazy",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Odosiela odpoveď na príkaz do rovnakého chatu; neumožňuje ľubovoľné správy.",
+        "Up to two sockets at a time.": "Najviac dva sockety súčasne.",
         "Hide Time": "Skryť čas",
         "Show Exact Last Seen": "Zobraziť presný čas poslednej aktivity",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Priehľadnosť farby žiary určuje jej silu. Pixelové kapsuly vrhajú ostrý tieň ako v starých hrách. Odlesk nemajú.",
@@ -20403,6 +20592,15 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "File Picker and Sharing": "Selectarea și partajarea fișierelor",
+        "System file picker and share sheet.": "Selectorul de fișiere și meniul de partajare ale sistemului.",
+        "Send Files": "Trimiterea fișierelor",
+        "Send plugin files as documents.": "Trimite fișierele pluginului ca documente.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personalizează clientul, înlocuiește pictograme, deschide ecrane, adaugă file și instalează sau exportă pluginuri.",
+        "Tabs and screens built by the plugin.": "File și ecrane create de plugin.",
+        "Command Replies": "Răspunsuri la comenzi",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Trimite răspunsul comenzii în aceeași conversație; nu permite mesaje arbitrare.",
+        "Up to two sockets at a time.": "Cel mult două socketuri simultan.",
         "Hide Time": "Ascunde ora",
         "Show Exact Last Seen": "Arată ora exactă a ultimei activități",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparența culorii strălucirii îi stabilește intensitatea. Capsulele pixel aruncă o umbră netă, ca în jocurile vechi. Nu au strălucire.",
@@ -21372,6 +21570,15 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "File Picker and Sharing": "Fájlválasztás és megosztás",
+        "System file picker and share sheet.": "Rendszerszintű fájlválasztó és megosztási menü.",
+        "Send Files": "Fájlok küldése",
+        "Send plugin files as documents.": "A bővítmény fájljainak küldése dokumentumként.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "A kliens megjelenésének módosítása, ikoncsere, képernyők megnyitása, lapok hozzáadása és bővítmények telepítése vagy exportálása.",
+        "Tabs and screens built by the plugin.": "A bővítmény által létrehozott lapok és képernyők.",
+        "Command Replies": "Válaszok parancsokra",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "A parancs válaszának küldése ugyanabba a csevegésbe; nem engedélyez tetszőleges üzeneteket.",
+        "Up to two sockets at a time.": "Egyszerre legfeljebb két socket.",
         "Hide Time": "Idő elrejtése",
         "Show Exact Last Seen": "Pontos utolsó aktivitás mutatása",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A ragyogás színének átlátszósága adja meg az erősségét. A pixeles kapszulák éles árnyékot vetnek, mint a régi játékokban. Csillanásuk nincs.",
@@ -22341,6 +22548,15 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "File Picker and Sharing": "Filvalg og deling",
+        "System file picker and share sheet.": "Systemets filvelger og delingsmeny.",
+        "Send Files": "Send filer",
+        "Send plugin files as documents.": "Send pluginfiler som dokumenter.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Tilpass klienten, bytt ikoner, åpne skjermer, legg til faner og installer eller eksporter plugins.",
+        "Tabs and screens built by the plugin.": "Faner og skjermer bygget av pluginen.",
+        "Command Replies": "Svar på kommandoer",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Send svaret på en kommando til samme samtale; tillater ikke vilkårlige meldinger.",
+        "Up to two sockets at a time.": "Opptil to sockets samtidig.",
         "Hide Time": "Skjul tidspunkt",
         "Show Exact Last Seen": "Vis nøyaktig sist sett-tid",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Gjennomsiktigheten i glødfargen bestemmer styrken. Pikselkapsler kaster en skarp skygge, som i gamle spill. Lysglimt har de ikke.",
@@ -23310,6 +23526,15 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "File Picker and Sharing": "Filval och delning",
+        "System file picker and share sheet.": "Systemets filväljare och delningsmeny.",
+        "Send Files": "Skicka filer",
+        "Send plugin files as documents.": "Skicka pluginfiler som dokument.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Anpassa klienten, byt ikoner, öppna skärmar, lägg till flikar och installera eller exportera plugins.",
+        "Tabs and screens built by the plugin.": "Flikar och skärmar skapade av pluginen.",
+        "Command Replies": "Svar på kommandon",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Skicka svaret på ett kommando till samma chatt; tillåter inte godtyckliga meddelanden.",
+        "Up to two sockets at a time.": "Högst två sockets samtidigt.",
         "Hide Time": "Dölj tid",
         "Show Exact Last Seen": "Visa exakt tid för senast sedd",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Glödfärgens genomskinlighet avgör styrkan. Pixelkapslar kastar en skarp skugga, som i gamla spel. Glansdager har de inte.",
@@ -24279,6 +24504,15 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "File Picker and Sharing": "Chọn và chia sẻ tệp",
+        "System file picker and share sheet.": "Bộ chọn tệp và menu chia sẻ của hệ thống.",
+        "Send Files": "Gửi tệp",
+        "Send plugin files as documents.": "Gửi tệp của plugin dưới dạng tài liệu.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Tùy chỉnh giao diện, thay biểu tượng, mở màn hình, thêm tab và cài đặt hoặc xuất plugin.",
+        "Tabs and screens built by the plugin.": "Tab và màn hình do plugin tạo.",
+        "Command Replies": "Trả lời lệnh",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Gửi câu trả lời của lệnh vào cùng cuộc trò chuyện; không cho phép gửi tin nhắn tùy ý.",
+        "Up to two sockets at a time.": "Tối đa hai socket cùng lúc.",
         "Hide Time": "Ẩn thời gian",
         "Show Exact Last Seen": "Hiển thị chính xác thời gian truy cập gần nhất",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Độ trong suốt của màu phát sáng quyết định độ mạnh. Viên nang điểm ảnh đổ bóng sắc nét như trò chơi cổ điển. Chúng không có ánh sáng.",
@@ -25248,6 +25482,15 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "File Picker and Sharing": "Вибір і поширення файлів",
+        "System file picker and share sheet.": "Системний вибір файлу та меню поширення.",
+        "Send Files": "Надсилання файлів",
+        "Send plugin files as documents.": "Надсилання файлів плагіна як документів.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Оформлення клієнта, заміна значків, відкриття екранів, власні вкладки, установлення та експорт плагінів.",
+        "Tabs and screens built by the plugin.": "Вкладки й екрани, створені плагіном.",
+        "Command Replies": "Відповіді на команди",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Відповідь команди надсилається в той самий чат; довільне надсилання повідомлень не надається.",
+        "Up to two sockets at a time.": "Не більше двох сокетів одночасно.",
         "Hide Time": "Приховати час",
         "Show Exact Last Seen": "Показувати точний час останньої активності",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Прозорість кольору сяйва задає його силу. Піксельні капсули мають різку тінь, як у старих іграх. Відблиску в них немає.",
@@ -26226,6 +26469,15 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "File Picker and Sharing": "Selección y uso compartido de archivos",
+        "System file picker and share sheet.": "Selector de archivos y menú para compartir del sistema.",
+        "Send Files": "Enviar archivos",
+        "Send plugin files as documents.": "Envía los archivos del plugin como documentos.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personaliza el cliente, sustituye iconos, abre pantallas, añade pestañas e instala o exporta plugins.",
+        "Tabs and screens built by the plugin.": "Pestañas y pantallas creadas por el plugin.",
+        "Command Replies": "Respuestas a comandos",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Envía la respuesta de un comando al mismo chat; no permite mensajes arbitrarios.",
+        "Up to two sockets at a time.": "Hasta dos sockets simultáneos.",
         "Hide Time": "Ocultar hora",
         "Show Exact Last Seen": "Mostrar la última conexión exacta",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparencia del color del resplandor fija su intensidad. Las cápsulas de píxeles proyectan una sombra dura, como en los juegos antiguos. No tienen brillo.",
@@ -27204,6 +27456,15 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "File Picker and Sharing": "Seleção e partilha de ficheiros",
+        "System file picker and share sheet.": "Seletor de ficheiros e menu de partilha do sistema.",
+        "Send Files": "Enviar ficheiros",
+        "Send plugin files as documents.": "Envia os ficheiros do plugin como documentos.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personaliza o cliente, substitui ícones, abre ecrãs, adiciona separadores e instala ou exporta plugins.",
+        "Tabs and screens built by the plugin.": "Separadores e ecrãs criados pelo plugin.",
+        "Command Replies": "Respostas a comandos",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Envia a resposta de um comando para a mesma conversa; não permite mensagens arbitrárias.",
+        "Up to two sockets at a time.": "Até dois sockets em simultâneo.",
         "Hide Time": "Ocultar hora",
         "Show Exact Last Seen": "Mostrar a última conexão exata",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A transparência da cor do brilho define a intensidade. As cápsulas pixel projetam uma sombra marcada, como nos jogos antigos. Não têm reflexo.",
@@ -28182,6 +28443,15 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "File Picker and Sharing": "Dateiauswahl und Teilen",
+        "System file picker and share sheet.": "Dateiauswahl und Teilen-Menü des Systems.",
+        "Send Files": "Dateien senden",
+        "Send plugin files as documents.": "Plugin-Dateien als Dokumente senden.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Client gestalten, Symbole ersetzen, Ansichten öffnen, Tabs hinzufügen und Plugins installieren oder exportieren.",
+        "Tabs and screens built by the plugin.": "Vom Plugin erstellte Tabs und Ansichten.",
+        "Command Replies": "Antworten auf Befehle",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Antwort auf einen Befehl im selben Chat senden; erlaubt keine beliebigen Nachrichten.",
+        "Up to two sockets at a time.": "Bis zu zwei Sockets gleichzeitig.",
         "Hide Time": "Uhrzeit ausblenden",
         "Show Exact Last Seen": "Genaue Zeit von zuletzt online anzeigen",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Die Transparenz der Leuchtfarbe bestimmt ihre Stärke. Pixelkapseln werfen einen harten Schatten wie in alten Spielen. Glanzlicht haben sie keins.",
@@ -29160,6 +29430,15 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "File Picker and Sharing": "Sélection et partage de fichiers",
+        "System file picker and share sheet.": "Sélecteur de fichiers et menu de partage du système.",
+        "Send Files": "Envoyer des fichiers",
+        "Send plugin files as documents.": "Envoie les fichiers du plugin en tant que documents.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "Personnalise le client, remplace les icônes, ouvre des écrans, ajoute des onglets et installe ou exporte des plugins.",
+        "Tabs and screens built by the plugin.": "Onglets et écrans créés par le plugin.",
+        "Command Replies": "Réponses aux commandes",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Envoie la réponse à une commande dans la même discussion ; ne permet pas de messages arbitraires.",
+        "Up to two sockets at a time.": "Deux sockets au maximum en même temps.",
         "Hide Time": "Masquer l’heure",
         "Show Exact Last Seen": "Afficher l’heure exacte de la dernière connexion",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparence de la couleur du halo en règle l’intensité. Les capsules pixel projettent une ombre nette, comme dans les vieux jeux. Elles n'ont pas de reflet.",
@@ -30138,6 +30417,15 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "File Picker and Sharing": "Dosya Seçimi ve Paylaşımı",
+        "System file picker and share sheet.": "Sistem dosya seçicisi ve paylaşım menüsü.",
+        "Send Files": "Dosya Gönder",
+        "Send plugin files as documents.": "Eklenti dosyalarını belge olarak gönderir.",
+        "Style the client, replace icons, open screens, add tabs, and install or export plugins.": "İstemciyi özelleştirir, simgeleri değiştirir, ekranları açar, sekmeler ekler ve eklentileri yükler veya dışa aktarır.",
+        "Tabs and screens built by the plugin.": "Eklentinin oluşturduğu sekmeler ve ekranlar.",
+        "Command Replies": "Komut Yanıtları",
+        "Send a command's reply to the same chat; does not allow arbitrary messages.": "Komut yanıtını aynı sohbete gönderir; rastgele mesaj göndermeye izin vermez.",
+        "Up to two sockets at a time.": "Aynı anda en fazla iki soket.",
         "Hide Time": "Saati gizle",
         "Show Exact Last Seen": "Son görülme saatini tam göster",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Parıltı renginin saydamlığı gücünü belirler. Piksel kapsüller eski oyunlardaki gibi keskin gölge düşürür. Parlamaları yoktur.",

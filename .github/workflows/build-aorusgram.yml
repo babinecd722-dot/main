@@ -1133,7 +1133,9 @@ jobs:
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
 
       - name: Native round video sending preflight
-        run: python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
+        run: |
+          python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
+          python3 aorusgram/scripts/plugin_market_permissions_check.py aorusgram
 
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios

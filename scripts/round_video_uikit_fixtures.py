@@ -34,6 +34,8 @@ def objc_source(tg: Path) -> str:
         '- (instancetype)editAdjustmentsWithPreset:(TGMediaVideoConversionPreset)preset maxDuration:',
         '- (instancetype)editAdjustmentsWithPreset:(TGMediaVideoConversionPreset)preset videoStartValue:',
         '- (bool)trimApplied',
+        '- (bool)hasPainting',
+        '- (bool)toolsApplied',
         '- (NSDictionary *)dictionary',
         '+ (instancetype)editAdjustmentsWithDictionary:',
         '- (bool)cropAppliedForAvatar:',
@@ -41,6 +43,11 @@ def objc_source(tg: Path) -> str:
     ])
     commit = context[context.index('    // Native editor tools rebuild adjustments.'):context.index('    if (adjustments != nil)\n        _adjustments[itemId] = adjustments;')]
     toggles = '\n'.join(declaration(gallery, prefix) for prefix in ['- (void)aorusToggleRoundVideo', '- (void)aorusToggleRealisticSending'])
+    zoom_crop = declaration(gallery, 'static CGRect AorusRoundVideoZoomCrop(')
+    pinch = declaration(gallery, '- (void)aorusPinchRoundVideo:')
+    pinch_gate = declaration(gallery, '- (BOOL)gestureRecognizerShouldBegin:')
+    tab_enum = declaration((lc / 'PublicHeaders/LegacyComponents/TGPhotoToolbarViewProtocol.h').read_text(), 'typedef NS_OPTIONS(NSUInteger, TGPhotoEditorTab)') + ';\n'
+    highlights = declaration((lc / 'Sources/TGPhotoEditorTabController.m').read_text(), '+ (TGPhotoEditorTab)highlightedButtonsForEditorValues:').replace('id<TGMediaEditAdjustments>', 'id')
     editor = (lc / 'Sources/PGPhotoEditor.m').read_text()
     export = declaration(editor, '- (id<TGMediaEditAdjustments>)exportAdjustmentsWithPaintingData:')
     export = export[export.index('        TGVideoEditAdjustments *initialAdjustments'):export.rindex('    }')]
@@ -55,7 +62,7 @@ def objc_source(tg: Path) -> str:
     conversion_methods = '\n'.join(declaration(converter, prefix) for prefix in ['+ (CGSize)dimensionsFor:', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize\n', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize rotateSideward:'])
     maximum_size = declaration(converter, '+ (CGSize)maximumSizeForPreset:')
     fit_size = declaration((lc / 'Sources/TGImageUtils.mm').read_text(), 'CGSize TGFitSizeF(')
-    return '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + '''
+    return '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + tab_enum + zoom_crop + '''
 static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
     return fabs(a.origin.x-b.origin.x) <= epsilon && fabs(a.origin.y-b.origin.y) <= epsilon && fabs(a.size.width-b.size.width) <= epsilon && fabs(a.size.height-b.size.height) <= epsilon;
 }
@@ -107,6 +114,8 @@ static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
 - (instancetype)editAdjustmentsWithPreset:(TGMediaVideoConversionPreset)preset maxDuration:(double)duration;
 - (instancetype)editAdjustmentsWithPreset:(TGMediaVideoConversionPreset)preset videoStartValue:(double)start trimStartValue:(double)trimStart trimEndValue:(double)trimEnd;
 - (bool)trimApplied;
+- (bool)hasPainting;
+- (bool)toolsApplied;
 - (bool)cropAppliedForAvatar:(bool)avatar;
 - (CGFloat)_cropRectEpsilon;
 - (NSDictionary *)dictionary;
@@ -114,6 +123,12 @@ static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
 @end
 @implementation TGVideoEditAdjustments
 ''' + methods + '''
+@end
+@interface TGPhotoEditorTabController: NSObject
++ (TGPhotoEditorTab)highlightedButtonsForEditorValues:(id)editorValues forAvatar:(bool)forAvatar;
+@end
+@implementation TGPhotoEditorTabController
+''' + highlights + '''
 @end
 @class RoundItem;
 static CGFloat CGFloor(CGFloat value) { return floor(value); }
@@ -167,6 +182,7 @@ static bool TGOrientationIsSideward(UIImageOrientation orientation, void *unused
 @end
 @interface RoundEditingContext: NSObject
 @property(nonatomic,strong) TGVideoEditAdjustments *current;
+@property(nonatomic) int commits;
 - (id)adjustmentsForItem:(id)item;
 - (void)setAdjustments:(id)adjustments forItem:(RoundItem *)item;
 @end
@@ -182,6 +198,7 @@ static bool TGOrientationIsSideward(UIImageOrientation orientation, void *unused
 @implementation RoundEditingContext
 - (id)adjustmentsForItem:(id)item { return self.current; }
 - (void)setAdjustments:(id)adjustments forItem:(RoundItem *)item {
+    self.commits++;
     id previousAdjustments = self.current;
 ''' + commit.replace('id<TGMediaEditAdjustments>', 'id') + '''
     self.current = adjustments;
@@ -203,14 +220,24 @@ static bool TGOrientationIsSideward(UIImageOrientation orientation, void *unused
     CGSize _videoDimensions;
     double _videoDuration;
     RoundVariable *_editableItemVariable;
+    TGVideoEditAdjustments *_aorusZoomAdjustments;
+    UIPinchGestureRecognizer *_aorusRoundPinch;
+    bool _downloadRequired;
 }
 @property(nonatomic,strong) RoundItem *item;
 @property(nonatomic) bool livePhoto;
+@property(nonatomic) bool gesturesEnabled;
+@property(nonatomic) CGRect displayedCrop;
+@property(nonatomic,readonly) UIPinchGestureRecognizer *roundPinch;
 - (instancetype)initWithSize:(CGSize)size duration:(double)duration;
 - (bool)itemIsLivePhoto;
 - (void)_mutePlayer:(bool)muted;
 - (void)aorusToggleRoundVideo;
 - (void)aorusToggleRealisticSending;
+- (void)aorusPinchRoundVideo:(UIPinchGestureRecognizer *)gesture;
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gesture;
+- (void)_layoutPlayerView;
+- (void)_layoutPlayerViewWithCropRect:(CGRect)crop videoFrameSize:(CGSize)size orientation:(UIImageOrientation)orientation mirrored:(bool)mirrored;
 - (id)editableMediaItem;
 @end
 @implementation RoundGallery
@@ -220,12 +247,23 @@ static bool TGOrientationIsSideward(UIImageOrientation orientation, void *unused
         self.item = [[RoundItem alloc] init]; self.item.originalDuration = duration;
         self.item.editingContext = [[RoundEditingContext alloc] init];
         _editableItemVariable = [[RoundVariable alloc] init];
+        self.gesturesEnabled = true;
+        _aorusRoundPinch = [[UIPinchGestureRecognizer alloc] initWithTarget:nil action:nil];
     } return self;
 }
 - (bool)itemIsLivePhoto { return self.livePhoto; }
 - (void)_mutePlayer:(bool)muted {}
 - (id)editableMediaItem { return self.item; }
-''' + toggles + '''
+- (UIPinchGestureRecognizer *)roundPinch { return _aorusRoundPinch; }
+- (void)_layoutPlayerView { self.displayedCrop = self.item.editingContext.current.cropRect; }
+- (void)_layoutPlayerViewWithCropRect:(CGRect)crop videoFrameSize:(CGSize)size orientation:(UIImageOrientation)orientation mirrored:(bool)mirrored { self.displayedCrop = crop; }
+''' + toggles + pinch_gate + pinch + '''
+@end
+@interface RoundTestPinch: UIPinchGestureRecognizer
+@property(nonatomic) UIGestureRecognizerState testState;
+@end
+@implementation RoundTestPinch
+- (UIGestureRecognizerState)state { return self.testState; }
 @end
 static int checks = 0;
 static void expect(bool value, const char *message) { checks++; if (!value) { fprintf(stderr,"Round editor: %s\\n",message); abort(); } }
@@ -243,6 +281,66 @@ static void applyRoundDrawingMask(RoundPhotoEditor *_photoEditor, UIView *_scrol
 @end
 int AorusNativeRoundEditorTests(void) {
     checks = 0;
+    for (int round = 0; round < 2; round++) {
+        for (int paint = 0; paint < 2; paint++) {
+            for (int tools = 0; tools < 2; tools++) {
+                for (int avatar = 0; avatar < 2; avatar++) {
+                    TGVideoEditAdjustments *values = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:CGSizeMake(1920,1080) cropRect:CGRectMake(500,100,600,600) cropOrientation:UIImageOrientationUp cropRotation:0 cropLockedAspectRatio:1 cropMirrored:false trimStartValue:0 trimEndValue:30 toolValues:tools ? @{@"exposure":@0.2} : @{} paintingData:paint ? [[TGPaintingData alloc] init] : nil sendAsGif:false preset:TGMediaVideoConversionPresetCompressedVeryHigh];
+                    values.aorusRoundVideo = round;
+                    TGPhotoEditorTab active = [TGPhotoEditorTabController highlightedButtonsForEditorValues:values forAvatar:avatar];
+                    expect(((active & TGPhotoEditorCropTab) != 0) == (!round || avatar), "circle mode suppresses crop highlighting without changing avatar editing");
+                    expect(((active & TGPhotoEditorPaintTab) != 0) == (paint != 0), "circle mode keeps painting highlighting");
+                    expect(((active & TGPhotoEditorToolsTab) != 0) == (tools != 0), "circle mode keeps filter highlighting");
+                }
+            }
+        }
+    }
+    RoundGallery *zoomGallery = [[RoundGallery alloc] initWithSize:CGSizeMake(1920,1080) duration:30];
+    expect(![zoomGallery gestureRecognizerShouldBegin:zoomGallery.roundPinch], "ordinary video does not claim circle pinch gestures");
+    [zoomGallery aorusToggleRoundVideo];
+    [zoomGallery aorusToggleRealisticSending];
+    expect([zoomGallery gestureRecognizerShouldBegin:zoomGallery.roundPinch], "circle accepts the native pinch recognizer");
+    zoomGallery.gesturesEnabled = false;
+    expect(![zoomGallery gestureRecognizerShouldBegin:zoomGallery.roundPinch], "disabled editor gestures do not begin a pinch");
+    zoomGallery.gesturesEnabled = true;
+    RoundTestPinch *gesture = [[RoundTestPinch alloc] initWithTarget:nil action:nil];
+    gesture.testState = UIGestureRecognizerStateBegan; gesture.scale = 1;
+    CGRect zoomInitial = zoomGallery.item.editingContext.current.cropRect;
+    int zoomCommits = zoomGallery.item.editingContext.commits;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    gesture.testState = UIGestureRecognizerStateChanged; gesture.scale = 2;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    expect(zoomGallery.displayedCrop.size.width == zoomInitial.size.width / 2, "native pinch updates the visible frame");
+    expect(zoomGallery.item.editingContext.commits == zoomCommits, "continuous pinch does not re-render or commit adjustments");
+    gesture.testState = UIGestureRecognizerStateEnded;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    expect(zoomGallery.item.editingContext.commits == zoomCommits + 1, "native pinch commits once at the end");
+    expect(zoomGallery.item.editingContext.current.aorusRoundVideo && zoomGallery.item.editingContext.current.aorusRealisticSending, "native pinch preserves circle and realistic sending");
+    expect(CGRectEqualToRect(zoomGallery.displayedCrop,zoomGallery.item.editingContext.current.cropRect), "sent frame matches the pinch preview");
+    CGRect committedZoom = zoomGallery.displayedCrop;
+    gesture.testState = UIGestureRecognizerStateBegan; gesture.scale = 1;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    gesture.testState = UIGestureRecognizerStateChanged; gesture.scale = 2;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    gesture.testState = UIGestureRecognizerStateCancelled;
+    [zoomGallery aorusPinchRoundVideo:gesture];
+    expect(CGRectEqualToRect(committedZoom,zoomGallery.displayedCrop) && zoomGallery.item.editingContext.commits == zoomCommits + 1, "cancelled pinch restores the saved frame without committing");
+    for (int orientation = 0; orientation < 4; orientation++) {
+        CGSize source = orientation % 2 == 0 ? CGSizeMake(1921,1081) : CGSizeMake(1081,1921);
+        CGRect initial = CGRectMake(0,0,640,640);
+        CGFloat scales[] = {0.01,0.5,1,1.5,2,10,100,NAN,INFINITY,0,-1};
+        for (int index = 0; index < 11; index++) {
+            CGRect crop = AorusRoundVideoZoomCrop(initial,source,scales[index]);
+            expect(crop.size.width == crop.size.height, "native pinch keeps a square frame");
+            expect(crop.origin.x >= 0 && crop.origin.y >= 0 && CGRectGetMaxX(crop) <= source.width && CGRectGetMaxY(crop) <= source.height, "native pinch stays within the source");
+            expect(floor(crop.origin.x) == crop.origin.x && floor(crop.origin.y) == crop.origin.y && floor(crop.size.width) == crop.size.width, "native pinch uses integral pixels");
+            if (isfinite(scales[index]) && scales[index] > 0) {
+                expect(crop.size.width >= floor(MIN(source.width,source.height)/10) && crop.size.width <= MIN(source.width,source.height), "native pinch respects the editor zoom limit");
+            } else {
+                expect(CGRectEqualToRect(crop,initial), "invalid pinch leaves the frame unchanged");
+            }
+        }
+    }
     for (int odd = 0; odd < 4; odd++) {
         CGSize source = CGSizeMake(1921 + odd * 0.25,1081 + odd * 0.5);
         RoundGallery *gallery = [[RoundGallery alloc] initWithSize:source duration:30];

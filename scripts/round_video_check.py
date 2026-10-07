@@ -102,7 +102,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='aorus-round-video-') as directory:
         work = Path(directory)
         sources = args.telegram_source / 'submodules/SSignalKit/SwiftSignalKit/Source'
-        names = ['Atomic', 'Bag', 'Disposable', 'Lock', 'Queue', 'Timer', 'Signal', 'Subscriber', 'Signal_Mapping', 'Signal_Meta', 'Signal_Merge', 'Signal_Timing', 'Signal_Take', 'Signal_Single']
+        names = ['Atomic', 'Bag', 'Disposable', 'Lock', 'Queue', 'Timer', 'Signal', 'Subscriber', 'Signal_Mapping', 'Signal_Meta', 'Signal_Merge', 'Signal_Timing', 'Signal_Take', 'Signal_Single', 'Signal_Catch']
         paths = []
         for name in names:
             text = (sources / (name + '.swift')).read_text()
@@ -124,6 +124,11 @@ def main():
         subprocess.run(common + ['-warnings-as-errors', str(transport), str(args.repo / 'scripts/tests/AorusRoundVideoTransportTests.swift'), '-o', str(transport_binary)], check=True)
         subprocess.run([str(transport_binary)], check=True, timeout=20)
         subprocess.run(common + ['-suppress-warnings', '-emit-module', '-emit-library', '-module-name', 'SwiftSignalKit', '-o', str(library)] + paths, check=True)
+        from round_video_activity_fixtures import activity_source
+        activity = work / 'NativeActivity.swift'; activity.write_text(activity_source(args.telegram_source))
+        activity_binary = work / 'activity-tests'
+        subprocess.run(common + ['-warnings-as-errors', '-I', str(work), '-L', str(work), '-lSwiftSignalKit', '-Xlinker', '-rpath', '-Xlinker', str(work), str(activity), str(args.repo / 'scripts/tests/AorusRoundVideoActivityTests.swift'), '-o', str(activity_binary)], check=True)
+        subprocess.run([str(activity_binary)], check=True, timeout=20)
         fixture = work / 'Fixtures.swift'; fixture.write_text(FIXTURES)
         attribute = work / 'AorusRoundVideoMessageAttribute.swift'
         actual = args.repo / 'patches/submodules/TelegramCore/Sources/SyncCore/AorusRoundVideoMessageAttribute.swift'
