@@ -23,17 +23,28 @@ import Foundation
             expect(NativeMarketArt.permission("plugin.perm." + pair.0)!.body != NativeMarketArt.permission("plugin.perm." + pair.1)!.body, "new permissions do not inherit misleading legacy descriptions")
         }
         for (key, terms) in [
-            ("mtproto", ["current account", "aorus.mtproto"]),
-            ("dialogs", ["file picker", "share sheet", "aorus.files.pick", "aorus.files.share"]),
-            ("send_messages", ["documents", "aorus.files.send"]),
-            ("app_customization", ["icons", "screens", "tabs", "install", "export"]),
-            ("custom_ui", ["Tabs", "screens", "plugin"]),
-            ("outgoing_messages", ["same chat", "does not allow arbitrary messages"]),
-            ("websocket", ["two sockets", "aorus.ws.open"]),
+            ("mtproto", ["Telegram API", "current account"]),
+            ("dialogs", ["file picker", "share sheet"]),
+            ("send_messages", ["files", "documents", "current account"]),
+            ("app_customization", ["icons", "screens", "tabs", "installing", "exporting"]),
+            ("custom_ui", ["tabs", "screens", "plugin"]),
+            ("outgoing_messages", ["chat where it was typed", "does not allow sending other messages"]),
+            ("websocket", ["two", "WebSocket"]),
         ] {
             for term in terms {
                 expect(NativeMarketArt.permission("plugin.perm." + key)!.body.contains(term), "permission cards explain the actual API scope")
             }
+        }
+        // Every card reads the same way: a short title in sentence case, a sentence that begins
+        // with what it allows, and no code identifiers in either.
+        let cards = (original + added).map { NativeMarketArt.permission($0)! }
+        expect(Set(cards.map { $0.title }).count == cards.count, "no two permission rows share a title")
+        for card in cards {
+            expect(!card.title.contains("aorus.") && !card.body.contains("aorus."), "cards name what a plugin may do, not the API it calls")
+            expect(!card.title.hasSuffix("."), "a title is a name, not a sentence")
+            expect(card.body.hasPrefix("Allows ") && card.body.hasSuffix("."), "a description says what it allows, in a full sentence")
+            let words = card.title.split(separator: " ").dropFirst()
+            expect(words.allSatisfy { $0.first?.isUppercase != true || ["Telegram", "MTProto", "WebSocket", "AorusAI"].contains(String($0)) }, "titles are in sentence case")
         }
         for (source, included, excluded) in [
             ("aorus.files.send('report.zip');", "send_messages", "websocket"),
@@ -41,9 +52,16 @@ import Foundation
             ("aorus.commands.register('ping', () => 'pong');", "outgoing_messages", "send_messages"),
             ("aorus.ws.open('ws', 'wss://example.com');", "websocket", "send_messages"),
             ("aorus.mtproto.invoke('users.getFullUser', {});", "mtproto", "websocket"),
+            ("aorus.files.pick();", "dialogs", "send_messages"),
         ] {
             let keys = AorusPluginMarketPermission.keys(forSource: source)
             expect(keys.contains("plugin.perm." + included) && !keys.contains("plugin.perm." + excluded), "publishing uses distinct IDs for distinct APIs")
+        }
+        for source in ["aorus.ui.toast('done');", "aorus.ui.alert('Title', 'Text');"] {
+            expect(!AorusPluginMarketPermission.keys(forSource: source).contains("plugin.perm.dialogs"), "an alert or a toast does not publish the file picker and sharing key")
+        }
+        for source in ["aorus.files.share(['a.txt']);", "aorus.ui.share('text');", "aorus.app.share({url: 'https://example.com'});"] {
+            expect(AorusPluginMarketPermission.keys(forSource: source).contains("plugin.perm.dialogs"), "the file picker and the share sheet publish their key")
         }
         print("Market permission cards passed: \(checks) assertions")
     }

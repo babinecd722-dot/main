@@ -405,6 +405,10 @@ public enum AorusPluginMarketPermission {
         }
     }
 
+    /// The calls that open the system file picker or the share sheet: what `plugin.perm.dialogs`
+    /// stands for in the Market. Alerts, prompts and toasts share the local grant but not the key.
+    private static let sharingCalls = ["aorus.files.pick", "aorus.files.share", "aorus.ui.share", "aorus.app.share", "aorus.media.share", "aorus.media.saveToFiles"]
+
     /// The keys a plugin's own source asks for, to send with a publish. The server unions this
     /// with its own detection and the moderator's, so it is a courtesy, never the last word.
     public static func keys(forSource source: String) -> [String] {
@@ -414,6 +418,9 @@ public enum AorusPluginMarketPermission {
             // These wire keys describe a narrower API than their local grant.
             // Keep each description tied to the API the source actually uses.
             switch key {
+            case "plugin.perm.dialogs":
+                if sharingCalls.contains(where: source.contains) { result.append(key) }
+                continue
             case "plugin.perm.send_messages":
                 if source.contains("aorus.files.send") { result.append(key) }
                 continue

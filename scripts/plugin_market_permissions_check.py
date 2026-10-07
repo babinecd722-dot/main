@@ -2,6 +2,7 @@
 import argparse
 import platform
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from round_video_uikit_fixtures import declaration
@@ -22,7 +23,10 @@ def main():
     ])
     identity = declaration(market, '    public static func isValid(')
     summaries = declaration(controllers, 'func permissionTitle(') + '\n' + declaration(controllers, 'func permissionSummary(')
-    words = '\n'.join(declaration(ui, '    static var ' + name) for name in ['commandsTitle', 'commandsBody', 'clipboardTitle', 'clipboardBody'])
+    # Every title and description the cards read from the Market's own text table.
+    text_table = declaration(ui, 'enum AorusPluginMarketText {')
+    names = re.findall(r'^    static var (\w+(?:Title|Body)): String', text_table, re.M)
+    words = '\n'.join(declaration(text_table, '    static var ' + name + ':') for name in names)
     source = '''import Foundation
 struct UIColor {
     let name: String

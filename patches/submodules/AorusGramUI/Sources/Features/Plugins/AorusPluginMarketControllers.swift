@@ -59,6 +59,18 @@ enum AorusPluginMarketText {
     static var commandsBody: String { aorusL("Разрешает добавлять команды, которые вы вводите в поле сообщения.", "Allows commands you type in the message field.") }
     static var clipboardTitle: String { aorusL("Буфер обмена", "Clipboard") }
     static var clipboardBody: String { aorusL("Разрешает читать и изменять содержимое буфера обмена.", "Allows reading and changing the clipboard.") }
+    static var fileSharingTitle: String { aorusL("Выбор файлов и «Поделиться»", "File picker and sharing") }
+    static var fileSharingBody: String { aorusL("Разрешает открывать системное окно выбора файлов и меню «Поделиться».", "Allows opening the system file picker and the share sheet.") }
+    static var sendFilesTitle: String { aorusL("Отправка файлов", "Send files") }
+    static var sendFilesBody: String { aorusL("Разрешает отправлять файлы плагина документами от текущего аккаунта.", "Allows sending the plugin's files as documents from the current account.") }
+    static var appearanceTitle: String { aorusL("Оформление и интерфейс", "Appearance and interface") }
+    static var appearanceBody: String { aorusL("Разрешает менять оформление и иконки приложения, открывать его экраны и добавлять вкладки в нижнюю панель. Также позволяет устанавливать и экспортировать плагины.", "Allows changing the app's appearance and icons, opening its screens and adding tabs to the bottom bar. Also allows installing and exporting plugins.") }
+    static var pluginScreensTitle: String { aorusL("Вкладки и экраны плагина", "Plugin tabs and screens") }
+    static var pluginScreensBody: String { aorusL("Разрешает плагину показывать собственные вкладки и экраны из нативных элементов.", "Allows the plugin to show its own tabs and screens built from native controls.") }
+    static var commandRepliesTitle: String { aorusL("Ответы на команды", "Command replies") }
+    static var commandRepliesBody: String { aorusL("Разрешает команде отвечать в том чате, где её ввели. Отправлять другие сообщения это разрешение не даёт.", "Allows a command to reply in the chat where it was typed. It does not allow sending other messages.") }
+    static var webSocketTitle: String { aorusL("Подключения WebSocket", "WebSocket connections") }
+    static var webSocketBody: String { aorusL("Разрешает держать открытыми до двух подключений WebSocket одновременно.", "Allows keeping up to two WebSocket connections open at a time.") }
     static func published(_ value: String) -> String { aorusL("Опубликован · %@", "Published · %@").replacingOccurrences(of: "%@", with: value) }
     static var underReview: String { aorusL("Ваш плагин на модерации", "Your plugin is under review") }
     static var rejected: String { aorusL("Плагин отклонён", "Plugin rejected") }
@@ -306,33 +318,20 @@ enum AorusPluginMarketDrawing {
             return ("command", .systemIndigo, AorusPluginMarketText.commandsTitle, AorusPluginMarketText.commandsBody)
         case "plugin.perm.clipboard":
             return ("doc.on.clipboard", .systemGray, AorusPluginMarketText.clipboardTitle, AorusPluginMarketText.clipboardBody)
-        case "plugin.perm.mtproto":
-            return ("antenna.radiowaves.left.and.right", .systemPurple,
-                    permissionTitle(.mtproto), permissionSummary(.mtproto) + " aorus.mtproto.")
+        // Newer keys that cover part of a local grant, or share one with an older key, have
+        // words of their own: a card never shows two rows under one name.
         case "plugin.perm.dialogs":
-            return ("square.and.arrow.up", .systemBlue,
-                    aorusL("Выбор файлов и общий доступ", "File Picker and Sharing"),
-                    aorusL("Системный выбор файла и меню «Поделиться».", "System file picker and share sheet.") + " aorus.files.pick, aorus.files.share.")
+            return ("square.and.arrow.up.fill", .systemBlue, AorusPluginMarketText.fileSharingTitle, AorusPluginMarketText.fileSharingBody)
         case "plugin.perm.send_messages":
-            return ("doc.fill", .systemBlue,
-                    aorusL("Отправка файлов", "Send Files"),
-                    aorusL("Отправка файлов плагина документами.", "Send plugin files as documents.") + " aorus.files.send.")
+            return ("doc.fill", .systemBlue, AorusPluginMarketText.sendFilesTitle, AorusPluginMarketText.sendFilesBody)
         case "plugin.perm.app_customization":
-            return ("paintbrush.fill", .systemPink,
-                    permissionTitle(.appCustomization),
-                    aorusL("Оформление, замена иконок, открытие экранов, свои вкладки, установка и экспорт плагинов.", "Style the client, replace icons, open screens, add tabs, and install or export plugins."))
+            return ("paintbrush.fill", .systemPink, AorusPluginMarketText.appearanceTitle, AorusPluginMarketText.appearanceBody)
         case "plugin.perm.custom_ui":
-            return ("rectangle.on.rectangle", .systemTeal,
-                    permissionTitle(.customUI),
-                    aorusL("Вкладки и экраны, построенные плагином.", "Tabs and screens built by the plugin."))
+            return ("rectangle.stack.fill", .systemTeal, AorusPluginMarketText.pluginScreensTitle, AorusPluginMarketText.pluginScreensBody)
         case "plugin.perm.outgoing_messages":
-            return ("arrowshape.turn.up.left.fill", .systemOrange,
-                    aorusL("Ответы на команды", "Command Replies"),
-                    aorusL("Ответ команды отправляется в тот же чат; произвольная отправка сообщений не предоставляется.", "Send a command's reply to the same chat; does not allow arbitrary messages."))
+            return ("arrowshape.turn.up.left.fill", .systemOrange, AorusPluginMarketText.commandRepliesTitle, AorusPluginMarketText.commandRepliesBody)
         case "plugin.perm.websocket":
-            return ("arrow.left.arrow.right", .systemGreen,
-                    "WebSocket",
-                    aorusL("Одновременно доступны не более двух сокетов.", "Up to two sockets at a time.") + " aorus.ws.open.")
+            return ("arrow.left.arrow.right", .systemGreen, AorusPluginMarketText.webSocketTitle, AorusPluginMarketText.webSocketBody)
         default:
             break
         }
@@ -344,6 +343,7 @@ enum AorusPluginMarketDrawing {
         case .incomingMessages: style = ("tray.full.fill", .systemTeal)
         case .messageHistory: style = ("clock.fill", .systemPurple)
         case .network: style = ("globe", .systemBlue)
+        case .mtproto: style = ("antenna.radiowaves.left.and.right", .systemPurple)
         case .screenEffects: style = ("sparkles", .systemPink)
         case .accountSwitching: style = ("person.2.fill", .systemGreen)
         case .connectionControl: style = ("network", .systemGreen)
