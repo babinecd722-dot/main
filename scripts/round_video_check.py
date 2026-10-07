@@ -66,6 +66,9 @@ def native_transport_source(tg: Path) -> str:
     fetch = (tg / 'submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift').read_text()
     library = fetch[fetch.index('if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
     local = fetch[fetch.index('if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+    toolbar = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift').read_text()
+    label_start = toolbar.index('    let label: String', toolbar.index('private func generateQualityIcon('))
+    label_end = toolbar.index('    let size = CGSize', label_start)
     return '''import Foundation
 struct TelegramMediaVideoFlags: OptionSet {
     let rawValue: Int
@@ -81,6 +84,9 @@ func nativeVideoFlags(videoFlags: TelegramMediaVideoFlags, preloadSize: Int?, co
 }
 func nativeLibraryUsesModern(alwaysUseModernPipeline: Bool, legacyAdjustments: Adjustments) -> Bool { return ''' + library + ''' }
 func nativeLocalUsesModern(alwaysUseModernPipeline: Bool, isImage: Bool, legacyAdjustments: Adjustments) -> Bool { return ''' + local + ''' }
+func nativeQualityLabel(isPhoto: Bool, highQuality: Bool, preset: Int) -> String {
+''' + toolbar[label_start:label_end] + '''    return label
+}
 '''
 
 

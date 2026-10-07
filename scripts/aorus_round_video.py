@@ -291,8 +291,21 @@ def patch_round_editor(tg: Path) -> None:
         maxDimensions = CGSizeMake(MIN(maxDimensions.width, 640.0), MIN(maxDimensions.height, 640.0));
     }''', 2)
     replace(converter, '    if ([adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])', '    if (adjustments.aorusRoundVideo || [adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])')
-    replace(lc / 'Sources/TGMediaPickerGalleryInterfaceView.m', '        [_portraitToolbarView setQualityButtonIsPhoto:isPhoto highQuality:isHd videoPreset:preset];', '''        if (aorusVideo.aorusRoundVideo && preset > TGMediaVideoConversionPresetCompressedLow) preset = TGMediaVideoConversionPresetCompressedLow;
+    replace(lc / 'Sources/TGMediaPickerGalleryInterfaceView.m', '        [_portraitToolbarView setQualityButtonIsPhoto:isPhoto highQuality:isHd videoPreset:preset];', '''        if (aorusVideo.aorusRoundVideo) preset = preset == TGMediaVideoConversionPresetCompressedVeryLow ? TGMediaVideoConversionPresetCompressedMedium : (TGMediaVideoConversionPreset)640;
         [_portraitToolbarView setQualityButtonIsPhoto:isPhoto highQuality:isHd videoPreset:preset];''')
+    toolbar = tg / 'submodules/MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift'
+    replace(toolbar, '        switch preset {\n        case 1:', '        switch preset {\n        case 640:\n            label = "640"\n        case 1:')
+    assets = lc / 'Sources/TGPhotoEditorInterfaceAssets.m'
+    text = assets.read_text()
+    start = text.index('+ (UIImage *)qualityIconForPreset:')
+    end = text.index('+ (UIImage *)timerIconForValue:', start)
+    fragment = text[start:end]
+    old = '    switch (preset)\n    {\n        case TGMediaVideoConversionPresetCompressedVeryLow:'
+    new = '    switch ((NSInteger)preset)\n    {\n        case 640:\n            label = @"640";\n            break;\n        case TGMediaVideoConversionPresetCompressedVeryLow:'
+    if new not in fragment:
+        if fragment.count(old) != 1: raise RuntimeError('RoundVideo: native quality label anchor moved')
+        fragment = fragment.replace(old, new)
+    assets.write_text(text[:start] + fragment + text[end:])
     replace(lc / 'Sources/TGPhotoQualityController.m', '    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:self.preset];', '''    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:self.preset];
     if (_photoEditor.aorusRoundVideo) maxDimensions = CGSizeMake(MIN(maxDimensions.width, 640.0), MIN(maxDimensions.height, 640.0));''')
     # Cached document attributes are immutable: never reuse the opposite media kind.
@@ -476,7 +489,7 @@ def verify_round_video(tg: Path) -> list[str]:
         'TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift': ['cachedFile.isInstantVideo == file.isInstantVideo'],
         'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh'],
         'LegacyComponents/Sources/TGMediaPickerGalleryInterfaceView.m': ['_aorusRoundButton.frame = CGRectOffset(_muteButton.frame, 48.0, 0.0)', 'if (tab == TGPhotoEditorRealisticSendingTab)'],
-        'MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift': ['.qualityTab,\n    .realisticSendingTab,\n    .timerTab,'],
+        'MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift': ['.qualityTab,\n    .realisticSendingTab,\n    .timerTab,', 'case 640:\n            label = "640"'],
         'LegacyMediaPickerUI/Sources/LegacyMediaPickers.swift': ['[.instantRoundVideo, .supportsStreaming]', 'localGroupingKey: aorusRound ? nil : item.groupedId'],
         'TelegramCore/Sources/PendingMessages/EnqueueMessage.swift': ['round.started(at: Date().timeIntervalSince1970)'],
         'TelegramCore/Sources/State/PendingMessageManager.swift': ['messageContext.activityType = .recordingInstantVideo', 'aorusRoundVideoUploadSignal(originalUploadSignal, round: round, queue: strongSelf.queue)', 'context.aorusRecordingDisposable.dispose()'],

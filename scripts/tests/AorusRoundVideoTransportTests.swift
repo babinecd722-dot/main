@@ -34,6 +34,11 @@ import Foundation
                 }
             }
         }
+        for (preset, label) in [(0, "480"), (1, "240"), (2, "360"), (3, "480"), (4, "720"), (5, "HD"), (640, "640")] {
+            expect(nativeQualityLabel(isPhoto: false, highQuality: false, preset: preset) == label, "native toolbar shows the round frame size and preserves ordinary quality labels")
+            expect(nativeQualityLabel(isPhoto: true, highQuality: false, preset: preset) == "SD", "photo label remains SD")
+            expect(nativeQualityLabel(isPhoto: true, highQuality: true, preset: preset) == "HD", "photo label remains HD")
+        }
         print("Native round transport passed: \(checks) assertions")
     }
 }
