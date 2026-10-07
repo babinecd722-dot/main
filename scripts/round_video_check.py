@@ -58,6 +58,32 @@ func nativeRoundEnqueueAttributes(mediaReference: ControlledMediaReference?, req
 '''
 
 
+def native_transport_source(tg: Path) -> str:
+    upload = (tg / 'submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift').read_text()
+    cache = upload[upload.index('cachedFile.isInstantVideo =='):].split(', let resource', 1)[0]
+    start = upload.index('                var flags: Int32 = 0', upload.index('case let .Video(duration, size, videoFlags'))
+    end = upload.index('                attributes.append(.documentAttributeVideo', start)
+    fetch = (tg / 'submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift').read_text()
+    library = fetch[fetch.index('if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+    local = fetch[fetch.index('if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+    return '''import Foundation
+struct TelegramMediaVideoFlags: OptionSet {
+    let rawValue: Int
+    static let instantRoundVideo = Self(rawValue: 1)
+    static let supportsStreaming = Self(rawValue: 2)
+    static let isSilent = Self(rawValue: 8)
+}
+struct Video { let isInstantVideo: Bool }
+struct Adjustments { let aorusRoundVideo: Bool }
+func nativeCacheCompatible(file: Video, cachedFile: Video) -> Bool { return ''' + cache + ''' }
+func nativeVideoFlags(videoFlags: TelegramMediaVideoFlags, preloadSize: Int?, coverTime: Double?, videoCodec: String?) -> Int32 {
+''' + upload[start:end] + '''    return flags
+}
+func nativeLibraryUsesModern(alwaysUseModernPipeline: Bool, legacyAdjustments: Adjustments) -> Bool { return ''' + library + ''' }
+func nativeLocalUsesModern(alwaysUseModernPipeline: Bool, isImage: Bool, legacyAdjustments: Adjustments) -> Bool { return ''' + local + ''' }
+'''
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('repo', type=Path)
@@ -87,6 +113,10 @@ def main():
         badge_binary = work / 'badge-tests'
         subprocess.run(common + ['-warnings-as-errors', str(badges), str(args.repo / 'scripts/tests/AorusBadgeMetricsTests.swift'), str(badge_main), '-o', str(badge_binary)], check=True)
         subprocess.run([str(badge_binary)], check=True, timeout=20)
+        transport = work / 'NativeRoundTransport.swift'; transport.write_text(native_transport_source(args.telegram_source))
+        transport_binary = work / 'transport-tests'
+        subprocess.run(common + ['-warnings-as-errors', str(transport), str(args.repo / 'scripts/tests/AorusRoundVideoTransportTests.swift'), '-o', str(transport_binary)], check=True)
+        subprocess.run([str(transport_binary)], check=True, timeout=20)
         subprocess.run(common + ['-suppress-warnings', '-emit-module', '-emit-library', '-module-name', 'SwiftSignalKit', '-o', str(library)] + paths, check=True)
         fixture = work / 'Fixtures.swift'; fixture.write_text(FIXTURES)
         attribute = work / 'AorusRoundVideoMessageAttribute.swift'

@@ -41,6 +41,16 @@ def objc_source(tg: Path) -> str:
     ])
     commit = context[context.index('    // Native editor tools rebuild adjustments.'):context.index('    if (adjustments != nil)\n        _adjustments[itemId] = adjustments;')]
     toggles = '\n'.join(declaration(gallery, prefix) for prefix in ['- (void)aorusToggleRoundVideo', '- (void)aorusToggleRealisticSending'])
+    editor = (lc / 'Sources/PGPhotoEditor.m').read_text()
+    export = declaration(editor, '- (id<TGMediaEditAdjustments>)exportAdjustmentsWithPaintingData:')
+    export = export[export.index('        TGVideoEditAdjustments *initialAdjustments'):export.rindex('    }')]
+    round_property = declaration(editor, '- (bool)aorusRoundVideo')
+    drawing = (lc / 'Sources/TGPhotoDrawingController.m').read_text()
+    mask_start = drawing.index('    if (_photoEditor.aorusRoundVideo) {')
+    mask_end = drawing.index('\n}', mask_start)
+    drawing_mask = drawing[mask_start:mask_end]
+    preview = (lc / 'Sources/TGPhotoEditorPreviewView.m').read_text()
+    radius = next(line for line in preview.splitlines() if 'self.layer.cornerRadius = self.aorusRoundVideo' in line)
     return '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + '''
 static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
     return fabs(a.origin.x-b.origin.x) <= epsilon && fabs(a.origin.y-b.origin.y) <= epsilon && fabs(a.size.width-b.size.width) <= epsilon && fabs(a.size.height-b.size.height) <= epsilon;
@@ -102,6 +112,37 @@ static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
 ''' + methods + '''
 @end
 @class RoundItem;
+@interface RoundPhotoEditor: NSObject {
+    bool _forVideo;
+    TGVideoEditAdjustments *_initialAdjustments;
+}
+@property(nonatomic) CGSize originalSize;
+@property(nonatomic) CGRect cropRect;
+@property(nonatomic) UIImageOrientation cropOrientation;
+@property(nonatomic) CGFloat cropRotation;
+@property(nonatomic) CGFloat cropLockedAspectRatio;
+@property(nonatomic) bool cropMirrored;
+@property(nonatomic) bool sendAsGif;
+@property(nonatomic) TGMediaVideoConversionPreset preset;
+- (instancetype)initWithAdjustments:(TGVideoEditAdjustments *)adjustments;
+- (TGVideoEditAdjustments *)exportPainting:(TGPaintingData *)paintingData tools:(NSDictionary *)toolValues;
+- (bool)aorusRoundVideo;
+@end
+@implementation RoundPhotoEditor
+- (instancetype)initWithAdjustments:(TGVideoEditAdjustments *)a {
+    self = [super init]; if (self) {
+        _forVideo = true; _initialAdjustments = a;
+        self.originalSize = a.originalSize; self.cropRect = a.cropRect;
+        self.cropOrientation = a.cropOrientation; self.cropRotation = a.cropRotation;
+        self.cropLockedAspectRatio = a.cropLockedAspectRatio; self.cropMirrored = a.cropMirrored;
+        self.sendAsGif = a.sendAsGif; self.preset = a.preset;
+    } return self;
+}
+''' + round_property + '''
+- (TGVideoEditAdjustments *)exportPainting:(TGPaintingData *)paintingData tools:(NSDictionary *)toolValues {
+''' + export + '''
+}
+@end
 @interface RoundEditingContext: NSObject
 @property(nonatomic,strong) TGVideoEditAdjustments *current;
 - (id)adjustmentsForItem:(id)item;
@@ -166,6 +207,18 @@ static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
 @end
 static int checks = 0;
 static void expect(bool value, const char *message) { checks++; if (!value) { fprintf(stderr,"Round editor: %s\\n",message); abort(); } }
+static void applyRoundDrawingMask(RoundPhotoEditor *_photoEditor, UIView *_scrollContainerView, UIView *previewView) {
+''' + drawing_mask + '''
+}
+@interface RoundPreview: UIView
+@property(nonatomic) bool aorusRoundVideo;
+@end
+@implementation RoundPreview
+- (void)layoutSubviews {
+    [super layoutSubviews];
+''' + radius + '''
+}
+@end
 int AorusNativeRoundEditorTests(void) {
     checks = 0;
     for (int orientation = 0; orientation < 4; orientation++) {
@@ -187,6 +240,25 @@ int AorusNativeRoundEditorTests(void) {
                 expect(circle.preset == TGMediaVideoConversionPresetCompressedVeryHigh, "maximum quality by default");
                 expect(circle.cropOrientation == orientation && circle.cropMirrored == mirrored, "orientation and mirror remain");
                 expect(circle.cropRotation == 0.1 && [circle.toolValues isEqual:original.toolValues] && circle.paintingData == original.paintingData, "filters, rotation and paint remain");
+                RoundPhotoEditor *roundEditor = [[RoundPhotoEditor alloc] initWithAdjustments:circle];
+                UIView *drawingContainer = [[UIView alloc] initWithFrame:CGRectMake(0,0,400,500)];
+                RoundPreview *preview = [[RoundPreview alloc] initWithFrame:CGRectMake(40,50,320,320)];
+                preview.aorusRoundVideo = roundEditor.aorusRoundVideo;
+                [drawingContainer addSubview:preview];
+                [preview layoutSubviews];
+                expect(preview.layer.cornerRadius == 160, "native editor preview retains circular shape");
+                applyRoundDrawingMask(roundEditor,drawingContainer,preview);
+                CAShapeLayer *mask = (CAShapeLayer *)drawingContainer.layer.mask;
+                expect(mask != nil && CGPathContainsPoint(mask.path,NULL,CGPointMake(200,210),false), "text and drawing share visible circle center");
+                expect(!CGPathContainsPoint(mask.path,NULL,CGPointMake(45,55),false), "text and drawing corners outside the circle are clipped");
+                preview.frame = CGRectMake(60,30,200,200);
+                [preview layoutSubviews];
+                applyRoundDrawingMask(roundEditor,drawingContainer,preview);
+                expect(preview.layer.cornerRadius == 100 && CGRectEqualToRect(CGPathGetBoundingBox(((CAShapeLayer *)drawingContainer.layer.mask).path),preview.frame), "keyboard and rotation layout use current preview bounds");
+                RoundPhotoEditor *plainEditor = [[RoundPhotoEditor alloc] initWithAdjustments:original];
+                applyRoundDrawingMask(plainEditor,drawingContainer,preview);
+                preview.aorusRoundVideo = false; [preview layoutSubviews];
+                expect(drawingContainer.layer.mask == nil && preview.layer.cornerRadius == 0, "ordinary videos retain rectangular editor");
                 [gallery aorusToggleRealisticSending];
                 expect(gallery.item.editingContext.current.aorusRealisticSending, "native timer enables recording delay");
                 [gallery aorusToggleRealisticSending];
@@ -194,13 +266,24 @@ int AorusNativeRoundEditorTests(void) {
                 [gallery aorusToggleRealisticSending];
                 TGVideoEditAdjustments *qualityCopy = [gallery.item.editingContext.current editAdjustmentsWithPreset:TGMediaVideoConversionPresetCompressedHigh maxDuration:60.0];
                 expect(qualityCopy.aorusRoundVideo && qualityCopy.aorusRealisticSending, "quality sheet keeps mode");
+                for (int edit = 0; edit < 5; edit++) {
+                    RoundPhotoEditor *editor = [[RoundPhotoEditor alloc] initWithAdjustments:qualityCopy];
+                    TGPaintingData *text = [TGPaintingData dataWithPaintingImagePath:@"text-overlay.png"];
+                    text.entitiesData = [@"text-and-sticker" dataUsingEncoding:NSUTF8StringEncoding];
+                    TGVideoEditAdjustments *exported = [editor exportPainting:text tools:@{@"exposure":@(edit * 0.1)}];
+                    expect(editor.aorusRoundVideo && exported.aorusRoundVideo && exported.aorusHasRoundMode, "native editor export retains note before shared commit");
+                    expect(exported.aorusRealisticSending && CGRectEqualToRect(exported.aorusVideoCropRect,crop), "reopening editor retains delay and reversible crop");
+                    expect(exported.paintingData == text && exported.paintingData.entitiesData != nil, "text and sticker entities survive video-note export");
+                    expect(exported.cropRect.size.width == exported.cropRect.size.height && !exported.sendAsGif, "native exported note remains square with sound");
+                    qualityCopy = exported;
+                }
                 NSDictionary *dictionary = qualityCopy.dictionary;
                 NSData *encoded = [NSKeyedArchiver archivedDataWithRootObject:dictionary requiringSecureCoding:false error:NULL];
                 NSDictionary *decoded = [NSKeyedUnarchiver unarchivedObjectOfClasses:[NSSet setWithArray:@[NSDictionary.class, NSString.class, NSNumber.class, NSValue.class, NSData.class, NSArray.class]] fromData:encoded error:NULL];
                 TGVideoEditAdjustments *restored = [TGVideoEditAdjustments editAdjustmentsWithDictionary:decoded];
                 expect(restored.aorusRoundVideo && restored.aorusRealisticSending && restored.aorusHasRoundMode, "native archive preserves circle state");
                 expect(CGRectEqualToRect(restored.aorusVideoCropRect,crop) && restored.aorusVideoPreset == original.preset, "archive preserves reversible crop and quality");
-                expect(CGRectEqualToRect(restored.cropRect,qualityCopy.cropRect) && restored.trimEndValue == qualityCopy.trimEndValue && [restored.paintingData.imagePath isEqual:painting.imagePath], "conversion archive preserves square crop, trimming and painting");
+                expect(CGRectEqualToRect(restored.cropRect,qualityCopy.cropRect) && restored.trimEndValue == qualityCopy.trimEndValue && [restored.paintingData.imagePath isEqual:qualityCopy.paintingData.imagePath], "conversion archive preserves square crop, trimming and painting");
                 expect(restored.cropRotation == qualityCopy.cropRotation && restored.cropLockedAspectRatio == qualityCopy.cropLockedAspectRatio, "conversion archive preserves rotation and aspect ratio");
                 TGVideoEditAdjustments *trimCopy = [qualityCopy editAdjustmentsWithPreset:qualityCopy.preset videoStartValue:4 trimStartValue:5 trimEndValue:15];
                 expect(trimCopy.aorusRoundVideo && trimCopy.aorusRealisticSending && trimCopy.trimEndValue-trimCopy.trimStartValue == 10, "trim copy keeps recording delay");

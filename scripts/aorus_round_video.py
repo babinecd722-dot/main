@@ -190,7 +190,7 @@ def patch_round_video(tg: Path) -> None:
         _aorusRoundButton.hidden = true;
         _aorusRoundButton.adjustsImageWhenHighlighted = false;
         [_aorusRoundButton setBackgroundImage:[TGPhotoEditorInterfaceAssets gifBackgroundImage] forState:UIControlStateNormal];
-        UIImage *aorusCircle = [[UIImage systemImageNamed:@"record.circle"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        UIImage *aorusCircle = [[UIImage imageNamed:@"Chat/Input/Text/IconVideo"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
         [_aorusRoundButton setImage:aorusCircle forState:UIControlStateNormal];
         _aorusRoundButton.tintColor = [UIColor whiteColor];
         _aorusRoundButton.accessibilityLabel = TGLocalized(@"Message.VideoMessage");
@@ -238,19 +238,67 @@ def patch_round_video(tg: Path) -> None:
         replace(interface, '\n' + old, '\n' + old + '\n' + old.replace('_muteButton', '_aorusRoundButton'), count)
     replace(interface, '    [_muteButton removeFromSuperview];', '    [_muteButton removeFromSuperview];\n    [_aorusRoundButton removeFromSuperview];')
     patch_round_video_help(tg)
+    patch_round_editor(tg)
     patch_enqueue(tg)
     patch_pending(tg)
     patch_countdown(tg)
     patch_badge(tg)
 
 
+def patch_round_editor(tg: Path) -> None:
+    lc = tg / 'submodules/LegacyComponents'
+    editor = lc / 'Sources/PGPhotoEditor.m'
+    old = '        return [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:self.originalSize cropRect:self.cropRect cropOrientation:self.cropOrientation cropRotation:self.cropRotation cropLockedAspectRatio:self.cropLockedAspectRatio cropMirrored:self.cropMirrored trimStartValue:initialAdjustments.trimStartValue trimEndValue:initialAdjustments.trimEndValue toolValues:toolValues paintingData:paintingData sendAsGif:self.sendAsGif preset:self.preset];'
+    new = old.replace('return [', 'TGVideoEditAdjustments *result = [') + '''
+        [result aorusCopyRoundModeFrom:initialAdjustments];
+        return result;'''
+    replace(editor, old, new)
+    replace(editor, '        self.trimStartValue = videoAdjustments.trimStartValue;', '        self.cropRotation = videoAdjustments.cropRotation;\n        self.trimStartValue = videoAdjustments.trimStartValue;')
+    replace(lc / 'Sources/PGPhotoEditor.h', '@property (nonatomic, readonly) bool forVideo;', '@property (nonatomic, readonly) bool forVideo;\n@property (nonatomic, readonly) bool aorusRoundVideo;')
+    replace(editor, '- (id<TGMediaEditAdjustments>)exportAdjustments\n{', '''- (bool)aorusRoundVideo
+{
+    return _forVideo && [_initialAdjustments isKindOfClass:[TGVideoEditAdjustments class]] && ((TGVideoEditAdjustments *)_initialAdjustments).aorusRoundVideo;
+}
+
+- (id<TGMediaEditAdjustments>)exportAdjustments
+{''')
+    preview = lc / 'Sources/TGPhotoEditorPreviewView.h'
+    replace(preview, '@property (nonatomic, assign) bool applyMirror;', '@property (nonatomic, assign) bool applyMirror;\n@property (nonatomic) bool aorusRoundVideo;')
+    replace(lc / 'Sources/TGPhotoEditorPreviewView.m', '- (void)layoutSubviews\n{', '''- (void)layoutSubviews
+{
+    [super layoutSubviews];
+    self.layer.cornerRadius = self.aorusRoundVideo ? MIN(self.bounds.size.width, self.bounds.size.height) / 2.0 : 0.0;''')
+    replace(lc / 'Sources/TGPhotoEditorController.m', '    _previewView.clipsToBounds = true;', '    _previewView.clipsToBounds = true;\n    _previewView.aorusRoundVideo = _photoEditor.aorusRoundVideo;')
+    drawing = lc / 'Sources/TGPhotoDrawingController.m'
+    replace(drawing, '\n    _scrollContainerView.frame = CGRectMake(containerFrame.origin.x, containerFrame.origin.y + offsetHeight, containerFrame.size.width, containerFrame.size.height);', '''
+    _scrollContainerView.frame = CGRectMake(containerFrame.origin.x, containerFrame.origin.y + offsetHeight, containerFrame.size.width, containerFrame.size.height);
+    if (_photoEditor.aorusRoundVideo) {
+        CAShapeLayer *circle = [CAShapeLayer layer];
+        circle.frame = _scrollContainerView.bounds;
+        circle.path = [UIBezierPath bezierPathWithOvalInRect:[previewView convertRect:previewView.bounds toView:_scrollContainerView]].CGPath;
+        _scrollContainerView.layer.mask = circle;
+    } else {
+        _scrollContainerView.layer.mask = nil;
+    }''')
+    # The modern exporter translates legacy adjustments into a different model.
+    # Video notes retain the native converter, square crop, paint and audio together.
+    fetch = tg / 'submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift'
+    replace(fetch, '                                if alwaysUseModernPipeline {', '                                if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo {')
+    replace(fetch, '                    if alwaysUseModernPipeline && !isImage {', '                    if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo {')
+    converter = lc / 'Sources/TGMediaVideoConverter.m'
+    replace(converter, '    if ([adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])', '    if (adjustments.aorusRoundVideo || [adjustments trimApplied] || [adjustments cropAppliedForAvatar:false] || adjustments.sendAsGif || [adjustments toolsApplied] || [adjustments hasPainting])')
+    # Cached document attributes are immutable: never reuse the opposite media kind.
+    upload = tg / 'submodules/TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift'
+    replace(upload, '                if !forceReupload, let file = media as? TelegramMediaFile, let resource = file.resource as? CloudDocumentMediaResource, let fileReference = resource.fileReference {', '                if !forceReupload, let cachedFile = media as? TelegramMediaFile, cachedFile.isInstantVideo == file.isInstantVideo, let resource = cachedFile.resource as? CloudDocumentMediaResource, let fileReference = resource.fileReference {\n                    let file = cachedFile')
+
+
 def patch_round_video_help(tg: Path) -> None:
     lc = tg / 'submodules/LegacyComponents/Sources'
     localization = lc / 'TGLocalization.m'
     fallback = """    } else {
-        if ([key isEqualToString:@"Aorus.VideoNote.Help"]) return [_code hasPrefix:@"ru"] ? @"Кнопка кружка меняет форму видео. Обрезка, фильтры и рисунки остаются доступны; повторное нажатие возвращает видео. Кружок сохраняет звук, использует максимальное качество и длится до минуты." : @"The circle button changes the video shape. Crop, filters and drawing remain available; tap again to return to video. A video note keeps its sound, uses maximum quality and lasts up to one minute.";
+        if ([key isEqualToString:@"Aorus.VideoNote.Help"]) return [_code hasPrefix:@"ru"] ? @"Превратите видео в кружок. Добавляйте текст, рисунки и стикеры. Нажмите ещё раз, чтобы вернуть обычное видео." : @"Turn your video into a video note. Add text, drawings and stickers. Tap again to return to a regular video.";
         if ([key isEqualToString:@"Aorus.VideoNote.RealisticSending"]) return [_code hasPrefix:@"ru"] ? @"Реалистичная отправка" : @"Realistic Sending";
-        if ([key isEqualToString:@"Aorus.VideoNote.RealisticSendingHelp"]) return [_code hasPrefix:@"ru"] ? @"Кружок появляется в чате с отсчётом и отправляется через время, равное его длительности. До окончания отсчёта собеседник видит «записывает видеосообщение». Кнопка таймера включает и выключает задержку." : @"The note appears in the chat with a countdown and sends after its duration has elapsed. Until then the recipient sees the recording video status. The timer button turns this delay on or off.";
+        if ([key isEqualToString:@"Aorus.VideoNote.RealisticSendingHelp"]) return [_code hasPrefix:@"ru"] ? @"Кружок отправится с задержкой, равной его длительности. В чате появится отсчёт, а собеседник увидит, что вы записываете видеосообщение." : @"Your video note sends after a delay equal to its length. A countdown appears in the chat while the recipient sees you recording a video message.";
         return fallbackString(key, _code);
     }"""
     replace(localization, '    } else {\n        return fallbackString(key, _code);\n    }', fallback)
@@ -412,6 +460,11 @@ def verify_round_video(tg: Path) -> list[str]:
     checks = {
         'LegacyComponents/PublicHeaders/LegacyComponents/TGVideoEditAdjustments.h': ['aorusRealisticSending', 'aorusCopyRoundModeFrom:'],
         'LegacyComponents/Sources/TGMediaEditingContext.m': ['[circle aorusCopyRoundModeFrom:video]', 'video.trimStartValue + 60.0'],
+        'LegacyComponents/Sources/PGPhotoEditor.m': ['[result aorusCopyRoundModeFrom:initialAdjustments]', 'self.cropRotation = videoAdjustments.cropRotation;'],
+        'LegacyComponents/Sources/TGPhotoEditorPreviewView.m': ['self.layer.cornerRadius = self.aorusRoundVideo'],
+        'LegacyComponents/Sources/TGPhotoDrawingController.m': ['if (_photoEditor.aorusRoundVideo)', '_scrollContainerView.layer.mask = circle'],
+        'TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift': ['if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo', 'if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'],
+        'TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift': ['cachedFile.isInstantVideo == file.isInstantVideo'],
         'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh'],
         'LegacyComponents/Sources/TGMediaPickerGalleryInterfaceView.m': ['_aorusRoundButton.frame = CGRectOffset(_muteButton.frame, 48.0, 0.0)', 'if (tab == TGPhotoEditorRealisticSendingTab)'],
         'MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift': ['.qualityTab,\n    .realisticSendingTab,\n    .timerTab,'],
