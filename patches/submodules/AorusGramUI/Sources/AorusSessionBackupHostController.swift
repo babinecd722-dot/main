@@ -21,7 +21,9 @@ final class AorusSessionBackupHostController: ViewController {
     init(context: AccountContext) {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
+        // The glass header every list screen of the client has, fading into the same
+        // grouped background the screen is drawn on.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
 
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         let lang = AorusLang.resolve(self.presentationData.strings.baseLanguageCode)

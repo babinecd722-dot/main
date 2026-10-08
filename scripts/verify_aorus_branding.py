@@ -53,6 +53,8 @@ def main() -> None:
     err.extend(verify_message_details(tg))
     from aorus_round_video import verify_round_video
     err.extend(verify_round_video(tg))
+    from aorus_old_interface import verify_old_interface
+    err.extend(verify_old_interface(tg))
     from aorus_local_profile import verify_local_profile
     err.extend(verify_local_profile(tg))
     from aorus_navigation_icons import verify_navigation_icons

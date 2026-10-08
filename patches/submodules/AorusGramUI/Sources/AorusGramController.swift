@@ -328,6 +328,7 @@ private struct AorusState: Equatable {
     var doubleTapCopy: Bool
     var tripleTapDelete: Bool
     var interfaceV2: Bool
+    var oldInterface: Bool
     var glassUI: Bool
     var subscriptionBanner: Bool
     var showStories: Bool
@@ -466,6 +467,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
     case uiHeader(PresentationTheme, String)
     case interfaceV2(PresentationTheme, String, Bool)
+    case oldInterface(PresentationTheme, String, Bool)
     case glassUI(PresentationTheme, String, Bool)
     case amoledMode(PresentationTheme, String, Bool)
     case profileReportButton(PresentationTheme, String, Bool)
@@ -538,7 +540,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .interfaceV2, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
+        case .uiHeader, .interfaceV2, .oldInterface, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
             return AorusSection.ui.rawValue
         case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar:
             return AorusSection.tabs.rawValue
@@ -606,6 +608,8 @@ private enum AorusEntry: ItemListNodeEntry {
         // 52 and 53 each move up one. These numbers order the list and nothing else reads
         // them, so the shift costs nothing; 54 was free, which is what makes the chain fit.
         case .interfaceV2:          return 51
+        // Its own number, beyond those of the plugin shortcuts; `<` stands it under Interface 2.0.
+        case .oldInterface:         return 200
         case .glassUI:              return 52
         case .amoledMode:           return 53
         case .profileReportButton:  return 54
@@ -673,6 +677,8 @@ private enum AorusEntry: ItemListNodeEntry {
             // Bubble Settings just above Message Settings, both under Show Stories.
             if case .bubbleSettings = entry { return 59 * 1000 + 400 }
             if case .messageSettings = entry { return 59 * 1000 + 500 }
+            // Directly under Interface 2.0, the other way to change the whole interface.
+            if case .oldInterface = entry { return 51 * 1000 + 500 }
             return entry.stableId * 1000
         }
         return order(lhs) < order(rhs)
@@ -756,6 +762,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .uiHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .interfaceV2(lt, ls, lv):
             if case let .interfaceV2(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .oldInterface(lt, ls, lv):
+            if case let .oldInterface(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .glassUI(lt, ls, lv):
             if case let .glassUI(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .amoledMode(lt, ls, lv):
@@ -953,6 +961,8 @@ private enum AorusEntry: ItemListNodeEntry {
             // No badge and no footnote. It is the first row of the Interface block, it is
             // released, and a released switch says what it is in its own title.
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.interfaceV2, $0) })
+        case let .oldInterface(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.oldInterface, $0) })
         case let .glassUI(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.glassUI, $0) })
         case let .amoledMode(_, title, value):
@@ -1084,6 +1094,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
         .uiHeader(theme, l10n.uiHeader),
         .interfaceV2(theme, l10n.interfaceV2, state.interfaceV2),
+        .oldInterface(theme, l10n.oldInterface, state.oldInterface),
         .glassUI(theme, l10n.glassUI, state.glassUI),
         .amoledMode(theme, l10n.amoledMode, state.amoledMode),
         .profileReportButton(theme, l10n.profileReportButton, state.profileReportButton),
@@ -1241,6 +1252,20 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         entries.insert(.cacheInterval(theme, l10n.cacheInterval, state.cacheCleanInterval), at: idx + 1)
     }
 
+    // The old interface has no glass and Telegram's classic tab bar: the glass effects and the
+    // glass tab bar's search button, titles and compact panel do nothing there, so they are
+    // not offered. Their values are kept for when it is turned off.
+    if state.oldInterface {
+        entries.removeAll(where: { entry in
+            switch entry {
+            case .glassUI, .hideSearchButton, .hideTabTitles, .compactTabBar:
+                return true
+            default:
+                return false
+            }
+        })
+    }
+
     return entries
 }
 
@@ -1295,7 +1320,8 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         messageSeconds:     mgr.messageSeconds,
         doubleTapCopy:      mgr.doubleTapCopy,
         tripleTapDelete:    mgr.tripleTapDelete,
-        interfaceV2:        AorusInterfaceV2.isEnabled,
+        interfaceV2:        AorusInterfaceV2.isRequested,
+        oldInterface:       AorusOldInterface.isRequested,
         glassUI:            mgr.glassUI,
         subscriptionBanner: UserDefaults.standard.object(forKey: "aorusgram_subscription_banner") as? Bool ?? true,
         showStories:        UserDefaults.standard.object(forKey: "aorusgram_show_stories") as? Bool ?? true,
@@ -1407,6 +1433,28 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 // change notice that rebuilds an open profile — every OTHER switch on this
                 // screen would otherwise do that too, for a value it did not touch.
                 AorusInterfaceV2.setEnabled(s.interfaceV2)
+                // Interface 2.0 and the old interface are two whole interfaces: turning one on
+                // turns the other off, and the next start draws the one that is on.
+                if s.interfaceV2 && s.oldInterface {
+                    AorusOldInterfaceSwitch.setRequested(false)
+                    updateState { current in
+                        var next = current
+                        next.oldInterface = false
+                        return next
+                    }
+                }
+                aorusPresentRestartNotice(context: context, controller: weakController)
+            }
+            if keyPath == \AorusState.oldInterface {
+                AorusOldInterfaceSwitch.setRequested(s.oldInterface)
+                if s.oldInterface && s.interfaceV2 {
+                    AorusInterfaceV2.setEnabled(false)
+                    updateState { current in
+                        var next = current
+                        next.interfaceV2 = false
+                        return next
+                    }
+                }
                 aorusPresentRestartNotice(context: context, controller: weakController)
             }
             // The chat-list stories strip re-reads this key on every layout, so posting

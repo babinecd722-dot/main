@@ -21644,7 +21644,7 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
         )
         replacement = (
             "                    let bottomInset: CGFloat = validLayout.insets(options: options).bottom\n"
-            "                    let aorusTabTitleAdjustment: CGFloat = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\") ? 8.0 : 0.0 // AorusGram: compact tab titles\n"
+            "                    let aorusTabTitleAdjustment: CGFloat = !AorusOldInterface.isEnabled && UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\") ? 8.0 : 0.0 // AorusGram: compact tab titles\n"
             "                    if !validLayout.safeInsets.left.isZero {\n"
             "                        tabBarHeight = 34.0 - aorusTabTitleAdjustment + bottomInset\n"
             "                    } else {\n"
@@ -30681,6 +30681,10 @@ def main() -> None:
     patch_round_video(tg)
     # After the glass toggle and Interface 2.0, which rewrite parts of the menus it styles.
     patch_glass_everywhere(tg)
+    # After the tab bar options and the message field's glass, whose layout it sits beside:
+    # Telegram as 12.0 drew it, behind AorusGram -> Interface -> Old Interface.
+    from aorus_old_interface import patch_old_interface
+    patch_old_interface(tg)
     # After every patch of the message nodes: it anchors on the side buttons and the deleted
     # dim the earlier ones add.
     patch_deleted_side_buttons(tg)

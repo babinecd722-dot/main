@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Display
 import AorusGram
 
 // AorusGram Interface 2.0: the switch that turns the glass interface on.
@@ -23,11 +24,29 @@ public enum AorusInterfaceV2 {
         if !AorusLicenseAccess.isAllowed {
             return false
         }
+        // The old interface is the other whole interface; a run started with it draws no
+        // Interface 2.0 at all.
+        if AorusOldInterface.isEnabled {
+            return false
+        }
         return UserDefaults.standard.bool(forKey: AorusInterfaceV2.key)
+    }
+
+    /// The choice the switch shows and the next start follows, whatever this run draws.
+    public static var isRequested: Bool {
+        return AorusLicenseAccess.isAllowed && UserDefaults.standard.bool(forKey: AorusInterfaceV2.key)
     }
 
     public static func setEnabled(_ value: Bool) {
         UserDefaults.standard.set(AorusLicenseAccess.isAllowed ? value : false, forKey: AorusInterfaceV2.key)
         NotificationCenter.default.post(name: AorusInterfaceV2.changedNotification, object: nil)
+    }
+}
+
+/// The switch for the old interface (Display/AorusOldInterface.swift). Like Interface 2.0 it is
+/// read when the app starts, so what is written here is what the next start draws.
+public enum AorusOldInterfaceSwitch {
+    public static func setRequested(_ value: Bool) {
+        UserDefaults.standard.set(AorusLicenseAccess.isAllowed ? value : false, forKey: AorusOldInterface.key)
     }
 }

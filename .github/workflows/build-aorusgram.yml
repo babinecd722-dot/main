@@ -1009,6 +1009,7 @@ jobs:
           #     long-press and tap menus and the action sheets are routed through it by
           #     aorus_branding.py; the glass module adds its own shapes to it.
           cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusOldInterface.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRoundVideoCountdownView.swift $TG/submodules/Display/Source/

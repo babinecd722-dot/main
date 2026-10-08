@@ -403,6 +403,7 @@ public struct AorusL10n {
     /// The number is the name and stays a number in both languages; the word in front of it is
     /// the part that was still English on a Russian screen.
     public var interfaceV2: String { t("Интерфейс 2.0", "Interface 2.0") }
+    public var oldInterface: String { t("Старый интерфейс", "Old Interface") }
     public var glassUI: String { t("Эффекты стекла", "Glass Effects") }
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }
     public var amoledMode: String { t("AMOLED интерфейс", "AMOLED Interface") }

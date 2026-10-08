@@ -858,7 +858,9 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.onSaved = onSaved
         self.canvas = AorusMaskCanvasView(image: nil)
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
+        // The glass header every list screen of the client has, fading into the same
+        // grouped background the screen is drawn on.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
         self.title = aorusL("Своя маска", "Custom Mask")
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(

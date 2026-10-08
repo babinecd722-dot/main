@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Old Interface": "Interfaccia classica",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L'interfaccia classica è attiva: niente vetro, i pannelli sono piatti come in Telegram 12.0. Queste impostazioni torneranno quando la disattiverai.",
         "File picker and sharing": "Selezione file e condivisione",
         "Allows opening the system file picker and the share sheet.": "Consente di aprire il selettore file di sistema e il menu di condivisione.",
         "Send files": "Invio di file",
@@ -1034,6 +1036,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Old Interface": "Stary interfejs",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Stary interfejs jest włączony: nie ma szkła, a panele są płaskie jak w Telegramie 12.0. Te ustawienia wrócą, gdy go wyłączysz.",
         "File picker and sharing": "Wybór plików i udostępnianie",
         "Allows opening the system file picker and the share sheet.": "Zezwala na otwieranie systemowego okna wyboru plików i menu udostępniania.",
         "Send files": "Wysyłanie plików",
@@ -2015,6 +2019,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Old Interface": "Oude interface",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "De oude interface staat aan: er is geen glas en panelen zijn vlak zoals in Telegram 12.0. Deze instellingen keren terug als je hem uitzet.",
         "File picker and sharing": "Bestanden kiezen en delen",
         "Allows opening the system file picker and the share sheet.": "Staat toe om de bestandskiezer van het systeem en het deelmenu te openen.",
         "Send files": "Bestanden versturen",
@@ -2996,6 +3002,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Old Interface": "Interfície antiga",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfície antiga està activada: no hi ha vidre i els panells són plans com a Telegram 12.0. Aquests ajustos tornaran quan la desactivis.",
         "File picker and sharing": "Selecció de fitxers i compartició",
         "Allows opening the system file picker and the share sheet.": "Permet obrir el selector de fitxers del sistema i el menú de compartir.",
         "Send files": "Enviar fitxers",
@@ -3977,6 +3985,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Old Interface": "Antarmuka lama",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antarmuka lama aktif: tidak ada kaca, dan panel datar seperti di Telegram 12.0. Pengaturan ini kembali saat Anda mematikannya.",
         "File picker and sharing": "Pemilih file dan berbagi",
         "Allows opening the system file picker and the share sheet.": "Mengizinkan pembukaan pemilih file sistem dan menu berbagi.",
         "Send files": "Mengirim file",
@@ -4958,6 +4968,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Old Interface": "Antara Muka Lama",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antara muka lama dihidupkan: tiada kaca, dan panel rata seperti dalam Telegram 12.0. Tetapan ini kembali apabila anda mematikannya.",
         "File picker and sharing": "Pemilih fail dan perkongsian",
         "Allows opening the system file picker and the share sheet.": "Membenarkan pembukaan pemilih fail sistem dan menu perkongsian.",
         "Send files": "Menghantar fail",
@@ -5939,6 +5951,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Old Interface": "Стары інтэрфейс",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Уключаны стары інтэрфейс: шкла няма, панэлі плоскія, як у Telegram 12.0. Гэтыя налады вернуцца, калі вы яго выключыце.",
         "File picker and sharing": "Выбар файлаў і «Падзяліцца»",
         "Allows opening the system file picker and the share sheet.": "Дазваляе адкрываць сістэмнае акно выбару файлаў і меню «Падзяліцца».",
         "Send files": "Адпраўка файлаў",
@@ -6920,6 +6934,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Old Interface": "Eski interfeys",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski interfeys yoqilgan: shisha yo‘q, panellar Telegram 12.0 dagidek tekis. Uni o‘chirganingizda bu sozlamalar qaytadi.",
         "File picker and sharing": "Fayl tanlash va ulashish",
         "Allows opening the system file picker and the share sheet.": "Tizimning fayl tanlash oynasi va ulashish menyusini ochishga ruxsat beradi.",
         "Send files": "Fayl yuborish",
@@ -7901,6 +7917,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Old Interface": "이전 인터페이스",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "이전 인터페이스가 켜져 있습니다. 유리 효과가 없고 패널은 Telegram 12.0처럼 평평합니다. 끄면 이 설정이 다시 적용됩니다.",
         "File picker and sharing": "파일 선택 및 공유",
         "Allows opening the system file picker and the share sheet.": "시스템 파일 선택기와 공유 메뉴를 여는 것을 허용합니다.",
         "Send files": "파일 보내기",
@@ -8882,6 +8900,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Old Interface": "الواجهة القديمة",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "الواجهة القديمة مفعّلة: لا يوجد زجاج، واللوحات مسطحة كما في تيليجرام 12.0. ستعود هذه الإعدادات عند إيقافها.",
         "File picker and sharing": "اختيار الملفات والمشاركة",
         "Allows opening the system file picker and the share sheet.": "يسمح بفتح منتقي الملفات في النظام وقائمة المشاركة.",
         "Send files": "إرسال الملفات",
@@ -9863,6 +9883,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Old Interface": "رابط کاربری قدیمی",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "رابط کاربری قدیمی روشن است: شیشه‌ای در کار نیست و پنل‌ها مانند تلگرام ۱۲٫۰ تخت هستند. با خاموش کردن آن، این تنظیمات برمی‌گردند.",
         "File picker and sharing": "انتخاب فایل و اشتراک‌گذاری",
         "Allows opening the system file picker and the share sheet.": "اجازه باز کردن انتخابگر فایل سیستم و منوی اشتراک‌گذاری را می‌دهد.",
         "Send files": "ارسال فایل",
@@ -10844,6 +10866,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Old Interface": "Ескі интерфейс",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Ескі интерфейс қосулы: шыны жоқ, панельдер Telegram 12.0 сияқты тегіс. Оны өшіргенде бұл баптаулар қайтады.",
         "File picker and sharing": "Файл таңдау және бөлісу",
         "Allows opening the system file picker and the share sheet.": "Жүйелік файл таңдау терезесін және бөлісу мәзірін ашуға рұқсат береді.",
         "Send files": "Файл жіберу",
@@ -11825,6 +11849,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Old Interface": "旧版界面",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧版界面已开启：没有玻璃效果，面板像 Telegram 12.0 那样是平的。关闭后这些设置会恢复。",
         "File picker and sharing": "文件选择与分享",
         "Allows opening the system file picker and the share sheet.": "允许打开系统文件选择器和分享菜单。",
         "Send files": "发送文件",
@@ -12807,6 +12833,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Old Interface": "舊版介面",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "舊版介面已開啟：沒有玻璃效果，面板像 Telegram 12.0 一樣是平的。關閉後這些設定會恢復。",
         "File picker and sharing": "檔案選擇與分享",
         "Allows opening the system file picker and the share sheet.": "允許開啟系統檔案選擇器和分享選單。",
         "Send files": "傳送檔案",
@@ -13788,6 +13816,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Old Interface": "旧インターフェース",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧インターフェースがオンです。ガラス効果はなく、パネルは Telegram 12.0 と同じくフラットです。オフにするとこれらの設定が戻ります。",
         "File picker and sharing": "ファイルの選択と共有",
         "Allows opening the system file picker and the share sheet.": "システムのファイル選択画面と共有メニューを開くことができます。",
         "Send files": "ファイルの送信",
@@ -14769,6 +14799,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Old Interface": "Vanha käyttöliittymä",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Vanha käyttöliittymä on käytössä: lasia ei ole, ja paneelit ovat litteitä kuten Telegram 12.0:ssa. Nämä asetukset palaavat, kun poistat sen käytöstä.",
         "File picker and sharing": "Tiedostojen valinta ja jakaminen",
         "Allows opening the system file picker and the share sheet.": "Sallii järjestelmän tiedostovalitsimen ja jakovalikon avaamisen.",
         "Send files": "Tiedostojen lähetys",
@@ -15750,6 +15782,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Old Interface": "ממשק ישן",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "הממשק הישן פעיל: אין זכוכית, והלוחות שטוחים כמו ב-Telegram 12.0. ההגדרות האלה יחזרו כשתכבה אותו.",
         "File picker and sharing": "בחירת קבצים ושיתוף",
         "Allows opening the system file picker and the share sheet.": "מאפשר לפתוח את בורר הקבצים ואת תפריט השיתוף של המערכת.",
         "Send files": "שליחת קבצים",
@@ -16731,6 +16765,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Old Interface": "Staro sučelje",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staro sučelje je uključeno: nema stakla, a ploče su ravne kao u Telegramu 12.0. Ove postavke vratit će se kad ga isključite.",
         "File picker and sharing": "Odabir datoteka i dijeljenje",
         "Allows opening the system file picker and the share sheet.": "Dopušta otvaranje sistemskog odabira datoteka i izbornika dijeljenja.",
         "Send files": "Slanje datoteka",
@@ -17712,6 +17748,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Old Interface": "Стари интерфејс",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Стари интерфејс је укључен: нема стакла, а панели су равни као у Telegram-у 12.0. Ова подешавања ће се вратити када га искључите.",
         "File picker and sharing": "Избор датотека и дељење",
         "Allows opening the system file picker and the share sheet.": "Дозвољава отварање системског избора датотека и менија за дељење.",
         "Send files": "Слање датотека",
@@ -18693,6 +18731,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Old Interface": "Staré rozhraní",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhraní je zapnuté: žádné sklo, panely jsou ploché jako v Telegramu 12.0. Tato nastavení se vrátí, až ho vypnete.",
         "File picker and sharing": "Výběr souborů a sdílení",
         "Allows opening the system file picker and the share sheet.": "Povoluje otevírat systémový výběr souborů a nabídku sdílení.",
         "Send files": "Odesílání souborů",
@@ -19674,6 +19714,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Old Interface": "Staré rozhranie",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhranie je zapnuté: žiadne sklo, panely sú ploché ako v Telegrame 12.0. Tieto nastavenia sa vrátia, keď ho vypnete.",
         "File picker and sharing": "Výber súborov a zdieľanie",
         "Allows opening the system file picker and the share sheet.": "Povoľuje otvárať systémový výber súborov a ponuku zdieľania.",
         "Send files": "Odosielanie súborov",
@@ -20655,6 +20697,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Old Interface": "Interfață veche",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Interfața veche este activă: nu există sticlă, iar panourile sunt plate ca în Telegram 12.0. Aceste setări revin când o dezactivezi.",
         "File picker and sharing": "Selectarea fișierelor și partajare",
         "Allows opening the system file picker and the share sheet.": "Permite deschiderea selectorului de fișiere al sistemului și a meniului de partajare.",
         "Send files": "Trimiterea fișierelor",
@@ -21636,6 +21680,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Old Interface": "Régi felület",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A régi felület be van kapcsolva: nincs üveg, a panelek laposak, mint a Telegram 12.0-ban. Ezek a beállítások visszatérnek, ha kikapcsolod.",
         "File picker and sharing": "Fájlválasztás és megosztás",
         "Allows opening the system file picker and the share sheet.": "Engedélyezi a rendszer fájlválasztójának és megosztási menüjének megnyitását.",
         "Send files": "Fájlok küldése",
@@ -22617,6 +22663,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Old Interface": "Gammelt grensesnitt",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamle grensesnittet er på: det er ikke noe glass, og panelene er flate som i Telegram 12.0. Disse innstillingene kommer tilbake når du slår det av.",
         "File picker and sharing": "Filvelger og deling",
         "Allows opening the system file picker and the share sheet.": "Tillater åpning av systemets filvelger og delingsmenyen.",
         "Send files": "Sende filer",
@@ -23598,6 +23646,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Old Interface": "Gammalt gränssnitt",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamla gränssnittet är på: inget glas, och panelerna är platta som i Telegram 12.0. De här inställningarna återkommer när du stänger av det.",
         "File picker and sharing": "Filväljare och delning",
         "Allows opening the system file picker and the share sheet.": "Tillåter att systemets filväljare och delningsmeny öppnas.",
         "Send files": "Skicka filer",
@@ -24579,6 +24629,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Old Interface": "Giao diện cũ",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Giao diện cũ đang bật: không có kính, các bảng phẳng như trong Telegram 12.0. Các cài đặt này sẽ trở lại khi bạn tắt nó.",
         "File picker and sharing": "Chọn tệp và chia sẻ",
         "Allows opening the system file picker and the share sheet.": "Cho phép mở bộ chọn tệp của hệ thống và menu chia sẻ.",
         "Send files": "Gửi tệp",
@@ -25560,6 +25612,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Old Interface": "Старий інтерфейс",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Увімкнено старий інтерфейс: скла немає, панелі пласкі, як у Telegram 12.0. Ці налаштування повернуться, коли ви його вимкнете.",
         "File picker and sharing": "Вибір файлів і «Поділитися»",
         "Allows opening the system file picker and the share sheet.": "Дозволяє відкривати системне вікно вибору файлів і меню «Поділитися».",
         "Send files": "Надсилання файлів",
@@ -26550,6 +26604,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Old Interface": "Interfaz antigua",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfaz antigua está activada: no hay cristal y los paneles son planos como en Telegram 12.0. Estos ajustes volverán cuando la desactives.",
         "File picker and sharing": "Selector de archivos y compartir",
         "Allows opening the system file picker and the share sheet.": "Permite abrir el selector de archivos del sistema y el menú para compartir.",
         "Send files": "Enviar archivos",
@@ -27540,6 +27596,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Old Interface": "Interface antiga",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A interface antiga está ativada: não há vidro, e os painéis são planos como no Telegram 12.0. Essas configurações voltam quando você a desativar.",
         "File picker and sharing": "Seletor de arquivos e compartilhamento",
         "Allows opening the system file picker and the share sheet.": "Permite abrir o seletor de arquivos do sistema e o menu de compartilhamento.",
         "Send files": "Enviar arquivos",
@@ -28530,6 +28588,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Old Interface": "Alte Oberfläche",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Die alte Oberfläche ist an: Es gibt kein Glas, und die Leisten sind flach wie in Telegram 12.0. Diese Einstellungen kehren zurück, wenn du sie ausschaltest.",
         "File picker and sharing": "Dateiauswahl und Teilen",
         "Allows opening the system file picker and the share sheet.": "Erlaubt das Öffnen der Dateiauswahl des Systems und des Teilen-Menüs.",
         "Send files": "Dateien senden",
@@ -29520,6 +29580,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Old Interface": "Ancienne interface",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L’ancienne interface est activée : il n’y a pas de verre et les panneaux sont plats comme dans Telegram 12.0. Ces réglages reviendront quand vous la désactiverez.",
         "File picker and sharing": "Sélection de fichiers et partage",
         "Allows opening the system file picker and the share sheet.": "Autorise l’ouverture du sélecteur de fichiers du système et du menu de partage.",
         "Send files": "Envoyer des fichiers",
@@ -30510,6 +30572,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Old Interface": "Eski arayüz",
+        "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski arayüz açık: cam yok, paneller Telegram 12.0'daki gibi düz. Kapattığınızda bu ayarlar geri gelir.",
         "File picker and sharing": "Dosya seçme ve paylaşma",
         "Allows opening the system file picker and the share sheet.": "Sistem dosya seçicisinin ve paylaşım menüsünün açılmasına izin verir.",
         "Send files": "Dosya gönderme",

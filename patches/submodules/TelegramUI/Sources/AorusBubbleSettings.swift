@@ -1140,7 +1140,11 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     }
     let roundness = AorusPluginAppearanceValues.number("glass.roundness", in: values) ?? 1.0
     entries.append(.roundness(aorusL("Скругление", "Roundness"), max(0.0, min(1.0, roundness))))
-    if material == "pixel" {
+    if AorusOldInterface.isEnabled {
+        // The old interface draws every pane as a flat panel; what is chosen here waits for it
+        // to be turned off.
+        entries.append(.materialFooter(aorusL("Включён старый интерфейс: стекла нет, панели плоские, как в Telegram 12.0. Эти настройки вернутся, когда вы его выключите.", "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.")))
+    } else if material == "pixel" {
         entries.append(.materialFooter(aorusL("Пиксели — пиксельный режим во всём приложении: ступенчатые капсулы, меню и листы действий, а с «Пиксельными иконками» — и все иконки, как их рисует пиксельный стиль плагинов.", "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.")))
     } else {
         entries.append(.materialFooter(aorusL("Меняет всё стекло приложения: кнопки над чатом, строку ввода, панель вкладок, меню и листы действий.", "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.")))

@@ -164,8 +164,29 @@ public struct AorusGlassStyle: Equatable {
 
     private static let cache = Cache()
 
+    /// The old interface (AorusOldInterface): Telegram 12.0 drew no glass. Every pane is a flat
+    /// plate, in the colour Telegram gave it or the panel colour of the appearance, with no
+    /// highlight, outline, shadow or glow, as round as Telegram asks. The glass a person or a
+    /// plugin chose is kept, and drawn again when the old interface is turned off.
+    private static let classicLight: AorusGlassStyle = {
+        var style = AorusGlassStyle()
+        style.material = .solid
+        style.isDark = false
+        return style
+    }()
+
+    private static let classicDark: AorusGlassStyle = {
+        var style = AorusGlassStyle()
+        style.material = .solid
+        style.isDark = true
+        return style
+    }()
+
     /// The style in force for panes drawn for a dark or a light appearance.
     public static func current(dark: Bool) -> AorusGlassStyle {
+        if AorusOldInterface.isEnabled {
+            return dark ? AorusGlassStyle.classicDark : AorusGlassStyle.classicLight
+        }
         let (values, revision) = AorusPluginAppearanceValues.glassSnapshot()
         let cache = AorusGlassStyle.cache
         cache.lock.lock()
