@@ -931,6 +931,9 @@ jobs:
           #    conversation" menu item is injected into PeerInfoScreenPerformButtonAction
           #    by aorus_branding.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusConversationExport.swift $PEER/Sources/
+          # Telegram 12.0's buttons on a profile's header, which the old interface draws
+          # instead of the glass capsules (wired in by aorus_old_interface.py).
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift $PEER/Sources/
 
           # 7. Copy the AorusGram "user's messages in group" chat-contents helper into the
           #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the

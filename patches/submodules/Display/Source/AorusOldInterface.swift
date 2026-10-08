@@ -66,4 +66,40 @@ public enum AorusOldInterface {
             NotificationCenter.default.post(name: AorusPluginAppearanceValues.glassDidChangeNotification, object: nil)
         }
     }
+
+    // MARK: Words
+
+    private static var doneTitle: String?
+    private static var cancelTitle: String?
+
+    /// Records the words of the language in force for the buttons 12.0 labelled in words.
+    public static func updateTitles(done: String, cancel: String) {
+        guard AorusOldInterface.isEnabled else {
+            return
+        }
+        AorusOldInterface.panelLock.lock()
+        AorusOldInterface.doneTitle = done
+        AorusOldInterface.cancelTitle = cancel
+        AorusOldInterface.panelLock.unlock()
+    }
+
+    /// The word 12.0's button said where 12.9.2 draws a tick ("___done") or a cross
+    /// ("___close"), while the old interface is on; nil for any other title.
+    public static func classicTitle(_ title: String?) -> String? {
+        guard AorusOldInterface.isEnabled, let title else {
+            return nil
+        }
+        AorusOldInterface.panelLock.lock()
+        defer {
+            AorusOldInterface.panelLock.unlock()
+        }
+        switch title {
+        case "___done":
+            return AorusOldInterface.doneTitle ?? "Done"
+        case "___close":
+            return AorusOldInterface.cancelTitle ?? "Cancel"
+        default:
+            return nil
+        }
+    }
 }
