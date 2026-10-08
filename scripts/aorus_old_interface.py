@@ -1597,6 +1597,11 @@ _CLASSIC_HEIGHT_SCREENS = (
     ("submodules/TelegramUI/Components/PeerInfo/AffiliateProgramSetupScreen/Sources/AffiliateProgramSetupScreen.swift", "        ), navigationBarAppearance: .default, theme: .default)\n"),
     ("submodules/TelegramUI/Components/PeerInfo/PostSuggestionsSettingsScreen/Sources/PostSuggestionsSettingsScreen.swift", "        ), navigationBarAppearance: .default, theme: .default, updatedPresentationData: nil)\n"),
     ("submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/AddGiftsScreen.swift", "        ), navigationBarAppearance: .default, theme: .default, updatedPresentationData: nil)\n"),
+    # The media viewers: 12.0's 44-point black bar.
+    ("submodules/GalleryUI/Sources/GalleryController.swift", "        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: GalleryController.darkNavigationTheme, strings: NavigationBarStrings(presentationStrings: self.presentationData.strings)))\n"),
+    ("submodules/PeerAvatarGalleryUI/Sources/AvatarGalleryController.swift", "        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: GalleryController.darkNavigationTheme, strings: NavigationBarStrings(presentationStrings: self.presentationData.strings)))\n"),
+    ("submodules/InstantPageUI/Sources/InstantPageGalleryController.swift", "        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: GalleryController.darkNavigationTheme, strings: NavigationBarStrings(presentationStrings: self.presentationData.strings)))\n"),
+    ("submodules/PassportUI/Sources/SecureIdDocumentGalleryController.swift", "        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: GalleryController.darkNavigationTheme, strings: NavigationBarStrings(presentationStrings: self.presentationData.strings)))\n"),
 )
 
 
@@ -2588,6 +2593,177 @@ def _patch_classic_profile(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _patch_classic_gallery(tg: Path) -> None:
+    # The media viewer as 12.0 drew it: the black bar along the top with the author and the
+    # date in it, a flat black band along the bottom, and plain white buttons on that band
+    # instead of glass capsules over a fade. A channel's bottom panel says Mute or Join in the
+    # accent colour on the panel, with its side buttons plain, as 12.0's did.
+    path = tg / "submodules/TelegramUI/Components/GlassControls/Sources/GlassControlGroup.swift"
+    text = _read(path)
+    edits = (
+        ("        case color(UIColor)\n    }\n",
+         "        case color(UIColor)\n"
+         "        // " + MARK + ": no capsule, the items in the given colour on whatever is behind them.\n"
+         "        case aorusPlain(UIColor)\n"
+         "    }\n",
+         "plain controls case"),
+        ("            case let .color(color):\n                foregroundColor = .white\n",
+         "            case let .aorusPlain(color):\n"
+         "                foregroundColor = color\n"
+         "                tintColor = .init(kind: .panel)\n"
+         "            case let .color(color):\n"
+         "                foregroundColor = .white\n",
+         "plain controls colour"),
+        ("font: Font.medium(17.0), textColor: foregroundColor))\n",
+         "font: component.background.aorusIsPlain ? Font.regular(17.0) : Font.medium(17.0), textColor: foregroundColor))\n",
+         "plain controls font"),
+        ("            self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: component.theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, transition: transition)\n",
+         "            self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: component.theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, isVisible: !component.background.aorusIsPlain, transition: transition) // " + MARK + "\n",
+         "plain controls capsule"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    if "var aorusIsPlain: Bool" not in text:
+        text = text.rstrip("\n") + (
+            "\n\n"
+            "extension GlassControlGroupComponent.Background {\n"
+            "    // " + MARK + "\n"
+            "    var aorusIsPlain: Bool {\n"
+            "        if case .aorusPlain = self {\n"
+            "            return true\n"
+            "        } else {\n"
+            "            return false\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+    path.write_text(text, encoding="utf-8")
+
+    plain_white = "AorusOldInterface.isEnabled ? .aorusPlain(.white) : .panel"
+    for rel, old, count in (
+        ("submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift", "                    background: .panel\n", 3),
+        ("submodules/PeerAvatarGalleryUI/Sources/AvatarGalleryItemFooterContentNode.swift", "                        background: .panel\n", 2),
+    ):
+        path = tg / rel
+        text = _read(path)
+        if not _imports_display(text):
+            raise RuntimeError(f"OldInterface: {path.name} does not import Display")
+        text = _edit(text, old, old.replace(".panel", plain_white + " // " + MARK), f"{path.name} plain buttons", count=count)
+        path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatChannelSubscriberInputPanelNode/Sources/ChatChannelSubscriberInputPanelNode.swift"
+    text = _read(path)
+    if not _imports_display(text):
+        raise RuntimeError("OldInterface: ChatChannelSubscriberInputPanelNode.swift does not import Display")
+    text = _edit(
+        text,
+        "                    background: .panel\n",
+        "                    background: AorusOldInterface.isEnabled ? .aorusPlain(interfaceState.theme.chat.inputPanel.panelControlAccentColor) : .panel // " + MARK + "\n",
+        "channel panel side buttons",
+        count=2,
+    )
+    text = _edit(
+        text,
+        "                background: centerAction.isAccent ? .activeTint(inset: true) : .panel,\n",
+        "                background: AorusOldInterface.isEnabled ? .aorusPlain(interfaceState.theme.chat.inputPanel.panelControlAccentColor) : (centerAction.isAccent ? .activeTint(inset: true) : .panel), // " + MARK + "\n",
+        "channel panel button",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/GalleryUI/Sources/GalleryFooterNode.swift"
+    text = _read(path)
+    edits = (
+        ("    private let edgeEffectView: EdgeEffectView\n",
+         "    private let edgeEffectView: EdgeEffectView\n"
+         "    // " + MARK + ": 12.0's flat band behind the footer, in place of the fade.\n"
+         "    private let aorusClassicBackgroundNode = ASDisplayNode()\n",
+         "gallery band field"),
+        ("        self.view.addSubview(self.edgeEffectView)\n",
+         "        if AorusOldInterface.isEnabled {\n"
+         "            self.aorusClassicBackgroundNode.backgroundColor = UIColor(white: 0.0, alpha: 0.6)\n"
+         "            self.aorusClassicBackgroundNode.isUserInteractionEnabled = false\n"
+         "            self.addSubnode(self.aorusClassicBackgroundNode)\n"
+         "        } else {\n"
+         "            self.view.addSubview(self.edgeEffectView)\n"
+         "        }\n",
+         "gallery band"),
+        ("        transition.setAlpha(view: self.edgeEffectView, alpha: alpha * self.defaultEdgeEffectAlpha)\n",
+         "        transition.setAlpha(view: self.edgeEffectView, alpha: alpha * self.defaultEdgeEffectAlpha)\n"
+         "        transition.setAlpha(view: self.aorusClassicBackgroundNode.view, alpha: alpha) // " + MARK + "\n",
+         "gallery band visibility"),
+        ("        self.edgeEffectView.alpha = 0.0\n"
+         "        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: self.defaultEdgeEffectAlpha * self.visibilityAlpha)\n",
+         "        self.edgeEffectView.alpha = 0.0\n"
+         "        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: self.defaultEdgeEffectAlpha * self.visibilityAlpha)\n"
+         "        self.aorusClassicBackgroundNode.alpha = 0.0 // " + MARK + "\n"
+         "        ComponentTransition(transition).setAlpha(view: self.aorusClassicBackgroundNode.view, alpha: self.visibilityAlpha)\n",
+         "gallery band in"),
+        ("        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: 0.0)\n",
+         "        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: 0.0)\n"
+         "        ComponentTransition(transition).setAlpha(view: self.aorusClassicBackgroundNode.view, alpha: 0.0) // " + MARK + "\n",
+         "gallery band out"),
+        ("        edgeEffectTransition.setFrame(view: self.edgeEffectView, frame: edgeEffectFrame)\n",
+         "        edgeEffectTransition.setFrame(view: self.edgeEffectView, frame: edgeEffectFrame)\n"
+         "        edgeEffectTransition.setFrame(view: self.aorusClassicBackgroundNode.view, frame: backgroundFrame) // " + MARK + "\n",
+         "gallery band frame"),
+        ("        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: self.visibilityAlpha * self.defaultEdgeEffectAlpha)\n",
+         "        ComponentTransition(transition).setAlpha(view: self.edgeEffectView, alpha: self.visibilityAlpha * self.defaultEdgeEffectAlpha)\n"
+         "        ComponentTransition(transition).setAlpha(view: self.aorusClassicBackgroundNode.view, alpha: self.visibilityAlpha) // " + MARK + "\n",
+         "gallery band layout alpha"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/GalleryUI/Sources/GalleryControllerNode.swift"
+    text = _read(path)
+    edits = (
+        ("            if self.headerEdgeEffectView.superview == nil {\n",
+         "            if self.headerEdgeEffectView.superview == nil && !AorusOldInterface.isEnabled { // " + MARK + ": 12.0's bar brings its own background\n",
+         "gallery header fade"),
+        ("                let titleHeight: CGFloat = navigationBarHeight - (layout.statusBarHeight ?? 0.0) - 3.0\n",
+         "                let titleHeight: CGFloat = navigationBarHeight - (layout.statusBarHeight ?? 0.0) - (AorusOldInterface.isEnabled ? 0.0 : 3.0) // " + MARK + "\n",
+         "gallery title height"),
+        ("y: (layout.statusBarHeight ?? 0.0) + 4.0), size: titleSize)\n",
+         "y: (layout.statusBarHeight ?? 0.0) + (AorusOldInterface.isEnabled ? 0.0 : 4.0)), size: titleSize)\n",
+         "gallery title position"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/GalleryUI/Sources/GalleryTitleView.swift"
+    text = _read(path)
+    edits = (
+        ("private let titleFont = Font.semibold(17.0)\n",
+         "private let titleFont = AorusOldInterface.isEnabled ? Font.medium(15.0) : Font.semibold(17.0) // " + MARK + "\n",
+         "gallery title font"),
+        ("private let dateFont = Font.regular(12.0)\n",
+         "private let dateFont = AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.regular(12.0) // " + MARK + "\n",
+         "gallery date font"),
+        ("font: dateFont, textColor: UIColor(white: 1.0, alpha: 0.5))\n",
+         "font: dateFont, textColor: AorusOldInterface.isEnabled ? UIColor.white : UIColor(white: 1.0, alpha: 0.5)) // " + MARK + "\n",
+         "gallery date colour"),
+        ("                authorNameText = stringForFullAuthorName(message: message, strings: self.presentationData.strings, nameDisplayOrder: self.presentationData.nameDisplayOrder, accountPeerId: self.context.account.peerId).first ?? \"\"\n",
+         "                let aorusAuthorNames = stringForFullAuthorName(message: message, strings: self.presentationData.strings, nameDisplayOrder: self.presentationData.nameDisplayOrder, accountPeerId: self.context.account.peerId)\n"
+         "                // " + MARK + ": 12.0 named the whole chain a forward came through.\n"
+         "                authorNameText = AorusOldInterface.isEnabled ? aorusAuthorNames.joined(separator: \" \\u{2192} \") : (aorusAuthorNames.first ?? \"\")\n",
+         "gallery author"),
+        ("            let labelsSpacing: CGFloat = 2.0\n",
+         "            let labelsSpacing: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 2.0 // " + MARK + "\n",
+         "gallery title spacing"),
+        ("tintColor: .init(kind: .panel), isInteractive: self.content?.action != nil, transition: ComponentTransition(transition))\n",
+         "tintColor: .init(kind: .panel), isInteractive: self.content?.action != nil, isVisible: !AorusOldInterface.isEnabled, transition: ComponentTransition(transition)) // " + MARK + "\n",
+         "gallery title capsule"),
+        ("            self.titleBackgroundContainer.isHidden = !(self.titleString != nil && self.titleString != \"\")\n",
+         "            self.titleBackgroundContainer.isHidden = !(self.titleString != nil && self.titleString != \"\") || AorusOldInterface.isEnabled // " + MARK + "\n",
+         "gallery counter pill"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    path.write_text(text, encoding="utf-8")
+
+
 _ROUNDED_LIST_WIDTH_FILES = (
     "ItemListUI/Sources/ItemListItem.swift",
     "ItemListUI/Sources/ItemListControllerNode.swift",
@@ -2989,6 +3165,7 @@ def patch_old_interface(tg: Path) -> None:
     _patch_classic_chat_list_header(tg)
     _patch_classic_message_panel(tg)
     _patch_classic_profile(tg)
+    _patch_classic_gallery(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 
@@ -3100,6 +3277,13 @@ def verify_old_interface(tg: Path) -> list[str]:
             "AorusOldInterface.isEnabled ? (!self.isSettings && layout.isModalOverlay ? 56.0 : 44.0)",
             "self.aorusClassicNavigationHeight = true",
         ],
+        "submodules/TelegramUI/Components/GlassControls/Sources/GlassControlGroup.swift": ["case aorusPlain(UIColor)", "isVisible: !component.background.aorusIsPlain"],
+        "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift": ["background: AorusOldInterface.isEnabled ? .aorusPlain(.white) : .panel"],
+        "submodules/TelegramUI/Components/Chat/ChatChannelSubscriberInputPanelNode/Sources/ChatChannelSubscriberInputPanelNode.swift": [".aorusPlain(interfaceState.theme.chat.inputPanel.panelControlAccentColor) : (centerAction.isAccent"],
+        "submodules/GalleryUI/Sources/GalleryFooterNode.swift": ["self.addSubnode(self.aorusClassicBackgroundNode)", "edgeEffectTransition.setFrame(view: self.aorusClassicBackgroundNode.view, frame: backgroundFrame)"],
+        "submodules/GalleryUI/Sources/GalleryControllerNode.swift": ["if self.headerEdgeEffectView.superview == nil && !AorusOldInterface.isEnabled"],
+        "submodules/GalleryUI/Sources/GalleryTitleView.swift": ["isVisible: !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))", "aorusAuthorNames.joined(separator:"],
+        "submodules/GalleryUI/Sources/GalleryController.swift": ["self.aorusClassicNavigationHeight = true"],
         "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift": [
             "innerSize.width = AorusOldInterface.isEnabled ? size.height : 40.0 + 3.0 * 2.0",
             "self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !AorusOldInterface.isEnabled",
