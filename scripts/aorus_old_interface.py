@@ -159,16 +159,23 @@ def _patch_legacy_styles(tg: Path) -> None:
         indent = line[: len(line) - len(line.lstrip())]
         new_line = f"{indent}self.style = AorusOldInterface.isEnabled && style == .glass ? .legacy : style // {MARK}\n"
         by_file.setdefault(section, []).append((before + line + after, before + new_line + after))
-    # The search field: 12.0 drew every one of them in its modern style.
+    # The search field: 12.0 drew it in its modern style, with its own icon and Cancel.
+    # A field inside a header that brings its own capsule and close button stays as it is.
     by_file.setdefault("submodules/SearchBarNode/Sources/SearchBarNode.swift", []).append((
         "        self.fieldStyle = fieldStyle\n        self.forceSeparator = forceSeparator\n",
-        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // " + MARK + "\n"
+        "        self.fieldStyle = AorusOldInterface.isEnabled && fieldStyle == .glass ? .modern : fieldStyle // " + MARK + "\n"
         "        self.forceSeparator = forceSeparator\n",
     ))
     by_file.setdefault("submodules/SearchBarNode/Sources/SearchBarPlaceholderNode.swift", []).append((
         "    init(fieldStyle: SearchBarStyle) {\n        self.fieldStyle = fieldStyle\n",
         "    init(fieldStyle: SearchBarStyle) {\n"
-        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // " + MARK + "\n",
+        "        self.fieldStyle = AorusOldInterface.isEnabled && fieldStyle == .glass ? .modern : fieldStyle // " + MARK + "\n",
+    ))
+    # The large buttons: no glass sheen, no room left for it.
+    by_file.setdefault("submodules/SolidRoundedButtonNode/Sources/SolidRoundedButtonNode.swift", []).append((
+        "        self.glass = glass\n        self.glassInset = glassInset\n",
+        "        self.glass = glass && !AorusOldInterface.isEnabled // " + MARK + "\n"
+        "        self.glassInset = glassInset && !AorusOldInterface.isEnabled\n",
     ))
     # The reaction bar over a menu reads its style straight from the argument.
     reaction_init = (
@@ -575,6 +582,39 @@ def _patch_chat_panels(tg: Path) -> None:
         "font: Font.regular(17.0), textColor: theme.chat.inputPanel.panelControlColor))\n",
         "font: Font.regular(17.0), textColor: AorusOldInterface.isEnabled ? theme.chat.inputPanel.panelControlAccentColor : theme.chat.inputPanel.panelControlColor)) // " + MARK + "\n",
         "unblock title",
+    )
+    path.write_text(text, encoding="utf-8")
+
+
+def _patch_toasts(tg: Path) -> None:
+    # The notice at the bottom of the screen: 12.0 rounded it by 14 points, 49 points high.
+    path = tg / "submodules/UndoUI/Sources/UndoOverlayControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.panelNode.cornerRadius = 25.0\n",
+        "        self.panelNode.cornerRadius = AorusOldInterface.isEnabled ? 14.0 : 25.0 // " + MARK + "\n",
+        "toast corners",
+    )
+    text = _edit(
+        text,
+        "        contentHeight = max(50.0, contentHeight)\n",
+        "        contentHeight = max(AorusOldInterface.isEnabled ? 49.0 : 50.0, contentHeight) // " + MARK + "\n",
+        "toast height",
+    )
+    path.write_text(text, encoding="utf-8")
+
+
+def _patch_lens(tg: Path) -> None:
+    # The selection in folder tabs and the other lens bars: a plain pill, as on systems
+    # before iOS 26, rather than the lens that bends what is under it.
+    path = tg / "submodules/TelegramUI/Components/LiquidLens/Sources/LiquidLensView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if #available(iOS 26.0, *) {\n",
+        "        if #available(iOS 26.0, *), !AorusOldInterface.isEnabled { // " + MARK + "\n",
+        "lens",
     )
     path.write_text(text, encoding="utf-8")
 
@@ -987,6 +1027,8 @@ def patch_old_interface(tg: Path) -> None:
     _patch_alerts(tg)
     _patch_bars(tg)
     _patch_chat_panels(tg)
+    _patch_lens(tg)
+    _patch_toasts(tg)
     _patch_context_menus(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
@@ -1004,8 +1046,8 @@ def verify_old_interface(tg: Path) -> list[str]:
             "private var aorusToolbarNode: ToolbarNode?",
             "} else if let toolbarData = self.toolbarItem, let theme = self.theme {",
         ],
-        "submodules/SearchBarNode/Sources/SearchBarNode.swift": ["(fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle"],
-        "submodules/SearchBarNode/Sources/SearchBarPlaceholderNode.swift": ["(fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle"],
+        "submodules/SearchBarNode/Sources/SearchBarNode.swift": ["fieldStyle == .glass ? .modern : fieldStyle"],
+        "submodules/SearchBarNode/Sources/SearchBarPlaceholderNode.swift": ["fieldStyle == .glass ? .modern : fieldStyle"],
         "submodules/AttachmentUI/Sources/AttachmentController.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/AttachmentUI/Sources/AttachmentPanel.swift": ["self.panelStyle = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
@@ -1022,6 +1064,9 @@ def verify_old_interface(tg: Path) -> list[str]:
         "submodules/TelegramUI/Components/ChatListHeaderComponent/Sources/NavigationButtonComponent.swift": ["AorusOldInterface.isEnabled ? Font.regular(17.0) : Font.medium(17.0)"],
         "submodules/TelegramUI/Components/HeaderPanelContainerComponent/Sources/HeaderPanelContainerComponent.swift": ["let sideInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 16.0"],
         "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift": ["AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5)"],
+        "submodules/TelegramUI/Components/LiquidLens/Sources/LiquidLensView.swift": ["if #available(iOS 26.0, *), !AorusOldInterface.isEnabled {"],
+        "submodules/UndoUI/Sources/UndoOverlayControllerNode.swift": ["self.panelNode.cornerRadius = AorusOldInterface.isEnabled ? 14.0 : 25.0"],
+        "submodules/SolidRoundedButtonNode/Sources/SolidRoundedButtonNode.swift": ["self.glass = glass && !AorusOldInterface.isEnabled"],
         "submodules/Display/Source/NavigationBar.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift": ["glass && !AorusOldInterface.isEnabled ? 26.0 : 11.0"],
         "submodules/TabBarUI/Sources/TabBarContollerNode.swift": [
