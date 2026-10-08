@@ -114,6 +114,9 @@ public struct AorusGlassStyle: Equatable {
     public internal(set) var shine: CGFloat = 0.0
     /// Drawn for a dark appearance, where a shadow has to be denser to be seen at all.
     public internal(set) var isDark: Bool = false
+    /// The old interface's panel: the plate is blurred beneath, as 12.0 drew its translucent
+    /// panels, rather than flat.
+    public internal(set) var classicBlur: Bool = false
 
     public init() {
     }
@@ -164,28 +167,26 @@ public struct AorusGlassStyle: Equatable {
 
     private static let cache = Cache()
 
-    /// The old interface (AorusOldInterface): Telegram 12.0 drew no glass. Every pane is a flat
-    /// plate, in the colour Telegram gave it or the panel colour of the appearance, with no
-    /// highlight, outline, shadow or glow, as round as Telegram asks. The glass a person or a
-    /// plugin chose is kept, and drawn again when the old interface is turned off.
-    private static let classicLight: AorusGlassStyle = {
+    /// The old interface (AorusOldInterface): Telegram 12.0 drew no glass. Every pane is a 12.0
+    /// panel: blurred, in the colour Telegram gave it or the panel colour of the theme in force,
+    /// with no highlight, outline, shadow or glow, as round as Telegram asks. The glass a person
+    /// or a plugin chose is kept, and drawn again when the old interface is turned off.
+    /// A long-press menu takes 12.0's menu colour rather than the panel colour.
+    fileprivate static func classic(dark: Bool, menu: Bool = false) -> AorusGlassStyle {
         var style = AorusGlassStyle()
         style.material = .solid
-        style.isDark = false
+        style.isDark = dark
+        style.classicBlur = true
+        if let color = menu ? AorusOldInterface.menuColor(dark: dark) : AorusOldInterface.panelColor(dark: dark) {
+            style.fill = [color]
+        }
         return style
-    }()
-
-    private static let classicDark: AorusGlassStyle = {
-        var style = AorusGlassStyle()
-        style.material = .solid
-        style.isDark = true
-        return style
-    }()
+    }
 
     /// The style in force for panes drawn for a dark or a light appearance.
     public static func current(dark: Bool) -> AorusGlassStyle {
         if AorusOldInterface.isEnabled {
-            return dark ? AorusGlassStyle.classicDark : AorusGlassStyle.classicLight
+            return AorusGlassStyle.classic(dark: dark)
         }
         let (values, revision) = AorusPluginAppearanceValues.glassSnapshot()
         let cache = AorusGlassStyle.cache
@@ -572,6 +573,9 @@ public final class AorusGlassDecorationView: UIView {
     private let borderMask = CAShapeLayer()
     private let borderGradient = CAGradientLayer()
     private var signature: Int?
+    /// The old interface's blur beneath a translucent plate, cut to the pane.
+    private var classicBlurView: UIVisualEffectView?
+    private let classicBlurMask = CAShapeLayer()
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
@@ -622,6 +626,28 @@ public final class AorusGlassDecorationView: UIView {
 
         for layer in [self.fillLayer, self.shineLayer, self.borderContainer, self.fillMask, self.tintLayer, self.shineMask, self.shineRim, self.shineRimMask, self.borderMask] as [CALayer] {
             transition.updateFrame(layer: layer, frame: bounds)
+        }
+
+        // The old interface blurs what is under a translucent plate, as 12.0 did under its panels.
+        if style.classicBlur && fill.count == 1 && fill[0].cgColor.alpha < 0.999 {
+            let blurView: UIVisualEffectView
+            if let current = self.classicBlurView {
+                blurView = current
+            } else {
+                blurView = UIVisualEffectView(effect: nil)
+                blurView.isUserInteractionEnabled = false
+                self.classicBlurMask.fillColor = UIColor.black.cgColor
+                blurView.layer.mask = self.classicBlurMask
+                self.insertSubview(blurView, at: 0)
+                self.classicBlurView = blurView
+            }
+            blurView.effect = UIBlurEffect(style: style.isDark ? .dark : .light)
+            transition.updateFrame(view: blurView, frame: bounds)
+            transition.updateFrame(layer: self.classicBlurMask, frame: bounds)
+            aorusGlassSetPath(self.classicBlurMask, outlines.outline, transition: pathTransition)
+        } else if let blurView = self.classicBlurView {
+            self.classicBlurView = nil
+            blurView.removeFromSuperview()
         }
 
         self.fillLayer.isHidden = fill.isEmpty
@@ -932,6 +958,11 @@ public final class AorusGlassSurface: NSObject {
     public var edgesOnTop: Bool = false
     /// Called when the style in force changes, after the pane has drawn it.
     public var styleUpdated: ((AorusGlassStyle) -> Void)?
+    /// A pane Telegram 12.0 already drew this way — an action sheet, the small menu over text —
+    /// is left exactly as Telegram draws it while the old interface is on.
+    public var keepsTelegramLook: Bool = false
+    /// A long-press menu, drawn in 12.0's menu colour while the old interface is on.
+    public var classicMenu: Bool = false
 
     private weak var host: UIView?
     private weak var backdrop: UIView?
@@ -967,13 +998,26 @@ public final class AorusGlassSurface: NSObject {
             NotificationCenter.default.addObserver(self, selector: #selector(self.styleDidChange), name: AorusPluginAppearanceValues.glassDidChangeNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(self.styleDidChange), name: AorusPluginAppearanceValues.didChangeNotification, object: nil)
         }
-        self.style = AorusGlassStyle.current(dark: self.isDark)
+        self.style = self.resolvedStyle()
+    }
+
+    /// The style this pane is drawn with.
+    private func resolvedStyle() -> AorusGlassStyle {
+        if self.keepsTelegramLook && AorusOldInterface.isEnabled {
+            var style = AorusGlassStyle()
+            style.isDark = self.isDark
+            return style
+        }
+        if self.classicMenu && AorusOldInterface.isEnabled {
+            return AorusGlassStyle.classic(dark: self.isDark, menu: true)
+        }
+        return AorusGlassStyle.current(dark: self.isDark)
     }
 
     /// Reads the style again for the appearance the pane is drawn in; answers it.
     @discardableResult
     public func refreshStyle() -> AorusGlassStyle {
-        self.style = AorusGlassStyle.current(dark: self.isDark)
+        self.style = self.resolvedStyle()
         return self.style
     }
 
@@ -1232,7 +1276,7 @@ public final class AorusGlassSurface: NSObject {
             guard let self else {
                 return
             }
-            let style = AorusGlassStyle.current(dark: self.isDark)
+            let style = self.resolvedStyle()
             if style == self.style {
                 return
             }
