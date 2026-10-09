@@ -238,13 +238,26 @@ def _attachments(tg: Path) -> None:
     body = body.replace("                    context: self.context,", "                    context: self.context,\n                    style: .legacy,")
     body = body.replace("                    type: type,", "                    type: type,\n                    isFirstOrLast: i == 0 || i == self.buttons.count - 1,")
     body = body.replace("strongSelf.itemViews[i]", "strongSelf.itemViews[type.key]")
+    # Keep the current client's additional attachment kinds and their labels.
+    extra_titles = """            case .sticker:
+                accessibilityTitle = self.presentationData.strings.Attachment_Sticker
+            case .emoji:
+                accessibilityTitle = "Emoji"
+            case .audio:
+                accessibilityTitle = self.presentationData.strings.Attachment_Audio
+            case .link:
+                accessibilityTitle = self.presentationData.strings.Attachment_Link
+            case .richText:
+                accessibilityTitle = self.presentationData.strings.Attachment_Article
+"""
+    body = body.replace("            case let .app(bot):", extra_titles + "            case let .app(bot):")
     text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {\n" + body + "\n            return\n        }\n", "attachment 12.0 tab layout")
     helper = ATTACHMENT_SCROLL_LAYOUT.replace("self.scrollLayout", "self.aorusClassicScrollLayout").replace("buttonSize", "self.buttonSize").replace("sideInset * 2.0", "3.0 * 2.0")
     helper = "    private func aorusClassicUpdateScrollLayout(force: Bool, transition: ContainedViewLayoutTransition) -> Bool {" + helper + "\n    }\n\n"
     signature = "    func update(layout: ContainerViewLayout, buttons: [AttachmentButtonType], isSelecting: Bool, selectionCount: Int, elevateProgress: Bool, hideButtons: Bool, transition: ContainedViewLayoutTransition) -> CGFloat {"
     text = edit(text, signature, helper + signature, "attachment 12.0 scroll layout")
     body = ATTACHMENT_PANEL_LAYOUT.replace("self.updateScrollLayoutIfNeeded", "self.aorusClassicUpdateScrollLayout").replace("height: buttonSize.height + insets.bottom", "height: self.buttonSize.height + insets.bottom")
-    body = body.replace("maxHeight: layout.size.height / 2.0,", "keyboardHeight: layout.inputHeight ?? 0.0, textFieldMaxHeight: layout.size.height / 2.0, availableHeight: layout.size.height,")
+    body = body.replace("additionalSideInsets: UIEdgeInsets(), maxHeight: layout.size.height / 2.0,", "keyboardHeight: layout.inputHeight ?? 0.0, additionalSideInsets: UIEdgeInsets(), textFieldMaxHeight: layout.size.height / 2.0, availableHeight: layout.size.height,")
     body = body.replace("[MessageId]", "[EngineMessage.Id]").replace("append(MessageId(", "append(EngineMessage.Id(")
     body = body.replace("updateLayout(size: buttonSize, state:", "updateLayout(size: buttonSize, context: self.context, style: .legacy, state:")
     body = "\n        self.hideButtons = hideButtons\n" + body
