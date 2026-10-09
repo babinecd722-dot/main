@@ -262,9 +262,13 @@ public enum AorusPluginPrelude {
         // same command, so it is listed once and unregistered with it.
         var commandAliases = {};
 
+        // A command is named in any alphabet: `.напомни` is as much a name as `.remind`. Letters
+        // and digits are Unicode's, marks may follow them, and the app reads a typed command
+        // with the same classes (AorusPluginSandbox.matchesCommand), so a name that registers
+        // is a name that is found.
         function commandName(value, what) {
             var key = requireString(value, what).trim().toLowerCase();
-            if (!/^[a-z0-9_][a-z0-9_\\-]{0,31}$/.test(key)) {
+            if (!/^[\\p{L}\\p{N}_][\\p{L}\\p{M}\\p{N}_\\-]{0,31}$/u.test(key)) {
                 throw new Error('Command name may contain letters, digits, _ and -, up to 32 characters');
             }
             return key;
@@ -2013,7 +2017,7 @@ public enum AorusPluginPrelude {
             var trimmed = text.replace(/^\\s+/, '');
             if (commandOrder.length === 0 || trimmed.slice(0, prefix.length) !== prefix) { return null; }
             var body = trimmed.slice(prefix.length);
-            var match = /^([A-Za-z0-9_\\-]+)(?:\\s+([\\s\\S]*))?$/.exec(body);
+            var match = /^([\\p{L}\\p{M}\\p{N}_\\-]+)(?:\\s+([\\s\\S]*))?$/u.exec(body);
             if (!match) { return null; }
             var typed = match[1].toLowerCase();
             var name = commandAliases.hasOwnProperty(typed) ? commandAliases[typed] : typed;

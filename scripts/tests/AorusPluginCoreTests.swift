@@ -426,6 +426,23 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(!prefixed.wantsOutgoing(".go") && !prefixed.wantsOutgoing("!stop"), "the default prefix and an unknown name are not")
     prefixed.stop()
 
+    // The reference names a command `напомни`: a name in any alphabet registers, is found in
+    // what was typed whatever its case, and reaches its handler.
+    let cyrillic = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Cyrillic command"),
+        source: "aorus.commands.register('напомни', function (args) { return 'ок ' + args; }, { aliases: ['нп'] });",
+        host: AorusPluginNullHost(),
+        permissions: [.outgoingMessages]
+    )
+    let cyrillicStarted = DispatchSemaphore(value: 0)
+    cyrillic.start { error in expect(error == nil, "a plugin with a Cyrillic command starts"); cyrillicStarted.signal() }
+    _ = cyrillicStarted.wait(timeout: .now() + 2)
+    expect(cyrillic.wantsOutgoing(".напомни завтра") && cyrillic.wantsOutgoing(".НП") && cyrillic.wantsOutgoing(" .нп\u{00A0}x"), "a Cyrillic command and its alias are the plugin's, whatever their case")
+    expect(!cyrillic.wantsOutgoing(".напомнить") && !cyrillic.wantsOutgoing(".нп!") && !cyrillic.wantsOutgoing("напомни"), "a longer name, punctuation after the name and a missing prefix are not")
+    let cyrillicVerdict = cyrillic.processOutgoing(text: ".нп завтра", peerId: 100, accountId: 200, timeout: 0.5)
+    expect(!cyrillicVerdict.consumed && cyrillicVerdict.replacement == "ок завтра", "a Cyrillic alias reaches its handler")
+    cyrillic.stop()
+
     let asyncHost = AorusPluginNullHost()
     var translatedMessages: [String] = []
     var translatedContext: AorusPluginOutgoingContext?

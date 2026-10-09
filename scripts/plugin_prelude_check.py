@@ -502,6 +502,17 @@ check('the alias was not named', commandContext !== null && commandContext.alias
 check('argv was not parsed', commandContext !== null && commandContext.argv.args[1] === 'buy milk' && commandContext.argv.flags.silent === true);
 check('commands.list does not show aliases', aorus.commands.list().filter((c) => c.name === 'remind')[0].aliases[0] === 'r');
 throws('an alias took over another command', () => aorus.commands.register('other', function () {}, { aliases: ['remind'] }));
+// A command named in another alphabet, as the reference registers `напомни`.
+let cyrillicContext = null;
+aorus.commands.register('погода', function (args, context) { cyrillicContext = context; return false; }, { aliases: ['пг'] });
+globalThis.__dispatcher.runOutgoing('.ПГ Москва', '5', null);
+check('a Cyrillic alias did not reach its command', cyrillicContext !== null && cyrillicContext.command === 'погода' && cyrillicContext.alias === 'пг');
+check('a Cyrillic command lost its arguments', cyrillicContext !== null && cyrillicContext.argv.args[0] === 'Москва');
+const hookNames = globalThis.__calls.filter((call) => call.name === 'hooksChanged').pop();
+check('the app is not told a Cyrillic command and its alias',
+    hookNames !== undefined && hookNames.args[3].indexOf('погода') !== -1 && hookNames.args[3].indexOf('пг') !== -1);
+throws('a command name accepted a space', () => aorus.commands.register('две команды', function () {}));
+throws('a command name accepted punctuation', () => aorus.commands.register('ping!', function () {}));
 
 // Send options are checked before they cross, and cross in the host's units.
 aorus.messages.send('-100', 'hi', { replyTo: { peerId: '-100', namespace: 0, messageId: 12 }, threadId: 3, silent: true });

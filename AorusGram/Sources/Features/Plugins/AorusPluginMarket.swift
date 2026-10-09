@@ -413,22 +413,27 @@ public enum AorusPluginMarketPermission {
     /// with its own detection and the moderator's, so it is a courtesy, never the last word.
     public static func keys(forSource source: String) -> [String] {
         let requested = AorusPluginPermission.requestedBySource(source)
+        // The narrow keys below are read off the source the way the permission scanner reads
+        // it: `aorus` on one line and `.ws.open(` on the next, or `aorus.files?.send(`, is the
+        // same call, and a key missed here is a card that does not say what the code does.
+        let text = AorusPluginPermission.probeText(source)
+        let usesCommands = text.contains("aorus.commands.")
         var result: [String] = []
         for key in keys {
             // These wire keys describe a narrower API than their local grant.
             // Keep each description tied to the API the source actually uses.
             switch key {
             case "plugin.perm.dialogs":
-                if sharingCalls.contains(where: source.contains) { result.append(key) }
+                if sharingCalls.contains(where: text.contains) { result.append(key) }
                 continue
             case "plugin.perm.send_messages":
-                if source.contains("aorus.files.send") { result.append(key) }
+                if text.contains("aorus.files.send") { result.append(key) }
                 continue
             case "plugin.perm.websocket":
-                if source.contains("aorus.ws.open") { result.append(key) }
+                if text.contains("aorus.ws.open") { result.append(key) }
                 continue
             case "plugin.perm.outgoing_messages":
-                if source.contains("aorus.commands.") || source.contains("aorus.command(") { result.append(key) }
+                if usesCommands { result.append(key) }
                 continue
             default:
                 break
@@ -438,7 +443,7 @@ public enum AorusPluginMarketPermission {
             } else if key == "plugin.perm.clipboard" {
                 if requested.contains(.clipboardRead) || requested.contains(.clipboardWrite) { result.append(key) }
             } else if key == "plugin.perm.commands" {
-                if source.contains("aorus.commands.") || source.contains("aorus.command(") { result.append(key) }
+                if usesCommands { result.append(key) }
             }
         }
         if requested.contains(.settingsIntegration), !result.contains("plugin.perm.ui") { result.append("plugin.perm.ui") }

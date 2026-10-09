@@ -901,15 +901,37 @@ public final class AorusPluginSandbox {
         guard trimmed.hasPrefix(prefix) else {
             return false
         }
-        let body = trimmed.dropFirst(prefix.count)
-        let name = body.prefix(while: { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") })
+        // The name, read scalar by scalar with the classes the prelude's pattern uses —
+        // `[\p{L}\p{M}\p{N}_\-]` — so a command in any alphabet is found here exactly when
+        // the prelude would run it.
+        let scalars = String(trimmed.dropFirst(prefix.count)).unicodeScalars
+        var name = String.UnicodeScalarView()
+        var index = scalars.startIndex
+        while index != scalars.endIndex, AorusPluginSandbox.isCommandNameScalar(scalars[index]) {
+            name.append(scalars[index])
+            index = scalars.index(after: index)
+        }
         guard !name.isEmpty else {
             return false
         }
-        if let next = body.dropFirst(name.count).first, !isSpace(next) {
+        if index != scalars.endIndex, !isSpace(Character(scalars[index])) {
             return false
         }
-        return names.contains(name.lowercased())
+        return names.contains(String(name).lowercased())
+    }
+
+    private static func isCommandNameScalar(_ scalar: Unicode.Scalar) -> Bool {
+        if scalar == "_" || scalar == "-" {
+            return true
+        }
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .nonspacingMark, .spacingMark, .enclosingMark,
+             .decimalNumber, .letterNumber, .otherNumber:
+            return true
+        default:
+            return false
+        }
     }
 
     /// A line written by the app rather than by the plugin: a dispatch, a refusal, a piece

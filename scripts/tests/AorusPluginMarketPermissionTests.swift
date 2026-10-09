@@ -57,6 +57,21 @@ import Foundation
             let keys = AorusPluginMarketPermission.keys(forSource: source)
             expect(keys.contains("plugin.perm." + included) && !keys.contains("plugin.perm." + excluded), "publishing uses distinct IDs for distinct APIs")
         }
+        // The reference promises that a call is recognised however it is written. A publish
+        // reads the narrow keys off the same normalised text the permission scanner reads.
+        for (source, included) in [
+            ("aorus\n    .files\n    .send('report.zip');", "send_messages"),
+            ("aorus.files?.send('report.zip');", "send_messages"),
+            ("const socket = await aorus . ws . open('wss://example.com', function () {});", "websocket"),
+            ("aorus\n  .commands\n  .register('ping', () => 'pong');", "outgoing_messages"),
+            ("aorus\n  .commands\n  .register('ping', () => 'pong');", "commands"),
+            ("aorus.files?.pick();", "dialogs"),
+            ("aorus.media\n    .share(ref);", "dialogs"),
+        ] {
+            let keys = AorusPluginMarketPermission.keys(forSource: source)
+            expect(keys.contains("plugin.perm." + included), "a call written across lines or with ?. still publishes plugin.perm.\(included)")
+        }
+        expect(!AorusPluginMarketPermission.keys(forSource: "aorus.command('ping');").contains("plugin.perm.commands"), "a name the API does not have publishes no key")
         for source in ["aorus.ui.toast('done');", "aorus.ui.alert('Title', 'Text');"] {
             expect(!AorusPluginMarketPermission.keys(forSource: source).contains("plugin.perm.dialogs"), "an alert or a toast does not publish the file picker and sharing key")
         }

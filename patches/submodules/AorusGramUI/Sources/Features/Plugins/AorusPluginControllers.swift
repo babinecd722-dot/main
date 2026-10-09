@@ -2599,7 +2599,7 @@ private enum AorusPluginDocumentation {
             Команды
             aorus.commands.register('name', (args, context) => result, { description, usage })
             aorus.commands.setPrefix('.')
-            Синхронная строка заменяет введённую команду. false, true или ничего — команда поглощена, сообщение не уходит. Promise поглощает команду сразу, а строка, которой он завершился, уходит туда, где команду написали: в тот же чат, в ту же тему и ответом на то же сообщение. Для этого хватает outgoingMessages — разрешение на отправку сообщений не нужно. Ответ принимается один раз и не позже чем через 10 минут. Число или объект вместо строки не отправляются, а в консоли появляется предупреждение. Контекст содержит peerId, accountId, raw и command.
+            Синхронная строка заменяет введённую команду. false, true или ничего — команда поглощена, сообщение не уходит. Promise поглощает команду сразу, а строка, которой он завершился, уходит туда, где команду написали: в тот же чат, в ту же тему и ответом на то же сообщение. Для этого хватает outgoingMessages — разрешение на отправку сообщений не нужно. Ответ принимается один раз и не позже чем через 10 минут. Число или объект вместо строки не отправляются, а в консоли появляется предупреждение. Контекст содержит peerId, accountId, raw и command. Имя команды и до восьми алиасов в aliases — буквы любого алфавита, цифры, _ и -, до 32 символов; регистр не важен: .напомни и .Напомни — одна команда.
 
             Сообщения и чаты
             Идентификаторы peerId и accountId передаются десятичными строками без потери точности. Текст длиннее 4096 символов уходит несколькими сообщениями подряд, разрезанными по строкам. Не больше 5 сообщений в один чат за 10 секунд и 60 в минуту всего; лишнее отклоняется с ошибкой.
@@ -3084,7 +3084,7 @@ private enum AorusPluginDocumentation {
     Commands
     aorus.commands.register('name', (args, context) => result, { description, usage })
     aorus.commands.setPrefix('.')
-    A synchronous string replaces the typed command. false, true or nothing consumes it and nothing is sent. A Promise consumes the command at once, and the string it resolves with goes where the command was typed: the same chat, the same topic, as a reply to the same message. outgoingMessages is enough for that; the send messages permission is not needed. The answer is accepted once and no later than 10 minutes on. A number or an object instead of a string is not sent and the console shows a warning. Context contains peerId, accountId, raw and command.
+    A synchronous string replaces the typed command. false, true or nothing consumes it and nothing is sent. A Promise consumes the command at once, and the string it resolves with goes where the command was typed: the same chat, the same topic, as a reply to the same message. outgoingMessages is enough for that; the send messages permission is not needed. The answer is accepted once and no later than 10 minutes on. A number or an object instead of a string is not sent and the console shows a warning. Context contains peerId, accountId, raw and command. A command's name and up to eight aliases use letters of any alphabet, digits, _ and -, up to 32 characters, in any case: .remind and .Remind are one command.
 
     Messages and chats
     peerId and accountId values are decimal strings so 64-bit identifiers remain exact. A text longer than 4096 characters goes out as consecutive messages, cut at line breaks. At most 5 messages to one chat in 10 seconds and 60 a minute in all; the rest are refused with an error.
