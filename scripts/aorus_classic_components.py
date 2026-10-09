@@ -193,10 +193,22 @@ def _normalize_styles(tg: Path) -> None:
             pattern = re.compile(r"^([ \t]*)self\." + prop + r" = " + argument + r"[^\n]*\n", re.M)
             for match in reversed(list(pattern.finditer(text))):
                 indent = match[1]
-                alias = indent + "let " + argument + " = " + argument + " && !AorusOldInterface.isEnabled // " + MARK + "\n"
-                if text[:match.start()].endswith(alias):
-                    continue
-                text = text[:match.start()] + alias + text[match.start():]
+                declarations = list(re.finditer(r"\b(?:let|var)\s+" + prop + r"\s*:\s*([^\n=]+)", text[:match.start()]))
+                kind = declarations[-1][1].strip() if declarations else ""
+                if kind == "Bool":
+                    value = argument + " && !AorusOldInterface.isEnabled"
+                elif kind == "GlassParams?":
+                    value = "AorusOldInterface.isEnabled ? nil : " + argument
+                else:
+                    # A view named `glass` is not a style flag. Its caller owns
+                    # the rendering choice; preserve the required view object.
+                    value = None
+                alias = indent + "let " + argument + " = " + value + " // " + MARK + "\n" if value is not None else ""
+                prefix = text[:match.start()]
+                previous = re.search(r"^[ \t]*let " + argument + r" = [^\n]* // " + MARK + r"\n\Z", prefix, re.M)
+                if previous:
+                    prefix = prefix[:previous.start()]
+                text = prefix + alias + text[match.start():]
         # The first pass already selected the stored style. Shadow the incoming
         # argument before it is stored, so every branch in this scope agrees.
         pattern = re.compile(r"^([ \t]*)self\.(?:style|panelStyle|systemStyle|fieldStyle) = AorusOldInterface\.isEnabled[^\n]*\n", re.M)
@@ -330,6 +342,7 @@ def verify_classic_components(tg: Path) -> list[str]:
         "BrowserUI/Sources/BrowserAddressBarComponent.swift": ["component: AnyComponent(AorusClassicAddressBarContentComponent"],
         "TelegramUI/Sources/NotificationItemContainerNode.swift": ["PresentationResourcesRootController.inAppNotificationBackground(theme)", "self.aorusClassicBackgroundNode.bounds.height"],
         "LocationUI/Sources/LocationMapHeaderNode.swift": ["let glass = glass && !AorusOldInterface.isEnabled"],
+        "ReactionSelectionNode/Sources/ReactionContextBackgroundNode.swift": ["let glass = AorusOldInterface.isEnabled ? nil : glass"],
         "AttachmentUI/Sources/AttachmentPanel.swift": ["let style = AorusOldInterface.isEnabled ? .legacy : style"],
         "DrawingUI/Sources/ModeAndSizeComponent.swift": ["component: AnyComponent(AorusClassicModeAndSizeComponent", "component.updatedMode(component.availableModes[index])"],
         "ItemListUI/Sources/ItemListControllerSegmentedTitleView.swift": ["component: AnyComponent(TabSelectorComponent("],

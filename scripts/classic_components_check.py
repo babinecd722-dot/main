@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from aorus_old_interface import patch_old_interface, verify_old_interface
+from classic_style_check import check_classic_styles
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -30,6 +31,7 @@ def main() -> None:
     parser.add_argument("repo", type=Path)
     parser.add_argument("--telegram-source", required=True, type=Path)
     parser.add_argument("--reference-source", type=Path)
+    parser.add_argument("--swiftc", default="swiftc")
     args = parser.parse_args()
     manifest = json.loads((args.repo / "patches/assets/classic-12.0.json").read_text())
     if manifest["commit"] != "29b266d5adb0d3a32b93f5506210fe7d20b8f81f" or manifest["tag"] != "release-12.0":
@@ -78,6 +80,7 @@ def main() -> None:
     changed = [str(path.relative_to(args.telegram_source)) for path in paths if hashlib.sha256(path.read_bytes()).digest() != before[path]]
     if changed:
         raise RuntimeError("Classic replay changed installed source:\n" + "\n".join(changed))
+    check_classic_styles(args.telegram_source, args.swiftc)
     print(f"Classic interface passed: {checks} reference and installation checks; {len(paths)} source files unchanged on replay")
 
 
