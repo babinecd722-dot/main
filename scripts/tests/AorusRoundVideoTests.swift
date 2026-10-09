@@ -20,9 +20,24 @@ import SwiftSignalKit
         expect(refreshes.with { $0 } == 1, "recording request starts immediately")
         expect(finished.wait(timeout: .now() + 1) == .success, "recording completes at the persisted deadline")
         let finalRefreshes = refreshes.with { $0 }
-        expect(finalRefreshes >= 2, "recording requests refresh during the countdown")
         expect(disposedRequests.with { $0 } == finalRefreshes, "deadline disposes every recording request")
         lease.dispose()
+        // A refresh and a deadline are separate events. The CI runner may pause
+        // the process for longer than the short deadline; wait for an actual
+        // refresh of a long-lived lease rather than racing a 160 ms countdown.
+        let periodicRefreshes = Atomic(value: 0)
+        let periodicDisposals = Atomic(value: 0)
+        let refreshed = DispatchSemaphore(value: 0)
+        let periodicLease = aorusRoundVideoRecordingSignal(round: AorusRoundVideoMessageAttribute(duration: 60).started(at: Date().timeIntervalSince1970), queue: recordingQueue, refreshInterval: 0.035, activity: {
+            let count = periodicRefreshes.modify { $0 + 1 }
+            if count == 2 { refreshed.signal() }
+            return Signal { _ in ActionDisposable { _ = periodicDisposals.modify { $0 + 1 } } }
+        }).start()
+        expect(refreshed.wait(timeout: .now() + 3) == .success, "recording requests refresh during the countdown")
+        periodicLease.dispose()
+        let periodicStopped = DispatchSemaphore(value: 0)
+        recordingQueue.async { periodicStopped.signal() }
+        expect(periodicStopped.wait(timeout: .now() + 3) == .success && periodicDisposals.with { $0 } == periodicRefreshes.with { $0 }, "cancelling periodic recording disposes its requests")
         let cancelledLease = aorusRoundVideoRecordingSignal(round: AorusRoundVideoMessageAttribute(duration: 10).started(at: Date().timeIntervalSince1970), queue: recordingQueue, refreshInterval: 0.02, activity: {
             _ = refreshes.modify { $0 + 1 }
             return .complete()

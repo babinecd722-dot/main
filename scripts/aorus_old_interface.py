@@ -46,6 +46,7 @@ Every edit is guarded by AorusOldInterface.isEnabled, so with the switch off Tel
 exactly what it draws today. Anchors are those of the patched tree; a missing one raises.
 """
 import shutil
+import re
 from pathlib import Path
 
 MARK = "AorusGram: old interface"
@@ -71,6 +72,11 @@ def _imports_display(text: str) -> bool:
 def _edit(text: str, old: str, new: str, label: str, count: int = 1) -> str:
     """One edit that a second run leaves alone: once `new` is in, it is not put in again."""
     if new in text:
+        return text
+    # Classic constructor arguments are normalized before they are stored. That
+    # extra line must not make an already installed style patch look absent.
+    normalized = re.sub(r"^[ \t]*let (?:glass|isGlass|style|systemStyle|fieldStyle) = [^\n]* // AorusGram: classic components\n", "", text, flags=re.MULTILINE)
+    if new in normalized:
         return text
     return _replace(text, old, new, label, count)
 
@@ -784,8 +790,8 @@ def _patch_classic_icons(tg: Path) -> None:
     root = catalogue / "AorusClassic"
     for imageset in sets:
         relative = imageset.relative_to(_CLASSIC_ICONS)
-        if not (catalogue / relative).is_dir():
-            raise RuntimeError(f"OldInterface: {relative} is no longer in the catalogue")
+        # 12.0's renderers also request assets that the new interface no longer
+        # uses. Keep them in the classic namespace for those renderers.
         target = root / relative
         if target.exists():
             shutil.rmtree(target)
@@ -1010,7 +1016,7 @@ def _patch_tabs(tg: Path) -> None:
             "                    } ?? component.theme.chat.inputPanel.panelControlColor)\n",
             "tab title colour",
         )
-    else:
+    elif "                    .foregroundColor: " + classic_colour not in text:
         text = _edit(
             text,
             "                    .foregroundColor: component.theme.chat.inputPanel.panelControlColor\n",
@@ -3296,6 +3302,8 @@ def patch_old_interface(tg: Path) -> None:
     _patch_classic_profile(tg)
     _patch_classic_gallery(tg)
     _patch_classic_keyboard_panel(tg)
+    from aorus_classic_components import patch_classic_components
+    patch_classic_components(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 
@@ -3431,4 +3439,5 @@ def verify_old_interface(tg: Path) -> list[str]:
         for marker in markers:
             if marker not in text:
                 errors.append(f"OldInterface: missing {marker!r} in {name}")
-    return errors
+    from aorus_classic_components import verify_classic_components
+    return errors + verify_classic_components(tg)

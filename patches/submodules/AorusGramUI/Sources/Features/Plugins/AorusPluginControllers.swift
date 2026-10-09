@@ -2943,6 +2943,7 @@ private enum AorusPluginDocumentation {
             aorus.appearance.reset('bubble.radius')
             aorus.appearance.reset()
             const layer = aorus.appearance.get()
+            Режим «Старый интерфейс» в AorusGram → Интерфейс использует панели и иконки Telegram iOS 12.0 и применяется после перезапуска. Изменения оформления плагина продолжают работать; настройки материала стекла сохраняются и используются после отключения старого интерфейса. Новые функции клиента остаются доступными.
             RGB и детали сообщений
             В палитрах настроек баблов и сообщений RGB находится после цвета по умолчанию. Заливка и обводка сообщений, текст, время, ссылки, имена, приписки и галочки меняют цвет плавно; в цитатах и ответах — фон, линии и значки; в стекле — заливка, оттенок, обводка и свечение. Прозрачность применяется один раз, в том числе у обводки и шаблонных изображений. Один RGB в заливке даёт переливающийся градиент, его можно сочетать с обычными цветами. Выбор хранится отдельно для светлой и тёмной темы.
             RGB — анимированный цвет, RGB:80 — тот же цвет с прозрачностью 128/255. При сворачивании обновления останавливаются; с уменьшением движения в iOS цвет остаётся неподвижным. message.hideTime скрывает время, сохраняя просмотры, отметку редактирования, отправку, прочтение и реакции, а также подпись в канале, дату пересланных и импортированных сообщений, метку рекламы и время отложенных. bubble.tails отдельно управляет хвостиками входящих и исходящих, сохраняя углы, стыки, время, статус и реакции.
@@ -3356,6 +3357,7 @@ private enum AorusPluginDocumentation {
     aorus.appearance.reset('bubble.radius')
     aorus.appearance.reset()
     const layer = aorus.appearance.get()
+    Old Interface in AorusGram → Interface uses Telegram iOS 12.0 panels and icons after a restart. Plugin appearance changes remain available; glass material settings are kept and used after Old Interface is turned off. The current client's features remain available.
     RGB and Message Details
     RGB follows Default in the Bubble Settings and Message Settings palettes. Bubble fills and outlines, text, time, links, names, titles and checkmarks flow through the spectrum; quotes and replies use RGB for their backgrounds, stripes and icons, and glass uses it for fills, tint, outline and glow. Opacity is applied once, including outlines and template images. A single RGB fill forms a flowing gradient and can be combined with fixed gradient stops. Choices are kept separately for light and dark appearances.
     RGB is an animated colour, RGB:80 is the same colour with 128/255 alpha. Updates stop in the background; Reduce Motion keeps the colour still. message.hideTime hides the clock, keeping views, edited, delivery, read and reaction controls, as well as channel signatures, the date of forwarded and imported messages, the sponsored label and the time of scheduled messages. bubble.tails controls incoming and outgoing tails independently of the clock, preserving corners, joins, the time, the status and reactions.

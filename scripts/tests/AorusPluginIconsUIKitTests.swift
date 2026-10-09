@@ -285,6 +285,7 @@ private enum AorusPluginIconsUIKitTests {
         checks += runBubbleBitmapRegression()
         checks += await runRoundVideoUIKitRegression(window: window)
         checks += await runRGBRegression(window: window)
+        checks += runClassicInputRegression()
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks
         print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")

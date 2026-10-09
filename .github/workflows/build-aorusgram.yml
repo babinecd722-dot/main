@@ -934,6 +934,12 @@ jobs:
           # Telegram 12.0's buttons on a profile's header, which the old interface draws
           # instead of the glass capsules (wired in by aorus_old_interface.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift $PEER/Sources/
+          # The classic browser and editor renderers from Telegram iOS 12.0.
+          cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserAddressBarComponent.swift $TG/submodules/BrowserUI/Sources/
+          cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserNavigationBarComponent.swift $TG/submodules/BrowserUI/Sources/
+          cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserTitleBarComponent.swift $TG/submodules/BrowserUI/Sources/
+          cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserToolbarComponent.swift $TG/submodules/BrowserUI/Sources/
+          cp $PATCHES/submodules/DrawingUI/Sources/AorusClassicModeAndSizeComponent.swift $TG/submodules/DrawingUI/Sources/
 
           # 7. Copy the AorusGram "user's messages in group" chat-contents helper into the
           #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the
@@ -1135,6 +1141,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Aorusgram" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
+
+      - name: Classic interface preflight
+        run: python3 aorusgram/scripts/classic_components_check.py aorusgram --telegram-source telegram-ios
 
       - name: Native round video sending preflight
         run: |
