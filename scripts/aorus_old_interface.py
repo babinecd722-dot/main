@@ -1070,8 +1070,9 @@ def _patch_profile_tabs(tg: Path) -> None:
         text,
         anchor,
         "        if AorusOldInterface.isEnabled {\n"
-        "            // " + MARK + ": the strip in the list's colour, square, with its line.\n"
-        "            self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: 0.0, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .custom(style: .default, color: presentationData.theme.list.itemBlocksBackgroundColor)), transition: ComponentTransition(transition))\n"
+        "            // " + MARK + ": the strip in the list's colour, square, with its line; as the pane\n"
+        "            // reaches the top, 12.0 laid the bar's opaque colour over it.\n"
+        "            self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: 0.0, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .custom(style: .default, color: presentationData.theme.list.itemBlocksBackgroundColor.mixedWith(presentationData.theme.rootController.navigationBar.opaqueBackgroundColor, alpha: expansionFraction))), transition: ComponentTransition(transition))\n"
         "            if self.aorusTabsSeparator.superlayer == nil {\n"
         "                self.tabsBackgroundContainer.layer.addSublayer(self.aorusTabsSeparator)\n"
         "            }\n"
@@ -1835,7 +1836,9 @@ def _patch_classic_chat_list_header(tg: Path) -> None:
     text = _edit(
         text,
         "                    searchFrame.origin.y = component.statusBarHeight + 8.0\n",
-        "                    searchFrame.origin.y = component.statusBarHeight + (AorusOldInterface.isEnabled ? -2.0 : 8.0) // " + MARK + "\n",
+        # While searching, 12.0 kept the placeholder at the foot of the bar, the filters under
+        # it: the field itself is laid over the bar's top row (aorus_classic_search).
+        "                    searchFrame.origin.y = AorusOldInterface.isEnabled ? visibleSize.height - searchSize.height : component.statusBarHeight + 8.0 // " + MARK + "\n",
         "chat list active search position",
     )
     text = _edit(
@@ -3308,6 +3311,10 @@ def patch_old_interface(tg: Path) -> None:
     patch_classic_components(tg)
     from aorus_classic_layout import patch_classic_layout
     patch_classic_layout(tg)
+    from aorus_classic_search import patch_classic_search
+    patch_classic_search(tg)
+    from aorus_classic_spacing import patch_classic_spacing
+    patch_classic_spacing(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 
@@ -3445,4 +3452,6 @@ def verify_old_interface(tg: Path) -> list[str]:
                 errors.append(f"OldInterface: missing {marker!r} in {name}")
     from aorus_classic_components import verify_classic_components
     from aorus_classic_values import verify_classic_values
-    return errors + verify_classic_components(tg) + verify_classic_values(tg)
+    from aorus_classic_search import verify_classic_search
+    from aorus_classic_spacing import verify_classic_spacing
+    return errors + verify_classic_components(tg) + verify_classic_values(tg) + verify_classic_search(tg) + verify_classic_spacing(tg)

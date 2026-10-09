@@ -436,7 +436,8 @@
     "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift": "ad30021b22015f6c5fc5d050c72ba3de01dd778017ff7ade408624e3ed2d9cab",
     "submodules/AttachmentUI/Sources/AttachmentContainer.swift": "cf5dff4cd87fdebef57eab1168b0510044f08f62008b274727483624f6638c8a",
     "submodules/AttachmentUI/Sources/AttachmentPanel.swift": "01872bce517c3f3c8fc402831cbfb6601dc0c92a1956f341e435834675172e0e",
-    "submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift": "98953a58a8b74ce5623cd09748da6b6ddcaee04a2a5ad2fef2e8cfc77e08173f"
+    "submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift": "98953a58a8b74ce5623cd09748da6b6ddcaee04a2a5ad2fef2e8cfc77e08173f",
+    "submodules/SearchBarNode/Sources/SearchBarNode.swift": "228b2bdbeaeb08dfd98f0d111b647775af1d9390b9c8b22bd9ebd9aec981a31f"
   },
   "layout_bodies": {
     "VIDEO_SCRUBBER_LAYOUT": "dd5fe18510cb36d3edfa951be03e65fa7529e023f6f9b0dee0985f13f61c5e13",
@@ -451,6 +452,8 @@
     "MEDIA_EDITOR_BUTTON_LAYOUT": "36b39d408d17019b53d56d15c9c703d801ed85434793a1e2df6e748602f1643c",
     "MEDIA_EDITOR_CANCEL_COMPONENT": "48adf01744402c314c42e246e2497b6068e0cc78b82f8722aa253315be94f65f",
     "MEDIA_EDITOR_DONE_COMPONENT": "c31533e1019e06c41017385ae810ff83c9c2f0006e1605db6d7145335b34dfa6",
-    "MEDIA_EDITOR_DONE_CONTENT": "8152626c6040b8727897c8aa1f68cd5116596687d6f8e36b96000b9d5e3cd329"
+    "MEDIA_EDITOR_DONE_CONTENT": "8152626c6040b8727897c8aa1f68cd5116596687d6f8e36b96000b9d5e3cd329",
+    "SEARCH_BAR_ANIMATE_IN": "ea9a334629343c8a630292691d07393c43e41e72e1d1ed1842d42aaba2adbea6",
+    "SEARCH_BAR_TRANSITION_OUT": "b5aaf625e2d6fbf8e11b5a38e6ce414f0543f146f0c7469aeedfb960aabd2efb"
   }
 }

@@ -935,3 +935,194 @@ MEDIA_EDITOR_DONE_CONTENT = r"""
                 doneButtonIcon = nil
             }
 """
+
+SEARCH_BAR_ANIMATE_IN = r"""
+    public func animateIn(from node: SearchBarPlaceholderNode, duration: Double, timingFunction: String) {
+        let initialTextBackgroundFrame = node.view.convert(node.backgroundNode.frame, to: self.view)
+        
+        let initialBackgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: self.bounds.size.width, height: max(0.0, initialTextBackgroundFrame.maxY + 8.0)))
+        if let fromBackgroundColor = node.backgroundColor, let toBackgroundColor = self.backgroundNode.backgroundColor {
+            self.backgroundNode.layer.animate(from: fromBackgroundColor.cgColor, to: toBackgroundColor.cgColor, keyPath: "backgroundColor", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: duration * 0.7)
+        } else {
+            self.backgroundNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: duration)
+        }
+        self.backgroundNode.layer.animateFrame(from: initialBackgroundFrame, to: self.backgroundNode.frame, duration: duration, timingFunction: timingFunction)
+        
+        let initialSeparatorFrame = CGRect(origin: CGPoint(x: 0.0, y: max(0.0, initialTextBackgroundFrame.maxY + 8.0)), size: CGSize(width: self.bounds.size.width, height: UIScreenPixel))
+        self.separatorNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: duration)
+        self.separatorNode.layer.animateFrame(from: initialSeparatorFrame, to: self.separatorNode.frame, duration: duration, timingFunction: timingFunction)
+        
+        if let fromTextBackgroundColor = node.backgroundNode.backgroundColor, let toTextBackgroundColor = self.textBackgroundNode.backgroundColor {
+            self.textBackgroundNode.layer.animate(from: fromTextBackgroundColor.cgColor, to: toTextBackgroundColor.cgColor, keyPath: "backgroundColor", timingFunction: timingFunction, duration: duration * 1.0)
+        }
+        self.textBackgroundNode.layer.animateFrame(from: initialTextBackgroundFrame, to: self.textBackgroundNode.frame, duration: duration, timingFunction: timingFunction)
+        
+        if initialTextBackgroundFrame.height.isZero {
+            self.iconNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25)
+            self.textField.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25)
+        }
+        
+        let textFieldFrame = self.textField.frame
+        var tokensWidth = self.textField.tokensWidth
+        if tokensWidth > 0.0 {
+            tokensWidth += 8.0
+        }
+        
+        let initialLabelNodeFrame = CGRect(origin: node.labelNode.frame.offsetBy(dx: initialTextBackgroundFrame.origin.x - 7.0 - tokensWidth, dy: initialTextBackgroundFrame.origin.y - 8.0).origin, size: textFieldFrame.size)
+        self.textField.layer.animateFrame(from: initialLabelNodeFrame, to: self.textField.frame, duration: duration, timingFunction: timingFunction)
+        
+        let iconFrame = self.iconNode.frame
+        let initialIconFrame = CGRect(origin: node.iconNode.frame.offsetBy(dx: initialTextBackgroundFrame.origin.x, dy: initialTextBackgroundFrame.origin.y).origin, size: iconFrame.size)
+        self.iconNode.layer.animateFrame(from: initialIconFrame, to: self.iconNode.frame, duration: duration, timingFunction: timingFunction)
+        
+        let cancelButtonFrame = self.cancelButton.frame
+        self.cancelButton.layer.animatePosition(from: CGPoint(x: self.bounds.size.width + cancelButtonFrame.size.width / 2.0, y: initialTextBackgroundFrame.midY), to: self.cancelButton.layer.position, duration: duration, timingFunction: timingFunction)
+        node.isHidden = true
+    }
+"""
+
+SEARCH_BAR_TRANSITION_OUT = r"""
+    public func transitionOut(to node: SearchBarPlaceholderNode, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void) {
+        let targetTextBackgroundFrame = node.view.convert(node.backgroundNode.frame, to: self.view)
+        
+        let duration: Double = transition.isAnimated ? 0.5 : 0.0
+        let timingFunction = kCAMediaTimingFunctionSpring
+        
+        node.isHidden = true
+        
+        self.textField.isUserInteractionEnabled = false
+        
+        if !self.clearButton.isHidden {
+            let xOffset = targetTextBackgroundFrame.width - self.textBackgroundNode.frame.width
+            if !xOffset.isZero {
+                self.clearButton.layer.animatePosition(from: .zero, to: CGPoint(x: xOffset, y: 0.0), duration: duration, timingFunction: timingFunction, additive: true)
+            }
+            self.clearButton.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { _ in
+                self.clearButton.isHidden = true
+                self.clearButton.layer.removeAllAnimations()
+            })
+        }
+        
+        self.activityIndicator?.isHidden = true
+        self.iconNode.isHidden = false
+        
+        var tokensWidth = self.textField.tokensWidth
+        if tokensWidth > 0.0 {
+            tokensWidth += 8.0
+        }
+        
+        let textFieldFrame = self.textField.frame
+        let targetLabelNodeFrame = CGRect(origin: CGPoint(x: node.labelNode.frame.minX + targetTextBackgroundFrame.origin.x - 7.0 - tokensWidth, y: targetTextBackgroundFrame.minY + floorToScreenPixels((targetTextBackgroundFrame.size.height - textFieldFrame.size.height) / 2.0) - UIScreenPixel), size: textFieldFrame.size)
+        
+        self.textField.layer.animateFrame(from: textFieldFrame, to: targetLabelNodeFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
+        
+        if !self.textField.tokenNodes.isEmpty {
+            for node in self.textField.tokenNodes.values {
+                node.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
+            }
+        }
+        
+        var hasText = false
+        if !(self.textField.text ?? "").isEmpty, let snapshotView = self.textField.snapshotView(afterScreenUpdates: false) {
+            hasText = true
+            snapshotView.frame = self.textField.frame
+            self.textField.superview?.addSubview(snapshotView)
+            snapshotView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { _ in
+                snapshotView.removeFromSuperview()
+            })
+            
+            snapshotView.layer.animatePosition(from: .zero, to: CGPoint(x: targetLabelNodeFrame.minX - textFieldFrame.minX, y: 0.0), duration: duration, timingFunction: timingFunction, removeOnCompletion: false, additive: true)
+            
+            self.textField.placeholderLabel.alpha = 0.0
+        }
+        
+        self.textField.prefixString = nil
+        self.textField.text = ""
+        self.textField.layoutSubviews()
+        
+        var backgroundCompleted = false
+        var separatorCompleted = false
+        var textBackgroundCompleted = false
+        let intermediateCompletion: () -> Void = { [weak node, weak self] in
+            if backgroundCompleted && separatorCompleted && textBackgroundCompleted {
+                completion()
+                node?.isHidden = false
+                self?.textField.isUserInteractionEnabled = true
+            }
+        }
+        
+        let targetBackgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: self.bounds.size.width, height: max(0.0, targetTextBackgroundFrame.maxY + 8.0)))
+        if let toBackgroundColor = node.backgroundColor, let fromBackgroundColor = self.backgroundNode.backgroundColor {
+            self.backgroundNode.layer.animate(from: fromBackgroundColor.cgColor, to: toBackgroundColor.cgColor, keyPath: "backgroundColor", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: duration * 0.5, removeOnCompletion: false)
+        } else {
+            self.backgroundNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: duration / 2.0, removeOnCompletion: false)
+        }
+        self.backgroundNode.layer.animateFrame(from: self.backgroundNode.frame, to: targetBackgroundFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false, completion: { _ in
+            backgroundCompleted = true
+            intermediateCompletion()
+        })
+        
+        let targetSeparatorFrame = CGRect(origin: CGPoint(x: 0.0, y: max(0.0, targetTextBackgroundFrame.maxY + 8.0)), size: CGSize(width: self.bounds.size.width, height: UIScreenPixel))
+        self.separatorNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: duration / 2.0, removeOnCompletion: false)
+        self.separatorNode.layer.animateFrame(from: self.separatorNode.frame, to: targetSeparatorFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false, completion: { _ in
+            separatorCompleted = true
+            intermediateCompletion()
+        })
+        
+        self.textBackgroundNode.isHidden = true
+        
+        /*if let accessoryComponentView = node.accessoryComponentView {
+         let tempContainer = UIView()
+         
+         let accessorySize = accessoryComponentView.bounds.size
+         tempContainer.frame = CGRect(origin: CGPoint(x: self.textBackgroundNode.frame.maxX - accessorySize.width - 4.0, y: floor((self.textBackgroundNode.frame.minY + self.textBackgroundNode.frame.height - accessorySize.height) / 2.0)), size: accessorySize)
+         
+         let targetTempContainerFrame = CGRect(origin: CGPoint(x: targetTextBackgroundFrame.maxX - accessorySize.width - 4.0, y: floor((targetTextBackgroundFrame.minY + 8.0 + targetTextBackgroundFrame.height - accessorySize.height) / 2.0)), size: accessorySize)
+         
+         tempContainer.layer.animateFrame(from: tempContainer.frame, to: targetTempContainerFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
+         
+         accessoryComponentView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+         tempContainer.addSubview(accessoryComponentView)
+         self.view.addSubview(tempContainer)
+         }*/
+        
+        self.textBackgroundNode.layer.animateFrame(from: self.textBackgroundNode.frame, to: targetTextBackgroundFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false, completion: { [weak node] _ in
+            textBackgroundCompleted = true
+            intermediateCompletion()
+            
+            if let node = node, let accessoryComponentView = node.accessoryComponentView {
+                //accessoryComponentContainer.addSubview(accessoryComponentView)
+                accessoryComponentView.layer.animateAlpha(from: 0.0, to: accessoryComponentView.alpha, duration: 0.2)
+            }
+        })
+        
+        let transitionBackgroundNode = ASDisplayNode()
+        transitionBackgroundNode.isLayerBacked = true
+        transitionBackgroundNode.displaysAsynchronously = false
+        transitionBackgroundNode.backgroundColor = node.backgroundNode.backgroundColor
+        transitionBackgroundNode.cornerRadius = node.backgroundNode.cornerRadius
+        self.insertSubnode(transitionBackgroundNode, aboveSubnode: self.textBackgroundNode)
+        
+        transitionBackgroundNode.layer.animateFrame(from: self.textBackgroundNode.frame, to: targetTextBackgroundFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
+        
+        if targetTextBackgroundFrame.height.isZero {
+            self.iconNode.layer.animateAlpha(from: self.iconNode.alpha, to: 0.0, duration: 0.2, removeOnCompletion: false)
+            self.textField.layer.animateAlpha(from: self.textField.alpha, to: 0.0, duration: 0.2, removeOnCompletion: false)
+        } else if let snapshot = node.labelNode.layer.snapshotContentTree() {
+            snapshot.frame = CGRect(origin: self.textField.placeholderLabel.frame.origin.offsetBy(dx: 0.0, dy: UIScreenPixel), size: node.labelNode.frame.size)
+            self.textField.layer.addSublayer(snapshot)
+            snapshot.animateAlpha(from: 0.0, to: 1.0, duration: duration * 2.0 / 3.0, timingFunction: CAMediaTimingFunctionName.linear.rawValue)
+            if !hasText {
+                self.textField.placeholderLabel.layer.animateAlpha(from: 1.0, to: 0.0, duration: duration, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)
+            }
+        }
+        
+        let iconFrame = self.iconNode.frame
+        let targetIconFrame = CGRect(origin: node.iconNode.frame.offsetBy(dx: targetTextBackgroundFrame.origin.x, dy: targetTextBackgroundFrame.origin.y).origin, size: iconFrame.size)
+        self.iconNode.image = node.iconNode.image
+        self.iconNode.layer.animateFrame(from: self.iconNode.frame, to: targetIconFrame, duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
+        
+        let cancelButtonFrame = self.cancelButton.frame
+        self.cancelButton.layer.animatePosition(from: self.cancelButton.layer.position, to: CGPoint(x: self.bounds.size.width + cancelButtonFrame.size.width / 2.0, y: targetTextBackgroundFrame.midY), duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
+    }
+"""
