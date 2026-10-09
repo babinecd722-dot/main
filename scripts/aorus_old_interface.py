@@ -2764,6 +2764,135 @@ def _patch_classic_gallery(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _patch_classic_keyboard_panel(tg: Path) -> None:
+    # The tabs under the emoji, sticker and GIF keyboard as 12.0 drew them: a blurred panel
+    # 34 points tall over the bottom inset with a line along its top, the tabs plain on it,
+    # 4 points apart, the open one on a rounded highlight, instead of a glass lens over a fade.
+    path = tg / "submodules/TelegramUI/Components/EntityKeyboard/Sources/EntityKeyboardBottomPanelComponent.swift"
+    text = _read(path)
+    if not _imports_display(text):
+        raise RuntimeError("OldInterface: EntityKeyboardBottomPanelComponent.swift does not import Display")
+    edits = (
+        # The tab itself: 12.0's font and colours, and a tap of its own (the lens took taps
+        # in 12.9.2, and it is not shown here).
+        ("            self.addSubview(self.contentView)\n        }\n",
+         "            self.addSubview(self.contentView)\n"
+         "            if AorusOldInterface.isEnabled {\n"
+         "                self.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.aorusTapGesture(_:)))) // " + MARK + "\n"
+         "            }\n"
+         "        }\n"
+         "        \n"
+         "        @objc private func aorusTapGesture(_ recognizer: UITapGestureRecognizer) {\n"
+         "            if case .ended = recognizer.state {\n"
+         "                self.component?.action()\n"
+         "            }\n"
+         "        }\n",
+         "keyboard tab tap"),
+        ("font: Font.medium(14.0), textColor: .white)\n",
+         "font: AorusOldInterface.isEnabled ? Font.medium(15.0) : Font.medium(14.0), textColor: .white) // " + MARK + "\n",
+         "keyboard tab font"),
+        ("            self.contentView.tintColor = component.theme.chat.inputPanel.panelControlColor\n",
+         "            if AorusOldInterface.isEnabled {\n"
+         "                // " + MARK + ": the open tab in 12.0's highlighted colour.\n"
+         "                self.contentView.tintColor = component.isHighlighted ? component.theme.chat.inputMediaPanel.panelHighlightedIconColor : component.theme.chat.inputMediaPanel.panelIconColor\n"
+         "            } else {\n"
+         "                self.contentView.tintColor = component.theme.chat.inputPanel.panelControlColor\n"
+         "            }\n",
+         "keyboard tab colour"),
+        ("y: (size.height - textSize.height) / 2.0), size: textSize))\n",
+         "y: (size.height - textSize.height) / 2.0 - (AorusOldInterface.isEnabled ? 1.0 : 0.0)), size: textSize))\n",
+         "keyboard tab text position"),
+        # The panel.
+        ("        private let edgeEffectView: EdgeEffectView\n",
+         "        private let edgeEffectView: EdgeEffectView\n"
+         "        // " + MARK + ": the highlight under the open tab.\n"
+         "        private let aorusHighlightedIconBackgroundView = UIView()\n",
+         "keyboard panel highlight field"),
+        ("            self.addSubview(self.edgeEffectView)\n"
+         "            \n"
+         "            self.addSubview(self.backgroundContainer)\n"
+         "            self.backgroundContainer.contentView.addSubview(self.liquidLensView)\n",
+         "            if AorusOldInterface.isEnabled {\n"
+         "                // " + MARK + ": 12.0's panel, its highlight and its line.\n"
+         "                self.aorusHighlightedIconBackgroundView.isUserInteractionEnabled = false\n"
+         "                self.aorusHighlightedIconBackgroundView.clipsToBounds = true\n"
+         "                self.addSubview(self.backgroundView)\n"
+         "                self.addSubview(self.aorusHighlightedIconBackgroundView)\n"
+         "                self.addSubview(self.separatorView)\n"
+         "            } else {\n"
+         "                self.addSubview(self.edgeEffectView)\n"
+         "                \n"
+         "                self.addSubview(self.backgroundContainer)\n"
+         "                self.backgroundContainer.contentView.addSubview(self.liquidLensView)\n"
+         "            }\n",
+         "keyboard panel views"),
+        ("                self.separatorView.backgroundColor = component.theme.list.itemPlainSeparatorColor.withMultipliedAlpha(0.5)\n",
+         "                self.separatorView.backgroundColor = AorusOldInterface.isEnabled ? component.theme.chat.inputMediaPanel.panelSeparatorColor : component.theme.list.itemPlainSeparatorColor.withMultipliedAlpha(0.5) // " + MARK + "\n"
+         "                self.aorusHighlightedIconBackgroundView.backgroundColor = component.theme.chat.inputMediaPanel.panelHighlightedIconBackgroundColor\n",
+         "keyboard panel colours"),
+        ("            let height = intrinsicHeight + component.containerInsets.bottom + 20.0\n",
+         "            let height = intrinsicHeight + component.containerInsets.bottom + (AorusOldInterface.isEnabled ? 0.0 : 20.0) // " + MARK + "\n",
+         "keyboard panel height"),
+        ("            if component.containerInsets.bottom > 0.0 {\n"
+         "                accessoryButtonOffset = 0.0\n"
+         "            } else {\n"
+         "                accessoryButtonOffset = -2.0\n"
+         "            }\n",
+         "            if component.containerInsets.bottom > 0.0 {\n"
+         "                accessoryButtonOffset = AorusOldInterface.isEnabled ? 2.0 : 0.0 // " + MARK + "\n"
+         "            } else {\n"
+         "                accessoryButtonOffset = -2.0\n"
+         "            }\n",
+         "keyboard panel button offset"),
+        ("CGPoint(x: component.containerInsets.left + 18.0, y: accessoryButtonOffset)",
+         "CGPoint(x: component.containerInsets.left + (AorusOldInterface.isEnabled ? 2.0 : 18.0), y: accessoryButtonOffset)",
+         "keyboard panel left button"),
+        ("CGPoint(x: availableSize.width - component.containerInsets.right - 18.0 - rightAccessoryButtonSize.width, y: accessoryButtonOffset)",
+         "CGPoint(x: availableSize.width - component.containerInsets.right - (AorusOldInterface.isEnabled ? 2.0 : 18.0) - rightAccessoryButtonSize.width, y: accessoryButtonOffset)",
+         "keyboard panel right button"),
+        ("                        iconView.isUserInteractionEnabled = false\n",
+         "                        iconView.isUserInteractionEnabled = AorusOldInterface.isEnabled // " + MARK + "\n",
+         "keyboard tab interaction"),
+        ("                        self.liquidLensView.contentView.addSubview(iconView)\n"
+         "                        self.liquidLensView.selectedContentView.addSubview(selectedIconView)\n",
+         "                        if AorusOldInterface.isEnabled {\n"
+         "                            self.addSubview(iconView) // " + MARK + "\n"
+         "                        } else {\n"
+         "                            self.liquidLensView.contentView.addSubview(iconView)\n"
+         "                            self.liquidLensView.selectedContentView.addSubview(selectedIconView)\n"
+         "                        }\n",
+         "keyboard tab placement"),
+        ("            let iconSpacing: CGFloat = 0.0\n",
+         "            let iconSpacing: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 0.0 // " + MARK + ": 4 points apart, as in 12.0\n",
+         "keyboard tab spacing"),
+        ("            var nextIconOrigin = CGPoint(x: floor((tabsSize.width - iconTotalSize.width) / 2.0), y: floor((tabsSize.height - iconTotalSize.height) / 2.0))\n",
+         "            var nextIconOrigin = CGPoint(x: floor((tabsSize.width - iconTotalSize.width) / 2.0), y: floor((tabsSize.height - iconTotalSize.height) / 2.0))\n"
+         "            if AorusOldInterface.isEnabled {\n"
+         "                // " + MARK + ": the tabs centred on the panel itself.\n"
+         "                nextIconOrigin = CGPoint(x: floor((availableSize.width - iconTotalSize.width) / 2.0), y: floor((intrinsicHeight - iconTotalSize.height) / 2.0) + (component.containerInsets.bottom > 0.0 ? 3.0 : 0.0))\n"
+         "                self.aorusHighlightedIconBackgroundView.isHidden = true\n"
+         "            }\n",
+         "keyboard tab origin"),
+        ("                        lensSelection = (iconFrame.origin.x, iconFrame.width)\n",
+         "                        lensSelection = (iconFrame.origin.x, iconFrame.width)\n"
+         "                        if AorusOldInterface.isEnabled {\n"
+         "                            self.aorusHighlightedIconBackgroundView.isHidden = false // " + MARK + "\n"
+         "                            transition.setFrame(view: self.aorusHighlightedIconBackgroundView, frame: iconFrame)\n"
+         "                            transition.setCornerRadius(layer: self.aorusHighlightedIconBackgroundView.layer, cornerRadius: min(iconFrame.width, iconFrame.height) / 2.0)\n"
+         "                        }\n",
+         "keyboard tab highlight"),
+        ("            transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: availableSize.width, height: height)))\n",
+         "            transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: availableSize.width, height: height)))\n"
+         "            if AorusOldInterface.isEnabled {\n"
+         "                self.backgroundView.update(size: CGSize(width: availableSize.width, height: height), transition: transition.containedViewLayoutTransition) // " + MARK + "\n"
+         "            }\n",
+         "keyboard panel background"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    path.write_text(text, encoding="utf-8")
+
+
 _ROUNDED_LIST_WIDTH_FILES = (
     "ItemListUI/Sources/ItemListItem.swift",
     "ItemListUI/Sources/ItemListControllerNode.swift",
@@ -3166,6 +3295,7 @@ def patch_old_interface(tg: Path) -> None:
     _patch_classic_message_panel(tg)
     _patch_classic_profile(tg)
     _patch_classic_gallery(tg)
+    _patch_classic_keyboard_panel(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 
@@ -3284,6 +3414,11 @@ def verify_old_interface(tg: Path) -> list[str]:
         "submodules/GalleryUI/Sources/GalleryControllerNode.swift": ["if self.headerEdgeEffectView.superview == nil && !AorusOldInterface.isEnabled"],
         "submodules/GalleryUI/Sources/GalleryTitleView.swift": ["isVisible: !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))", "aorusAuthorNames.joined(separator:"],
         "submodules/GalleryUI/Sources/GalleryController.swift": ["self.aorusClassicNavigationHeight = true"],
+        "submodules/TelegramUI/Components/EntityKeyboard/Sources/EntityKeyboardBottomPanelComponent.swift": [
+            "self.addSubview(self.aorusHighlightedIconBackgroundView)",
+            "self.addSubview(iconView) // " + MARK,
+            "self.contentView.tintColor = component.isHighlighted ? component.theme.chat.inputMediaPanel.panelHighlightedIconColor",
+        ],
         "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift": [
             "innerSize.width = AorusOldInterface.isEnabled ? size.height : 40.0 + 3.0 * 2.0",
             "self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !AorusOldInterface.isEnabled",
