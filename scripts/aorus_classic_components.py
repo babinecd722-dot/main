@@ -233,12 +233,13 @@ def _browser(tg: Path) -> None:
         shutil.copyfile(source, folder / source.name)
     path = folder / "BrowserNavigationBarComponent.swift"
     text = path.read_text()
+    text = text.replace(".navigationBar.backgroundColor", ".navigationBar.blurredBackgroundColor")
     text = edit(text, "public fileprivate(set) var centerItemFrame: CGRect", "public var centerItemFrame: CGRect", "classic browser address frame")
     text = edit(text, "    let collapseFraction: CGFloat\n    let activate:", "    let readingProgress: CGFloat\n    let loadingProgress: Double?\n    let collapseFraction: CGFloat\n    let activate:", "browser progress fields")
     text = edit(text, "        centerItem: AnyComponentWithIdentity<BrowserNavigationBarEnvironment>?,\n        collapseFraction:", "        centerItem: AnyComponentWithIdentity<BrowserNavigationBarEnvironment>?,\n        readingProgress: CGFloat,\n        loadingProgress: Double?,\n        collapseFraction:", "browser progress arguments")
     text = edit(text, "        self.centerItem = centerItem\n", "        self.centerItem = centerItem\n        self.readingProgress = readingProgress\n        self.loadingProgress = loadingProgress\n", "browser progress storage")
     text = edit(text, "        if lhs.collapseFraction != rhs.collapseFraction {", "        if lhs.readingProgress != rhs.readingProgress || lhs.loadingProgress != rhs.loadingProgress { return false }\n        if lhs.collapseFraction != rhs.collapseFraction {", "browser progress updates")
-    args = "backgroundColor: component.theme.rootController.navigationBar.backgroundColor, separatorColor: component.theme.rootController.navigationBar.separatorColor, textColor: component.theme.rootController.navigationBar.primaryTextColor, progressColor: component.theme.rootController.navigationBar.primaryTextColor.withMultipliedAlpha(0.07), accentColor: component.theme.rootController.navigationBar.buttonColor, topInset: component.topInset, height: component.height, sideInset: component.sideInset, metrics: component.metrics, externalState: component.externalState, leftItems: component.leftItems, rightItems: component.rightItems, centerItem: component.centerItem, readingProgress: component.readingProgress, loadingProgress: component.loadingProgress, collapseFraction: component.collapseFraction, activate: component.activate"
+    args = "backgroundColor: component.theme.rootController.navigationBar.blurredBackgroundColor, separatorColor: component.theme.rootController.navigationBar.separatorColor, textColor: component.theme.rootController.navigationBar.primaryTextColor, progressColor: component.theme.rootController.navigationBar.primaryTextColor.withMultipliedAlpha(0.07), accentColor: component.theme.rootController.navigationBar.buttonColor, topInset: component.topInset, height: component.height, sideInset: component.sideInset, metrics: component.metrics, externalState: component.externalState, leftItems: component.leftItems, rightItems: component.rightItems, centerItem: component.centerItem, readingProgress: component.readingProgress, loadingProgress: component.loadingProgress, collapseFraction: component.collapseFraction, activate: component.activate"
     signature = "        func update(component: BrowserNavigationBarComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {"
     text = _view_adapter(text, "BrowserNavigationBarComponent", args, "Empty", signature)
     path.write_text(text)
@@ -255,10 +256,13 @@ def _browser(tg: Path) -> None:
 
     path = folder / "BrowserToolbarComponent.swift"
     text = path.read_text()
-    args = "backgroundColor: context.component.theme.rootController.navigationBar.backgroundColor, separatorColor: context.component.theme.rootController.navigationBar.separatorColor, textColor: context.component.theme.rootController.navigationBar.primaryTextColor, bottomInset: context.component.bottomInset, sideInset: context.component.sideInset, item: context.component.item, collapseFraction: context.component.collapseFraction"
+    text = text.replace(".navigationBar.backgroundColor", ".navigationBar.blurredBackgroundColor")
+    args = "backgroundColor: context.component.theme.rootController.navigationBar.blurredBackgroundColor, separatorColor: context.component.theme.rootController.navigationBar.separatorColor, textColor: context.component.theme.rootController.navigationBar.primaryTextColor, bottomInset: context.component.bottomInset, sideInset: context.component.sideInset, item: context.component.item, collapseFraction: context.component.collapseFraction"
     text = _combined_adapter(text, "BrowserToolbarComponent", args)
     args = "accentColor: context.component.theme.rootController.navigationBar.buttonColor, textColor: context.component.theme.rootController.navigationBar.primaryTextColor, canGoBack: context.component.canGoBack, canGoForward: context.component.canGoForward, canOpenIn: context.component.canOpenIn, canShare: context.component.canShare, isDocument: context.component.mode == .document || context.component.mode == .markdown, performAction: context.component.performAction, performHoldAction: context.component.performHoldAction"
     text = _combined_adapter(text, "NavigationToolbarContentComponent", args)
+    args = "strings: context.component.strings, textColor: context.component.theme.rootController.navigationBar.primaryTextColor, index: context.component.index, count: context.component.count, isEmpty: context.component.isEmpty, performAction: context.component.performAction"
+    text = _combined_adapter(text, "SearchToolbarContentComponent", args)
     path.write_text(text)
 
     path = folder / "BrowserScreen.swift"
@@ -338,7 +342,7 @@ def _drawing(tg: Path) -> None:
 def verify_classic_components(tg: Path) -> list[str]:
     checks = {
         "BrowserUI/Sources/BrowserNavigationBarComponent.swift": ["component: AnyComponent(AorusClassicBrowserNavigationBarComponent", "self.readingProgress = readingProgress"],
-        "BrowserUI/Sources/BrowserToolbarComponent.swift": ["component: AorusClassicBrowserToolbarComponent", "component: AorusClassicNavigationToolbarContentComponent"],
+        "BrowserUI/Sources/BrowserToolbarComponent.swift": ["component: AorusClassicBrowserToolbarComponent", "component: AorusClassicNavigationToolbarContentComponent", "component: AorusClassicSearchToolbarContentComponent"],
         "BrowserUI/Sources/BrowserTitleBarComponent.swift": ["component: AnyComponent(AorusClassicTitleBarContentComponent"],
         "BrowserUI/Sources/BrowserAddressBarComponent.swift": ["component: AnyComponent(AorusClassicAddressBarContentComponent"],
         "TelegramUI/Sources/NotificationItemContainerNode.swift": ["PresentationResourcesRootController.inAppNotificationBackground(theme)", "self.aorusClassicBackgroundNode.bounds.height"],

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from aorus_old_interface import patch_old_interface, verify_old_interface
 from classic_style_check import check_classic_styles, installed_classic_gesture
+from classic_browser_check import check_classic_browser
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -83,6 +84,7 @@ def main() -> None:
     if changed:
         raise RuntimeError("Classic replay changed installed source:\n" + "\n".join(changed))
     check_classic_styles(args.telegram_source, args.swiftc)
+    check_classic_browser(args.telegram_source, args.swiftc)
     print(f"Classic interface passed: {checks} reference and installation checks; {len(paths)} source files unchanged on replay")
 
 

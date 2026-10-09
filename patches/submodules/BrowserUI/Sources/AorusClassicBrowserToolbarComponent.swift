@@ -378,7 +378,7 @@ final class AorusClassicNavigationToolbarContentComponent: CombinedComponent {
     }
 }
 
-final class SearchToolbarContentComponent: CombinedComponent {
+final class AorusClassicSearchToolbarContentComponent: CombinedComponent {
     let strings: PresentationStrings
     let textColor: UIColor
     let index: Int
@@ -402,7 +402,7 @@ final class SearchToolbarContentComponent: CombinedComponent {
         self.performAction = performAction
     }
 
-    static func ==(lhs: SearchToolbarContentComponent, rhs: SearchToolbarContentComponent) -> Bool {
+    static func ==(lhs: AorusClassicSearchToolbarContentComponent, rhs: AorusClassicSearchToolbarContentComponent) -> Bool {
         if lhs.strings !== rhs.strings {
             return false
         }
