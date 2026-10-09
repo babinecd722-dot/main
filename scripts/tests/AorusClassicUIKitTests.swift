@@ -4,7 +4,11 @@ import UIKit
     var checks = 0
     func expect(_ value: Bool, _ message: String) {
         checks += 1
-        if !value { fatalError(message) }
+        if !value {
+            print("Native classic input FAILED: " + message)
+            fflush(stdout)
+            fatalError(message)
+        }
     }
     let view = AorusClassicHitTestView(frame: CGRect(x: 0, y: 0, width: 240, height: 28))
     // The modern background is never laid out in the classic rendering path.

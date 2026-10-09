@@ -30,8 +30,16 @@ METHOD
 """.replace("METHOD", method).replace("GESTURE", gesture)
     attachment = (tg / "submodules/AttachmentUI/Sources/AttachmentContainer.swift").read_text()
     start = attachment.index("        if AorusOldInterface.isEnabled {\n            self.clipNode.addSubnode(self.container)")
-    end = attachment.index("\n        }", start) + len("\n        }")
+    end = attachment.index("\n        self.isReady = self.container.isReady", start)
     hierarchy = attachment[start:end].replace(".addSubnode(", ".addSubview(").replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
+    for required in (
+        "self.clipNode.addSubview(self.container)",
+        "self.clipNode.addSubview(self.bottomClipNode)",
+        "self.bottomClipNode.addSubview(self.container)",
+        "} else {",
+    ):
+        if hierarchy.count(required) != 1:
+            raise RuntimeError("The native attachment fixture did not retain both installed hierarchies: " + required)
     start = attachment.index("    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {")
     end = attachment.index("\n    }", start) + len("\n    }")
     point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
@@ -106,6 +114,7 @@ def main() -> None:
     if errors:
         raise RuntimeError("\n".join(errors))
     checks += check_classic_layout(args.repo, args.telegram_source, args.reference_source)
+    native_hit_test_source(args.telegram_source)
 
     # Reapplying the complete feature must not duplicate handlers, constructor
     # aliases or components. Hash the actual source, not a fixture of the patch.
