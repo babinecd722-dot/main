@@ -15,6 +15,13 @@ import UIKit
     defer { AorusClassicControlledLook.enabled = false }
     for enabled in [false, true] {
         AorusClassicControlledLook.enabled = enabled
+        view.tabSelectionRecognizer = nil
+        view.updateClassicGesture()
+        expect(view.tabSelectionRecognizer == nil, "an absent modern recognizer stays absent")
+        let recognizer = UIGestureRecognizer()
+        view.tabSelectionRecognizer = recognizer
+        view.updateClassicGesture()
+        expect(recognizer.isEnabled == !enabled, "the modern recognizer only yields to the classic control")
         for point in [CGPoint(x: 4, y: 4), CGPoint(x: 120, y: 14), CGPoint(x: 236, y: 24), CGPoint(x: -1, y: 14), CGPoint(x: 241, y: 14), CGPoint(x: 120, y: 29)] {
             let expected = (enabled ? control.frame : view.backgroundView.frame).contains(point)
             expect(view.point(inside: point, with: nil) == expected, "installed selector uses the visible control's hit region")

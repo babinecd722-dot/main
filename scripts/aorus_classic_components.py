@@ -300,6 +300,7 @@ def _drawing(tg: Path) -> None:
     shutil.copyfile(ROOT / "DrawingUI/Sources/AorusClassicModeAndSizeComponent.swift", folder / "AorusClassicModeAndSizeComponent.swift")
     path = folder / "ModeAndSizeComponent.swift"
     text = path.read_text()
+    text = text.replace("self.tabSelectionRecognizer.isEnabled = false", "self.tabSelectionRecognizer?.isEnabled = false")
     arguments = "values: component.availableModes.map { $0.title(strings: component.strings) }, sizeValue: 0.0, isEditing: false, isEnabled: true, rightInset: 0.0, tag: component.tag, selectedIndex: component.availableModes.firstIndex(of: component.currentMode) ?? 0, selectionChanged: { index in if component.availableModes.indices.contains(index) { component.updatedMode(component.availableModes[index]) } }, sizeUpdated: { _ in }, sizeReleased: {}"
     # ModeComponent now owns only the mode selector; brush size is a separate
     # control in the current editor. 12.0 also passed isEditing: false here.
@@ -312,7 +313,7 @@ def _drawing(tg: Path) -> None:
     code = """
             if AorusOldInterface.isEnabled {
                 self.component = component
-                self.tabSelectionRecognizer.isEnabled = false
+                self.tabSelectionRecognizer?.isEnabled = false
                 let size = self.aorusClassic.update(transition: transition, component: AnyComponent(AorusClassicModeAndSizeComponent(ARGS)), environment: {}, containerSize: availableSize)
                 if let view = self.aorusClassic.view {
                     if view.superview == nil {

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from aorus_old_interface import patch_old_interface, verify_old_interface
-from classic_style_check import check_classic_styles
+from classic_style_check import check_classic_styles, installed_classic_gesture
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -15,15 +15,17 @@ def native_hit_test_source(tg: Path) -> str:
     start = text.index("        override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {")
     method = text[start:text.index("\n        }", start) + len("\n        }")]
     method = method.replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
+    gesture = installed_classic_gesture(tg, "UIGestureRecognizer").replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     return """import UIKit
 enum AorusClassicControlledLook { static var enabled = false }
 struct AorusClassicViewFixture { var view: UIView? }
 final class AorusClassicHitTestView: UIView {
     let backgroundView = UIView()
     var aorusClassic = AorusClassicViewFixture()
+GESTURE
 METHOD
 }
-""".replace("METHOD", method)
+""".replace("METHOD", method).replace("GESTURE", gesture)
 
 
 def main() -> None:

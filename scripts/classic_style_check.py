@@ -5,6 +5,22 @@ import tempfile
 from pathlib import Path
 
 
+def installed_classic_gesture(tg: Path, recognizer_type: str) -> str:
+    text = (tg / "submodules/DrawingUI/Sources/ModeAndSizeComponent.swift").read_text()
+    declaration = re.search(r"private var tabSelectionRecognizer: ([^\n]+)", text)
+    assignment = re.search(r"^\s*(self\.tabSelectionRecognizer\??\.isEnabled = false)\s*$", text, re.M)
+    if declaration is None or assignment is None:
+        raise RuntimeError("Installed classic gesture declaration or update is missing")
+    kind = declaration[1].replace("TabSelectionRecognizer", recognizer_type)
+    return f"""    var tabSelectionRecognizer: {kind}
+    func updateClassicGesture() {{
+        if AorusOldInterface.isEnabled {{
+            {assignment[1]}
+        }}
+    }}
+"""
+
+
 def check_classic_styles(tg: Path, swiftc: str = "swiftc") -> None:
     source = ["""enum AorusOldInterface { static var isEnabled = false }
 struct GlassParams { let isDark: Bool; let isTinted: Bool }
@@ -80,6 +96,18 @@ func expect(_ value: Bool, _ message: String) {
     if kinds != {"Bool", "GlassParams?", "UIView & AorusPluginGlassBackground"}:
         raise RuntimeError(f"Installed style coverage is incomplete: {kinds}")
     source.extend(tests)
+    source.append("class InstalledRecognizer { var isEnabled = true }\nclass InstalledGestureOwner {\n" + installed_classic_gesture(tg, "InstalledRecognizer") + "}\n")
+    source.append("""for enabled in [false, true] {
+    AorusOldInterface.isEnabled = enabled
+    let owner = InstalledGestureOwner()
+    owner.updateClassicGesture()
+    expect(owner.tabSelectionRecognizer == nil, "a missing recognizer stays absent")
+    let recognizer = InstalledRecognizer()
+    owner.tabSelectionRecognizer = recognizer
+    owner.updateClassicGesture()
+    expect(recognizer.isEnabled == !enabled, "only the classic path disables a created recognizer")
+}
+""")
     source.append('print("Installed classic styles passed: \\(checks) assertions")\n')
     with tempfile.TemporaryDirectory(prefix="aorus-classic-styles-") as folder:
         root = Path(folder)
