@@ -878,3 +878,60 @@ MEDIA_EDITOR_BUTTON_LAYOUT = r"""
                 buttonsLeftOffset = floorToScreenPixels(buttonSideInset + cancelButtonSize.width * 0.66)
             }
 """
+
+
+MEDIA_EDITOR_CANCEL_COMPONENT = r"""
+                component: AnyComponent(Button(
+                    content: AnyComponent(
+                        LottieAnimationComponent(
+                            animation: LottieAnimationComponent.AnimationItem(
+                                name: "media_backToCancel",
+                                mode: .still(position: .end),
+                                range: (0.5, 1.0)
+                            ),
+                            colors: ["__allcolors__": .white],
+                            size: CGSize(width: 33.0, height: 33.0)
+                        )
+                    ),
+                    action: { [weak controller] in
+                        guard let controller else {
+                            return
+                        }
+                        guard !controller.node.recording.isActive else {
+                            return
+                        }
+                        controller.maybePresentDiscardAlert()
+                    }
+                ))
+"""
+
+
+MEDIA_EDITOR_DONE_COMPONENT = r"""
+                component: AnyComponent(PlainButtonComponent(
+                    content: AnyComponent(DoneButtonContentComponent(
+                        backgroundColor: UIColor(rgb: 0x007aff),
+                        icon: doneButtonIcon,
+                        title: doneButtonTitle)),
+                    effectAlignment: .center,
+                    action: { [weak controller] in
+                        controller?.node.requestCompletion()
+                    }
+                ))
+"""
+
+
+MEDIA_EDITOR_DONE_CONTENT = r"""
+            var doneButtonTitle: String?
+            var doneButtonIcon: UIImage?
+            switch controller.mode {
+            case .storyEditor:
+                doneButtonTitle = isEditingStory ? environment.strings.Story_Editor_Done.uppercased() : environment.strings.Story_Editor_Next.uppercased()
+                doneButtonIcon = UIImage(bundleImageName: "Media Editor/Next")!
+            case .stickerEditor, .avatarEditor, .coverEditor:
+                doneButtonTitle = nil
+                doneButtonIcon = generateTintedImage(image: UIImage(bundleImageName: "Media Editor/Apply"), color: .white)!
+            case .botPreview:
+                doneButtonTitle = environment.strings.Story_Editor_Add.uppercased()
+                doneButtonIcon = nil
+            }
+"""
