@@ -1613,21 +1613,23 @@ _CLASSIC_HEIGHT_SCREENS = (
 
 def _patch_classic_heights(tg: Path) -> None:
     # 12.0's bar was 44 points tall, 56 in a sheet held upright; 12.9.2 made every bar 60, 68
-    # in a sheet. A screen 12.0 drew the same way takes 12.0's height again; one whose header
-    # a component lays out for the taller bar keeps it.
+    # in a sheet. Restore this consistently, including attachment controllers and
+    # screens created by plugins, before their children compute navigation insets.
     path = tg / "submodules/Display/Source/ViewController.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "    open var _hasGlassStyle: Bool = false\n",
-        "    open var _hasGlassStyle: Bool = false\n"
-        "    // " + MARK + ": a screen 12.0 drew under its own 44-point bar.\n"
-        "    public var aorusClassicNavigationHeight: Bool = false\n"
-        "    public var aorusUsesClassicNavigationHeight: Bool {\n"
-        "        return AorusOldInterface.isEnabled && self.aorusClassicNavigationHeight\n"
-        "    }\n",
-        "classic bar height field",
-    )
+    if "public var aorusClassicNavigationHeight:" not in text:
+        text = _edit(
+            text,
+            "    open var _hasGlassStyle: Bool = false\n",
+            "    open var _hasGlassStyle: Bool = false\n"
+            "    public var aorusClassicNavigationHeight: Bool = false\n"
+            "    public var aorusUsesClassicNavigationHeight: Bool {\n"
+            "        return AorusOldInterface.isEnabled\n"
+            "    }\n",
+            "classic bar height field",
+        )
+    text = text.replace("return AorusOldInterface.isEnabled && self.aorusClassicNavigationHeight", "return AorusOldInterface.isEnabled")
+    text = _edit(text, "    open var _hasGlassStyle: Bool = false\n", "    private var aorusRequestedGlassStyle: Bool = false\n    open var _hasGlassStyle: Bool {\n        get { return self.aorusRequestedGlassStyle && !AorusOldInterface.isEnabled }\n        set { self.aorusRequestedGlassStyle = newValue }\n    }\n", "controller rendering style")
     text = _edit(
         text,
         "if self._presentedInModal && self._hasGlassStyle {\n",
@@ -3304,6 +3306,8 @@ def patch_old_interface(tg: Path) -> None:
     _patch_classic_keyboard_panel(tg)
     from aorus_classic_components import patch_classic_components
     patch_classic_components(tg)
+    from aorus_classic_layout import patch_classic_layout
+    patch_classic_layout(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 

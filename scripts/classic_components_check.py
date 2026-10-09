@@ -8,6 +8,7 @@ from pathlib import Path
 from aorus_old_interface import patch_old_interface, verify_old_interface
 from classic_style_check import check_classic_styles, installed_classic_gesture
 from classic_browser_check import check_classic_browser
+from classic_layout_check import check_classic_layout
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -17,7 +18,7 @@ def native_hit_test_source(tg: Path) -> str:
     method = text[start:text.index("\n        }", start) + len("\n        }")]
     method = method.replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     gesture = installed_classic_gesture(tg, "UIGestureRecognizer").replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
-    return """import UIKit
+    fixture = """import UIKit
 enum AorusClassicControlledLook { static var enabled = false }
 struct AorusClassicViewFixture { var view: UIView? }
 final class AorusClassicHitTestView: UIView {
@@ -27,6 +28,33 @@ GESTURE
 METHOD
 }
 """.replace("METHOD", method).replace("GESTURE", gesture)
+    attachment = (tg / "submodules/AttachmentUI/Sources/AttachmentContainer.swift").read_text()
+    start = attachment.index("        if AorusOldInterface.isEnabled {\n            self.clipNode.addSubnode(self.container)")
+    end = attachment.index("\n        }", start) + len("\n        }")
+    hierarchy = attachment[start:end].replace(".addSubnode(", ".addSubview(").replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
+    start = attachment.index("    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {")
+    end = attachment.index("\n    }", start) + len("\n    }")
+    point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
+    return fixture + """
+final class AorusClassicAttachmentHitTestView: UIView {
+    var view: UIView { return self }
+    let clipNode = UIView()
+    let bottomClipNode = UIView()
+    let container = UIView()
+    let sendButton = UIButton()
+    private(set) var sends = 0
+    func installHierarchy() {
+        self.addSubview(self.clipNode)
+        self.clipNode.clipsToBounds = true
+        self.bottomClipNode.clipsToBounds = true
+HIERARCHY
+        self.container.addSubview(self.sendButton)
+        self.sendButton.addTarget(self, action: #selector(self.send), for: .touchUpInside)
+    }
+    @objc private func send() { self.sends += 1 }
+POINT
+}
+""".replace("HIERARCHY", hierarchy).replace("POINT", point)
 
 
 def main() -> None:
@@ -74,6 +102,7 @@ def main() -> None:
     errors = verify_old_interface(args.telegram_source)
     if errors:
         raise RuntimeError("\n".join(errors))
+    checks += check_classic_layout(args.repo, args.telegram_source, args.reference_source)
 
     # Reapplying the complete feature must not duplicate handlers, constructor
     # aliases or components. Hash the actual source, not a fixture of the patch.

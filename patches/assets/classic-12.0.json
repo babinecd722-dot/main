@@ -426,6 +426,28 @@
     "submodules/TelegramUI/Images.xcassets/Settings/TextArrowRight.imageset/Contents.json": "f93a0c0fa7ad0d1a121fde77697be530edbc3f29e440167820dffa5d4d1dd856",
     "submodules/DrawingUI/Sources/ModeAndSizeComponent.swift": "ca3d0b5bfa94071511eece0de824ec1c5ddd68b901c9f36b058685437ab99d83",
     "submodules/ItemListUI/Sources/ItemListControllerSegmentedTitleView.swift": "5212f0e4380c696f814a6161039d103cec5ba6d1fcb51a3b6fbdc61f0b299b13",
-    "submodules/HashtagSearchUI/Sources/HashtagSearchNavigationContentNode.swift": "ac9d5df4d9e12cfa92a5ffbbf2c19e02fd401a439af447f564ceb36af9374546"
+    "submodules/HashtagSearchUI/Sources/HashtagSearchNavigationContentNode.swift": "ac9d5df4d9e12cfa92a5ffbbf2c19e02fd401a439af447f564ceb36af9374546",
+    "submodules/TelegramUI/Components/CameraScreen/Sources/ModeComponent.swift": "faec423d6d0104ff2b9551bbfd226c7524e8c01f015ab273ffefd2129bc31c8d",
+    "submodules/TelegramUI/Components/CameraScreen/Sources/CaptureControlsComponent.swift": "38db335c339bd4eda5dce99fa7c5f03bde82a7d51e4b1cef5d4f02dcd559e201",
+    "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperOptionButtonNode.swift": "15015b5d68ada26038f8201e5f6be34d212e1658833e0f83ca0280ab84e40f07",
+    "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryToolbarNode.swift": "a1ce795d174352db3fa392503cf417367a9f8ff2fd0c97283f96b5bcc75e6673",
+    "submodules/GalleryUI/Sources/GalleryControllerNode.swift": "a4ecd4dfcdafbbe8a531a694c2d96457b03ac085b3dfd426978b49489db46673",
+    "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift": "9645ea42cdc1e21ded19314c91ef36d8ec1cf3bbbda3c868b39c5cf9eb95638f",
+    "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift": "ad30021b22015f6c5fc5d050c72ba3de01dd778017ff7ade408624e3ed2d9cab",
+    "submodules/AttachmentUI/Sources/AttachmentContainer.swift": "cf5dff4cd87fdebef57eab1168b0510044f08f62008b274727483624f6638c8a",
+    "submodules/AttachmentUI/Sources/AttachmentPanel.swift": "01872bce517c3f3c8fc402831cbfb6601dc0c92a1956f341e435834675172e0e",
+    "submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift": "98953a58a8b74ce5623cd09748da6b6ddcaee04a2a5ad2fef2e8cfc77e08173f"
+  },
+  "layout_bodies": {
+    "VIDEO_SCRUBBER_LAYOUT": "dd5fe18510cb36d3edfa951be03e65fa7529e023f6f9b0dee0985f13f61c5e13",
+    "VIDEO_SCRUBBER_TOUCH_LABELS": "8f5458482d8b98be8b569786430996fc5021fcb06aed9d0188dbdcfcea10de5a",
+    "GALLERY_FOOTER_LAYOUT": "a9c2bb45cda902d00fda79b7f5ef297e1b928ad51e8e8be049b13c78decf327f",
+    "GALLERY_CAPTION_MASK": "72afde995400bae6654343b07eca4155fcec206094fef8185c9b1f267ae13ef4",
+    "ATTACHMENT_CONTAINER_LAYOUT": "1cda8ceb26e1fe2c84fc10167a1bce12c89a0714d00b811a5008307c12e59b00",
+    "ATTACHMENT_TABS_LAYOUT": "70d920908d606113a0b2eea3d7229ba18bd36ebb17c7ee89c7d74f8baaaeff24",
+    "ATTACHMENT_PANEL_LAYOUT": "ad00afe2604cc36824a775602c57205e6a5857842b97fa054650401d9a986413",
+    "ATTACHMENT_SCROLL_LAYOUT": "d843e986f05987defcd24d41cfd141ac2f132c8750e55403dd9bef6599711008",
+    "GALLERY_CONTAINER_LAYOUT": "978f9609b62bfdda87ad2a487e10ff190336f7d3ac297bf476d796cc8be6f333",
+    "MEDIA_EDITOR_BUTTON_LAYOUT": "36b39d408d17019b53d56d15c9c703d801ed85434793a1e2df6e748602f1643c"
   }
 }

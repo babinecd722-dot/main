@@ -34,6 +34,22 @@ import UIKit
     view.backgroundView.frame = CGRect(x: 16, y: 4, width: 200, height: 44)
     expect(view.point(inside: CGPoint(x: 20, y: 10), with: nil), "the current selector retains its native hit region")
     expect(!view.point(inside: CGPoint(x: 4, y: 10), with: nil), "the current selector retains its native outside region")
+    for classic in [false, true] {
+        AorusClassicControlledLook.enabled = classic
+        let sheet = AorusClassicAttachmentHitTestView(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        sheet.installHierarchy()
+        sheet.clipNode.frame = CGRect(x: 0, y: 24, width: 320, height: 540)
+        sheet.bottomClipNode.frame = CGRect(x: 0, y: -100, width: 320, height: 640)
+        sheet.container.frame = CGRect(x: 0, y: classic ? 0 : 100, width: 320, height: 540)
+        sheet.sendButton.frame = CGRect(x: 16, y: 456, width: 288, height: 44)
+        expect(sheet.container.superview === (classic ? sheet.clipNode : sheet.bottomClipNode), "installed attachment hierarchy matches the selected interface")
+        let point = sheet.container.convert(CGPoint(x: 160, y: 478), to: sheet)
+        expect(sheet.point(inside: point, with: nil), "the attachment sheet accepts a tap on send")
+        expect(sheet.hitTest(point, with: nil) === sheet.sendButton, "the visible send button receives the tap through the installed hierarchy")
+        (sheet.hitTest(point, with: nil) as? UIButton)?.sendActions(for: .touchUpInside)
+        expect(sheet.sends == 1, "a send tap reaches its action once")
+        expect(!sheet.point(inside: CGPoint(x: 160, y: 12), with: nil), "the attachment sheet does not intercept taps above its visible content")
+    }
     print("Native classic input passed: \(checks) assertions")
     return checks
 }

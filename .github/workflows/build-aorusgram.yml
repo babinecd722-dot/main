@@ -940,6 +940,10 @@ jobs:
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserTitleBarComponent.swift $TG/submodules/BrowserUI/Sources/
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserToolbarComponent.swift $TG/submodules/BrowserUI/Sources/
           cp $PATCHES/submodules/DrawingUI/Sources/AorusClassicModeAndSizeComponent.swift $TG/submodules/DrawingUI/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/CameraScreen/Sources/AorusClassicCameraModeComponent.swift $TG/submodules/TelegramUI/Components/CameraScreen/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/CameraScreen/Sources/AorusClassicCaptureControlsComponent.swift $TG/submodules/TelegramUI/Components/CameraScreen/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/AorusClassicWallpaperGalleryToolbarNode.swift $TG/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/AorusClassicWallpaperOptionBackgroundNode.swift $TG/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/
 
           # 7. Copy the AorusGram "user's messages in group" chat-contents helper into the
           #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the

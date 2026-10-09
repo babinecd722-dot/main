@@ -1,0 +1,1238 @@
+{
+  "reference": "release-12.0",
+  "commit": "29b266d5adb0d3a32b93f5506210fe7d20b8f81f",
+  "files": {
+    "submodules/AttachmentUI/Sources/AttachmentController.swift": "cc26d662a362a184749ab0a5625bf55262f0fc1543344539aa039b248a4bf5cd",
+    "submodules/AuthorizationUI/Sources/AuthorizationSequencePaymentScreen.swift": "ac7845d76cfb75c21c5f4a6ff8ff8a983961052713fb7b3ad5b55df1745a4ff9",
+    "submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift": "1a840b3008b7d9910f3d89529addbad67d77545270accc5dae7aa0fb43cbb60c",
+    "submodules/BotPaymentsUI/Sources/BotCheckoutControllerNode.swift": "bcd19af2cb92f424e3e8bd7a594abec1c5d7537938031237f3baea229b0c0746",
+    "submodules/BotPaymentsUI/Sources/BotReceiptControllerNode.swift": "1815b957b2810dcef19dad5e3d81b7c2195dfbb8d5c9371f3322b6fce7b28cd7",
+    "submodules/BrowserUI/Sources/BrowserAddressBarComponent.swift": "62adc0ccc19b89871989befcda5b702abe1d49daf1f241e9341f361b9d90a891",
+    "submodules/BrowserUI/Sources/BrowserScreen.swift": "561a6436bc698d1296d2b049aa71ac659f23be661c8245d4d7fb6e6718322d69",
+    "submodules/BrowserUI/Sources/BrowserToolbarComponent.swift": "0961dfae0d7a344908b848c21ab1d62b9b1d3e03a81768accd81c8adb0cd4246",
+    "submodules/ChatListUI/Sources/ChatListEmptyNode.swift": "53217bce8010e4c875cd74534cb2003c7343101f31046cafe7e9a9754fe76f7d",
+    "submodules/ChatListUI/Sources/ChatListFilterPresetListSuggestedItem.swift": "cd798d0ee3699474b2b1b98f22ce17458e7c273ddd6483441933946518cc1cf5",
+    "submodules/ChatListUI/Sources/ChatListSearchListPaneNode.swift": "2e827a65aa6c01cce77f48aa7e7dd608d824b8462e941424da27484faa2fa83c",
+    "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
+    "submodules/CounterControllerTitleView/Sources/CounterControllerTitleView.swift": "05791b6ba5ba4e0b2f2ec2dc04cdfa3f1688f2a4c45e050d53ef32d5fb1c360f",
+    "submodules/DatePickerNode/Sources/DatePickerNode.swift": "4e3492cc76c716a6f5c3161833db9a5538a86adc0198f71d9a8a50f1799df5bb",
+    "submodules/Display/Source/Navigation/NavigationModalFrame.swift": "5caac91f79af9f2dfcdae23c6963b3115d8f9e162a022f36a7a744b0b9f2b867",
+    "submodules/DrawingUI/Sources/ColorPickerScreen.swift": "0819e7a1fe20531feb2d5b9a6eaca22722ca04e5c57708273967eb923ae85c87",
+    "submodules/GalleryUI/Sources/GalleryControllerNode.swift": "a4ecd4dfcdafbbe8a531a694c2d96457b03ac085b3dfd426978b49489db46673",
+    "submodules/GalleryUI/Sources/Items/ChatImageGalleryItem.swift": "ab23a36d9d03e7a8bac02d09c9cfd82c0246ee242e54316359af2e1d540db787",
+    "submodules/InviteLinksUI/Sources/ItemListFolderInviteLinkItem.swift": "14cbc157294a5b1026f64c47acfc04a14fe5523f42134cf5d260d9282b676416",
+    "submodules/InviteLinksUI/Sources/ItemListPermanentInviteLinkItem.swift": "5fbd10ecd4100c1595db3b39d8adb2dc79a451f9c5589974d81943accb1a61ea",
+    "submodules/ItemListUI/Sources/ItemListController.swift": "57c9335a2f349daa5775e3d41c3b9769b1ab980a86922f82ffce1603a294e703",
+    "submodules/LocationUI/Sources/LocationActionListItem.swift": "2739dd18e81d203c24e4379cf69bb09c9aefb96d09ebbceeebe34e75328fd859",
+    "submodules/LocationUI/Sources/LocationInfoListItem.swift": "1484aad6c79d9cb2c0f02c09eee7e37b0c0d446dda501b4ae771afade5c3b639",
+    "submodules/LocationUI/Sources/LocationLiveListItem.swift": "1bcac2d06cac1ef55bacf723977f2e41f86ebed112a7555f1489bf53bbb03d4d",
+    "submodules/PeerInfoUI/CreateExternalMediaStreamScreen/Sources/CreateExternalMediaStreamScreen.swift": "a39147b3b0e4c6f901be8aa757203387559d36489b73fc97e5e7f0dbb161f1bf",
+    "submodules/PremiumUI/Sources/CreateGiveawayHeaderItem.swift": "4870115db226c15adc8fc0e6641186b9325f2b731eca9e7fd0334338d4f34938",
+    "submodules/PremiumUI/Sources/PremiumGiftCodeScreen.swift": "e7b77a510f7993d5cfbfebdbf2980e6c855ad259434c76f6649cd7eef3eab970",
+    "submodules/PremiumUI/Sources/PremiumIntroScreen.swift": "d755de1ea2eb78abc2971091b79b7036371188f0b7e6fccd086d33100077885d",
+    "submodules/PremiumUI/Sources/PremiumLimitScreen.swift": "5e62468dcb585959a0aba21ebc3ac4637fd7b67a966cbe240a4ba8a282d4f567",
+    "submodules/PremiumUI/Sources/PremiumLimitsListScreen.swift": "a615a1ea57b01c7043525a15a67e35663a2f5d64c8076ac8f73eea55bbfaf064",
+    "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift": "7b62afadbacb0338abfcf70f7bf3a6cc4cecd6b2ce66666e52defca0846edb43",
+    "submodules/SettingsUI/Sources/Search/SettingsSearchResultItem.swift": "150a3392e7592eb402fd2069b68da5f0dbf94be4bd9074ca19ac154f7a424fc4",
+    "submodules/SettingsUI/Sources/ThemePickerGridItem.swift": "ccd4018f1fc1aed64f63fb484f1a722efe2df7ae386b3446af57c7b36beb894f",
+    "submodules/StickerPackPreviewUI/Sources/StickerPackScreen.swift": "a48e7c3695bbb4981730636ebb52aa08825837ce283d7829284686c5bf1b3566",
+    "submodules/TelegramBaseController/Sources/TelegramBaseController.swift": "8d83d28f26e4587be0a8d1b4a8937bd377cd6eaa36e11ce9f1d567ee7e532880",
+    "submodules/TelegramCallsUI/Sources/VideoChatParticipantVideoComponent.swift": "52ec9c7ce10a462de313fc527851c6022533369d86b498356f63b4bd683a8f8b",
+    "submodules/TelegramCallsUI/Sources/VideoChatParticipantsComponent.swift": "34ae43d7b53092c0b62e2d0042c0bdf8d3036549a846d5a8af86631a1b171b6e",
+    "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift": "e36a2acc15363c1613fad935ba7e668c6434036bbabc9a0939e255d8c6c1a502",
+    "submodules/TelegramCallsUI/Sources/VideoChatTitleComponent.swift": "c327734db49c910369942f5fd8847982b316ae98735d88ba24b81231672c4b1b",
+    "submodules/TelegramCallsUI/Sources/VoiceChatInfoContextItem.swift": "9d53ca349afaae593022d1b2cf149f35eb54c80d549e48c50e60be8614787d79",
+    "submodules/TelegramCallsUI/Sources/VoiceChatRecordingContextItem.swift": "1e40b6fb70f2e7fc12d7e5148fa6fc9c796589e2e1b262569c7f79c855d971be",
+    "submodules/TelegramCallsUI/Sources/VoiceChatShareScreenContextItem.swift": "10184c97c125c8e802df9f2d0669bcb1a27df42ea9e1a1ff233b9d3093821563",
+    "submodules/TelegramCallsUI/Sources/VoiceChatVolumeContextItem.swift": "5ff3a38a16a20acfaa584cb7c9e35689852f41778b0016b69af23f08ca1dc19a",
+    "submodules/TelegramUI/Components/AdminUserActionsSheet/Sources/AdminUserActionsPeerComponent.swift": "fbbb7a2ee36df7be1817df190f819b2834c3b2f64f1b1fb9848c002978c6ad6b",
+    "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/AvatarEditorScreen.swift": "90c66e27053e4a651bbe812fdc64a5d85cb98901fcc82bd48a28b97f36011f35",
+    "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/BackgroundColorComponent.swift": "98e8fc535adda5b8a258f8588c858161426b7ee8bb4a13cea19594b855292ad8",
+    "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift": "72558e66a864e204dc84d4231709e43ce1d70219eccb4d28176b10b397885fe9",
+    "submodules/TelegramUI/Components/Chat/ChatButtonKeyboardInputNode/Sources/ChatButtonKeyboardInputNode.swift": "2c329a2296237eb7839788375dc8946023163480fdf0847723740c45bfe6ae1e",
+    "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift": "d5761e51a817e76ae06c604ed442decf55c77a9fe0eec5c4823577bdb3792cb8",
+    "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatMessageNotificationItem.swift": "52624e49003453fa83c50322464b31b4b470deefb17e66ede08b862a02801dc2",
+    "submodules/TelegramUI/Components/Chat/ChatQrCodeScreen/Sources/ChatQrCodeScreen.swift": "c4636e184dea8c556f5dcd076cf66ba6aac578aeb87bc340e4bcd8fb23d60cd1",
+    "submodules/TelegramUI/Components/Chat/ChatRecentActionsController/Sources/ChatRecentActionsControllerNode.swift": "c41995e2eb42fd928af944958a7444e0faf21cb38eaa6647c8dd0ccc07652f13",
+    "submodules/TelegramUI/Components/Chat/ChatSendStarsScreen/Sources/ChatSendStarsScreen.swift": "0b6be193865ad6410f5f5505273e2ec9085627f6d93ad826f5f031cf13ee1ed4",
+    "submodules/TelegramUI/Components/Chat/EditableTokenListNode/Sources/EditableTokenListNode.swift": "76ef74bf49f3bbcef7d09aa580710031dfb1a5dbd93ed908f7174a1c38ba6b81",
+    "submodules/TelegramUI/Components/ChatFolderLinkPreviewScreen/Sources/ChatFolderLinkPreviewScreen.swift": "292683cea842aa9e294af1913e13d8010c67ece76343649cfb3c815fcc128c2e",
+    "submodules/TelegramUI/Components/ChatThemeScreen/Sources/ChatThemeScreen.swift": "be87e0f76a48e26db8d50b151e9d1361f6bb3fc87e0005085d2be14cf7d7a2cd",
+    "submodules/TelegramUI/Components/ComposeTodoScreen/Sources/ComposeTodoScreen.swift": "7aea2b0900aa0e0b9c0a7e53d67b4dae10020eeda7481c818ced6ed74a1094a8",
+    "submodules/TelegramUI/Components/EmojiStatusSelectionComponent/Sources/EmojiStatusSelectionComponent.swift": "b4bff353765cd6dcfd68e8a22e9fd6ce6f5457ebe2d4c93ccca9f4f595085f24",
+    "submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiKeyboardItemLayer.swift": "1ad6accd597e55062746f94a5d354673dc7c3f0b867d540af49431810ac2ea0b",
+    "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/FilterSelectorComponent.swift": "0708673c15343ac9c09bc0d785e534dfe1f92ff49b5b021e70ddb4cfd49f9ba4",
+    "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/GiftAttributeListContextItem.swift": "c9f88be19d95a1d4b21890bbf05bf15e349aa2b90ec7d1d0be7050e001db5038",
+    "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/SearchContextItem.swift": "9de957b8a4c545bcd5cb5535c7dfa5b86bc02f56577e5abeeab3c3a1963783ff",
+    "submodules/TelegramUI/Components/ListComposePollOptionComponent/Sources/ListComposePollOptionComponent.swift": "f4358587f2171f64a6ce360d22672458aa2250c5d6d6e3e722fa80b9aac12a0c",
+    "submodules/TelegramUI/Components/ListSwitchItemComponent/Sources/ListSwitchItemComponent.swift": "760f324ebb11762c9cc79ecd38fa32594c1f5ff676276c6050ac3ec4d85a817f",
+    "submodules/TelegramUI/Components/MediaScrubberComponent/Sources/MediaScrubberComponent.swift": "ea5f805efa7f0592e606e2ac2d73cf23182d0532712a82466a142d6dab56dfd5",
+    "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedContainer.swift": "fe4546ff27c5b8fbd05cff1cc5b14f9703aeebdb44bea93ab96cdd51a67f5eda",
+    "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedHeaderNode.swift": "8537fe7b5ea812b725b0fac4a23db3279efaa6433e91482a900ceebe8b2678af",
+    "submodules/TelegramUI/Components/PeerAllowedReactionsScreen/Sources/EmojiListInputComponent.swift": "eb4e84d20280041c17c80eda67a5ed5370e240709e6c3aedc027b4c0681f2184",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenBusinessHoursItem.swift": "ceb745832c172c1d4a0df4deab6e500cf422755f8fc31ec62f10e054dd02c374",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift": "1ef2a1975e7a8506b6c3afbf041464cfb4a3b9c15012348a97c95af05394d0b4",
+    "submodules/TelegramUI/Components/SendInviteLinkScreen/Sources/SendInviteLinkScreen.swift": "af1755cbd98637b721f6a57805cd77fb95d6dfe7bc358347278e1f97504f0948",
+    "submodules/TelegramUI/Components/Settings/BirthdayPickerScreen/Sources/BirthdayPickerContentComponent.swift": "e4d0a125bc675088ef83ae6c47c1ac70e2de6ad7fcbab19b79e10694718382d2",
+    "submodules/TelegramUI/Components/Settings/NewSessionInfoScreen/Sources/NewSessionInfoContentComponent.swift": "91ea3b96b4e8701148dce1d048c2ea2de98f7f7852a523bb4f0d2dcf28beed37",
+    "submodules/TelegramUI/Components/Settings/QuickReactionSetupController/Sources/ItemListReactionItem.swift": "f20215d4db1a0e6ee33020179205e5d4d8fa857210520026c9ce248cd43168a3",
+    "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperColorPanelNode.swift": "b7d778ee5c1b34fbf672fd56c514ef35ac75e766bab4e0e862dfcaccf45eef22",
+    "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperColorPickerNode.swift": "8aa0a28527cbdada4aea24a38bf71e1f21a88a1e383da918ef3a44849f16b4b5",
+    "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryToolbarNode.swift": "a1ce795d174352db3fa392503cf417367a9f8ff2fd0c97283f96b5bcc75e6673",
+    "submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerItem.swift": "9bee2b53997db134c5bbf1405ca2cbaffec2ecc5891d7f4633e91032d29c1154",
+    "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CategoryListItemComponent.swift": "26adfc95ca30a20c08314a94cf01bbe5c888960f87dfbac905036d8147c01d89",
+    "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CountriesMultiselectionScreen.swift": "1e2d5d7066e51b151e83975a64f127c690968d54e9d652bd29bdc27cbda71383",
+    "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CoverListItemComponent.swift": "61114df04758dbada24b8def640488c7c646bfddd20f18b8c8a58e3665d80fa6",
+    "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/OptionListItemComponent.swift": "f7b3800bfd885702168bc9f6086ffd9dcbb7d460dd956791d8285d83b855b02d",
+    "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/ShareWithPeersScreen.swift": "a804f5887271ae8507a92beb52699eda9da45504eafc1c6b739b2fa99b184697",
+    "submodules/TelegramUI/Components/SliderContextItem/Sources/SliderContextItem.swift": "b83e16010ba13c7203351f5bac292ffbfefe72dab4b7c4e7ce692038423891f6",
+    "submodules/TelegramUI/Components/Stars/StarsIntroScreen/Sources/StarsIntroScreen.swift": "e1edff8ca8f157145e759b15241f6a15a2bae0c0fbe87255368f750614f02cd8",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataButtonComponent.swift": "66641802f4a60bcdda52a10431f218907172b21cb9afad5e01adabdb3465a0b2",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataCategoriesComponent.swift": "cf43f717bcaf902072e717195d62f966a06d8de4a78064568c0ce89fbace14c9",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataCategoryItemCompoment.swift": "b9da5742c48883b5c64d42fac943eef0558f14c4da053c7a9fd2d3dd164a884b",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataUsageScreen.swift": "825fef44e7501bbe8e466584f1943904f843a1379379a90f0137b7ecd3f64747",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageCategoriesComponent.swift": "39fdd1236896371d7b055a5e23acdfdd8001adf5f22c7c5d42ec26795acfb138",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageCategoryItemCompoment.swift": "20de5372a2e40349c3c9c0061749731cc5bc18e68c90d42e47e91ecc7f49c2f6",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageKeepSizeComponent.swift": "c18d73b94ef370438d039899681cb70e802e3b22372323b049d9ddeeddeb2118",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StoragePeerTypeItemComponent.swift": "c0ad4a53776180dbb1fd2409ca7d3bccecdd5c45c75d2a0810f9e228d9142efc",
+    "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageUsageScreen.swift": "66c8833718067bf9ea050f9221dad26121313d19ac01926ebba84035a5089afe",
+    "submodules/TelegramUI/Components/Stories/StoryContainerScreen/Sources/StoryContentCaptionComponent.swift": "bc5c53f390837de3599cb6486145852cff514bfad0b4b5c49cc1b8f11ae4e4c2",
+    "submodules/TelegramUI/Sources/ChatHistoryNavigationButtons.swift": "c89234338e09997dfea9f81838df6073be475c774c398749a6b6517ef67ac0a8",
+    "submodules/TelegramUI/Sources/ChatManagingBotTitlePanelNode.swift": "444aa3027b42aa8f47d7e1fc47b8f0409110ccb41686dc17b6334bab7d9b02eb",
+    "submodules/TelegramUI/Sources/ChatVerifiedPeerTitlePanelNode.swift": "38af1e7a9896bffd2a5f8d011806ad0d2c0544b8880c66dd1085f78ed9962821",
+    "submodules/TelegramUpdateUI/Sources/UpdateInfoItem.swift": "f7e9706c9323d72632a80359e411c3b7edd890c3c8a775b89d0e81be4cdf55b8",
+    "submodules/WebUI/Sources/WebAppLocationAlertController.swift": "fe04f80776536b9fb22a571d542b5c48bd6cc0580b3a0c8f858c0e3728fee85f",
+    "submodules/WebUI/Sources/WebAppSecureStorageTransferScreen.swift": "bc31fdac115e7e0514fdfc5e8763c5dc9e67c5dacda6903ac6c453a44a8e74ba",
+    "submodules/WebUI/Sources/WebAppMessagePreviewScreen.swift": "79dee01eca4d5e34540e2fdcfd6a7ca3bda7df5ab7a61d1b158e745983480446",
+    "submodules/TelegramUI/Sources/ChatRestrictedInputPanelNode.swift": "0e3ff19d195b9178417162bcec6b59aff3fd1b0c953cecfed1510808783bd224",
+    "submodules/TelegramUI/Sources/ChatPinnedMessageTitlePanelNode.swift": "4d21520227db200da1619c956f48d933c6fd69e4175bf03f09d1b94a88165f2b",
+    "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift": "d68b084c82fbcccfd47f114db9e94eab573a9d9e73ca5a0aba5a1f0fc745d5b1",
+    "submodules/TelegramUI/Components/Stars/StarsWithdrawalScreen/Sources/StarsWithdrawalScreen.swift": "d06d15e521e616130142e75890b50cb8edb15b00708f59001784027dc95e985c",
+    "submodules/TelegramUI/Components/Settings/ThemeAccentColorScreen/Sources/ThemeAccentColorControllerNode.swift": "37e57fffa3c7742e88b40d604edcf21037171bd61111d67baa105493b896c474",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderEditingContentNode.swift": "1c699b3a3ca83cee141687c6f34aade4f79c5c29edd58ff52931d46c4fc24540",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift": "fa865827cbdda7154dcbe9f5075fc833a15a7f9755b33cf9fd8a55f8e1665fb8",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift": "c11df91c64ba8dc9d2c0d5e5c99ffc7f2506c0d5d8f9362bc36db65da831a7f6",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureEncryptionKeyItem.swift": "6a458c1be852828bca00517af53a39c7f6b307468fe114a1eaf2565af3b6eeee",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift": "d7c0b94c1f75ade8b7d3e820b0b431c2fcd49cf3ed3ed10de13608b300acd6f7",
+    "submodules/TelegramUI/Components/PeerInfo/MessagePriceItem/Sources/MessagePriceItem.swift": "a862d71ab108152c94bb32ead0b500bfcec2bd6598d7c736d84e913e1b4dacbf",
+    "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CreateLinkScreen.swift": "56d9ff5dd439d80591142bc867ec6c86a30cacdff3df6de61dea69828776f25c",
+    "submodules/TelegramUI/Components/ItemListDatePickerItem/Sources/ItemListDatePickerItem.swift": "d7cc00ea15cd2117d2648b74ca37907fb200ed552a784b2d8a16c568f8dfbb96",
+    "submodules/TelegramUI/Components/ContentReportScreen/Sources/ContentReportScreen.swift": "394277fd6fd9dec925e0dddfad353fff0ac2ce486d14623ba3976116e0312d0f",
+    "submodules/TelegramUI/Components/Ads/AdsReportScreen/Sources/AdsReportScreen.swift": "89e947ae4db2725838dcbb19697c391db98d9495f2e10a8434788c9c33a23536",
+    "submodules/TelegramCallsUI/Sources/VideoChatListInviteComponent.swift": "ef278ad7d9e156c9cc488c6f3191e58dee2a4bfbeafc08c2bfabd8abaa884b00",
+    "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListWebsiteItem.swift": "4e6ec8710aff62c64626a24cd97ae9419e2eb72f69ae2aeac468d8a7612e911d",
+    "submodules/PremiumUI/Sources/PremiumOptionComponent.swift": "a36cd26f6a2f522138aa35af3ed42e0a8e0a03d4982ede585ecc6caebf13f8ca",
+    "submodules/PeerAvatarGalleryUI/Sources/AvatarGalleryItemFooterContentNode.swift": "1d6527f024da595a25a42e80010d582a58fd993b527e2f042a92649093c0b46a",
+    "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift": "98a6561c8c9a60cafbad54023cfa1f44a99dc59eaa0bf798e64c2c20cac8ec72",
+    "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift": "36068f05dd50f9659f8627c631e9bf2f790122025dccc205a4571da55609cd5a",
+    "submodules/ItemListPeerItem/Sources/ItemListPeerItem.swift": "f2b57229001b740b74d5c7a50b91a6e549fc91964bba4626c44d4dca2e2819ac",
+    "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift": "9645ea42cdc1e21ded19314c91ef36d8ec1cf3bbbda3c868b39c5cf9eb95638f",
+    "submodules/ChatListUI/Sources/Node/ChatListItem.swift": "2c90d6f6db7c59c9eeb7c7cb6db22cdf77ba0e6c841ab5b4752a44a9cd2f0b6c"
+  },
+  "bindings": [
+    {
+      "path": "submodules/WebUI/Sources/WebAppLocationAlertController.swift",
+      "old": "    let size = CGSize(width: 28.0, height: 28.0)",
+      "new": "    let size = CGSize(width: 24.0, height: 24.0)",
+      "replacement": "    let size = AorusOldInterface.isEnabled ? CGSize(width: 28.0, height: 28.0) : CGSize(width: 24.0, height: 24.0)"
+    },
+    {
+      "path": "submodules/TelegramUpdateUI/Sources/UpdateInfoItem.swift",
+      "old": "            let verticalInset: CGFloat = 14.0",
+      "new": "            let verticalInset: CGFloat = 16.0",
+      "replacement": "            let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 14.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatVerifiedPeerTitlePanelNode.swift",
+      "old": "        var panelHeight: CGFloat = 8.0",
+      "new": "        var panelHeight: CGFloat = 12.0",
+      "replacement": "        var panelHeight: CGFloat = AorusOldInterface.isEnabled ? 8.0 : 12.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatManagingBotTitlePanelNode.swift",
+      "old": "            let avatarTextSpacing: CGFloat = 10.0",
+      "new": "            let avatarTextSpacing: CGFloat = 8.0",
+      "replacement": "            let avatarTextSpacing: CGFloat = AorusOldInterface.isEnabled ? 10.0 : 8.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatHistoryNavigationButtons.swift",
+      "old": "        let buttonSize = CGSize(width: 38.0, height: 38.0)",
+      "new": "        let buttonSize = CGSize(width: 40.0, height: 40.0)",
+      "replacement": "        let buttonSize = AorusOldInterface.isEnabled ? CGSize(width: 38.0, height: 38.0) : CGSize(width: 40.0, height: 40.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Stories/StoryContainerScreen/Sources/StoryContentCaptionComponent.swift",
+      "old": "            let verticalInset: CGFloat = 7.0",
+      "new": "            let verticalInset: CGFloat = 8.0",
+      "replacement": "            let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 7.0 : 8.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageUsageScreen.swift",
+      "old": "            self.keepDurationSectionContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.keepDurationSectionContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.keepDurationSectionContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StoragePeerTypeItemComponent.swift",
+      "old": "            var height: CGFloat = 44.0",
+      "new": "            var height: CGFloat = 52.0",
+      "replacement": "            var height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageKeepSizeComponent.swift",
+      "old": "            self.layer.cornerRadius = 10.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageKeepSizeComponent.swift",
+      "old": "            let height: CGFloat = 88.0",
+      "new": "            let height: CGFloat = 96.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 88.0 : 96.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageCategoryItemCompoment.swift",
+      "old": "            var height: CGFloat = 44.0",
+      "new": "            var height: CGFloat = 52.0",
+      "replacement": "            var height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/StorageCategoriesComponent.swift",
+      "old": "            self.layer.cornerRadius = 10.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataUsageScreen.swift",
+      "old": "            self.autoDownloadSettingsContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.autoDownloadSettingsContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.autoDownloadSettingsContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataCategoryItemCompoment.swift",
+      "old": "            let height: CGFloat = 44.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataCategoryItemCompoment.swift",
+      "old": "            var height: CGFloat = 44.0",
+      "new": "            var height: CGFloat = 52.0",
+      "replacement": "            var height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataCategoriesComponent.swift",
+      "old": "            self.layer.cornerRadius = 10.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataButtonComponent.swift",
+      "old": "            self.layer.cornerRadius = 10.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataButtonComponent.swift",
+      "old": "            let height: CGFloat = 44.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Stars/StarsIntroScreen/Sources/StarsIntroScreen.swift",
+      "old": "            let buttonHeight: CGFloat = 50.0",
+      "new": "            let buttonHeight: CGFloat = 52.0",
+      "replacement": "            let buttonHeight: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/SliderContextItem/Sources/SliderContextItem.swift",
+      "old": "            let leftInset: CGFloat = 17.0",
+      "new": "            let leftInset: CGFloat = 10.0",
+      "replacement": "            let leftInset: CGFloat = AorusOldInterface.isEnabled ? 17.0 : 10.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/ShareWithPeersScreen.swift",
+      "old": "            var navigationHeight: CGFloat = 56.0",
+      "new": "            var navigationHeight: CGFloat = 72.0",
+      "replacement": "            var navigationHeight: CGFloat = AorusOldInterface.isEnabled ? 56.0 : 72.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/OptionListItemComponent.swift",
+      "old": "            let height: CGFloat = 44.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CoverListItemComponent.swift",
+      "old": "            let height: CGFloat = 44.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CountriesMultiselectionScreen.swift",
+      "old": "            var navigationHeight: CGFloat = 56.0",
+      "new": "            var navigationHeight: CGFloat = 76.0",
+      "replacement": "            var navigationHeight: CGFloat = AorusOldInterface.isEnabled ? 56.0 : 76.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CategoryListItemComponent.swift",
+      "old": "            let height: CGFloat = 56.0",
+      "new": "            let height: CGFloat = 64.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 56.0 : 64.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ShareWithPeersScreen/Sources/CategoryListItemComponent.swift",
+      "old": "            let titleSpacing: CGFloat = 1.0",
+      "new": "            let titleSpacing: CGFloat = 3.0",
+      "replacement": "            let titleSpacing: CGFloat = AorusOldInterface.isEnabled ? 1.0 : 3.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerItem.swift",
+      "old": "        self.view.layer.cornerRadius = 10.0",
+      "new": "        self.view.layer.cornerRadius = 16.0",
+      "replacement": "        self.view.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryToolbarNode.swift",
+      "old": "            self.doneButtonSolidBackgroundNode.layer.cornerRadius = 14.0",
+      "new": "            self.doneButtonSolidBackgroundNode.layer.cornerRadius = 26.0",
+      "replacement": "            self.doneButtonSolidBackgroundNode.layer.cornerRadius = AorusOldInterface.isEnabled ? 14.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryToolbarNode.swift",
+      "old": "        let inset: CGFloat = 16.0",
+      "new": "        let inset: CGFloat = 30.0",
+      "replacement": "        let inset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperColorPickerNode.swift",
+      "old": "        let brightnessKnobSize = CGSize(width: 12.0, height: 55.0)",
+      "new": "        let brightnessKnobSize = CGSize(width: 12.0, height: 60.0)",
+      "replacement": "        let brightnessKnobSize = AorusOldInterface.isEnabled ? CGSize(width: 12.0, height: 55.0) : CGSize(width: 12.0, height: 60.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperColorPanelNode.swift",
+      "old": "        let sampleItemSize: CGFloat = 32.0",
+      "new": "        let sampleItemSize: CGFloat = 34.0",
+      "replacement": "        let sampleItemSize: CGFloat = AorusOldInterface.isEnabled ? 32.0 : 34.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/QuickReactionSetupController/Sources/ItemListReactionItem.swift",
+      "old": "                        let iconOffsetX: CGFloat = 0.0",
+      "new": "                        let iconOffsetX: CGFloat = -6.0",
+      "replacement": "                        let iconOffsetX: CGFloat = AorusOldInterface.isEnabled ? 0.0 : -6.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/NewSessionInfoScreen/Sources/NewSessionInfoContentComponent.swift",
+      "old": "            self.noticeBackground.cornerRadius = 10.0",
+      "new": "            self.noticeBackground.cornerRadius = 22.0",
+      "replacement": "            self.noticeBackground.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 22.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/BirthdayPickerScreen/Sources/BirthdayPickerContentComponent.swift",
+      "old": "            var contentHeight: CGFloat = 0.0",
+      "new": "            var contentHeight: CGFloat = 8.0",
+      "replacement": "            var contentHeight: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/SendInviteLinkScreen/Sources/SendInviteLinkScreen.swift",
+      "old": "            self.itemContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.itemContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.itemContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
+      "old": "        var topOffset = 11.0",
+      "new": "        var topOffset = 15.0",
+      "replacement": "        var topOffset = AorusOldInterface.isEnabled ? 11.0 : 15.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenBusinessHoursItem.swift",
+      "old": "        var topOffset = 10.0",
+      "new": "        var topOffset = 15.0",
+      "replacement": "        var topOffset = AorusOldInterface.isEnabled ? 10.0 : 15.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerAllowedReactionsScreen/Sources/EmojiListInputComponent.swift",
+      "old": "            self.layer.cornerRadius = 12.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedHeaderNode.swift",
+      "old": "        self.backgroundView.layer.cornerRadius = 10.0",
+      "new": "        self.backgroundView.layer.cornerRadius = 25.0",
+      "replacement": "        self.backgroundView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 25.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedHeaderNode.swift",
+      "old": "        let headerHeight: CGFloat = 44.0",
+      "new": "        let headerHeight: CGFloat = 56.0",
+      "replacement": "        let headerHeight: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 56.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedContainer.swift",
+      "old": "            self.containerNode.cornerRadius = 10.0",
+      "new": "            self.containerNode.cornerRadius = 25.0",
+      "replacement": "            self.containerNode.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 25.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MinimizedContainer/Sources/MinimizedContainer.swift",
+      "old": "            self.cornerRadius = 10.0",
+      "new": "            self.cornerRadius = 25.0",
+      "replacement": "            self.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 25.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MediaScrubberComponent/Sources/MediaScrubberComponent.swift",
+      "old": "                let imageSize = CGSize(width: 36.0, height: 36.0)",
+      "new": "                let imageSize = CGSize(width: 34.0, height: 34.0)",
+      "replacement": "                let imageSize = AorusOldInterface.isEnabled ? CGSize(width: 36.0, height: 36.0) : CGSize(width: 34.0, height: 34.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MediaScrubberComponent/Sources/MediaScrubberComponent.swift",
+      "old": "        let capsuleSize = CGSize(width: 2.0, height: 11.0)",
+      "new": "        let capsuleSize = CGSize(width: 3.0, height: 12.0)",
+      "replacement": "        let capsuleSize = AorusOldInterface.isEnabled ? CGSize(width: 2.0, height: 11.0) : CGSize(width: 3.0, height: 12.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ListSwitchItemComponent/Sources/ListSwitchItemComponent.swift",
+      "old": "            self.layer.cornerRadius = 12.0",
+      "new": "            self.layer.cornerRadius = 26.0",
+      "replacement": "            self.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ListComposePollOptionComponent/Sources/ListComposePollOptionComponent.swift",
+      "old": "            var rightIconsInset: CGFloat = 0.0",
+      "new": "            var rightIconsInset: CGFloat = 16.0",
+      "replacement": "            var rightIconsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/SearchContextItem.swift",
+      "old": "        let inputInset: CGFloat = 42.0",
+      "new": "        let inputInset: CGFloat = 46.0",
+      "replacement": "        let inputInset: CGFloat = AorusOldInterface.isEnabled ? 42.0 : 46.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/GiftAttributeListContextItem.swift",
+      "old": "        let minActionsWidth: CGFloat = 250.0",
+      "new": "        let minActionsWidth: CGFloat = 270.0",
+      "replacement": "        let minActionsWidth: CGFloat = AorusOldInterface.isEnabled ? 250.0 : 270.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/FilterSelectorComponent.swift",
+      "old": "            let baseHeight: CGFloat = 28.0",
+      "new": "            let baseHeight: CGFloat = 36.0",
+      "replacement": "            let baseHeight: CGFloat = AorusOldInterface.isEnabled ? 28.0 : 36.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Gifts/GiftStoreScreen/Sources/FilterSelectorComponent.swift",
+      "old": "            let itemFont = Font.semibold(14.0)",
+      "new": "            let itemFont = Font.medium(14.0)",
+      "replacement": "            let itemFont = AorusOldInterface.isEnabled ? Font.semibold(14.0) : Font.medium(14.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/EntityKeyboard/Sources/EmojiKeyboardItemLayer.swift",
+      "old": "                        let plusSize = CGSize(width: 3.5, height: 28.0)",
+      "new": "                        let plusSize = CGSize(width: 4.0, height: 27.0)",
+      "replacement": "                        let plusSize = AorusOldInterface.isEnabled ? CGSize(width: 3.5, height: 28.0) : CGSize(width: 4.0, height: 27.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/EmojiStatusSelectionComponent/Sources/EmojiStatusSelectionComponent.swift",
+      "old": "            self.componentShadowLayer.shadowOffset = CGSize(width: 0.0, height: 2.0)",
+      "new": "            self.componentShadowLayer.shadowOffset = CGSize(width: 0.0, height: 10.0)",
+      "replacement": "            self.componentShadowLayer.shadowOffset = AorusOldInterface.isEnabled ? CGSize(width: 0.0, height: 2.0) : CGSize(width: 0.0, height: 10.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/EmojiStatusSelectionComponent/Sources/EmojiStatusSelectionComponent.swift",
+      "old": "            self.componentShadowLayer.shadowRadius = 16.0",
+      "new": "            self.componentShadowLayer.shadowRadius = 30.0",
+      "replacement": "            self.componentShadowLayer.shadowRadius = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ComposeTodoScreen/Sources/ComposeTodoScreen.swift",
+      "old": "            let topInset: CGFloat = 24.0",
+      "new": "            let topInset: CGFloat = 8.0",
+      "replacement": "            let topInset: CGFloat = AorusOldInterface.isEnabled ? 24.0 : 8.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ComposeTodoScreen/Sources/ComposeTodoScreen.swift",
+      "old": "            let sectionSpacing: CGFloat = 24.0",
+      "new": "            let sectionSpacing: CGFloat = 30.0",
+      "replacement": "            let sectionSpacing: CGFloat = AorusOldInterface.isEnabled ? 24.0 : 30.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ChatThemeScreen/Sources/ChatThemeScreen.swift",
+      "old": "        self.imageNode.cornerRadius = 8.0",
+      "new": "        self.imageNode.cornerRadius = 16.0",
+      "replacement": "        self.imageNode.cornerRadius = AorusOldInterface.isEnabled ? 8.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ChatFolderLinkPreviewScreen/Sources/ChatFolderLinkPreviewScreen.swift",
+      "old": "            self.itemContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.itemContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.itemContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/EditableTokenListNode/Sources/EditableTokenListNode.swift",
+      "old": "        let verticalInset: CGFloat = 6.0",
+      "new": "        let verticalInset: CGFloat = 8.0",
+      "replacement": "        let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 6.0 : 8.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatSendStarsScreen/Sources/ChatSendStarsScreen.swift",
+      "old": "            self.backgroundLayer.cornerRadius = 10.0",
+      "new": "            self.backgroundLayer.cornerRadius = 40.0",
+      "replacement": "            self.backgroundLayer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 40.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatRecentActionsController/Sources/ChatRecentActionsControllerNode.swift",
+      "old": "        let intrinsicPanelHeight: CGFloat = 47.0",
+      "new": "        let intrinsicPanelHeight: CGFloat = 40.0",
+      "replacement": "        let intrinsicPanelHeight: CGFloat = AorusOldInterface.isEnabled ? 47.0 : 40.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatQrCodeScreen/Sources/ChatQrCodeScreen.swift",
+      "old": "        self.backgroundNode.cornerRadius = 16.0",
+      "new": "        self.backgroundNode.cornerRadius = 38.0",
+      "replacement": "        self.backgroundNode.cornerRadius = AorusOldInterface.isEnabled ? 16.0 : 38.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatMessageNotificationItem.swift",
+      "old": "            var radius: CGFloat = 6.0",
+      "new": "            var radius: CGFloat = 20.0",
+      "replacement": "            var radius: CGFloat = AorusOldInterface.isEnabled ? 6.0 : 20.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatMessageNotificationItem.swift",
+      "old": "        var rightInset: CGFloat = 8.0",
+      "new": "        var rightInset: CGFloat = 10.0",
+      "replacement": "        var rightInset: CGFloat = AorusOldInterface.isEnabled ? 8.0 : 10.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift",
+      "old": "        let panelHeight: CGFloat = 66.0",
+      "new": "        let panelHeight: CGFloat = 64.0",
+      "replacement": "        let panelHeight: CGFloat = AorusOldInterface.isEnabled ? 66.0 : 64.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift",
+      "old": "        let leftInset: CGFloat = 14.0",
+      "new": "        let leftInset: CGFloat = 12.0",
+      "replacement": "        let leftInset: CGFloat = AorusOldInterface.isEnabled ? 14.0 : 12.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift",
+      "old": "        let rightInset: CGFloat = 14.0",
+      "new": "        let rightInset: CGFloat = 12.0",
+      "replacement": "        let rightInset: CGFloat = AorusOldInterface.isEnabled ? 14.0 : 12.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift",
+      "old": "        let avatarSize: CGFloat = 38.0",
+      "new": "        let avatarSize: CGFloat = 40.0",
+      "replacement": "        let avatarSize: CGFloat = AorusOldInterface.isEnabled ? 38.0 : 40.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatMessageNotificationItem/Sources/ChatCallNotificationItem.swift",
+      "old": "        let titleTextSpacing: CGFloat = 0.0",
+      "new": "        let titleTextSpacing: CGFloat = 1.0",
+      "replacement": "        let titleTextSpacing: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 1.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatButtonKeyboardInputNode/Sources/ChatButtonKeyboardInputNode.swift",
+      "old": "            let verticalInset: CGFloat = 10.0",
+      "new": "            let verticalInset: CGFloat = 18.0",
+      "replacement": "            let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 10.0 : 18.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "            self.previewContainerView.layer.cornerRadius = 12.0",
+      "new": "            self.previewContainerView.layer.cornerRadius = 30.0",
+      "replacement": "            self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 30.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/BackgroundColorComponent.swift",
+      "old": "            let height: CGFloat = 50.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/AvatarEditorScreen.swift",
+      "old": "            self.backgroundContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.backgroundContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.backgroundContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/AvatarEditorScreen.swift",
+      "old": "            self.keyboardContainerView.layer.cornerRadius = 10.0",
+      "new": "            self.keyboardContainerView.layer.cornerRadius = 26.0",
+      "replacement": "            self.keyboardContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 26.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/AdminUserActionsSheet/Sources/AdminUserActionsPeerComponent.swift",
+      "old": "            let height: CGFloat = 44.0",
+      "new": "            let height: CGFloat = 52.0",
+      "replacement": "            let height: CGFloat = AorusOldInterface.isEnabled ? 44.0 : 52.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatVolumeContextItem.swift",
+      "old": "            let leftInset: CGFloat = 17.0",
+      "new": "            let leftInset: CGFloat = 25.0",
+      "replacement": "            let leftInset: CGFloat = AorusOldInterface.isEnabled ? 17.0 : 25.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatShareScreenContextItem.swift",
+      "old": "        let sideInset: CGFloat = 16.0",
+      "new": "        let sideInset: CGFloat = 18.0",
+      "replacement": "        let sideInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 18.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatShareScreenContextItem.swift",
+      "old": "        let iconSideInset: CGFloat = 12.0",
+      "new": "        let iconSideInset: CGFloat = 20.0",
+      "replacement": "        let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 20.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatShareScreenContextItem.swift",
+      "old": "        let verticalInset: CGFloat = 12.0",
+      "new": "        let verticalInset: CGFloat = 11.0",
+      "replacement": "        let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 11.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatRecordingContextItem.swift",
+      "old": "        let verticalInset: CGFloat = 12.0",
+      "new": "        let verticalInset: CGFloat = 11.0",
+      "replacement": "        let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 11.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatInfoContextItem.swift",
+      "old": "        let sideInset: CGFloat = 16.0",
+      "new": "        let sideInset: CGFloat = 18.0",
+      "replacement": "        let sideInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 18.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatInfoContextItem.swift",
+      "old": "        let iconSideInset: CGFloat = 12.0",
+      "new": "        let iconSideInset: CGFloat = 20.0",
+      "replacement": "        let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 20.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VoiceChatInfoContextItem.swift",
+      "old": "        let verticalInset: CGFloat = 12.0",
+      "new": "        let verticalInset: CGFloat = 11.0",
+      "replacement": "        let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 11.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatTitleComponent.swift",
+      "old": "            let spacing: CGFloat = 1.0",
+      "new": "            let spacing: CGFloat = 0.0",
+      "replacement": "            let spacing: CGFloat = AorusOldInterface.isEnabled ? 1.0 : 0.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift",
+      "old": "            let landscapeControlsSpacing: CGFloat = 30.0",
+      "new": "            let landscapeControlsSpacing: CGFloat = 20.0",
+      "replacement": "            let landscapeControlsSpacing: CGFloat = AorusOldInterface.isEnabled ? 30.0 : 20.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift",
+      "old": "            let navigationBarHeight: CGFloat = 61.0",
+      "new": "            let navigationBarHeight: CGFloat = 56.0",
+      "replacement": "            let navigationBarHeight: CGFloat = AorusOldInterface.isEnabled ? 61.0 : 56.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift",
+      "old": "            let navigationButtonAreaWidth: CGFloat = 34.0",
+      "new": "            let navigationButtonAreaWidth: CGFloat = 44.0",
+      "replacement": "            let navigationButtonAreaWidth: CGFloat = AorusOldInterface.isEnabled ? 34.0 : 44.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatParticipantsComponent.swift",
+      "old": "                self.expandedGridItemContainer.layer.cornerRadius = 10.0",
+      "new": "                self.expandedGridItemContainer.layer.cornerRadius = 16.0",
+      "replacement": "                self.expandedGridItemContainer.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatParticipantVideoComponent.swift",
+      "old": "            self.pinchContainerNode.contentNode.view.layer.cornerRadius = 10.0",
+      "new": "            self.pinchContainerNode.contentNode.view.layer.cornerRadius = 16.0",
+      "replacement": "            self.pinchContainerNode.contentNode.view.layer.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 16.0"
+    },
+    {
+      "path": "submodules/TelegramBaseController/Sources/TelegramBaseController.swift",
+      "old": "            let panelHeight: CGFloat = 50.0",
+      "new": "            let panelHeight: CGFloat = 56.0",
+      "replacement": "            let panelHeight: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 56.0"
+    },
+    {
+      "path": "submodules/StickerPackPreviewUI/Sources/StickerPackScreen.swift",
+      "old": "            self.containerContainingNode.cornerRadius = 10.0",
+      "new": "            self.containerContainingNode.cornerRadius = 38.0",
+      "replacement": "            self.containerContainingNode.cornerRadius = AorusOldInterface.isEnabled ? 10.0 : 38.0"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/ThemePickerGridItem.swift",
+      "old": "        self.imageNode.cornerRadius = 8.0",
+      "new": "        self.imageNode.cornerRadius = 16.0",
+      "replacement": "        self.imageNode.cornerRadius = AorusOldInterface.isEnabled ? 8.0 : 16.0"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/Search/SettingsSearchResultItem.swift",
+      "old": "            let contentInset: CGFloat = 58.0",
+      "new": "            let contentInset: CGFloat = 60.0",
+      "replacement": "            let contentInset: CGFloat = AorusOldInterface.isEnabled ? 58.0 : 60.0"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
+      "old": "            let verticalInset: CGFloat = 10.0",
+      "new": "            let verticalInset: CGFloat = 11.0",
+      "replacement": "            let verticalInset: CGFloat = AorusOldInterface.isEnabled ? 10.0 : 11.0"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
+      "old": "            let textSpacing: CGFloat = 3.0",
+      "new": "            let textSpacing: CGFloat = 2.0",
+      "replacement": "            let textSpacing: CGFloat = AorusOldInterface.isEnabled ? 3.0 : 2.0"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/PremiumLimitsListScreen.swift",
+      "old": "        let buttonInset: CGFloat = 16.0",
+      "new": "        let buttonInset: CGFloat = 30.0",
+      "replacement": "        let buttonInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/PremiumLimitScreen.swift",
+      "old": "            self.container.layer.cornerRadius = 6.0",
+      "new": "            self.container.layer.cornerRadius = 15.0",
+      "replacement": "            self.container.layer.cornerRadius = AorusOldInterface.isEnabled ? 6.0 : 15.0"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/PremiumIntroScreen.swift",
+      "old": "                    let textPadding: CGFloat = 13.0",
+      "new": "                    let textPadding: CGFloat = 17.0",
+      "replacement": "                    let textPadding: CGFloat = AorusOldInterface.isEnabled ? 13.0 : 17.0"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/PremiumGiftCodeScreen.swift",
+      "old": "            let sideInset: CGFloat = 38.0",
+      "new": "            let sideInset: CGFloat = 42.0",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 38.0 : 42.0"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/CreateGiveawayHeaderItem.swift",
+      "old": "        let navigationHeight: CGFloat = 56.0",
+      "new": "        let navigationHeight: CGFloat = 76.0",
+      "replacement": "        let navigationHeight: CGFloat = AorusOldInterface.isEnabled ? 56.0 : 76.0"
+    },
+    {
+      "path": "submodules/PeerInfoUI/CreateExternalMediaStreamScreen/Sources/CreateExternalMediaStreamScreen.swift",
+      "old": "            let credentialsItemHeight: CGFloat = 60.0",
+      "new": "            let credentialsItemHeight: CGFloat = 64.0",
+      "replacement": "            let credentialsItemHeight: CGFloat = AorusOldInterface.isEnabled ? 60.0 : 64.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+      "old": "            let titleSpacing: CGFloat = 1.0",
+      "new": "            let titleSpacing: CGFloat = 0.0",
+      "replacement": "            let titleSpacing: CGFloat = AorusOldInterface.isEnabled ? 1.0 : 0.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+      "old": "                            let timerSize = CGSize(width: 28.0, height: 28.0)",
+      "new": "                            let timerSize = CGSize(width: 24.0, height: 24.0)",
+      "replacement": "                            let timerSize = AorusOldInterface.isEnabled ? CGSize(width: 28.0, height: 28.0) : CGSize(width: 24.0, height: 24.0)"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+      "old": "            let iconSize: CGFloat = 48.0",
+      "new": "            let iconSize: CGFloat = 40.0",
+      "replacement": "            let iconSize: CGFloat = AorusOldInterface.isEnabled ? 48.0 : 40.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+      "old": "            let titleSpacing: CGFloat = 1.0",
+      "new": "            let titleSpacing: CGFloat = 0.0",
+      "replacement": "            let titleSpacing: CGFloat = AorusOldInterface.isEnabled ? 1.0 : 0.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+      "old": "            let bottomInset: CGFloat = 4.0",
+      "new": "            let bottomInset: CGFloat = 16.0",
+      "replacement": "            let bottomInset: CGFloat = AorusOldInterface.isEnabled ? 4.0 : 16.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationActionListItem.swift",
+      "old": "            let titleSpacing: CGFloat = 1.0",
+      "new": "            let titleSpacing: CGFloat = 0.0",
+      "replacement": "            let titleSpacing: CGFloat = AorusOldInterface.isEnabled ? 1.0 : 0.0"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationActionListItem.swift",
+      "old": "                            let timerSize = CGSize(width: 28.0, height: 28.0)",
+      "new": "                            let timerSize = CGSize(width: 24.0, height: 24.0)",
+      "replacement": "                            let timerSize = AorusOldInterface.isEnabled ? CGSize(width: 28.0, height: 28.0) : CGSize(width: 24.0, height: 24.0)"
+    },
+    {
+      "path": "submodules/ItemListUI/Sources/ItemListController.swift",
+      "old": "        let spacing: CGFloat = 0.0",
+      "new": "        let spacing: CGFloat = 1.0",
+      "replacement": "        let spacing: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 1.0"
+    },
+    {
+      "path": "submodules/InviteLinksUI/Sources/ItemListPermanentInviteLinkItem.swift",
+      "old": "            let fieldSpacing: CGFloat = 16.0",
+      "new": "            let fieldSpacing: CGFloat = 10.0",
+      "replacement": "            let fieldSpacing: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 10.0"
+    },
+    {
+      "path": "submodules/InviteLinksUI/Sources/ItemListPermanentInviteLinkItem.swift",
+      "old": "            let buttonHeight: CGFloat = 50.0",
+      "new": "            let buttonHeight: CGFloat = 52.0",
+      "replacement": "            let buttonHeight: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 52.0"
+    },
+    {
+      "path": "submodules/InviteLinksUI/Sources/ItemListFolderInviteLinkItem.swift",
+      "old": "            let buttonHeight: CGFloat = 50.0",
+      "new": "            let buttonHeight: CGFloat = 52.0",
+      "replacement": "            let buttonHeight: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 52.0"
+    },
+    {
+      "path": "submodules/GalleryUI/Sources/GalleryControllerNode.swift",
+      "old": "            let panelHeight: CGFloat = 52.0",
+      "new": "            let panelHeight: CGFloat = 30.0",
+      "replacement": "            let panelHeight: CGFloat = AorusOldInterface.isEnabled ? 52.0 : 30.0"
+    },
+    {
+      "path": "submodules/GalleryUI/Sources/Items/ChatImageGalleryItem.swift",
+      "old": "        let buttonSize = CGSize(width: 32.0, height: 32.0)",
+      "new": "        let buttonSize = CGSize(width: 44.0, height: 44.0)",
+      "replacement": "        let buttonSize = AorusOldInterface.isEnabled ? CGSize(width: 32.0, height: 32.0) : CGSize(width: 44.0, height: 44.0)"
+    },
+    {
+      "path": "submodules/DrawingUI/Sources/ColorPickerScreen.swift",
+      "old": "            var contentHeight: CGFloat = 58.0",
+      "new": "            var contentHeight: CGFloat = 76.0",
+      "replacement": "            var contentHeight: CGFloat = AorusOldInterface.isEnabled ? 58.0 : 76.0"
+    },
+    {
+      "path": "submodules/Display/Source/Navigation/NavigationModalFrame.swift",
+      "old": "        let cornerRadius: CGFloat = 9.0",
+      "new": "        let cornerRadius: CGFloat = 38.0",
+      "replacement": "        let cornerRadius: CGFloat = AorusOldInterface.isEnabled ? 9.0 : 38.0"
+    },
+    {
+      "path": "submodules/DatePickerNode/Sources/DatePickerNode.swift",
+      "old": "        self.dateButtonNode.cornerRadius = 9.0",
+      "new": "        self.dateButtonNode.cornerRadius = 18.0",
+      "replacement": "        self.dateButtonNode.cornerRadius = AorusOldInterface.isEnabled ? 9.0 : 18.0"
+    },
+    {
+      "path": "submodules/DatePickerNode/Sources/DatePickerNode.swift",
+      "old": "        self.timeButtonNode.cornerRadius = 9.0",
+      "new": "        self.timeButtonNode.cornerRadius = 18.0",
+      "replacement": "        self.timeButtonNode.cornerRadius = AorusOldInterface.isEnabled ? 9.0 : 18.0"
+    },
+    {
+      "path": "submodules/CounterControllerTitleView/Sources/CounterControllerTitleView.swift",
+      "old": "        let spacing: CGFloat = 0.0",
+      "new": "        let spacing: CGFloat = 1.0",
+      "replacement": "        let spacing: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 1.0"
+    },
+    {
+      "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+      "old": "            let sideInset: CGFloat = 16.0",
+      "new": "            let sideInset: CGFloat = 18.0",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 18.0"
+    },
+    {
+      "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+      "old": "            let iconSideInset: CGFloat = 12.0",
+      "new": "            let iconSideInset: CGFloat = 23.0",
+      "replacement": "            let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 23.0"
+    },
+    {
+      "path": "submodules/ChatListUI/Sources/ChatListSearchListPaneNode.swift",
+      "old": "        let overflowInset: CGFloat = 20.0",
+      "new": "        let overflowInset: CGFloat = 0.0",
+      "replacement": "        let overflowInset: CGFloat = AorusOldInterface.isEnabled ? 20.0 : 0.0"
+    },
+    {
+      "path": "submodules/ChatListUI/Sources/ChatListFilterPresetListSuggestedItem.swift",
+      "old": "            let titleSpacing: CGFloat = 3.0",
+      "new": "            let titleSpacing: CGFloat = 2.0",
+      "replacement": "            let titleSpacing: CGFloat = AorusOldInterface.isEnabled ? 3.0 : 2.0"
+    },
+    {
+      "path": "submodules/ChatListUI/Sources/ChatListEmptyNode.swift",
+      "old": "        var bottomInset: CGFloat = 16.0",
+      "new": "        var bottomInset: CGFloat = 20.0",
+      "replacement": "        var bottomInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 20.0"
+    },
+    {
+      "path": "submodules/BrowserUI/Sources/BrowserToolbarComponent.swift",
+      "old": "            let contentHeight: CGFloat = 49.0",
+      "new": "            let contentHeight: CGFloat = 56.0",
+      "replacement": "            let contentHeight: CGFloat = AorusOldInterface.isEnabled ? 49.0 : 56.0"
+    },
+    {
+      "path": "submodules/BrowserUI/Sources/BrowserToolbarComponent.swift",
+      "old": "            let sideInset: CGFloat = 3.0",
+      "new": "            let sideInset: CGFloat = 60.0",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 3.0 : 60.0"
+    },
+    {
+      "path": "submodules/BrowserUI/Sources/BrowserScreen.swift",
+      "old": "            let collapsedHeight: CGFloat = 24.0",
+      "new": "            let collapsedHeight: CGFloat = 54.0",
+      "replacement": "            let collapsedHeight: CGFloat = AorusOldInterface.isEnabled ? 24.0 : 54.0"
+    },
+    {
+      "path": "submodules/BrowserUI/Sources/BrowserAddressBarComponent.swift",
+      "old": "            let inputHeight: CGFloat = 36.0",
+      "new": "            let inputHeight: CGFloat = 44.0",
+      "replacement": "            let inputHeight: CGFloat = AorusOldInterface.isEnabled ? 36.0 : 44.0"
+    },
+    {
+      "path": "submodules/BotPaymentsUI/Sources/BotReceiptControllerNode.swift",
+      "old": "        let bottomPanelHorizontalInset: CGFloat = 16.0",
+      "new": "        let bottomPanelHorizontalInset: CGFloat = 30.0",
+      "replacement": "        let bottomPanelHorizontalInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+    },
+    {
+      "path": "submodules/BotPaymentsUI/Sources/BotCheckoutControllerNode.swift",
+      "old": "        let bottomPanelHorizontalInset: CGFloat = 16.0",
+      "new": "        let bottomPanelHorizontalInset: CGFloat = 30.0",
+      "replacement": "        let bottomPanelHorizontalInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+    },
+    {
+      "path": "submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift",
+      "old": "            self.backgroundNode.cornerRadius = 24.0",
+      "new": "            self.backgroundNode.cornerRadius = 42.0",
+      "replacement": "            self.backgroundNode.cornerRadius = AorusOldInterface.isEnabled ? 24.0 : 42.0"
+    },
+    {
+      "path": "submodules/AuthorizationUI/Sources/AuthorizationSequencePaymentScreen.swift",
+      "old": "            let buttonHeight: CGFloat = 50.0",
+      "new": "            let buttonHeight: CGFloat = 52.0",
+      "replacement": "            let buttonHeight: CGFloat = AorusOldInterface.isEnabled ? 50.0 : 52.0"
+    },
+    {
+      "path": "submodules/AttachmentUI/Sources/AttachmentController.swift",
+      "old": "                    let offset = 25.0",
+      "new": "                    let offset = 10.0",
+      "replacement": "                    let offset = AorusOldInterface.isEnabled ? 25.0 : 10.0"
+    },
+    {
+      "path": "submodules/WebUI/Sources/WebAppSecureStorageTransferScreen.swift",
+      "old": "            var contentSize = CGSize(width: context.availableSize.width, height: 18.0)",
+      "new": "            var contentSize = CGSize(width: context.availableSize.width, height: 38.0)",
+      "replacement": "            var contentSize = AorusOldInterface.isEnabled ? CGSize(width: context.availableSize.width, height: 18.0) : CGSize(width: context.availableSize.width, height: 38.0)"
+    },
+    {
+      "path": "submodules/WebUI/Sources/WebAppMessagePreviewScreen.swift",
+      "old": "            var contentSize = CGSize(width: context.availableSize.width, height: 18.0)",
+      "new": "            var contentSize = CGSize(width: context.availableSize.width, height: 38.0)",
+      "replacement": "            var contentSize = AorusOldInterface.isEnabled ? CGSize(width: context.availableSize.width, height: 18.0) : CGSize(width: context.availableSize.width, height: 38.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatRestrictedInputPanelNode.swift",
+      "old": "        let textSize = self.textNode.updateLayout(CGSize(width: width - leftInset - rightInset - 8.0 * 2.0, height: panelHeight))",
+      "new": "        let textSize = self.textNode.updateLayout(CGSize(width: width - leftInset - rightInset - 16.0 * 2.0, height: panelHeight))",
+      "replacement": "        let textSize = AorusOldInterface.isEnabled ? self.textNode.updateLayout(CGSize(width: width - leftInset - rightInset - 8.0 * 2.0, height: panelHeight)) : self.textNode.updateLayout(CGSize(width: width - leftInset - rightInset - 16.0 * 2.0, height: panelHeight))"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatPinnedMessageTitlePanelNode.swift",
+      "old": "        let contentLeftInset: CGFloat = leftInset + 10.0",
+      "new": "        let contentLeftInset: CGFloat = leftInset + 18.0",
+      "replacement": "        let contentLeftInset: CGFloat = AorusOldInterface.isEnabled ? leftInset + 10.0 : leftInset + 18.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatManagingBotTitlePanelNode.swift",
+      "old": "            let leftInset: CGFloat = component.insets.left + 12.0",
+      "new": "            let leftInset: CGFloat = component.insets.left + 6.0",
+      "replacement": "            let leftInset: CGFloat = AorusOldInterface.isEnabled ? component.insets.left + 12.0 : component.insets.left + 6.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/ChatHistoryNavigationButtons.swift",
+      "old": "        let completeSize = CGSize(width: buttonSize.width, height: buttonSize.height * 2.0 + 12.0)",
+      "new": "        let completeSize = CGSize(width: buttonSize.width, height: buttonSize.height * 2.0 + 8.0)",
+      "replacement": "        let completeSize = AorusOldInterface.isEnabled ? CGSize(width: buttonSize.width, height: buttonSize.height * 2.0 + 12.0) : CGSize(width: buttonSize.width, height: buttonSize.height * 2.0 + 8.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift",
+      "old": "            let bottomInset = max(insets.bottom, cleanInsets.bottom) + 43.0",
+      "new": "            let bottomInset = max(insets.bottom, cleanInsets.bottom) + 54.0",
+      "replacement": "            let bottomInset = AorusOldInterface.isEnabled ? max(insets.bottom, cleanInsets.bottom) + 43.0 : max(insets.bottom, cleanInsets.bottom) + 54.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Stars/StarsWithdrawalScreen/Sources/StarsWithdrawalScreen.swift",
+      "old": "            let size = CGSize(width: availableSize.width, height: 44.0)",
+      "new": "            let size = CGSize(width: availableSize.width, height: 52.0)",
+      "replacement": "            let size = AorusOldInterface.isEnabled ? CGSize(width: availableSize.width, height: 44.0) : CGSize(width: availableSize.width, height: 52.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/ThemeAccentColorScreen/Sources/ThemeAccentColorControllerNode.swift",
+      "old": "        let toolbarHeight = 49.0 + layout.intrinsicInsets.bottom",
+      "new": "        let toolbarHeight = 52.0 + layout.intrinsicInsets.bottom",
+      "replacement": "        let toolbarHeight = AorusOldInterface.isEnabled ? 49.0 + layout.intrinsicInsets.bottom : 52.0 + layout.intrinsicInsets.bottom"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Settings/ThemeAccentColorScreen/Sources/ThemeAccentColorControllerNode.swift",
+      "old": "        let toolbarHeight = 49.0 + toolbarBottomInset",
+      "new": "        let toolbarHeight = 52.0 + toolbarBottomInset",
+      "replacement": "        let toolbarHeight = AorusOldInterface.isEnabled ? 49.0 + toolbarBottomInset : 52.0 + toolbarBottomInset"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderEditingContentNode.swift",
+      "old": "        var contentHeight: CGFloat = statusBarHeight + 10.0 + avatarSize + 20.0",
+      "new": "        var contentHeight: CGFloat = statusBarHeight + 10.0 + avatarSize + 28.0",
+      "replacement": "        var contentHeight: CGFloat = AorusOldInterface.isEnabled ? statusBarHeight + 10.0 + avatarSize + 20.0 : statusBarHeight + 10.0 + avatarSize + 28.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift",
+      "old": "        let height = textSize.height + 24.0",
+      "new": "        let height = textSize.height + 32.0",
+      "replacement": "        let height = AorusOldInterface.isEnabled ? textSize.height + 24.0 : textSize.height + 32.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
+      "old": "        let height = textSize.height + 24.0",
+      "new": "        let height = textSize.height + 32.0",
+      "replacement": "        let height = AorusOldInterface.isEnabled ? textSize.height + 24.0 : textSize.height + 32.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureEncryptionKeyItem.swift",
+      "old": "        let height = textSize.height + 24.0",
+      "new": "        let height = textSize.height + 32.0",
+      "replacement": "        let height = AorusOldInterface.isEnabled ? textSize.height + 24.0 : textSize.height + 32.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift",
+      "old": "        let height = textSize.height + 24.0",
+      "new": "        let height = textSize.height + 32.0",
+      "replacement": "        let height = AorusOldInterface.isEnabled ? textSize.height + 24.0 : textSize.height + 32.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/PeerInfo/MessagePriceItem/Sources/MessagePriceItem.swift",
+      "old": "                        let buttonSize = CGSize(width: params.width - params.leftInset - params.rightInset - sideInset * 2.0, height: 50.0)",
+      "new": "                        let buttonSize = CGSize(width: params.width - params.leftInset - params.rightInset - sideInset * 2.0, height: 52.0)",
+      "replacement": "                        let buttonSize = AorusOldInterface.isEnabled ? CGSize(width: params.width - params.leftInset - params.rightInset - sideInset * 2.0, height: 50.0) : CGSize(width: params.width - params.leftInset - params.rightInset - sideInset * 2.0, height: 52.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CreateLinkScreen.swift",
+      "old": "            var contentSize = CGSize(width: context.availableSize.width, height: 18.0)",
+      "new": "            var contentSize = CGSize(width: context.availableSize.width, height: 36.0)",
+      "replacement": "            var contentSize = AorusOldInterface.isEnabled ? CGSize(width: context.availableSize.width, height: 18.0) : CGSize(width: context.availableSize.width, height: 36.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CreateLinkScreen.swift",
+      "old": "            let size = CGSize(width: availableSize.width, height: 44.0)",
+      "new": "            let size = CGSize(width: availableSize.width, height: 52.0)",
+      "replacement": "            let size = AorusOldInterface.isEnabled ? CGSize(width: availableSize.width, height: 44.0) : CGSize(width: availableSize.width, height: 52.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ListSwitchItemComponent/Sources/ListSwitchItemComponent.swift",
+      "old": "            let size = CGSize(width: availableSize.width, height: 44.0)",
+      "new": "            let size = CGSize(width: availableSize.width, height: 52.0)",
+      "replacement": "            let size = AorusOldInterface.isEnabled ? CGSize(width: availableSize.width, height: 44.0) : CGSize(width: availableSize.width, height: 52.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ItemListDatePickerItem/Sources/ItemListDatePickerItem.swift",
+      "old": "            let pickerHeight = 122.0 + cellSize * 6.0",
+      "new": "            let pickerHeight = 132.0 + cellSize * 6.0",
+      "replacement": "            let pickerHeight = AorusOldInterface.isEnabled ? 122.0 + cellSize * 6.0 : 132.0 + cellSize * 6.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/ContentReportScreen/Sources/ContentReportScreen.swift",
+      "old": "            var contentSize = CGSize(width: context.availableSize.width, height: 18.0)",
+      "new": "            var contentSize = CGSize(width: context.availableSize.width, height: 26.0)",
+      "replacement": "            var contentSize = AorusOldInterface.isEnabled ? CGSize(width: context.availableSize.width, height: 18.0) : CGSize(width: context.availableSize.width, height: 26.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/EditableTokenListNode/Sources/EditableTokenListNode.swift",
+      "old": "        let contentHeight = currentOffset.y + 29.0 + verticalInset",
+      "new": "        let contentHeight = currentOffset.y + 28.0 + verticalInset",
+      "replacement": "        let contentHeight = AorusOldInterface.isEnabled ? currentOffset.y + 29.0 + verticalInset : currentOffset.y + 28.0 + verticalInset"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Chat/ChatButtonKeyboardInputNode/Sources/ChatButtonKeyboardInputNode.swift",
+      "old": "            let sideInset: CGFloat = 6.0 + leftInset",
+      "new": "            let sideInset: CGFloat = 18.0 + leftInset",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 6.0 + leftInset : 18.0 + leftInset"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/Ads/AdsReportScreen/Sources/AdsReportScreen.swift",
+      "old": "            var contentSize = CGSize(width: context.availableSize.width, height: 18.0)",
+      "new": "            var contentSize = CGSize(width: context.availableSize.width, height: 26.0)",
+      "replacement": "            var contentSize = AorusOldInterface.isEnabled ? CGSize(width: context.availableSize.width, height: 18.0) : CGSize(width: context.availableSize.width, height: 26.0)"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift",
+      "old": "            var leftInset: CGFloat = max(environment.safeInsets.left, 14.0)",
+      "new": "            var leftInset: CGFloat = max(environment.safeInsets.left, 16.0)",
+      "replacement": "            var leftInset: CGFloat = AorusOldInterface.isEnabled ? max(environment.safeInsets.left, 14.0) : max(environment.safeInsets.left, 16.0)"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatScreen.swift",
+      "old": "            var rightInset: CGFloat = max(environment.safeInsets.right, 14.0)",
+      "new": "            var rightInset: CGFloat = max(environment.safeInsets.right, 16.0)",
+      "replacement": "            var rightInset: CGFloat = AorusOldInterface.isEnabled ? max(environment.safeInsets.right, 14.0) : max(environment.safeInsets.right, 16.0)"
+    },
+    {
+      "path": "submodules/TelegramCallsUI/Sources/VideoChatListInviteComponent.swift",
+      "old": "            let size = CGSize(width: availableSize.width, height: 46.0)",
+      "new": "            let size = CGSize(width: availableSize.width, height: 52.0)",
+      "replacement": "            let size = AorusOldInterface.isEnabled ? CGSize(width: availableSize.width, height: 46.0) : CGSize(width: availableSize.width, height: 52.0)"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListWebsiteItem.swift",
+      "old": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
+      "new": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0))",
+      "replacement": "            let titleFont = AorusOldInterface.isEnabled ? Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) : Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0))"
+    },
+    {
+      "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
+      "old": "            let textFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0))",
+      "new": "            let textFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))",
+      "replacement": "            let textFont = AorusOldInterface.isEnabled ? Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0)) : Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))"
+    },
+    {
+      "path": "submodules/PremiumUI/Sources/PremiumOptionComponent.swift",
+      "old": "            var insets = UIEdgeInsets(top: 11.0, left: 46.0, bottom: 13.0, right: 16.0)",
+      "new": "            var insets = UIEdgeInsets(top: 15.0, left: 46.0, bottom: 17.0, right: 16.0)",
+      "replacement": "            var insets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: 11.0, left: 46.0, bottom: 13.0, right: 16.0) : UIEdgeInsets(top: 15.0, left: 46.0, bottom: 17.0, right: 16.0)"
+    },
+    {
+      "path": "submodules/PeerAvatarGalleryUI/Sources/AvatarGalleryItemFooterContentNode.swift",
+      "old": "        var panelHeight: CGFloat = 44.0 + bottomInset",
+      "new": "        var panelHeight: CGFloat = 54.0 + bottomInset",
+      "replacement": "        var panelHeight: CGFloat = AorusOldInterface.isEnabled ? 44.0 + bottomInset : 54.0 + bottomInset"
+    },
+    {
+      "path": "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift",
+      "old": "        let textSize = self.label.updateLayout(size: CGSize(width: 100.0, height: diameter), animated: true)",
+      "new": "        let textSize = self.label.updateLayout(size: CGSize(width: 120.0, height: diameter), animated: true)",
+      "replacement": "        let textSize = AorusOldInterface.isEnabled ? self.label.updateLayout(size: CGSize(width: 100.0, height: diameter), animated: true) : self.label.updateLayout(size: CGSize(width: 120.0, height: diameter), animated: true)"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+      "old": "            let leftInset: CGFloat = 65.0 + params.leftInset",
+      "new": "            let leftInset: CGFloat = 72.0 + params.leftInset",
+      "replacement": "            let leftInset: CGFloat = AorusOldInterface.isEnabled ? 65.0 + params.leftInset : 72.0 + params.leftInset"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+      "old": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0))",
+      "new": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))",
+      "replacement": "            let subtitleFont = AorusOldInterface.isEnabled ? Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0)) : Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+      "old": "            let leftInset: CGFloat = 75.0 + params.leftInset",
+      "new": "            let leftInset: CGFloat = 78.0 + params.leftInset",
+      "replacement": "            let leftInset: CGFloat = AorusOldInterface.isEnabled ? 75.0 + params.leftInset : 78.0 + params.leftInset"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+      "old": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0))",
+      "new": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))",
+      "replacement": "            let subtitleFont = AorusOldInterface.isEnabled ? Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0)) : Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))"
+    },
+    {
+      "path": "submodules/LocationUI/Sources/LocationActionListItem.swift",
+      "old": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0))",
+      "new": "            let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))",
+      "replacement": "            let subtitleFont = AorusOldInterface.isEnabled ? Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0)) : Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))"
+    },
+    {
+      "path": "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift",
+      "old": "            let addressFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0))",
+      "new": "            let addressFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))",
+      "replacement": "            let addressFont = AorusOldInterface.isEnabled ? Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0)) : Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))"
+    },
+    {
+      "path": "submodules/ItemListPeerItem/Sources/ItemListPeerItem.swift",
+      "old": "        let badgeWidth = max(badgeDiameter, labelSize.width + 10.0)",
+      "new": "        let badgeWidth = max(badgeDiameter, labelSize.width + 12.0)",
+      "replacement": "        let badgeWidth = AorusOldInterface.isEnabled ? max(badgeDiameter, labelSize.width + 10.0) : max(badgeDiameter, labelSize.width + 12.0)"
+    },
+    {
+      "path": "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift",
+      "old": "        var panelHeight = 44.0 + bottomInset",
+      "new": "        var panelHeight = 54.0 + bottomInset",
+      "replacement": "        var panelHeight = AorusOldInterface.isEnabled ? 44.0 + bottomInset : 54.0 + bottomInset"
+    },
+    {
+      "path": "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift",
+      "old": "            let sideInset: CGFloat = 8.0 + leftInset",
+      "new": "            let sideInset: CGFloat = 16.0 + leftInset",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 8.0 + leftInset : 16.0 + leftInset"
+    },
+    {
+      "path": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
+      "old": "            let rawContentWidth = params.width - leftInset - params.rightInset - 10.0 - editingOffset",
+      "new": "            let rawContentWidth = params.width - leftInset - params.rightInset - 18.0 - editingOffset",
+      "replacement": "            let rawContentWidth = AorusOldInterface.isEnabled ? params.width - leftInset - params.rightInset - 10.0 - editingOffset : params.width - leftInset - params.rightInset - 18.0 - editingOffset"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                    controlsBottomInset = -48.0",
+      "new": "                    controlsBottomInset = -70.0",
+      "replacement": "                    controlsBottomInset = AorusOldInterface.isEnabled ? -48.0 : -70.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "            let topControlInset: CGFloat = 20.0",
+      "new": "            let topControlSideInset: CGFloat = 9.0",
+      "replacement": "            let topControlSideInset: CGFloat = AorusOldInterface.isEnabled ? 20.0 : 9.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "            let topControlInset: CGFloat = 20.0",
+      "new": "            let topControlVerticalInset: CGFloat = 12.0",
+      "replacement": "            let topControlVerticalInset: CGFloat = AorusOldInterface.isEnabled ? 20.0 : 12.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                    availableModeControlSize = availableSize",
+      "new": "                    availableModeControlSize = CGSize(width: availableSize.width - 140.0, height: availableSize.height)",
+      "replacement": "                    availableModeControlSize = AorusOldInterface.isEnabled ? availableSize : CGSize(width: availableSize.width - 140.0, height: availableSize.height)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                    availableModeControlSize = CGSize(width: panelWidth, height: 120.0)",
+      "new": "                    availableModeControlSize = CGSize(width: floor(panelWidth), height: 120.0)",
+      "replacement": "                    availableModeControlSize = AorusOldInterface.isEnabled ? CGSize(width: panelWidth, height: 120.0) : CGSize(width: floor(panelWidth), height: 120.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset)",
+      "new": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)",
+      "replacement": "                    modeControlPosition = AorusOldInterface.isEnabled ? CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset) : CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                        var nextButtonX = availableSize.width - topControlInset - rightMostButtonWidth / 2.0 - 58.0",
+      "new": "                        var nextButtonX = availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 100.0",
+      "replacement": "                        var nextButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 58.0 : availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 100.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlInset - flashButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlInset) + flashButton.size.height / 2.0)",
+      "new": "                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 50.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0)",
+      "replacement": "                        let position = AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0) : CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 50.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0)"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                            collageButtonX = availableSize.width - topControlInset - collageButton.size.width / 2.0 - 5.0",
+      "new": "                                collageButtonX = availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 54.0",
+      "replacement": "                                collageButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 5.0 : availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 54.0"
+    },
+    {
+      "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
+      "old": "                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : topControlInset + cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlInset) + cancelButton.size.height / 2.0))",
+      "new": "                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0))",
+      "replacement": "                        .position(AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? smallPanelWidth / 2.0 : topControlSideInset + cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0) : CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0))"
+    }
+  ]
+}
