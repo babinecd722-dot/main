@@ -1,6 +1,7 @@
 """Verify the provenance and installation of 12.0 layout bodies and geometry."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import classic_layout_reference
@@ -33,6 +34,27 @@ def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) ->
             matches = [rel for rel in assets["files"] if rel.endswith(".swift") and body.strip() in "\n".join(line.rstrip() for line in (reference / rel).read_text().splitlines())]
             if len(matches) != 1:
                 raise RuntimeError(f"Layout body does not come from one reference file: {name}: {matches}")
+        checks += 1
+
+    # Values restored line by line: each one installed, and with the reference at hand, each
+    # 12.0 line read from the file the manifest names, at the digest it names.
+    values = json.loads((repo / "scripts/classic_values.json").read_text())
+    if values["commit"] != "29b266d5adb0d3a32b93f5506210fe7d20b8f81f":
+        raise RuntimeError("Classic values do not come from Telegram iOS 12.0")
+    for entry in values["values"]:
+        source = (tg / entry["path"]).read_text()
+        if entry["replacement"] not in source:
+            raise RuntimeError(f"Classic value was not installed: {entry['path']}: {entry['new'].strip()}")
+        if reference is not None:
+            ref = reference / entry["reference"]
+            if hashlib.sha256(ref.read_bytes()).hexdigest() != entry["reference_sha256"]:
+                raise RuntimeError(f"Classic value reference mismatch: {entry['reference']}")
+            if entry["form"] == "added-term":
+                # A constant 12.9.2 added: 12.0 has no value of that name at all.
+                if re.search(r"\b" + entry["term"] + r"\b", ref.read_text()):
+                    raise RuntimeError(f"Classic term exists in 12.0: {entry['reference']}: {entry['term']}")
+            elif entry["old"] not in ref.read_text().split("\n"):
+                raise RuntimeError(f"Classic value does not come from 12.0: {entry['reference']}: {entry['old'].strip()}")
         checks += 1
 
     for source in (repo / "patches/submodules").rglob("AorusClassic*.swift"):

@@ -3444,4 +3444,5 @@ def verify_old_interface(tg: Path) -> list[str]:
             if marker not in text:
                 errors.append(f"OldInterface: missing {marker!r} in {name}")
     from aorus_classic_components import verify_classic_components
-    return errors + verify_classic_components(tg)
+    from aorus_classic_values import verify_classic_values
+    return errors + verify_classic_components(tg) + verify_classic_values(tg)

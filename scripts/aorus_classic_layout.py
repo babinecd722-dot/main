@@ -13,6 +13,8 @@ def patch_classic_layout(tg: Path) -> None:
         text = path.read_text()
         text = edit(text, binding["new"] + "\n", binding["replacement"] + "\n", binding["path"] + " reference geometry")
         path.write_text(text)
+    from aorus_classic_values import patch_classic_values
+    patch_classic_values(tg)
     _camera(tg)
     _capture_controls(tg)
     _wallpaper(tg)
