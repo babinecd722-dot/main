@@ -42,6 +42,32 @@ func run() { UIImage.custom(wrong: 1) }
 ''')
         self.assertTrue(any("custom" in failure for failure in failures))
 
+    def test_same_nested_names_belong_to_distinct_components(self):
+        self.assertEqual(self.failures("""
+struct First { class View { func offset(value: Int) { offset(value: 1) } } }
+struct Second { class View { func offset(value: Int) { offset(value: 2) } } }
+"""), [])
+
+    def test_nested_labels_do_not_accept_another_components_overload(self):
+        failures = self.failures("""
+struct First { class View { func offset(value: Int) { offset(wrong: 1) } } }
+struct Second { class View { func offset(wrong: Int) {} } }
+""")
+        self.assertTrue(any("does not match" in failure for failure in failures))
+
+    def test_nested_redeclaration_is_still_rejected(self):
+        failures = self.failures("""
+struct First { class View { func offset(value: Int) {} func offset(value: Int) {} } }
+""")
+        self.assertTrue(any("declared 2 times" in failure for failure in failures))
+
+    def test_qualified_nested_member_labels(self):
+        failures = self.failures("""
+struct First { class View { static func offset(value: Int) {} } }
+func run() { First.View.offset(wrong: 1) }
+""")
+        self.assertTrue(any("does not match" in failure for failure in failures))
+
 
 if __name__ == "__main__":
     unittest.main()

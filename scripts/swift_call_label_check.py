@@ -54,13 +54,13 @@ KNOWN_FOREIGN = {
     "dropLast", "trimmingCharacters", "replacingOccurrences", "components", "description",
 }
 
-TYPE_DECL = re.compile(r"\b(?:class|struct|enum|extension|actor|protocol)\s+(?!func\b|var\b)([A-Za-z_]\w*)")
+TYPE_DECL = re.compile(r"\b(?:class|struct|enum|extension|actor|protocol)\s+(?!func\b|var\b)([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
 # `class Cell: UITableViewCell, UITextViewDelegate {` — the first name after the colon is the
 # superclass when it is one of ours, and an inherited method is not a mistake.
 TYPE_PARENTS = re.compile(r"\b(?:class|extension)\s+([A-Za-z_]\w*)\s*:\s*([^{]+)\{")
 FUNC_DECL = re.compile(r"\bfunc\s+([A-Za-z_]\w*)\s*(?:<[^>(]*>)?\s*\(")
 CALL = re.compile(r"(?<![\w.$])([A-Za-z_]\w*)\s*\(")
-QUALIFIED = re.compile(r"\b([A-Z]\w*)\.(?:shared\.)?([A-Za-z_]\w*)\s*\(")
+QUALIFIED = re.compile(r"\b([A-Z]\w*(?:\.[A-Z]\w*)*)\.(?:shared\.)?([A-Za-z_]\w*)\s*\(")
 LABELLED = re.compile(r"^\s*([A-Za-z_]\w*)\s*:(?!:)")
 TWO_NAMES = re.compile(r"^\s*(?:@\w+\s+)*(_|[A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s*:")
 ONE_NAME = re.compile(r"^\s*(?:@\w+\s+)*([A-Za-z_]\w*)\s*:")
@@ -187,7 +187,13 @@ def enclosing_types(code):
                 if depth == 0:
                     spans.append((brace, index, match.group(1)))
                     break
-    return spans
+    qualified = []
+    for start, end, name in sorted(spans):
+        owner = innermost(qualified, start)
+        if owner is not None and "." not in name:
+            name = owner + "." + name
+        qualified.append((start, end, name))
+    return qualified
 
 
 def ancestors(name, parents, seen=None):
@@ -231,7 +237,9 @@ def collect(paths):
         for match in TYPE_PARENTS.finditer(code):
             inherited = [piece.strip().split("<")[0].strip()
                          for piece in match.group(2).split(",")]
-            parents.setdefault(match.group(1), set()).update(name for name in inherited if name)
+            brace = code.find("{", match.end())
+            owner = next((name for start, _, name in spans if start == brace), match.group(1))
+            parents.setdefault(owner, set()).update(name for name in inherited if name)
         for match in FUNC_DECL.finditer(code):
             close = match_paren(code, match.end() - 1)
             if close < 0:
