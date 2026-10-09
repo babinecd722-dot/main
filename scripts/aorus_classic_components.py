@@ -79,6 +79,105 @@ def patch_classic_components(tg: Path) -> None:
     _notifications(tg)
     _suggestions(tg)
     _drawing(tg)
+    _auxiliary_panels(tg)
+    _pdf_indicator(tg)
+
+
+def _pdf_indicator(tg: Path) -> None:
+    path = tg / "submodules/BrowserUI/Sources/BrowserPdfContent.swift"
+    text = path.read_text()
+    anchor = "    private let pageIndicatorBackground = GlassBackgroundView()\n"
+    helpers = """    private var aorusClassicPageIndicatorBackground: UIVisualEffectView?
+    private var aorusPageBackground: UIView {
+        guard AorusOldInterface.isEnabled else { return self.pageIndicatorBackground }
+        if let view = self.aorusClassicPageIndicatorBackground { return view }
+        let view = UIVisualEffectView(effect: UIBlurEffect(style: .light))
+        view.clipsToBounds = true
+        view.layer.cornerRadius = 10.0
+        self.aorusClassicPageIndicatorBackground = view
+        return view
+    }
+    private var aorusPageContentView: UIView {
+        if let view = self.aorusPageBackground as? UIVisualEffectView { return view.contentView }
+        return self.pageIndicatorBackground.contentView
+    }
+"""
+    text = edit(text, anchor, anchor + helpers, "PDF classic indicator view")
+    for old, new, count in (
+        ("transition.setAlpha(view: self.pageIndicatorBackground,", "transition.setAlpha(view: self.aorusPageBackground,", 2),
+        ("self.addSubview(self.pageIndicatorBackground)", "self.addSubview(self.aorusPageBackground)", 1),
+        ("self.pageIndicatorBackground.contentView.addSubview(view)", "self.aorusPageContentView.addSubview(view)", 1),
+        ("weight: .regular, traits: .monospacedNumbers), color: self.presentationData.theme.list.itemPrimaryTextColor", "weight: AorusOldInterface.isEnabled ? .semibold : .regular, traits: .monospacedNumbers), color: AorusOldInterface.isEnabled ? self.presentationData.theme.list.itemSecondaryTextColor : self.presentationData.theme.list.itemPrimaryTextColor", 1),
+        ("x: insets.left + 16.0, y: insets.top + 16.0", "x: insets.left + (AorusOldInterface.isEnabled ? 20.0 : 16.0), y: insets.top + 16.0", 1),
+        ("self.pageIndicatorBackground.bounds = CGRect(origin: .zero, size: pageBackgroundFrame.size)", "self.aorusPageBackground.bounds = CGRect(origin: .zero, size: pageBackgroundFrame.size)", 1),
+        ("transition.setPosition(view: self.pageIndicatorBackground, position: pageBackgroundFrame.center)", "transition.setPosition(view: self.aorusPageBackground, position: pageBackgroundFrame.center)", 1),
+    ):
+        text = edit(text, old, new, "PDF " + old[:40], count)
+    old = "            self.pageIndicatorBackground.update(size: pageBackgroundFrame.size, cornerRadius: pageBackgroundFrame.size.height * 0.5, isDark: self.presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .panel), transition: transition)"
+    text = edit(text, old, "            if !AorusOldInterface.isEnabled {\n    " + old + "\n            }", "PDF modern indicator update")
+    path.write_text(text)
+
+
+def _auxiliary_panels(tg: Path) -> None:
+    from classic_12_reference import ITEM_LIST_TABS_BODY, HASHTAG_TABS_BODY
+    for rel, signature, body, finish in (
+        ("ItemListUI/Sources/ItemListControllerSegmentedTitleView.swift", "    private func update(transition: ComponentTransition) {", ITEM_LIST_TABS_BODY, "            return\n"),
+        ("HashtagSearchUI/Sources/HashtagSearchNavigationContentNode.swift", "    override func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, transition: ContainedViewLayoutTransition) -> CGSize {", HASHTAG_TABS_BODY, "            return size\n"),
+    ):
+        path = tg / "submodules" / rel
+        text = path.read_text()
+        if "import TabSelectorComponent\n" not in text:
+            text = edit(text, "import HorizontalTabsComponent\n", "import HorizontalTabsComponent\nimport TabSelectorComponent\n", rel + " classic selector import")
+        # Only the original renderer is reused, so current model types, search
+        # providers, callbacks and theme changes remain in their current owner.
+        classic = "\n        if AorusOldInterface.isEnabled { // " + MARK + "\n" + "\n".join("    " + line if line else "" for line in body.splitlines()) + "\n" + finish + "        }\n"
+        text = edit(text, signature, signature + classic, rel + " 12.0 renderer")
+        if "HashtagSearch" in rel:
+            text = edit(text, "            return 64.0 + 44.0", "            return (AorusOldInterface.isEnabled ? 54.0 : 64.0) + 44.0", "hashtag classic height")
+            text = edit(text, "        self.view.addSubview(self.tabsBackgroundContainer)", "        if !AorusOldInterface.isEnabled { self.view.addSubview(self.tabsBackgroundContainer) }", "hashtag classic background")
+            build = tg / "submodules/HashtagSearchUI/BUILD"
+            content = build.read_text()
+            label = '        "//submodules/TelegramUI/Components/TabSelectorComponent",\n'
+            if label not in content:
+                content = edit(content, '    deps = [\n', '    deps = [\n' + label, "hashtag selector dependency")
+                build.write_text(content)
+        else:
+            text = edit(text, "        self.addSubview(self.backgroundContainer)", "        if !AorusOldInterface.isEnabled { self.addSubview(self.backgroundContainer) }", "list title classic background")
+        path.write_text(text)
+
+    path = tg / "submodules/TelegramUI/Sources/SecretChatHandshakeStatusInputPanelNode.swift"
+    text = path.read_text()
+    anchor = "        let titleSize = self.title.update(\n"
+    classic = """        if AorusOldInterface.isEnabled {
+            self.titleBackground.isHidden = true
+            self.button.setAttributedTitle(NSAttributedString(string: text ?? " ", font: Font.regular(15.0), textColor: interfaceState.theme.chat.inputPanel.primaryTextColor, paragraphAlignment: .center), for: [])
+            let buttonSize = self.button.measure(CGSize(width: width - 10.0, height: 100.0))
+            let panelHeight = defaultHeight(metrics: metrics)
+            self.button.frame = CGRect(origin: CGPoint(x: leftInset + floor((width - leftInset - rightInset - buttonSize.width) / 2.0), y: floor((panelHeight - buttonSize.height) / 2.0)), size: buttonSize)
+            return panelHeight
+        }
+
+"""
+    text = edit(text, anchor, classic + anchor, "secret chat classic status")
+    path.write_text(text)
+
+    path = tg / "submodules/TelegramUI/Sources/CommandMenuChatInputContextPanelNode.swift"
+    text = path.read_text()
+    text = edit(text, "        self.listView.view.mask = self.listMaskView", "        self.listView.view.mask = AorusOldInterface.isEnabled ? nil : self.listMaskView", "bot command classic mask")
+    text = edit(text, "            cornerRadius: 20.0,", "            cornerRadius: AorusOldInterface.isEnabled ? 0.0 : 20.0,", "bot command classic corner")
+    text = edit(text, "            tintColor: .init(kind: .panel),", "            tintColor: AorusOldInterface.isEnabled ? .init(kind: .custom(style: .default, color: interfaceState.theme.list.plainBackgroundColor)) : .init(kind: .panel),", "bot command classic theme")
+    path.write_text(text)
+
+    path = tg / "submodules/TelegramUI/Sources/HorizontalListContextResultsChatInputContextPanelNode.swift"
+    text = path.read_text()
+    for old, new in (
+        ("        let sideInset: CGFloat = 8.0", "        let sideInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0"),
+        ("        let innerInset: CGFloat = 4.0", "        let innerInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 4.0"),
+        ("        let cornerRadius: CGFloat = 8.0", "        let cornerRadius: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0"),
+        ("y: size.height - bottomInset - 8.0 - listHeight", "y: size.height - (AorusOldInterface.isEnabled ? 0.0 : bottomInset + 8.0) - listHeight"),
+    ):
+        text = edit(text, old, new, "horizontal bot result " + old.strip())
+    path.write_text(text)
 
 
 def _normalize_styles(tg: Path) -> None:
@@ -233,6 +332,11 @@ def verify_classic_components(tg: Path) -> list[str]:
         "LocationUI/Sources/LocationMapHeaderNode.swift": ["let glass = glass && !AorusOldInterface.isEnabled"],
         "AttachmentUI/Sources/AttachmentPanel.swift": ["let style = AorusOldInterface.isEnabled ? .legacy : style"],
         "DrawingUI/Sources/ModeAndSizeComponent.swift": ["component: AnyComponent(AorusClassicModeAndSizeComponent", "component.updatedMode(component.availableModes[index])"],
+        "ItemListUI/Sources/ItemListControllerSegmentedTitleView.swift": ["component: AnyComponent(TabSelectorComponent("],
+        "HashtagSearchUI/Sources/HashtagSearchNavigationContentNode.swift": ["component: AnyComponent(TabSelectorComponent(", "AorusOldInterface.isEnabled ? 54.0 : 64.0"],
+        "TelegramUI/Sources/SecretChatHandshakeStatusInputPanelNode.swift": ["self.button.setAttributedTitle(NSAttributedString(string: text ??"],
+        "TelegramUI/Sources/CommandMenuChatInputContextPanelNode.swift": ["self.listView.view.mask = AorusOldInterface.isEnabled ? nil : self.listMaskView"],
+        "BrowserUI/Sources/BrowserPdfContent.swift": ["view.layer.cornerRadius = 10.0", "self.aorusPageContentView.addSubview(view)"],
     }
     errors = []
     for rel, markers in checks.items():

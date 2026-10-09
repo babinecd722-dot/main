@@ -424,6 +424,8 @@
     "submodules/TelegramUI/Images.xcassets/Settings/Power/PowerIconVideo.imageset/Contents.json": "51d0e5b69cb4ef26d40dd314f7d36aa9a5e3f940d8fc64efda09fe1854be0e3b",
     "submodules/TelegramUI/Images.xcassets/Settings/TextArrowRight.imageset/chevron.right.svg": "9b270740bb9e8244d6f9c63898025a8bcbcdd6335cb5b9311e1859ab5b875257",
     "submodules/TelegramUI/Images.xcassets/Settings/TextArrowRight.imageset/Contents.json": "f93a0c0fa7ad0d1a121fde77697be530edbc3f29e440167820dffa5d4d1dd856",
-    "submodules/DrawingUI/Sources/ModeAndSizeComponent.swift": "ca3d0b5bfa94071511eece0de824ec1c5ddd68b901c9f36b058685437ab99d83"
+    "submodules/DrawingUI/Sources/ModeAndSizeComponent.swift": "ca3d0b5bfa94071511eece0de824ec1c5ddd68b901c9f36b058685437ab99d83",
+    "submodules/ItemListUI/Sources/ItemListControllerSegmentedTitleView.swift": "5212f0e4380c696f814a6161039d103cec5ba6d1fcb51a3b6fbdc61f0b299b13",
+    "submodules/HashtagSearchUI/Sources/HashtagSearchNavigationContentNode.swift": "ac9d5df4d9e12cfa92a5ffbbf2c19e02fd401a439af447f564ceb36af9374546"
   }
 }
