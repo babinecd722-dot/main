@@ -36,10 +36,13 @@ METHOD
     end = attachment.index("\n    }", start) + len("\n    }")
     point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     return fixture + """
+final class AorusClassicNodeViewFixture: UIView {
+    var view: UIView { return self }
+}
 final class AorusClassicAttachmentHitTestView: UIView {
     var view: UIView { return self }
-    let clipNode = UIView()
-    let bottomClipNode = UIView()
+    let clipNode = AorusClassicNodeViewFixture()
+    let bottomClipNode = AorusClassicNodeViewFixture()
     let container = UIView()
     let sendButton = UIButton()
     private(set) var sends = 0
