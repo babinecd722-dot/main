@@ -1157,6 +1157,9 @@ jobs:
       - name: Classic interface preflight
         run: python3 aorusgram/scripts/classic_components_check.py aorusgram --telegram-source telegram-ios
 
+      - name: Wall menus and classic presentation preflight
+        run: python3 aorusgram/scripts/wall_menu_check.py aorusgram --telegram-source telegram-ios
+
       - name: Native round video sending preflight
         run: |
           python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios

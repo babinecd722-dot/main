@@ -98,6 +98,21 @@ import UIKit
             expect(timerLabel.valueLabel.frame.maxX < timerLabel.unitLabel.frame.minX, "timer number does not overlap its unit")
         }
     }
+    for width: CGFloat in [320, 390, 768] {
+        let menu = AorusClassicLensContainer(frame: CGRect(x: 0, y: 0, width: width, height: 200))
+        let button = UIButton(frame: CGRect(x: 0, y: 44, width: width, height: 44))
+        menu.contentsView.addSubview(button)
+        for color in [UIColor.magenta, UIColor.cyan] {
+            menu.themeColor = color
+            menu.update(size: menu.bounds.size, cornerRadius: 14, isDark: true, transition: AorusClassicMenuFixtureTransition())
+            expect(menu.subviews.count == 2, "the classic menu has one background and one content host")
+            expect(!menu.subviews.contains(where: { $0 is UIVisualEffectView }), "the classic menu does not mount a modern glass host")
+            expect(menu.subviews[0].backgroundColor == color, "the menu uses the current theme color")
+            expect(menu.contentsView.frame == menu.bounds, "menu actions occupy the full native panel")
+            expect(menu.layer.cornerRadius == 14 && menu.clipsToBounds, "menu clips to 12.0 corners")
+            expect(menu.hitTest(CGPoint(x: width / 2, y: 66), with: nil) === button, "native menu buttons receive their taps")
+        }
+    }
     print("Native classic input passed: \(checks) assertions")
     return checks
 }

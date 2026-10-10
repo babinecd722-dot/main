@@ -96,6 +96,26 @@ HIERARCHY
 """.replace('HIERARCHY', hierarchy)
 
 
+def native_menu_source(tg):
+    text = (tg / 'submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift').read_text()
+    source = block(text, 'private final class AorusClassicLensContainer:')
+    source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition').replace('NavigationBackgroundView', 'AorusClassicMenuFixtureBackground')
+    return '''
+protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
+final class AorusClassicMenuFixtureBackground: UIView {
+    init(color: UIColor?) { super.init(frame: .zero); self.backgroundColor = color }
+    required init?(coder: NSCoder) { fatalError() }
+    func updateColor(color: UIColor, enableBlur: Bool, forceKeepBlur: Bool, transition: AorusClassicMenuFixtureTransition) { self.backgroundColor = color }
+    func update(size: CGSize, transition: AorusClassicMenuFixtureTransition) {}
+}
+struct AorusClassicMenuFixtureTransition {
+    var containedViewLayoutTransition: AorusClassicMenuFixtureTransition { self }
+    func setFrame(view: UIView, frame: CGRect) { view.frame = frame }
+    func setCornerRadius(layer: CALayer, cornerRadius: CGFloat) { layer.cornerRadius = cornerRadius }
+}
+''' + source
+
+
 def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: str):
     checks = 0
     if REFERENCE['commit'] != '29b266d5adb0d3a32b93f5506210fe7d20b8f81f':

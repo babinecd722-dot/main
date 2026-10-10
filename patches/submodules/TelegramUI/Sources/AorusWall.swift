@@ -384,6 +384,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// cannot rediscover it through some other seed.
         func applyExclusions() {
             let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: self.accountId)
+            let removed = AorusWallSettingsStore.removedMessageIds(accountId: self.accountId)
             self.excludedPeerIds = excluded
             self.recommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
             self.globalRecommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
@@ -396,14 +397,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // rebuild the feed: stable message ids let the native list animate these rows out
             // while every unrelated post keeps its position.
             let current = self.currentMessageIds.compactMap { self.currentMessages[$0] }
-            let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) }
+            let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) && !removed.contains($0.id) }
             if filtered.count != current.count {
                 self.applyMessages(filtered, updateType: .Generic, preserveCurrent: false)
                 self.previousVisibleMessageIds = self.previousVisibleMessageIds.filter {
-                    !excluded.contains($0.peerId.toInt64())
+                    !excluded.contains($0.peerId.toInt64()) && !removed.contains($0)
                 }
                 self.observeVisibleMessages(
-                    self.observedMessageIds.filter { !excluded.contains($0.peerId.toInt64()) }
+                    self.observedMessageIds.filter { !excluded.contains($0.peerId.toInt64()) && !removed.contains($0) }
                 )
             }
         }
@@ -603,6 +604,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             return self.context.account.postbox.transaction { transaction -> [Message] in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
                 let seen = AorusWallSettingsStore.seenMessageIds(accountId: accountId)
+                let removed = AorusWallSettingsStore.removedMessageIds(accountId: accountId)
                 let includeArchived = AorusWallSettingsStore.showArchived(accountId: accountId)
 
                 let channelFilter: (Peer) -> Bool = { peer in
@@ -680,7 +682,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             if let readState, readState.isIncomingMessageIndexRead(message.index) {
                                 continue
                             }
-                            if AorusWallSettingsStore.isSeen(message.id, in: seen) || placed.contains(message.id) {
+                            if removed.contains(message.id) || AorusWallSettingsStore.isSeen(message.id, in: seen) || placed.contains(message.id) {
                                 continue
                             }
                             guard uniqueIds.insert(message.id).inserted else {
@@ -920,6 +922,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 messages.sort(by: { $0.index < $1.index })
             }
 
+            let removed = AorusWallSettingsStore.removedMessageIds(accountId: self.accountId)
+            messages.removeAll(where: { removed.contains($0.id) })
             messages = self.removingExactCrossChannelTextDuplicates(
                 messages,
                 preserving: preserveCurrent ? Set(self.currentMessageIds) : []
@@ -1504,6 +1508,20 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
 
         self.observers.append(NotificationCenter.default.addObserver(
+            forName: AorusWallSettingsStore.postsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let changedAccountId = notification.object as? NSNumber,
+                  changedAccountId.int64Value == context.account.id.int64 else {
+                return
+            }
+            self?.impl.with { impl in
+                impl.applyExclusions()
+                impl.recountBadge()
+            }
+        })
+        self.observers.append(NotificationCenter.default.addObserver(
             forName: AorusWallSettingsStore.didChange,
             object: nil,
             queue: .main
@@ -1584,6 +1602,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 
     public func deleteMessages(ids: [EngineMessage.Id]) {
+        self.impl.with { impl in
+            AorusWallSettingsStore.removePosts(ids, accountId: impl.accountId)
+            impl.applyExclusions()
+            impl.recountBadge()
+        }
     }
 
     public func editMessage(id: EngineMessage.Id, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool) {

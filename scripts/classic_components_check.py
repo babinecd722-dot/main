@@ -10,7 +10,7 @@ from classic_style_check import check_classic_styles, installed_classic_gesture
 from classic_browser_check import check_classic_browser
 from classic_layout_check import check_classic_layout
 from classic_attachment_check import check_classic_attachment
-from classic_sheets_check import check_classic_sheets, native_timer_source, native_sheet_source, native_sticker_source
+from classic_sheets_check import check_classic_sheets, native_timer_source, native_sheet_source, native_sticker_source, native_menu_source
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -67,7 +67,7 @@ HIERARCHY
     @objc private func send() { self.sends += 1 }
 POINT
 }
-""".replace("HIERARCHY", hierarchy).replace("POINT", point) + native_sheet_source(tg) + native_sticker_source(tg)
+""".replace("HIERARCHY", hierarchy).replace("POINT", point) + native_sheet_source(tg) + native_sticker_source(tg) + native_menu_source(tg)
 
 
 def main() -> None:

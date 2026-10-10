@@ -12,6 +12,7 @@ import AccountContext
 
 public enum AorusWallSettingsStore {
     public static let didChange = Notification.Name("aorusgram.wallSettingsChanged")
+    public static let postsDidChange = Notification.Name("aorusgram.wallPostsChanged")
 
     private static let lock = NSLock()
     private static let seenLimit = 100000
@@ -28,6 +29,36 @@ public enum AorusWallSettingsStore {
     // serialising a giant UserDefaults array or losing the final batch when iOS kills the app.
     private static var seenCache: [Int64: SeenState] = [:]
     private static var excludedCache: [Int64: Set<Int64>] = [:]
+    private static var removedCache: [Int64: Set<MessageId>] = [:]
+
+    public static func removedMessageIds(accountId: Int64) -> Set<MessageId> {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = removedCache[accountId] {
+            return cached
+        }
+        let stored = UserDefaults.standard.stringArray(forKey: key("removed_posts", accountId: accountId)) ?? []
+        let result = Set(stored.compactMap(parseMessageKey))
+        removedCache[accountId] = result
+        return result
+    }
+
+    public static func removePosts(_ ids: [MessageId], accountId: Int64) {
+        guard !ids.isEmpty else { return }
+        lock.lock()
+        let stored = UserDefaults.standard.stringArray(forKey: key("removed_posts", accountId: accountId)) ?? []
+        var removed = removedCache[accountId] ?? Set(stored.compactMap(parseMessageKey))
+        let previousCount = removed.count
+        removed.formUnion(ids)
+        guard removed.count != previousCount else {
+            lock.unlock()
+            return
+        }
+        removedCache[accountId] = removed
+        UserDefaults.standard.set(removed.map(messageKey).sorted(), forKey: key("removed_posts", accountId: accountId))
+        lock.unlock()
+        NotificationCenter.default.post(name: postsDidChange, object: NSNumber(value: accountId))
+    }
 
     private static func key(_ name: String, accountId: Int64) -> String {
         return "aorusgram_wall_\(name)_\(accountId)"

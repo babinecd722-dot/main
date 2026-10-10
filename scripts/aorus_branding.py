@@ -30700,6 +30700,8 @@ def main() -> None:
     patch_proxy_key_provider(tg)
     patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
+    from aorus_wall_context_menu import patch_wall_context_menu
+    patch_wall_context_menu(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)
     patch_forward_hide_names_default(tg)

@@ -39,6 +39,9 @@ def patch_classic_sheets(tg: Path) -> None:
     for rel in COPIES:
         shutil.copyfile(ROOT / rel, tg / "submodules" / rel)
     _routes(tg)
+    _presentation_routes(tg)
+    from aorus_classic_presentation import patch_classic_presentation
+    patch_classic_presentation(tg)
     _theme(tg)
     _stickers(tg)
     _devices(tg)
@@ -60,6 +63,27 @@ def patch_classic_sheets(tg: Path) -> None:
         for dependency in original:
             text = add_dependency(text, dependency)
         path.write_text(text)
+
+
+def _presentation_routes(tg: Path) -> None:
+    path = tg / "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/RecentSessionsController.swift"
+    text = path.read_text()
+    if "// AorusGram: classic session presentation" not in text:
+        for start_marker, end_marker in (("    }, openSession:", "    }, openConnectedBotSession:"), ("    }, openWebSession:", "    }, removeWebSession:")):
+            start = text.index(start_marker)
+            end = text.index(end_marker, start)
+            body = text[start:end]
+            body = edit(body, "        pushControllerImpl?(controller)", "        // AorusGram: classic session presentation\n        if AorusOldInterface.isEnabled {\n            presentControllerImpl?(controller, nil)\n        } else {\n            pushControllerImpl?(controller)\n        }", "12.0 session presentation")
+            text = text[:start] + body + text[end:]
+        path.write_text(text)
+    path = tg / "submodules/SettingsUI/Sources/Data and Storage/ProxyServerSettingsController.swift"
+    text = path.read_text()
+    if "// AorusGram: classic proxy QR presentation" not in text:
+        start = text.index("        let controller = aorusQrCodeScreen(")
+        end = text.index("        pushControllerImpl?(controller)", start) + len("        pushControllerImpl?(controller)")
+        body = text[start:end].replace("let controller =", "let qrController =", 1)
+        body = body.replace("        pushControllerImpl?(controller)", "        // AorusGram: classic proxy QR presentation\n        if AorusOldInterface.isEnabled {\n            controller?.present(qrController, in: .window(.root))\n        } else {\n            pushControllerImpl?(qrController)\n        }")
+        path.write_text(text[:start] + body + text[end:])
 
 
 def _routes(tg: Path) -> None:
