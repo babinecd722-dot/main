@@ -107,9 +107,6 @@ def native_menu_source(tg):
     return '''
 protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
-private extension UIColor {
-    var alpha: CGFloat { self.cgColor.alpha }
-}
 public struct AorusClassicMenuFixtureTransition {
     static let immediate = AorusClassicMenuFixtureTransition()
     var containedViewLayoutTransition: AorusClassicMenuFixtureTransition { self }
