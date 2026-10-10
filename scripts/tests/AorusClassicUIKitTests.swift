@@ -70,6 +70,20 @@ import UIKit
             action.removeFromSuperview()
         }
     }
+    for classic in [false, true] {
+        AorusClassicControlledLook.enabled = classic
+        let stickers = AorusClassicStickerFixture(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
+        stickers.installHierarchy()
+        expect((stickers.bottomContainerNode.superview == nil) == classic, "classic stickers do not mount the modern footer")
+        if classic {
+            stickers.topContainerNode.frame = CGRect(x: 0, y: 0, width: 320, height: 56)
+            stickers.titleContainer.frame = CGRect(x: 32, y: 0, width: 280, height: 56)
+            stickers.cancelButtonNode.frame = CGRect(x: 16, y: 10, width: 80, height: 40)
+            stickers.moreButtonNode.frame = CGRect(x: 260, y: 10, width: 40, height: 40)
+            expect(stickers.hitTest(CGPoint(x: 60, y: 30), with: nil) === stickers.cancelButtonNode, "long sticker titles cannot cover Cancel")
+            expect(stickers.hitTest(CGPoint(x: 280, y: 30), with: nil) === stickers.moreButtonNode, "long sticker titles cannot cover More")
+        }
+    }
     let timerLabel = AorusClassicTimerPickerItemView(frame: CGRect(x: 0, y: 0, width: 280, height: 40))
     timerLabel.textColor = .magenta
     expect(timerLabel.valueLabel.font.pointSize == 24 && timerLabel.unitLabel.font.pointSize == 16, "timer wheel retains 12.0 typography")

@@ -22,6 +22,19 @@ def function_body(text):
     return text[text.index("{") + 1:text.rindex("}")]
 
 
+def canonical_dependency(label: str) -> str:
+    if label.startswith("//") and ":" not in label:
+        return label + ":" + label.rsplit("/", 1)[-1]
+    return label
+
+
+def add_dependency(text: str, label: str) -> str:
+    dependencies = re.findall(r'"(//[^"\n]+)"', text)
+    if canonical_dependency(label) in {canonical_dependency(item) for item in dependencies}:
+        return text
+    return edit(text, "    deps = [", '    deps = [\n        "' + label + '",', "restored sheet dependency")
+
+
 def patch_classic_sheets(tg: Path) -> None:
     for rel in COPIES:
         shutil.copyfile(ROOT / rel, tg / "submodules" / rel)
@@ -34,9 +47,8 @@ def patch_classic_sheets(tg: Path) -> None:
     for rel in ("TelegramUI/Components/ChatTimerScreen", "LocationUI", "TelegramUI/Components/ChatThemeScreen"):
         path = tg / "submodules" / rel / "BUILD"
         text = path.read_text()
-        for dependency in ("//submodules/AsyncDisplayKit:AsyncDisplayKit", "//submodules/SolidRoundedButtonNode:SolidRoundedButtonNode"):
-            if '"' + dependency + '"' not in text:
-                text = edit(text, "    deps = [", "    deps = [\n        \"" + dependency + "\",", "original sheet dependency")
+        for dependency in ("//submodules/AsyncDisplayKit", "//submodules/SolidRoundedButtonNode"):
+            text = add_dependency(text, dependency)
         path.write_text(text)
     for rel in COPIES:
         path = next((parent / "BUILD" for parent in (tg / "submodules" / rel).parents if (parent / "BUILD").is_file()), None)
@@ -46,8 +58,7 @@ def patch_classic_sheets(tg: Path) -> None:
         original = REFERENCE.get("dependencies", {}).get(str(folder), [])
         text = path.read_text()
         for dependency in original:
-            if '"' + dependency + '"' not in text:
-                text = edit(text, "    deps = [", "    deps = [\n        \"" + dependency + "\",", "restored sheet imports")
+            text = add_dependency(text, dependency)
         path.write_text(text)
 
 
@@ -108,7 +119,9 @@ def _devices(tg: Path) -> None:
 def _stickers(tg: Path) -> None:
     path = tg / "submodules/StickerPackPreviewUI/Sources/StickerPackScreen.swift"
     text = path.read_text()
+    text = _sticker_hierarchy(text)
     if "private func aorusClassicUpdateButtonBackgroundAlpha()" in text:
+        path.write_text(text)
         return
     fields = """    private lazy var actionAreaBackgroundNode = NavigationBackgroundNode(color: self.presentationData.theme.rootController.tabBar.backgroundColor)
     private lazy var actionAreaSeparatorNode: ASDisplayNode = {
@@ -129,12 +142,6 @@ def _stickers(tg: Path) -> None:
     for name in ("topEdgeEffectView", "bottomEdgeEffectView"):
         text = edit(text, "private let " + name + " = EdgeEffectView()", "private lazy var " + name + " = EdgeEffectView()", "sticker lazy edge effect")
     setup = """        if AorusOldInterface.isEnabled {
-            self.addSubnode(self.actionAreaBackgroundNode)
-            self.addSubnode(self.actionAreaSeparatorNode)
-            self.addSubnode(self.buttonNode)
-            self.addSubnode(self.titleSeparatorNode)
-            self.topContainerNode.addSubnode(self.cancelButtonNode)
-            self.topContainerNode.addSubnode(self.moreButtonNode)
             self.moreButtonNode.iconNode.enqueueState(.more, animated: false)
             self.buttonNode.addTarget(self, action: #selector(self.buttonPressed), forControlEvents: .touchUpInside)
             self.cancelButtonNode.setTitle(self.presentationData.strings.Common_Cancel, with: Font.regular(17.0), with: self.presentationData.theme.actionSheet.controlAccentColor, for: .normal)
@@ -151,7 +158,7 @@ def _stickers(tg: Path) -> None:
             self.gridNode.visibleContentOffsetChanged = { [weak self] _ in self?.aorusClassicUpdateButtonBackgroundAlpha() }
         }
 """
-    text = edit(text, "        self.addSubnode(self.bottomContainerNode)", "        self.addSubnode(self.bottomContainerNode)\n" + setup, "sticker node mounting")
+    text = edit(text, "        // AorusGram: classic sticker hierarchy", "        // AorusGram: classic sticker hierarchy\n" + setup, "sticker actions")
     # Original snapping/expansion accompanies the original title and grid geometry.
     start = text.index("        self.gridNode.interactiveScrollingWillBeEnded =")
     end = text.index("\n        let ignoreCache", start)
@@ -183,6 +190,44 @@ def _stickers(tg: Path) -> None:
 """
     text = edit(text, "    func updatePresentationData(_ presentationData: PresentationData) {\n        self.presentationData = presentationData", "    func updatePresentationData(_ presentationData: PresentationData) {\n        self.presentationData = presentationData\n" + colors, "sticker native presentation updates")
     path.write_text(text)
+
+
+def _sticker_hierarchy(text: str) -> str:
+    if "// AorusGram: classic sticker hierarchy" in text:
+        return text
+    original = """        self.titleContainer.addSubnode(self.titleNode)
+        self.addSubnode(self.topContainerNode)
+        self.addSubnode(self.titleContainer)
+
+        self.addSubnode(self.bottomContainerNode)""".replace("\n\n", "\n        \n")
+    hierarchy = """        self.titleContainer.addSubnode(self.titleNode)
+        if AorusOldInterface.isEnabled {
+            self.addSubnode(self.actionAreaBackgroundNode)
+            self.addSubnode(self.actionAreaSeparatorNode)
+            self.addSubnode(self.buttonNode)
+            self.addSubnode(self.titleContainer)
+            self.addSubnode(self.titleSeparatorNode)
+            self.addSubnode(self.topContainerNode)
+            self.topContainerNode.addSubnode(self.cancelButtonNode)
+            self.topContainerNode.addSubnode(self.moreButtonNode)
+        } else {
+            self.addSubnode(self.topContainerNode)
+            self.addSubnode(self.titleContainer)
+            self.addSubnode(self.bottomContainerNode)
+        }
+        // AorusGram: classic sticker hierarchy"""
+    text = edit(text, original, hierarchy, "12.0 sticker node order")
+    # Upgrade an already installed renderer without registering its actions twice.
+    old_setup = """        if AorusOldInterface.isEnabled {
+            self.addSubnode(self.actionAreaBackgroundNode)
+            self.addSubnode(self.actionAreaSeparatorNode)
+            self.addSubnode(self.buttonNode)
+            self.addSubnode(self.titleSeparatorNode)
+            self.topContainerNode.addSubnode(self.cancelButtonNode)
+            self.topContainerNode.addSubnode(self.moreButtonNode)
+            self.moreButtonNode.iconNode.enqueueState"""
+    text = text.replace(old_setup, "        if AorusOldInterface.isEnabled {\n            self.moreButtonNode.iconNode.enqueueState")
+    return text
 
 
 def _adaptive_sheets(tg: Path) -> None:

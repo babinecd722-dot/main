@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from aorus_classic_sheets import COPIES, REFERENCE
+from aorus_classic_sheets import COPIES, REFERENCE, canonical_dependency
 
 
 def block(text, marker):
@@ -47,6 +47,30 @@ class AorusClassicSheetFixture: UIView {
     return source
 
 
+def native_sticker_source(tg):
+    text = (tg / 'submodules/StickerPackPreviewUI/Sources/StickerPackScreen.swift').read_text()
+    start = text.index('        self.titleContainer.addSubnode(self.titleNode)')
+    end = text.index('        // AorusGram: classic sticker hierarchy', start)
+    hierarchy = text[start:end].replace('.addSubnode(', '.addSubview(').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
+    return """
+final class AorusClassicStickerFixture: UIView {
+    let actionAreaBackgroundNode = UIView()
+    let actionAreaSeparatorNode = UIView()
+    let buttonNode = UIButton()
+    let titleContainer = UIView()
+    let titleNode = UILabel()
+    let titleSeparatorNode = UIView()
+    let topContainerNode = UIView()
+    let cancelButtonNode = UIButton()
+    let moreButtonNode = UIButton()
+    let bottomContainerNode = UIView()
+    func installHierarchy() {
+HIERARCHY
+    }
+}
+""".replace('HIERARCHY', hierarchy)
+
+
 def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: str):
     checks = 0
     if REFERENCE['commit'] != '29b266d5adb0d3a32b93f5506210fe7d20b8f81f':
@@ -66,6 +90,13 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
     for rel in COPIES:
         if (repo / 'patches/submodules' / rel).read_bytes() != (tg / 'submodules' / rel).read_bytes():
             raise RuntimeError('Original sheet not installed: ' + rel)
+        checks += 1
+    for rel in REFERENCE['dependencies']:
+        text = (tg / 'submodules' / rel / 'BUILD').read_text()
+        deps = text.split('    deps = [', 1)[1].split(']', 1)[0]
+        labels = [canonical_dependency(label) for label in re.findall(r'"([^"\n]+)"', deps)]
+        if len(labels) != len(set(labels)):
+            raise RuntimeError('Duplicate restored sheet dependency: ' + rel)
         checks += 1
     routed = ('ChatTimerScreen', 'LocationDistancePickerScreen', 'RecentSessionScreen', 'AdsInfoScreen', 'QrCodeScreen', 'PremiumBoostLevelsScreen')
     for path in (tg / 'submodules').rglob('*.swift'):
