@@ -766,7 +766,7 @@ class AorusClassicChatThemeScreenNode: ViewControllerTracingNode, ASScrollViewDe
 
         self.otherButton = HighlightableButtonNode()
 
-        self.listNode = ListView()
+        self.listNode = ListViewImpl()
         self.listNode.transform = CATransform3DMakeRotation(-CGFloat.pi / 2.0, 0.0, 0.0, 1.0)
 
         super.init()
@@ -812,10 +812,7 @@ class AorusClassicChatThemeScreenNode: ViewControllerTracingNode, ASScrollViewDe
         }
         self.otherButton.addTarget(self, action: #selector(self.otherButtonPressed), forControlEvents: .touchUpInside)
 
-        self.disposable.set(combineLatest(
-            queue: Queue.mainQueue(),
-            self.context.engine.themes.getChatThemes(accountManager: self.context.sharedContext.accountManager),
-            self.uniqueGiftChatThemesContext.state
+        let giftThemesAndPeers: Signal<(UniqueGiftChatThemesContext.State, [EnginePeer.Id: EnginePeer]), NoError> = self.uniqueGiftChatThemesContext.state
             |> mapToSignal { state -> Signal<(UniqueGiftChatThemesContext.State, [EnginePeer.Id: EnginePeer]), NoError> in
                 var peerIds: [EnginePeer.Id] = []
                 for theme in state.themes {
@@ -837,10 +834,15 @@ class AorusClassicChatThemeScreenNode: ViewControllerTracingNode, ASScrollViewDe
                         return result
                     }
                 )
-            },
+            }
+        let themesAndSelection: Signal<([TelegramTheme], (UniqueGiftChatThemesContext.State, [EnginePeer.Id: EnginePeer]), ChatTheme?, Bool), NoError> = combineLatest(
+            queue: Queue.mainQueue(),
+            self.context.engine.themes.getChatThemes(accountManager: self.context.sharedContext.accountManager),
+            giftThemesAndPeers,
             self.selectedThemePromise.get(),
             self.isDarkAppearancePromise.get()
-        ).startStrict(next: { [weak self] themes, uniqueGiftChatThemesStateAndPeers, selectedTheme, isDarkAppearance in
+        )
+        self.disposable.set(themesAndSelection.startStrict(next: { [weak self] themes, uniqueGiftChatThemesStateAndPeers, selectedTheme, isDarkAppearance in
             guard let strongSelf = self else {
                 return
             }

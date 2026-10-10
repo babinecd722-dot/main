@@ -25,6 +25,14 @@ def check_initializer_order(source, rel):
                 raise RuntimeError('Instance method called before super.init: ' + rel + ': ' + call.group(1))
 
 
+def check_protocol_constructors(source, protocols, rel):
+    code = strip_comments(source)
+    concrete_types = set(re.findall(r'\b(?:class|struct|enum)\s+(\w+)', code))
+    for call in re.finditer(r'(?<![\w.])([A-Z]\w*)\s*\(', code):
+        if call.group(1) in protocols and call.group(1) not in concrete_types:
+            raise RuntimeError('Cannot construct a current protocol in a classic sheet: ' + rel + ': ' + call.group(1))
+
+
 def block(text, marker):
     start = text.index(marker)
     line_start = text.rfind('\n', 0, start) + 1
@@ -108,10 +116,6 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
         installed = (tg / 'submodules' / rel).read_bytes()
         if (repo / 'patches/submodules' / rel).read_bytes() != installed:
             raise RuntimeError('Original sheet not installed: ' + rel)
-        # ContextController became a protocol in the current client. Its factory
-        # retains the legacy menu implementation; the 12.0 initializer no longer exists.
-        if re.search(r'\bContextController\s*\(', installed.decode()):
-            raise RuntimeError('Classic sheet must use the current context-menu factory: ' + rel)
         check_initializer_order(installed.decode(), rel)
         checks += 1
     for rel in REFERENCE['dependencies']:
@@ -122,15 +126,19 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
             raise RuntimeError('Duplicate restored sheet dependency: ' + rel)
         checks += 1
     routed = ('ChatTimerScreen', 'LocationDistancePickerScreen', 'RecentSessionScreen', 'AdsInfoScreen', 'QrCodeScreen', 'PremiumBoostLevelsScreen')
+    protocols = set()
     for path in (tg / 'submodules').rglob('*.swift'):
         if path.name.startswith('AorusClassic'):
             continue
         text = path.read_text()
+        protocols.update(re.findall(r'\bpublic\s+protocol\s+(\w+)', text))
         for name in routed:
             if path.name != name + '.swift' and re.search(r'\b' + name + r'\(', text):
                 raise RuntimeError('Constructor bypasses classic dispatch: ' + str(path))
         if re.search(r'\baorusaorus\w*Screen\(', text):
             raise RuntimeError('Sheet dispatch duplicated on replay: ' + str(path))
+    for rel in COPIES:
+        check_protocol_constructors((tg / 'submodules' / rel).read_text(), protocols, rel)
     native_timer_source(tg)
     timer = (tg / 'submodules/TelegramUI/Components/ChatTimerScreen/Sources/AorusClassicChatTimerScreen.swift').read_text()
     current = (tg / 'submodules/TelegramUI/Components/ChatTimerScreen/Sources/ChatTimerScreen.swift').read_text()
