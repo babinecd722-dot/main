@@ -10,6 +10,7 @@ from classic_style_check import check_classic_styles, installed_classic_gesture
 from classic_browser_check import check_classic_browser
 from classic_layout_check import check_classic_layout
 from classic_attachment_check import check_classic_attachment
+from classic_sheets_check import check_classic_sheets, native_timer_source, native_sheet_source
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -44,7 +45,7 @@ METHOD
     start = attachment.index("    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {")
     end = attachment.index("\n    }", start) + len("\n    }")
     point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
-    return fixture + """
+    return fixture + native_timer_source(tg) + """
 final class AorusClassicNodeViewFixture: UIView {
     var view: UIView { return self }
 }
@@ -66,7 +67,7 @@ HIERARCHY
     @objc private func send() { self.sends += 1 }
 POINT
 }
-""".replace("HIERARCHY", hierarchy).replace("POINT", point)
+""".replace("HIERARCHY", hierarchy).replace("POINT", point) + native_sheet_source(tg)
 
 
 def main() -> None:
@@ -115,6 +116,7 @@ def main() -> None:
     if errors:
         raise RuntimeError("\n".join(errors))
     checks += check_classic_layout(args.repo, args.telegram_source, args.reference_source)
+    checks += check_classic_sheets(args.repo, args.telegram_source, args.reference_source, args.swiftc)
     native_hit_test_source(args.telegram_source)
 
     # Reapplying the complete feature must not duplicate handlers, constructor

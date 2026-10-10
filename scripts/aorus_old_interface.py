@@ -3315,6 +3315,8 @@ def patch_old_interface(tg: Path) -> None:
     patch_classic_search(tg)
     from aorus_classic_spacing import patch_classic_spacing
     patch_classic_spacing(tg)
+    from aorus_classic_sheets import patch_classic_sheets
+    patch_classic_sheets(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 

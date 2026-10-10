@@ -54,6 +54,36 @@ import UIKit
         expect(sheet.sends == 1, "a send tap reaches its action once")
         expect(!sheet.point(inside: CGPoint(x: 160, y: 12), with: nil), "the attachment sheet does not intercept taps above its visible content")
     }
+    for sheet in [AorusClassicTimerHitTestView(), AorusClassicDistanceHitTestView(), AorusClassicSessionHitTestView()] as [AorusClassicSheetFixture] {
+        for width: CGFloat in [320, 390, 768] {
+            sheet.frame = CGRect(x: 0, y: 0, width: width, height: 640)
+            sheet.dimNode.frame = sheet.bounds
+            sheet.contentBackgroundNode.frame = CGRect(x: 16, y: 280, width: width - 32, height: 360)
+            sheet.addSubview(sheet.dimNode)
+            sheet.addSubview(sheet.contentBackgroundNode)
+            let action = UIButton(frame: CGRect(x: 16, y: 268, width: width - 64, height: 52))
+            sheet.contentBackgroundNode.addSubview(action)
+            let point = sheet.contentBackgroundNode.convert(action.center, to: sheet)
+            expect(sheet.hitTest(point, with: nil) === action, "restored sheet delivers taps to its visible action")
+            expect(sheet.hitTest(CGPoint(x: width / 2, y: 100), with: nil) === sheet.dimNode, "restored sheet dismiss region stays outside its content")
+            expect(sheet.hitTest(CGPoint(x: -1, y: 100), with: nil) == nil, "restored sheet does not capture taps outside the screen")
+            action.removeFromSuperview()
+        }
+    }
+    let timerLabel = AorusClassicTimerPickerItemView(frame: CGRect(x: 0, y: 0, width: 280, height: 40))
+    timerLabel.textColor = .magenta
+    expect(timerLabel.valueLabel.font.pointSize == 24 && timerLabel.unitLabel.font.pointSize == 16, "timer wheel retains 12.0 typography")
+    for (value, title, number, unit) in [(Int32(5), "5 seconds", "5", "seconds"), (60, "60s", "60", "s"), (0, "Off", "Off", ""), (aorusClassicTimerViewOnce, "View Once", "View Once", "")] {
+        timerLabel.value = (value, title)
+        timerLabel.layoutIfNeeded()
+        expect(timerLabel.valueLabel.text == number && timerLabel.unitLabel.text == unit, "timer wheel formats numeric and named values")
+        expect(timerLabel.valueLabel.textColor == .magenta && timerLabel.unitLabel.textColor == .magenta, "both timer labels retain the configured color")
+        if unit.isEmpty {
+            expect(abs(timerLabel.valueLabel.frame.midX - timerLabel.bounds.midX) <= 0.5, "named timer values remain centered")
+        } else {
+            expect(timerLabel.valueLabel.frame.maxX < timerLabel.unitLabel.frame.minX, "timer number does not overlap its unit")
+        }
+    }
     print("Native classic input passed: \(checks) assertions")
     return checks
 }
