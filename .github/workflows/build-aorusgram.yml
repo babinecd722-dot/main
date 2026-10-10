@@ -944,6 +944,14 @@ jobs:
           cp $PATCHES/submodules/TelegramUI/Components/CameraScreen/Sources/AorusClassicCaptureControlsComponent.swift $TG/submodules/TelegramUI/Components/CameraScreen/Sources/
           cp $PATCHES/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/AorusClassicWallpaperGalleryToolbarNode.swift $TG/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/
           cp $PATCHES/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/AorusClassicWallpaperOptionBackgroundNode.swift $TG/submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/
+          # Native 12.0 sheets; their controller factories are selected before rendering.
+          cp $PATCHES/submodules/TelegramUI/Components/ChatTimerScreen/Sources/AorusClassicChatTimerScreen.swift $TG/submodules/TelegramUI/Components/ChatTimerScreen/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift $TG/submodules/TelegramUI/Components/ChatThemeScreen/Sources/
+          cp $PATCHES/submodules/LocationUI/Sources/AorusClassicLocationDistancePickerScreen.swift $TG/submodules/LocationUI/Sources/
+          cp "$PATCHES/submodules/SettingsUI/Sources/Privacy and Security/AorusClassicRecentSessionScreen.swift" "$TG/submodules/SettingsUI/Sources/Privacy and Security/"
+          cp $PATCHES/submodules/TelegramUI/Components/Ads/AdsInfoScreen/Sources/AorusClassicAdsInfoScreen.swift $TG/submodules/TelegramUI/Components/Ads/AdsInfoScreen/Sources/
+          cp $PATCHES/submodules/QrCodeUI/Sources/AorusClassicQrCodeScreen.swift $TG/submodules/QrCodeUI/Sources/
+          cp $PATCHES/submodules/PremiumUI/Sources/AorusClassicPremiumBoostLevelsScreen.swift $TG/submodules/PremiumUI/Sources/
 
           # 7. Copy the AorusGram "user's messages in group" chat-contents helper into the
           #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the
