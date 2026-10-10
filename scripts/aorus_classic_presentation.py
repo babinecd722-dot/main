@@ -45,10 +45,17 @@ def patch_classic_presentation(tg: Path) -> None:
     path.write_text(text)
     path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
     text = path.read_text()
+    assignment = "        self.glassView = UIVisualEffectView()\n"
     if "// AorusGram: native classic menu presentation" in text:
+        if text.count(assignment) > 1:
+            raise RuntimeError("ClassicPresentation: multiple eager glass initializations")
+        text = text.replace(assignment, "")
+        path.write_text(text)
         return
     text = edit(text, "    let glassView: UIVisualEffectView\n", "    private lazy var glassView = UIVisualEffectView()\n", "lazy menu glass")
-    text = edit(text, "        self.glassView = UIVisualEffectView()\n", "", "menu glass initialization")
+    if text.count(assignment) != 1:
+        raise RuntimeError("ClassicPresentation: expected one eager glass initialization")
+    text = text.replace(assignment, "")
     text = edit(text, "    private let aorusSurface = AorusGlassSurface()", "    private lazy var aorusSurface = AorusGlassSurface()", "lazy menu surface")
     anchor = "        self.addSubview(self.glassView)\n"
     text = edit(text, anchor, "        // AorusGram: native classic menu presentation\n        if AorusOldInterface.isEnabled {\n            if let contentView { self.addSubview(contentView) }\n            return\n        }\n" + anchor, "classic menu source host")

@@ -12,6 +12,7 @@ from swift_protocol_conformance_check import matching_brace, strip_comments
 
 def check_initializer_order(source, rel):
     code = strip_comments(source)
+    lazy_properties = re.findall(r'\blazy\s+var\s+(\w+)', code)
     declaration = re.compile(r'^\s*(?:(?:public|private|fileprivate|internal|override|required|convenience)\s+)*init[?!]?\s*\(', re.MULTILINE)
     for match in declaration.finditer(code):
         parameters_end = match_paren(code, match.end() - 1)
@@ -20,6 +21,9 @@ def check_initializer_order(source, rel):
         super_init = re.search(r'\bsuper\.init\s*\(', body)
         if super_init is None:
             continue
+        for name in lazy_properties:
+            if re.search(r'\bself\.' + re.escape(name) + r'\b', body[:super_init.start()]):
+                raise RuntimeError('Lazy property accessed before super.init: ' + rel + ': ' + name)
         for call in re.finditer(r'\bself\.(\w+)\s*\(', body[:super_init.start()]):
             if call.group(1) != 'init':
                 raise RuntimeError('Instance method called before super.init: ' + rel + ': ' + call.group(1))
@@ -104,6 +108,11 @@ def native_menu_source(tg):
     background = block((tg / 'submodules/Display/Source/NavigationBackgroundView.swift').read_text(), 'open class BlurredBackgroundView:')
     background = background.replace('ContainedViewLayoutTransition', 'AorusClassicMenuFixtureTransition').replace('ControlledTransitionAnimator', 'AorusClassicMenuFixtureAnimator')
     source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition')
+    context = (tg / 'submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift').read_text()
+    effect = block(context, 'private final class LensTransitionContainerEffectViewImpl:')
+    check_initializer_order(effect, 'LensTransitionContainerEffectViewImpl')
+    effect = effect[:effect.index('    required init?(coder:')] + block(effect, 'required init?(coder:') + '\n    func update(theme: AorusClassicEffectFixtureTheme) { self.theme = theme }\n}\n'
+    effect = effect.replace('private final class LensTransitionContainerEffectViewImpl: UIView, LensTransitionContainerEffectView', 'final class AorusClassicEffectFixture: UIView').replace('PresentationTheme', 'AorusClassicEffectFixtureTheme').replace('AorusGlassSurface', 'AorusClassicEffectFixtureSurface').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
     return '''
 protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
@@ -121,7 +130,19 @@ public struct AorusClassicMenuFixtureAnimator {
     func updateFrame(layer: CALayer, frame: CGRect, completion: (() -> Void)?) { layer.frame = frame; completion?() }
     func updateCornerRadius(layer: CALayer, cornerRadius: CGFloat, completion: (() -> Void)?) { layer.cornerRadius = cornerRadius; completion?() }
 }
-''' + background + '\n' + source
+struct AorusClassicEffectFixtureTheme {}
+struct AorusClassicEffectFixtureStyle {
+    func clipRadius(_ value: CGFloat) -> CGFloat { value }
+}
+final class AorusClassicEffectFixtureSurface {
+    static var constructions = 0
+    var classicMenu = false
+    var cornerRadius: CGFloat = 0
+    var styleUpdated: ((AorusClassicEffectFixtureStyle) -> Void)?
+    init() { Self.constructions += 1 }
+    func attach(host: UIView, backdrop: UIView?, haloHost: UIView, haloBelow: UIView) {}
+}
+''' + background + '\n' + source + '\n' + effect
 
 
 def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: str):

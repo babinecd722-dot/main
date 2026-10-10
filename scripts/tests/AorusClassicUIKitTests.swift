@@ -115,6 +115,22 @@ import UIKit
             expect(menu.hitTest(CGPoint(x: width / 2, y: 66), with: nil) === button, "native menu buttons receive their taps")
         }
     }
+    for classic in [true, false] {
+        AorusClassicControlledLook.enabled = classic
+        AorusClassicEffectFixtureSurface.constructions = 0
+        let content = UIButton()
+        let previousHost = UIView()
+        previousHost.addSubview(content)
+        let effect = AorusClassicEffectFixture(contentView: content)
+        let glass = effect.subviews.compactMap { $0 as? UIVisualEffectView }
+        expect(effect.contentView === content, "the installed effect initializer retains the supplied content")
+        expect(glass.count == (classic ? 0 : 1), "only the modern initializer creates a glass view")
+        expect(AorusClassicEffectFixtureSurface.constructions == (classic ? 0 : 1), "only the modern initializer allocates its glass surface")
+        expect(content.superview === (classic ? effect : glass[0].contentView), "the initializer mounts content in the selected native host")
+        let empty = AorusClassicEffectFixture(contentView: nil)
+        expect(empty.subviews.count == (classic ? 0 : 1), "initialization without extracted content selects the same host")
+    }
+    AorusClassicControlledLook.enabled = false
     print("Native classic input passed: \(checks) assertions")
     return checks
 }
