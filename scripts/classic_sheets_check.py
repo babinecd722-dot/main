@@ -6,6 +6,23 @@ import tempfile
 from pathlib import Path
 
 from aorus_classic_sheets import COPIES, REFERENCE, canonical_dependency
+from swift_call_label_check import match_paren
+from swift_protocol_conformance_check import matching_brace, strip_comments
+
+
+def check_initializer_order(source, rel):
+    code = strip_comments(source)
+    declaration = re.compile(r'^\s*(?:(?:public|private|fileprivate|internal|override|required|convenience)\s+)*init[?!]?\s*\(', re.MULTILINE)
+    for match in declaration.finditer(code):
+        parameters_end = match_paren(code, match.end() - 1)
+        body_start = code.find('{', parameters_end)
+        body = code[body_start:matching_brace(code, body_start)]
+        super_init = re.search(r'\bsuper\.init\s*\(', body)
+        if super_init is None:
+            continue
+        for call in re.finditer(r'\bself\.(\w+)\s*\(', body[:super_init.start()]):
+            if call.group(1) != 'init':
+                raise RuntimeError('Instance method called before super.init: ' + rel + ': ' + call.group(1))
 
 
 def block(text, marker):
@@ -95,6 +112,7 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
         # retains the legacy menu implementation; the 12.0 initializer no longer exists.
         if re.search(r'\bContextController\s*\(', installed.decode()):
             raise RuntimeError('Classic sheet must use the current context-menu factory: ' + rel)
+        check_initializer_order(installed.decode(), rel)
         checks += 1
     for rel in REFERENCE['dependencies']:
         text = (tg / 'submodules' / rel / 'BUILD').read_text()

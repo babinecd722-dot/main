@@ -198,7 +198,6 @@ public final class AorusClassicQrCodeScreen: ViewController {
             self.context = context
             self.subject = subject
             self.presentationData = presentationData
-            self.updateProxyColors()
 
             self.wrappingScrollNode = ASScrollNode()
             self.wrappingScrollNode.view.alwaysBounceVertical = true
