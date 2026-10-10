@@ -4,7 +4,7 @@ from aorus_classic_components import edit
 
 
 CLASSIC_MENU = '''private final class AorusClassicLensContainer: UIView, LensTransitionContainerProtocol {
-    private let backgroundView = NavigationBackgroundView(color: nil)
+    private let backgroundView = BlurredBackgroundView(color: nil)
     var themeColor: UIColor = .clear
     public let contentsView = UIView()
 
@@ -37,11 +37,12 @@ CLASSIC_MENU = '''private final class AorusClassicLensContainer: UIView, LensTra
 def patch_classic_presentation(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift"
     text = path.read_text()
+    text = text.replace("NavigationBackgroundView(color: nil)", "BlurredBackgroundView(color: nil)")
     if "private final class AorusClassicLensContainer" not in text:
         text = edit(text, "public final class LensTransitionContainer: UIView {", CLASSIC_MENU + "public final class LensTransitionContainer: UIView {", "native classic menu host")
         text = edit(text, "    public init(effectView: LensTransitionContainerEffectView) {\n        if #available(iOS 26.0, *) {", "    public init(effectView: LensTransitionContainerEffectView) {\n        if AorusOldInterface.isEnabled {\n            self.impl = AorusClassicLensContainer(frame: .zero)\n        } else if #available(iOS 26.0, *) {", "menu renderer selection")
         text = edit(text, "    public init(effectView: LensTransitionContainerEffectView) {", "    public func updateClassicTheme(color: UIColor) {\n        (self.impl as? AorusClassicLensContainer)?.themeColor = color\n    }\n\n    public init(effectView: LensTransitionContainerEffectView) {", "classic menu theme binding")
-        path.write_text(text)
+    path.write_text(text)
     path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
     text = path.read_text()
     if "// AorusGram: native classic menu presentation" in text:

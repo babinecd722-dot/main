@@ -99,21 +99,32 @@ HIERARCHY
 def native_menu_source(tg):
     text = (tg / 'submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift').read_text()
     source = block(text, 'private final class AorusClassicLensContainer:')
-    source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition').replace('NavigationBackgroundView', 'AorusClassicMenuFixtureBackground')
+    if 'BlurredBackgroundView(color: nil)' not in source:
+        raise RuntimeError('Classic menu must use the exported Display background class')
+    background = block((tg / 'submodules/Display/Source/NavigationBackgroundView.swift').read_text(), 'open class BlurredBackgroundView:')
+    background = background.replace('ContainedViewLayoutTransition', 'AorusClassicMenuFixtureTransition').replace('ControlledTransitionAnimator', 'AorusClassicMenuFixtureAnimator')
+    source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition')
     return '''
 protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
-final class AorusClassicMenuFixtureBackground: UIView {
-    init(color: UIColor?) { super.init(frame: .zero); self.backgroundColor = color }
-    required init?(coder: NSCoder) { fatalError() }
-    func updateColor(color: UIColor, enableBlur: Bool, forceKeepBlur: Bool, transition: AorusClassicMenuFixtureTransition) { self.backgroundColor = color }
-    func update(size: CGSize, transition: AorusClassicMenuFixtureTransition) {}
+private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
+private extension UIColor {
+    var alpha: CGFloat { self.cgColor.alpha }
 }
-struct AorusClassicMenuFixtureTransition {
+public struct AorusClassicMenuFixtureTransition {
+    static let immediate = AorusClassicMenuFixtureTransition()
     var containedViewLayoutTransition: AorusClassicMenuFixtureTransition { self }
     func setFrame(view: UIView, frame: CGRect) { view.frame = frame }
     func setCornerRadius(layer: CALayer, cornerRadius: CGFloat) { layer.cornerRadius = cornerRadius }
+    func updateBackgroundColor(layer: CALayer, color: UIColor) { layer.backgroundColor = color.cgColor }
+    func updateFrame(view: UIView, frame: CGRect, beginWithCurrentState: Bool) { view.frame = frame }
+    func updateFrame(layer: CALayer, frame: CGRect, beginWithCurrentState: Bool) { layer.frame = frame }
+    func updateCornerRadius(layer: CALayer, cornerRadius: CGFloat) { layer.cornerRadius = cornerRadius }
 }
-''' + source
+public struct AorusClassicMenuFixtureAnimator {
+    func updateFrame(layer: CALayer, frame: CGRect, completion: (() -> Void)?) { layer.frame = frame; completion?() }
+    func updateCornerRadius(layer: CALayer, cornerRadius: CGFloat, completion: (() -> Void)?) { layer.cornerRadius = cornerRadius; completion?() }
+}
+''' + background + '\n' + source
 
 
 def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: str):

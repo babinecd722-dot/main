@@ -107,7 +107,9 @@ import UIKit
             menu.update(size: menu.bounds.size, cornerRadius: 14, isDark: true, transition: AorusClassicMenuFixtureTransition())
             expect(menu.subviews.count == 2, "the classic menu has one background and one content host")
             expect(!menu.subviews.contains(where: { $0 is UIVisualEffectView }), "the classic menu does not mount a modern glass host")
-            expect(menu.subviews[0].backgroundColor == color, "the menu uses the current theme color")
+            let background = menu.subviews[0] as! BlurredBackgroundView
+            expect(background.subviews.last?.backgroundColor == color, "the native Display background uses the current theme color")
+            expect(background.effectView == nil || background.effectView?.effect is UIBlurEffect, "the native background uses ordinary blur")
             expect(menu.contentsView.frame == menu.bounds, "menu actions occupy the full native panel")
             expect(menu.layer.cornerRadius == 14 && menu.clipsToBounds, "menu clips to 12.0 corners")
             expect(menu.hitTest(CGPoint(x: width / 2, y: 66), with: nil) === button, "native menu buttons receive their taps")
