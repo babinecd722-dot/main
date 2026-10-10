@@ -49,7 +49,9 @@ public final class AorusClassicChatTimerScreen: ViewController {
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             if let strongSelf = self {
                 strongSelf.presentationData = presentationData
-                strongSelf.controllerNode.updatePresentationData(presentationData)
+                if strongSelf.isNodeLoaded {
+                    strongSelf.controllerNode.updatePresentationData(presentationData)
+                }
             }
         })
 

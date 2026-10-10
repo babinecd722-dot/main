@@ -1596,7 +1596,7 @@ def check_ambiguous_timer(root: Path, errors: list[str]) -> None:
 # Modules the workflow copies as whole directories. Everything else under patches/submodules is
 # a single file dropped into one of Telegram's own modules, and each of those is copied by name.
 _WHOLE_PATCH_MODULES = ("AorusGram", "AorusGramUI", "AorusBadge", "AorusMaskPicker")
-_PATCH_COPY = re.compile(r"^\s*cp\s+([^\n]+)", re.MULTILINE)
+_PATCH_COPY = re.compile(r'^\s*cp\s+((?:"?\$PATCHES/submodules/)[^\n]+)', re.MULTILINE)
 
 
 def check_patch_injection(root: Path, workflow: str, errors: list[str]) -> None:
@@ -1611,7 +1611,7 @@ def check_patch_injection(root: Path, workflow: str, errors: list[str]) -> None:
         return
     copied = set()
     for command in _PATCH_COPY.findall(workflow):
-        arguments = shlex.split(command, comments=True)
+        arguments = shlex.split(command.rstrip().removesuffix("\\"), comments=True)
         if arguments and arguments[0].startswith("$PATCHES/submodules/"):
             copied.add(arguments[0][len("$PATCHES/submodules/"):])
     for source in sorted(patches.rglob("*.swift")):
