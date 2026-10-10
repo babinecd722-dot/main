@@ -88,8 +88,13 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
                 raise RuntimeError('Sheet method does not belong to 12.0: ' + key)
             checks += 1
     for rel in COPIES:
-        if (repo / 'patches/submodules' / rel).read_bytes() != (tg / 'submodules' / rel).read_bytes():
+        installed = (tg / 'submodules' / rel).read_bytes()
+        if (repo / 'patches/submodules' / rel).read_bytes() != installed:
             raise RuntimeError('Original sheet not installed: ' + rel)
+        # ContextController became a protocol in the current client. Its factory
+        # retains the legacy menu implementation; the 12.0 initializer no longer exists.
+        if re.search(r'\bContextController\s*\(', installed.decode()):
+            raise RuntimeError('Classic sheet must use the current context-menu factory: ' + rel)
         checks += 1
     for rel in REFERENCE['dependencies']:
         text = (tg / 'submodules' / rel / 'BUILD').read_text()

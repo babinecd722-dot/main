@@ -1344,7 +1344,7 @@ public class AorusClassicAdsInfoScreen: ViewController {
                 })))
             }
 
-            let contextController = ContextController(presentationData: presentationData, source: .reference(AorusClassicAdsInfoContextReferenceContentSource(controller: controller, sourceView: referenceView, insets: .zero, contentInsets: .zero)), items: .single(ContextController.Items(content: .list(actions))), gesture: nil)
+            let contextController = makeContextController(presentationData: presentationData, source: .reference(AorusClassicAdsInfoContextReferenceContentSource(controller: controller, sourceView: referenceView, insets: .zero, contentInsets: .zero)), items: .single(ContextController.Items(content: .list(actions))), gesture: nil)
             controller.presentInGlobalOverlay(contextController)
         }
 
