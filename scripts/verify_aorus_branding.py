@@ -1924,7 +1924,7 @@ def main() -> None:
         "func applyExclusions()",
         "seedPool = seedPool.filter { !self.isExcluded($0) }",
         "!self.discoveredRecommendationPeerIds.contains($0) && !self.isExcluded($0)",
-        "let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) }",
+        "let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) && !removed.contains($0.id) }",
         "self.applyMessages(filtered, updateType: .Generic, preserveCurrent: false)",
         "self.applyExclusions()",
     ):

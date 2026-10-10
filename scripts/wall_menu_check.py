@@ -17,6 +17,9 @@ def check(repo: Path, tg: Path, swiftc: str):
     gate = re.search(r'if (!aorusIsWallPost && UserDefaults\.standard\.bool\(forKey: "aorusgram_feature_edit_locally"\)) \{', menu)
     if gate is None:
         raise RuntimeError('Wall posts expose local editing')
+    for marker in ('// AorusGram: AorusAI message action v7', '// AorusGram: hide-name forward v1'):
+        if marker not in menu:
+            raise RuntimeError('Wall menu installation dropped another message action: ' + marker)
     for marker in ('removed.contains(message.id)', 'messages.removeAll(where: { removed.contains($0.id) })', '&& !removed.contains($0.id)', 'forName: AorusWallSettingsStore.postsDidChange'):
         if marker not in wall:
             raise RuntimeError('Wall removal is not applied to all snapshots: ' + marker)
