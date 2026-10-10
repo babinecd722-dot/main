@@ -116,6 +116,9 @@ def patch_context_menu(root: Path) -> None:
         value = replace_once(value, "import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", "AorusGramUI import")
 
     anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
+    wall_anchor = "        // AorusGram: wall post actions"
+    if wall_anchor in value:
+        anchor = wall_anchor
 
     # A tree patched by an earlier revision of this integrator carries a different
     # menu shape. Drop that block first so repeated runs converge on the current
@@ -132,6 +135,8 @@ def patch_context_menu(root: Path) -> None:
         if legacy_index < 0:
             continue
         anchor_index = value.find(anchor, legacy_index)
+        if anchor_index < 0 and anchor == wall_anchor:
+            anchor_index = value.find("        if let aorusWallContents {", legacy_index)
         if anchor_index < 0:
             raise RuntimeError("AorusAI: legacy message action block end not found")
         value = value[:legacy_index] + value[anchor_index:]
