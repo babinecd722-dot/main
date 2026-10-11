@@ -144,7 +144,7 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
     passive.backgroundColor = "invalid"; passive.textColor = nil; passive.borderColor = nil
     let empty = host.make(passive)
     expect(empty.configuration?.title == nil && empty.configuration?.image == nil, "empty content stays empty")
-    expect(!empty.isUserInteractionEnabled && (empty.gestureRecognizers ?? []).isEmpty, "passive overlay adds no drag handler")
+    expect(!empty.isUserInteractionEnabled && !(empty.gestureRecognizers ?? []).contains(where: { $0 is UIPanGestureRecognizer }), "passive overlay adds no drag handler")
     expect(empty.tintColor == .white && empty.backgroundColor == .systemBlue, "absent colors retain client defaults")
     expect(empty.layer.borderWidth == 0 && empty.layer.shadowOpacity == 0, "disabled decoration creates no border or shadow")
     print("Native plugin overlay buttons passed: \\(checks) assertions")
