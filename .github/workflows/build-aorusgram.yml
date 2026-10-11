@@ -20,7 +20,7 @@ jobs:
       # Quiets GitHub deprecation warnings for actions/cache, checkout, upload-artifact on Node 20.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       TELEGRAM_IOS_COMMIT: f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838
-      TELEGRAM_IOS_VERSION: 13.0
+      TELEGRAM_IOS_VERSION: "13.0"
       PILLOW_VERSION: 11.3.0
       LIBXRAY_VERSION: v26.7.28
       LIBXRAY_APPLE_SHA256: 07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9
