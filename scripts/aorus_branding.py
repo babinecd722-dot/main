@@ -28404,6 +28404,10 @@ def patch_formatting_panel(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     original_source = t
+    if "import SwiftUI\n" not in t:
+        if t.count("import Foundation\n") != 1:
+            raise RuntimeError("FormattingPanel: missing or ambiguous Foundation import")
+        t = t.replace("import Foundation\n", "import Foundation\nimport SwiftUI\n", 1)
 
     recording_anchor = "                interfaceInteraction.beginMediaRecording(isVideo)\n"
     recording_replacement = (
@@ -28685,9 +28689,6 @@ def patch_formatting_panel(tg: Path) -> None:
             print("FormattingPanel: already injected")
         return
 
-    import_anchor = "import Foundation\nimport UniformTypeIdentifiers\n"
-    if import_anchor in t and "import SwiftUI\n" not in t:
-        t = t.replace(import_anchor, "import Foundation\nimport SwiftUI\nimport UniformTypeIdentifiers\n", 1)
     # Clipboard history UI lives in AorusGramUI; ensure the import is present regardless of
     # whether the AorusCode patch (which also adds it) has run yet.
     if "import AorusGramUI\n" not in t and "import AccountContext\n" in t:

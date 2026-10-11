@@ -103,6 +103,26 @@ static NSString *TGLocalized(NSString *key) { return key; }
 ''' + text[start:end] + "\n}\n@end\n"
 
 
+def toolbar_test_source(tg):
+    from telegram13_list_check import block
+    text = (tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift").read_text()
+    if text.count("import SwiftUI\n") != 1:
+        raise RuntimeError("Formatting panel must explicitly import SwiftUI once")
+    imports = "\n".join(line for line in text.splitlines() if line in ("import Foundation", "import UIKit", "import SwiftUI"))
+    start = text.index("        let hosting = UIHostingController(rootView: toolbarView)")
+    end = text.index("        self.aorusToolbarHostBox = hosting", start)
+    hosting = text[start:end]
+    animation = block(text, "withAnimation(.easeInOut(duration: 0.16))")
+    return imports + '''
+final class ToolbarModel { var isTranslatorExpanded = false }
+@MainActor func verifyToolbarHosting() {
+    let toolbarView = Text("Formatting toolbar")
+''' + hosting + '''
+    let model = ToolbarModel()
+    let expanded = true
+''' + animation + "\n}\n"
+
+
 def check_gift_patterns(tg):
     native = (tg / "submodules/TelegramCore/Sources/SyncCore/SyncCore_TelegramMediaAction.swift").read_text()
     case = next(line for line in native.splitlines() if line.strip().startswith("case starGiftUnique("))
@@ -202,6 +222,7 @@ def main():
     check_proxies(args.telegram_source, args.swiftc)
     check_gift_patterns(args.telegram_source)
     check_lottie_calls(args.telegram_source)
+    toolbar_source = toolbar_test_source(args.telegram_source)
     with tempfile.TemporaryDirectory(prefix="aorus-telegram13-") as directory:
         work = Path(directory)
         gifts = work / "GiftTests.swift"
@@ -219,7 +240,10 @@ def main():
             button = work / "RoundButton.m"
             button.write_text(button_test_source(args.telegram_source))
             subprocess.run(["xcrun", "clang", "-fobjc-arc", "-fsyntax-only", "-Werror", "-Wdeprecated-declarations", "-isysroot", sdk, "-target", "arm64-apple-ios15.0", str(button)], check=True)
-            print("Telegram 13 font and round button UIKit SDK checks passed")
+            toolbar = work / "ToolbarTests.swift"
+            toolbar.write_text(toolbar_source)
+            subprocess.run([args.swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(toolbar)], check=True)
+            print("Telegram 13 font, round button and formatting toolbar SDK checks passed")
 
 
 if __name__ == "__main__":
