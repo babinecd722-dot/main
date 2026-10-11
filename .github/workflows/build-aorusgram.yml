@@ -1159,6 +1159,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
 
+      - name: Telegram 13 native compatibility preflight
+        run: python3 aorusgram/scripts/telegram13_check.py telegram-ios
+
       - name: Native voice capture integration preflight
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram --telegram-source telegram-ios
 

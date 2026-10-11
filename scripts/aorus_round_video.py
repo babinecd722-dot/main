@@ -197,7 +197,10 @@ def patch_round_video(tg: Path) -> None:
     replace(interface, '        [_wrapperView addSubview:_muteButton];', '''        [_wrapperView addSubview:_muteButton];
         _aorusRoundButton = [[TGModernButton alloc] initWithFrame:CGRectMake(0, 0, 40.0, 40.0)];
         _aorusRoundButton.hidden = true;
+        #pragma clang diagnostic push
+        #pragma clang diagnostic ignored "-Wdeprecated-declarations" // TGModernButton uses the legacy image highlight behavior.
         _aorusRoundButton.adjustsImageWhenHighlighted = false;
+        #pragma clang diagnostic pop
         [_aorusRoundButton setBackgroundImage:[TGPhotoEditorInterfaceAssets gifBackgroundImage] forState:UIControlStateNormal];
         UIImage *aorusCircle = [[UIImage imageNamed:@"Chat/Input/Text/IconVideo"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
         [_aorusRoundButton setImage:aorusCircle forState:UIControlStateNormal];

@@ -10364,7 +10364,7 @@ public enum AorusFakeGiftsStore {
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
-            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: senderPeerId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: senderPeerId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: nil, entities: nil, nameHidden: false)
         case .generic:
             action = .starGift(gift: ownedGift, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: senderPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
         }
@@ -10498,7 +10498,7 @@ public enum AorusFakeGiftsStore {
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
-            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName)
         case let .generic(genericGift):
             // A gift bought for oneself is one's own to upgrade, from its card as from the
             // profile: the card names the stored instance, which is the reference the gift
@@ -11355,22 +11355,28 @@ extension AorusFakeGiftsStore {
         let savedToProfile = stored.showInProfile
         let _ = account.postbox.transaction { transaction -> Void in
             var original: Message?
+            var originalGiftText: String?
+            var originalGiftEntities: [MessageTextEntity]?
+            var originalGiftNameHidden = false
             transaction.scanTopMessages(peerId: accountPeerId, namespace: Namespaces.Message.Local, limit: 1000, { message in
                 for media in message.media {
                     guard let action = media as? TelegramMediaAction,
-                          case let .starGift(gift, _, _, _, _, _, _, upgraded, _, _, _, _, _, _, _, savedId, _, _, _, _, _, _) = action.action,
+                          case let .starGift(gift, _, text, entities, nameHidden, _, _, upgraded, _, _, _, _, _, _, _, savedId, _, _, _, _, _, _) = action.action,
                           !upgraded,
                           case let .generic(value) = gift,
                           value.id == generic.id else { continue }
                     if savedId == instanceId || (savedId == nil && message.timestamp == purchaseDate) {
                         original = message
+                        originalGiftText = text
+                        originalGiftEntities = entities
+                        originalGiftNameHidden = nameHidden
                         return false
                     }
                 }
                 return true
             })
             guard let original else { return }
-            let upgradeAction = TelegramMediaActionType.starGiftUnique(gift: .unique(unique), isUpgrade: true, isTransferred: false, savedToProfile: savedToProfile, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: accountPeerId, senderId: accountPeerId, savedId: instanceId, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            let upgradeAction = TelegramMediaActionType.starGiftUnique(gift: .unique(unique), isUpgrade: true, isTransferred: false, savedToProfile: savedToProfile, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: accountPeerId, senderId: accountPeerId, savedId: instanceId, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: originalGiftText, entities: originalGiftEntities, nameHidden: originalGiftNameHidden)
             let globallyUniqueId = Int64.random(in: Int64.min ... Int64.max)
             let upgradeMessage = StoreMessage(peerId: accountPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: globallyUniqueId, groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: upgradeAction)])
             guard let upgradeMessageId = transaction.addMessages([upgradeMessage], location: .Random)[globallyUniqueId] else { return }
@@ -17637,15 +17643,15 @@ def patch_voice_twin_calls(tg: Path) -> None:
     before it is forwarded to the WebRTC voice engine for encoding. We transform
     the samples in place there — the encoder then transmits the modified voice.
 
-    The DSP is a self-contained C++ port of the Swift Voice Twin (written to a new
-    header alongside the .mm). It has no module dependencies, so TgVoipWebrtc gains
-    no new link edges and there is zero risk of a dependency cycle. UserDefaults is
-    read (throttled) on the ObjC side; the same flat keys the settings screen
+    The adapter uses the shared AorusVoiceDSP leaf module and owns its capture
+    state. It adds no dependency on Swift UI or account modules. UserDefaults is
+    read (throttled) on the ObjC side; the same effective flat keys the settings screen
     writes (`aorusgram_voice_twin_enabled` / `aorusgram_voice_twin_preset`) drive
     it, identical to the voice-message and video-note paths.
 
-    iOS delivers mono Int16 PCM after the hardware voice-processing AEC/NS, so the
-    transform sees clean near-end voice; any other layout is a safe no-op.
+    The native transport supplies interleaved Int16 PCM in mono or stereo. Its
+    byte count is the size of a frame, including both channels. Other layouts pass
+    through unchanged.
     """
     mm = tg / "submodules/TgVoipWebrtc/Sources/OngoingCallThreadLocalContext.mm"
     if not mm.is_file():
@@ -17654,7 +17660,7 @@ def patch_voice_twin_calls(tg: Path) -> None:
     t = mm.read_text(encoding="utf-8")
     sentinel = "// AorusGram: voice twin (calls)"
 
-    # 1) Write the self-contained DSP header next to the .mm.
+    # 1) Write the native capture adapter next to the .mm.
     header = tg / "submodules/TgVoipWebrtc/Sources/AorusCallVoiceTwin.h"
     header.write_text(_AORUS_CALL_VOICE_TWIN_HEADER, encoding="utf-8")
     print("VoiceTwinCalls: wrote AorusCallVoiceTwin.h")
@@ -24696,8 +24702,8 @@ private enum AorusRuntimeFont {
             result = result.addingAttributes([
                 UIFontDescriptor.AttributeName.featureSettings: [
                     [
-                        UIFontDescriptor.FeatureKey.featureIdentifier: kNumberSpacingType,
-                        UIFontDescriptor.FeatureKey.typeIdentifier: kMonospacedNumbersSelector
+                        UIFontDescriptor.FeatureKey.type.rawValue: kNumberSpacingType,
+                        UIFontDescriptor.FeatureKey.selector.rawValue: kMonospacedNumbersSelector
                     ]
                 ]
             ])
