@@ -96,15 +96,22 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
     var checks = 0
     func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError("Overlay button: " + label) } }
     let host = AorusPluginOverlayHost(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+    let window = UIWindow(frame: UIScreen.main.bounds)
+    let controller = UIViewController()
+    window.rootViewController = controller
+    controller.view.addSubview(host)
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true }
     for mode in [AorusPluginOverlay.Mode.text, .icon, .mixed] {
         var overlay = AorusPluginOverlay(); overlay.displayMode = mode
         let button = host.make(overlay)
         host.addSubview(button)
         button.frame = CGRect(x: 20, y: 20, width: 160, height: 48)
+        button.updateConfiguration()
         button.layoutIfNeeded()
         guard let config = button.configuration else { fatalError("native configuration missing") }
         expect((config.image != nil) == (mode != .text), "icon follows display mode")
-        expect((config.attributedTitle != nil) == (mode != .icon), "title follows display mode")
+        expect((config.title != nil) == (mode != .icon), "title follows display mode")
         expect(config.baseForegroundColor == button.tintColor && button.tintColor != .black, "configured tint preserves the selected text color")
         expect(button.backgroundColor == UIColor(red: 25.0 / 255, green: 51.0 / 255, blue: 77.0 / 255, alpha: 1), "configuration leaves the plugin's plate color intact")
         expect(button.alpha == 0.75 && button.layer.borderWidth == 2 && button.layer.shadowOpacity == 0.22, "opacity, border and shadow survive configuration")
@@ -112,6 +119,10 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
         if mode != .icon {
             let title = button.titleLabel?.attributedText
             let renderedFont = (title?.length ?? 0) > 0 ? (title?.attribute(.font, at: 0, effectiveRange: nil) as? UIFont) ?? button.titleLabel?.font : button.titleLabel?.font
+            if button.titleLabel?.text != overlay.title || renderedFont?.pointSize != 19 {
+                print("Overlay title diagnostics: configured=\\(String(describing: config.title)), rendered=\\(String(describing: button.titleLabel?.text)), font=\\(String(describing: renderedFont)), attributed=\\(String(describing: title))")
+                fflush(stdout)
+            }
             expect(button.titleLabel?.text == overlay.title && renderedFont?.pointSize == 19, "rendered title keeps its requested font and content")
             expect(button.titleLabel!.frame.width > 0 && button.titleLabel!.frame.height > 0, "title has visible native geometry")
         }
@@ -132,7 +143,7 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
     passive.title = ""; passive.icon = nil; passive.interactive = false; passive.draggable = false; passive.shadow = false
     passive.backgroundColor = "invalid"; passive.textColor = nil; passive.borderColor = nil
     let empty = host.make(passive)
-    expect(empty.configuration?.attributedTitle == nil && empty.configuration?.image == nil, "empty content stays empty")
+    expect(empty.configuration?.title == nil && empty.configuration?.image == nil, "empty content stays empty")
     expect(!empty.isUserInteractionEnabled && (empty.gestureRecognizers ?? []).isEmpty, "passive overlay adds no drag handler")
     expect(empty.tintColor == .white && empty.backgroundColor == .systemBlue, "absent colors retain client defaults")
     expect(empty.layer.borderWidth == 0 && empty.layer.shadowOpacity == 0, "disabled decoration creates no border or shadow")

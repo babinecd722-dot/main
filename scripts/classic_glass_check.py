@@ -158,7 +158,7 @@ extension CALayer {
     @MainActor static func aorusClassicMaskFilter() -> NSObject? { aorusClassicMaskCalls += 1; return nil }
 }
 @MainActor class AorusClassicBackgroundProbe: UIView {
-    public protocol ContentView: UIView { var tintMask: UIView { get } }
+    @MainActor public protocol ContentView: UIView { var tintMask: UIView { get } }
     static var useCustomGlassImpl = false
     let legacyView: AorusClassicLegacyGlassProbe?
     let legacyHighlightContainerView: UIView?

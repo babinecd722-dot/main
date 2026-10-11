@@ -122,9 +122,13 @@ final class AorusPluginOverlayHost: UIView {
         configuration.contentInsets = .zero
         configuration.image = button.image(for: .normal)
         if let title = button.title(for: .normal) {
-            var attributes = AttributeContainer()
-            attributes.font = aorusUIFont(CGFloat(overlay.fontSize ?? 15.0), .semibold)
-            configuration.attributedTitle = AttributedString(title, attributes: attributes)
+            let font = aorusUIFont(CGFloat(overlay.fontSize ?? 15.0), .semibold)
+            configuration.title = title
+            configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+                var attributes = attributes
+                attributes.font = font
+                return attributes
+            }
             configuration.contentInsets = NSDirectionalEdgeInsets(top: 0.0, leading: 14.0, bottom: 0.0, trailing: 14.0)
             if configuration.image != nil {
                 configuration.contentInsets.leading = 12.0
