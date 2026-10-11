@@ -47,6 +47,9 @@ COLLAPSED
     native = native.replace("        let usernameSpacing:", "        let subtitleRatingInset: CGFloat = 22\n        let subtitleButtonHorizontalOffset: CGFloat = 8\n        let subtitleRatingSize: CGSize? = self.subtitleRating == nil ? nil : CGSize(width: 22, height: 22)\n        let usernameSpacing:")
     reference = method.replace("EXPANDED", PROFILE_EXPANDED_SUBTITLE).replace("COLLAPSED", PROFILE_COLLAPSED_SUBTITLE)
     return '''import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 enum AorusOldInterface { static var isEnabled = true }
 func floorToScreenPixels(_ value: CGFloat) -> CGFloat { floor(value * 3) / 3 }
 class ProfileOwner {
