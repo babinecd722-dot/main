@@ -29,6 +29,15 @@ def main():
             (temp / 'module.modulemap').write_text('module AorusVoiceDSP { header "' + str(module / 'PublicHeaders/AorusVoiceDSP.h') + '" export * }\n')
             subprocess.run([args.swiftc, '-warnings-as-errors', '-I', str(temp), str(repo / 'AorusGram/Sources/Features/AorusVoiceTwin.swift'), str(repo / 'scripts/tests/AorusVoiceTwinAppleTests.swift'), str(temp / 'voice.o'), '-lc++', '-o', str(temp / 'apple-tests')], check=True)
             subprocess.run([str(temp / 'apple-tests')], check=True)
+            from aorus_branding import _AORUS_CALL_VOICE_TWIN_HEADER
+            header = _AORUS_CALL_VOICE_TWIN_HEADER
+            if args.telegram_source:
+                installed = args.telegram_source / 'submodules/TgVoipWebrtc/Sources/AorusCallVoiceTwin.h'
+                if installed.read_text() != header:
+                    raise RuntimeError('Installed WebRTC voice adapter differs from its tested source')
+            (temp / 'AorusCallVoiceTwin.h').write_text(header)
+            subprocess.run(common + ['-fobjc-arc', '-I', str(temp), str(repo / 'scripts/tests/AorusCallVoiceTwinAppleTests.mm'), str(temp / 'voice.o'), '-framework', 'Foundation', '-o', str(temp / 'call-tests')], check=True)
+            subprocess.run([str(temp / 'call-tests')], check=True)
         else:
             print('Apple PCM adapter: requires macOS; CI executes the native tests')
     if args.telegram_source:

@@ -86,6 +86,7 @@ struct AorusVoiceTwinAppleTests {
             checkCamera(rate: 44100, channels: 2, floating: true)
         }
         checkCamera(rate: 16000, channels: 1, floating: true)
+        checkCamera(rate: 32000, channels: 1, floating: false)
         checkCamera(rate: 48000, channels: 3, floating: false, shouldChange: false)
         checkCamera(rate: 48000, channels: 1, floating: false, flags: kAudioFormatFlagIsBigEndian, shouldChange: false)
         defaults.set(false, forKey: keys[0])

@@ -17581,14 +17581,10 @@ def patch_video_mask_call_phase(tg: Path) -> None:
     print("VideoMasks: one-to-one call phase published for nonblocking local preview")
 
 
-# Self-contained C++ port of the validated Swift Voice Twin DSP
-# (AorusGram/Sources/Features/AorusVoiceTwin.swift). Runs on the WebRTC capture
-# thread; mutates the microphone PCM in place inside RecordedDataIsAvailable,
-# before the encoder. Pure C++ + an ObjC-only UserDefaults read — no module
-# dependencies, so it adds nothing to TgVoipWebrtc's link graph and cannot create
-# a dependency cycle. iOS delivers the mic as mono Int16 PCM after the hardware
-# voice-processing AEC/NS, so the transform applies to clean near-end voice only;
-# any other PCM layout is a safe no-op (original audio passes through untouched).
+# Calls use the same native DSP as the Swift capture adapters, before WebRTC encoding.
+# Settings are the effective values published by AorusGramManager. The processor is
+# owned by the call's capture bridge; the shared DSP module has no Telegram dependencies.
+# WebRTC counts bytes across an interleaved frame: Int16 mono is 2, stereo is 4.
 _AORUS_CALL_VOICE_TWIN_HEADER = r"""#ifndef AorusCallVoiceTwin_h
 #define AorusCallVoiceTwin_h
 #include "AorusVoiceDSP.h"
@@ -17619,7 +17615,7 @@ public:
     }
     bool enabled() const { return enabled_; }
     void process(void *samples, size_t frames, size_t bytes, size_t channels, uint32_t rate) {
-        if (!enabled_ || !samples || bytes != 2 || channels < 1 || channels > 2 || rate < 8000 || rate > 192000) { return; }
+        if (!enabled_ || !samples || channels < 1 || channels > 2 || bytes != sizeof(int16_t) * channels || rate < 8000 || rate > 192000) { return; }
         AorusVoiceDSPConfigure(processor_, preset_, rate, static_cast<unsigned>(channels));
         AorusVoiceDSPProcessInt16(processor_, static_cast<int16_t *>(samples), frames);
     }

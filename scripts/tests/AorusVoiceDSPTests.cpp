@@ -35,7 +35,7 @@ static double frequencyOf(const std::vector<float> &samples, double rate, int mi
 int main() {
     const auto started = std::chrono::steady_clock::now();
     const float semitones[] = {-4, -3, 3, 0, 6};
-    for (double rate : {8000., 16000., 24000., 44100., 48000., 96000.}) {
+    for (double rate : {8000., 16000., 24000., 32000., 44100., 48000., 96000.}) {
         for (int preset = 0; preset < 5; ++preset) {
             auto *dsp = AorusVoiceDSPCreate();
             expect(dsp != nullptr, "processor allocation");

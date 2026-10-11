@@ -78,6 +78,10 @@ def patch_camera_selection(tg: Path) -> None:
 
 def patch_bazel9_imports(tg: Path) -> None:
     for path in tg.rglob("BUILD"):
+        # macOS globbing can also match OpenH264's build directory.
+        # Only Bazel's uppercase package files contain Starlark rules.
+        if path.name != "BUILD" or not path.is_file():
+            continue
         text = path.read_text()
         additions = []
         for rule in ("objc_library", "objc_import", "cc_library", "cc_import", "cc_binary", "cc_test"):
