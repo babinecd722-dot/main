@@ -115,3 +115,21 @@ def patch_classic_lottie(tg: Path) -> None:
         if dependency not in source:
             source = replace(source, "    deps = [\n", "    deps = [\n" + dependency, relative + " renderer dependency")
             build.write_text(source)
+
+
+def patch_classic_list_item(tg: Path) -> None:
+    path = tg / "submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift"
+    text = path.read_text()
+    # Both protocol methods share this parameter pair in the pinned snapshot.
+    old = "previousItem: ListViewItem?, nextItem: ListViewItem?"
+    new = "neighbors: ListViewItemNeighbors"
+    if old in text:
+        if text.count(old) != 2:
+            raise RuntimeError("Telegram13: classic theme list parameters are ambiguous")
+        text = text.replace(old, new)
+    elif text.count(new) != 2:
+        raise RuntimeError("Telegram13: classic theme list parameters are missing")
+    text = replace(text, "private class AorusClassicThemeSettingsThemeIconItem: ListViewItem {\n",
+                   "private class AorusClassicThemeSettingsThemeIconItem: ListViewItem {\n    var neighborDescriptor: AnyEquatable { return .noNeighborInfluence }\n",
+                   "classic theme neighbor descriptor")
+    path.write_text(text)

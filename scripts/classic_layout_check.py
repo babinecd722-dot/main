@@ -15,6 +15,9 @@ def classic_reference_bytes(path: Path) -> bytes:
         data = data.replace(b"DefaultAnimatedStickerNodeImpl(lottieSettings: .init(backend: .rlottie))",
                             b"DefaultAnimatedStickerNodeImpl()")
         data = data.replace(b"import LottieSettings\n", b"")
+    if path.name == "AorusClassicChatThemeNodes.swift":
+        data = data.replace(b"neighbors: ListViewItemNeighbors", b"previousItem: ListViewItem?, nextItem: ListViewItem?")
+        data = data.replace(b"    var neighborDescriptor: AnyEquatable { return .noNeighborInfluence }\n", b"")
     return data
 
 

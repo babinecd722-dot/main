@@ -3381,8 +3381,9 @@ def patch_old_interface(tg: Path) -> None:
     patch_classic_spacing(tg)
     from aorus_classic_sheets import patch_classic_sheets
     patch_classic_sheets(tg)
-    from aorus_telegram13 import patch_classic_lottie
+    from aorus_telegram13 import patch_classic_lottie, patch_classic_list_item
     patch_classic_lottie(tg)
+    patch_classic_list_item(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 

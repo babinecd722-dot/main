@@ -277,8 +277,7 @@ private final class AorusSpoofDeviceItem: ListViewItem, ItemListItem {
         async: @escaping (@escaping () -> Void) -> Void,
         params: ListViewItemLayoutParams,
         synchronousLoads: Bool,
-        previousItem: ListViewItem?,
-        nextItem: ListViewItem?,
+        neighbors: ListViewItemNeighbors,
         completion: @escaping (
             ListViewItemNode,
             @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)
@@ -291,8 +290,8 @@ private final class AorusSpoofDeviceItem: ListViewItem, ItemListItem {
                 params,
                 itemListNeighbors(
                     item: self,
-                    topItem: previousItem as? ItemListItem,
-                    bottomItem: nextItem as? ItemListItem
+                    topFacet: neighbors.previous?.base(ItemListNeighborFacet.self),
+                    bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)
                 )
             )
             node.contentSize = layout.contentSize
@@ -309,8 +308,7 @@ private final class AorusSpoofDeviceItem: ListViewItem, ItemListItem {
         async: @escaping (@escaping () -> Void) -> Void,
         node: @escaping () -> ListViewItemNode,
         params: ListViewItemLayoutParams,
-        previousItem: ListViewItem?,
-        nextItem: ListViewItem?,
+        neighbors: ListViewItemNeighbors,
         animation: ListViewItemUpdateAnimation,
         completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void
     ) {
@@ -325,8 +323,8 @@ private final class AorusSpoofDeviceItem: ListViewItem, ItemListItem {
                     params,
                     itemListNeighbors(
                         item: self,
-                        topItem: previousItem as? ItemListItem,
-                        bottomItem: nextItem as? ItemListItem
+                        topFacet: neighbors.previous?.base(ItemListNeighborFacet.self),
+                        bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)
                     )
                 )
                 Queue.mainQueue().async {

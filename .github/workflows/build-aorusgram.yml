@@ -1452,7 +1452,14 @@ jobs:
           echo "=== First 80 lines ==="
           head -80 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
           echo "=== Errors (compiler + Bazel) ==="
-          grep -iE " error:|^ERROR:|FAILED:" $RUNNER_TEMP/build.log | head -120 || echo "(none)"
+          python3 - "$RUNNER_TEMP/build.log" <<'PY'
+          import pathlib, re, sys
+          path = pathlib.Path(sys.argv[1])
+          errors = dict.fromkeys(line for line in path.read_text(errors="replace").splitlines()
+                                 if re.search(r" error:|^ERROR:|FAILED:", line)
+                                 and not re.match(r"\s*\|", line)) if path.is_file() else {}
+          print("\n".join(errors) if errors else "(none)")
+          PY
           echo "=== Last 80 lines ==="
           tail -80 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
 

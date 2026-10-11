@@ -63,16 +63,15 @@ private final class AorusIntervalSliderItem: ListViewItem, ItemListItem {
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void,
                                   params: ListViewItemLayoutParams,
                                   synchronousLoads: Bool,
-                                  previousItem: ListViewItem?,
-                                  nextItem: ListViewItem?,
+                                  neighbors: ListViewItemNeighbors,
                                   completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
             let node = AorusIntervalSliderItemNode()
             let (layout, apply) = node.asyncLayout()(
                 self, params,
                 itemListNeighbors(item: self,
-                                  topItem: previousItem as? ItemListItem,
-                                  bottomItem: nextItem as? ItemListItem))
+                                  topFacet: neighbors.previous?.base(ItemListNeighborFacet.self),
+                                  bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
             node.contentSize = layout.contentSize
             node.insets = layout.insets
             Queue.mainQueue().async {
@@ -84,8 +83,7 @@ private final class AorusIntervalSliderItem: ListViewItem, ItemListItem {
     func updateNode(async: @escaping (@escaping () -> Void) -> Void,
                     node: @escaping () -> ListViewItemNode,
                     params: ListViewItemLayoutParams,
-                    previousItem: ListViewItem?,
-                    nextItem: ListViewItem?,
+                    neighbors: ListViewItemNeighbors,
                     animation: ListViewItemUpdateAnimation,
                     completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
         Queue.mainQueue().async {
@@ -95,8 +93,8 @@ private final class AorusIntervalSliderItem: ListViewItem, ItemListItem {
                     let (layout, apply) = makeLayout(
                         self, params,
                         itemListNeighbors(item: self,
-                                          topItem: previousItem as? ItemListItem,
-                                          bottomItem: nextItem as? ItemListItem))
+                                          topFacet: neighbors.previous?.base(ItemListNeighborFacet.self),
+                                          bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
                     Queue.mainQueue().async { completion(layout, { _ in apply() }) }
                 }
             }
