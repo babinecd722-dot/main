@@ -51,9 +51,9 @@ def main() -> int:
     commit = re.search(r"TELEGRAM_IOS_COMMIT:\s*([0-9a-f]{40})\b", workflow)
     if commit is None:
         fail(errors, "Telegram iOS must be pinned to an exact 40-character commit")
-    upstream_version_match = re.search(r"TELEGRAM_IOS_VERSION:\s*([0-9]+(?:\.[0-9]+)+)\b", workflow)
+    upstream_version_match = re.search(r'TELEGRAM_IOS_VERSION:\s*"([0-9]+(?:\.[0-9]+)+)"\s*$', workflow, re.M)
     if upstream_version_match is None:
-        fail(errors, "Telegram iOS version must be declared explicitly")
+        fail(errors, "Telegram iOS version must be declared as a quoted string")
         upstream_version = None
     else:
         upstream_version = upstream_version_match.group(1)
