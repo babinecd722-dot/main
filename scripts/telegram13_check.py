@@ -123,6 +123,95 @@ final class ToolbarModel { var isTranslatorExpanded = false }
 ''' + animation + "\n}\n"
 
 
+def attachment_test_source(tg):
+    from telegram13_list_check import block
+    from classic_layout_reference import ATTACHMENT_CONTAINER_LAYOUT
+    container = (tg / "submodules/AttachmentUI/Sources/AttachmentContainer.swift").read_text()
+    panel = (tg / "submodules/AttachmentUI/Sources/AttachmentPanel.swift").read_text()
+    pan = next(line for line in container.splitlines() if "private var panGestureArguments:" in line)
+    start = container.index("        let topInset: CGFloat", container.index("if AorusOldInterface.isEnabled {", container.index("    func update(layout:")))
+    end = container.index("        transition.updateFrame(node: self.wrappingNode", start)
+    installed = container[start:end]
+    start = ATTACHMENT_CONTAINER_LAYOUT.index("        let topInset: CGFloat")
+    end = ATTACHMENT_CONTAINER_LAYOUT.index("        transition.updateFrame(node: self.wrappingNode", start)
+    reference = ATTACHMENT_CONTAINER_LAYOUT[start:end]
+    first = panel.index("private final class AttachButtonComponent:")
+    begin = panel.index("    enum Style", first)
+    init = panel.index("    init(", begin)
+    definition = panel[begin:init] + block(panel, "    init(\n        context: AccountContext,")
+    first = panel.index("    func updateViews(transition: ComponentTransition) {")
+    call_start = panel.index("AttachButtonComponent(", first)
+    call = balanced(panel, call_start)
+    call = call[:call.index("                    action:")] + "action: {}, longPressAction: {})"
+    return '''import Foundation
+class UIScrollView {}
+class ListView {}
+class AccountContext {}
+enum AorusOldInterface { static let isEnabled = true }
+enum AttachmentButtonType { case gallery, file, contact }
+class PresentationStrings {}
+class PresentationTheme {}
+struct PresentationData { let strings = PresentationStrings(); let theme = PresentationTheme() }
+final class AttachButtonComponent {
+''' + definition + '''
+}
+final class ButtonOwner {
+    let context = AccountContext()
+    let presentationData = PresentationData()
+    var buttons: [AttachmentButtonType] = [.gallery, .file, .contact]
+    var selectedIndex = 0
+    func make(_ i: Int, _ type: AttachmentButtonType) -> AttachButtonComponent {
+        return ''' + call + '''
+    }
+}
+final class PanOwner {
+''' + pan + '''
+    var isFullSize = false
+    func inset(_ full: Bool, _ expanded: Bool, _ offset: CGFloat?, _ capturedFull: Bool) -> CGFloat {
+        self.isFullSize = full
+        self.panGestureArguments = offset.map { (40.0, $0, nil, nil, capturedFull) }
+        let effectiveExpanded = expanded
+        let edgeTopInset: CGFloat = 100.0
+''' + installed + '''
+        return topInset
+    }
+}
+final class ReferencePanOwner {
+    var panGestureArguments: (CGFloat, CGFloat, UIScrollView?, ListView?)?
+    var isFullSize = false
+    func inset(_ full: Bool, _ expanded: Bool, _ offset: CGFloat?) -> CGFloat {
+        self.isFullSize = full
+        self.panGestureArguments = offset.map { (40.0, $0, nil, nil) }
+        let effectiveExpanded = expanded
+        let edgeTopInset: CGFloat = 100.0
+''' + reference + '''
+        return topInset
+    }
+}
+var checks = 0
+func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
+let owner = ButtonOwner()
+for selected in 0..<owner.buttons.count {
+    owner.selectedIndex = selected
+    for (i, type) in owner.buttons.enumerated() {
+        let button = owner.make(i, type)
+        expect(button.isSelected == (i == selected), "classic selected tab retains its native tint")
+        expect(button.isAnimating == (i == selected), "only the selected classic tab animates")
+        expect(button.style == .legacy && button.isFirstOrLast == (i == 0 || i == 2), "classic style and tab edge metadata")
+    }
+}
+let pan = PanOwner(), reference = ReferencePanOwner()
+for full in [false, true] { for expanded in [false, true] {
+    for offset: CGFloat? in [nil, -120, -40, 0, 20, 80, 140] {
+        for capturedFull in [false, true] {
+            expect(pan.inset(full, expanded, offset, capturedFull) == reference.inset(full, expanded, offset), "13.0 pan metadata preserves the 12.0 sheet geometry")
+        }
+    }
+} }
+print("Telegram 13 classic attachments passed: \\(checks) assertions")
+'''
+
+
 def check_gift_patterns(tg):
     native = (tg / "submodules/TelegramCore/Sources/SyncCore/SyncCore_TelegramMediaAction.swift").read_text()
     case = next(line for line in native.splitlines() if line.strip().startswith("case starGiftUnique("))
@@ -225,6 +314,10 @@ def main():
     toolbar_source = toolbar_test_source(args.telegram_source)
     with tempfile.TemporaryDirectory(prefix="aorus-telegram13-") as directory:
         work = Path(directory)
+        attachments = work / "AttachmentTests.swift"
+        attachments.write_text(attachment_test_source(args.telegram_source))
+        subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(attachments), "-o", str(work / "attachment-tests")], check=True)
+        subprocess.run([str(work / "attachment-tests")], check=True)
         gifts = work / "GiftTests.swift"
         gifts.write_text(gift_test_source(args.telegram_source))
         subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(gifts), "-o", str(work / "gift-tests")], check=True)

@@ -225,6 +225,7 @@ def _attachments(tg: Path) -> None:
     text = edit(text, old, new, "attachment 12.0 view hierarchy")
     signature = "    func update(layout: ContainerViewLayout, controllers: [AttachmentContainable], coveredByModalTransition: CGFloat, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void = {}) {"
     body = ATTACHMENT_CONTAINER_LAYOUT.replace("inVoiceOver: layout.inVoiceOver)", "inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet)")
+    body = body.replace("let (panInitialTopInset, panOffset, _, _)", "let (panInitialTopInset, panOffset, _, _, _)")
     text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {\n" + body + "\n            self.pillView.isHidden = true\n            return\n        }\n", "attachment 12.0 sheet layout")
     text = edit(text, "self.view.convert(point, to: self.bottomClipNode.view)", "self.view.convert(point, to: AorusOldInterface.isEnabled ? self.clipNode.view : self.bottomClipNode.view)", "attachment 12.0 hit testing")
     path.write_text(text)
@@ -239,6 +240,7 @@ def _attachments(tg: Path) -> None:
     body = body.replace("layout.size.width / CGFloat(self.buttons.count)", "layout.size.width / CGFloat(max(1, self.buttons.count))")
     body = body.replace("                    context: self.context,", "                    context: self.context,\n                    style: .legacy,")
     body = body.replace("                    type: type,", "                    type: type,\n                    isFirstOrLast: i == 0 || i == self.buttons.count - 1,")
+    body = body.replace("                    isSelected: i == self.selectedIndex,", "                    isSelected: i == self.selectedIndex,\n                    isAnimating: i == self.selectedIndex,")
     body = body.replace("strongSelf.itemViews[i]", "strongSelf.itemViews[type.key]")
     # Keep the current client's additional attachment kinds and their labels.
     extra_titles = """            case .money:
