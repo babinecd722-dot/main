@@ -110,7 +110,9 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
         expect(button.alpha == 0.75 && button.layer.borderWidth == 2 && button.layer.shadowOpacity == 0.22, "opacity, border and shadow survive configuration")
         expect(button.isUserInteractionEnabled && button.gestureRecognizers?.contains(where: { $0 is UIPanGestureRecognizer }) == true, "interactive draggable button retains its pan")
         if mode != .icon {
-            expect(button.titleLabel?.text == overlay.title && button.titleLabel?.font.pointSize == 19, "title keeps its requested font and content")
+            let title = button.titleLabel?.attributedText
+            let renderedFont = (title?.length ?? 0) > 0 ? (title?.attribute(.font, at: 0, effectiveRange: nil) as? UIFont) ?? button.titleLabel?.font : button.titleLabel?.font
+            expect(button.titleLabel?.text == overlay.title && renderedFont?.pointSize == 19, "rendered title keeps its requested font and content")
             expect(button.titleLabel!.frame.width > 0 && button.titleLabel!.frame.height > 0, "title has visible native geometry")
         }
         if mode != .text {
