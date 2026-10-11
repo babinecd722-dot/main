@@ -1406,6 +1406,32 @@ def _patch_lens(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
+    path = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    text = _read(path)
+    native = "    public override init(frame: CGRect) {\n        if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {"
+    classic = """    public override init(frame: CGRect) {
+        if AorusOldInterface.isEnabled {
+            self.legacyView = nil
+            self.legacyHighlightContainerView = nil
+            self.legacyHighlightClippingContext = nil
+            self.nativeView = nil
+            self.nativeViewClippingContext = nil
+            self.nativeParamsView = nil
+            self.foregroundView = nil
+            self.shadowView = nil
+        } else if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {"""
+    text = _edit(text, native, classic, "plain classic background construction")
+    native = "    public init(spacing: CGFloat = 7.0) {\n        if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {"
+    classic = "    public init(spacing: CGFloat = 7.0) {\n        if #available(iOS 26.0, *), !AorusOldInterface.isEnabled, !GlassBackgroundView.useCustomGlassImpl {"
+    text = _edit(text, native, classic, "plain classic container construction")
+    text = _edit(text, "        if let filter = CALayer.luminanceToAlpha() {",
+                 "        if !AorusOldInterface.isEnabled, let filter = CALayer.luminanceToAlpha() {",
+                 "classic backgrounds do not allocate the unused glass mask filter")
+    text = _edit(text, "        if let subview = subview as? GlassBackgroundView.ContentView {",
+                 "        if !AorusOldInterface.isEnabled, let subview = subview as? GlassBackgroundView.ContentView {",
+                 "classic content does not mount or access unused tint masks", count=2)
+    path.write_text(text, encoding="utf-8")
+
 
 def _patch_context_menus(tg: Path) -> None:
     # 12.0's menu: rounded by 14 points, the pressed row lit edge to edge.

@@ -116,12 +116,22 @@ final class AorusPluginOverlayHost: UIView {
         if overlay.displayMode != .text, let icon = overlay.icon, let image = UIImage(systemName: icon) {
             button.setImage(image.withRenderingMode(.alwaysTemplate), for: .normal)
         }
-        if button.title(for: .normal) != nil, button.image(for: .normal) != nil {
-            button.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 12.0, bottom: 0.0, right: 14.0)
-            button.titleEdgeInsets = UIEdgeInsets(top: 0.0, left: 6.0, bottom: 0.0, right: -6.0)
-        } else if button.title(for: .normal) != nil {
-            button.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 14.0, bottom: 0.0, right: 14.0)
+        var configuration = UIButton.Configuration.plain()
+        configuration.background = .clear()
+        configuration.baseForegroundColor = foreground
+        configuration.contentInsets = .zero
+        configuration.image = button.image(for: .normal)
+        if let title = button.title(for: .normal) {
+            var attributes = AttributeContainer()
+            attributes.font = aorusUIFont(CGFloat(overlay.fontSize ?? 15.0), .semibold)
+            configuration.attributedTitle = AttributedString(title, attributes: attributes)
+            configuration.contentInsets = NSDirectionalEdgeInsets(top: 0.0, leading: 14.0, bottom: 0.0, trailing: 14.0)
+            if configuration.image != nil {
+                configuration.contentInsets.leading = 12.0
+                configuration.imagePadding = 6.0
+            }
         }
+        button.configuration = configuration
         if let borderColor = AorusPluginOverlayHost.color(overlay.borderColor), overlay.borderWidth > 0.0 {
             button.layer.borderColor = borderColor.cgColor
             button.layer.borderWidth = CGFloat(overlay.borderWidth)

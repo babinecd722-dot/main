@@ -45,7 +45,9 @@ METHOD
     start = attachment.index("    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {")
     end = attachment.index("\n    }", start) + len("\n    }")
     point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
-    return fixture + native_timer_source(tg) + """
+    from classic_glass_check import native_glass_source
+    from telegram13_preview_check import native_overlay_source
+    return fixture + native_glass_source(tg) + native_overlay_source(tg) + native_timer_source(tg) + """
 final class AorusClassicNodeViewFixture: UIView {
     var view: UIView { return self }
 }
@@ -130,6 +132,8 @@ def main() -> None:
     check_classic_styles(args.telegram_source, args.swiftc)
     check_classic_browser(args.telegram_source, args.swiftc)
     check_classic_attachment(args.telegram_source, args.swiftc)
+    from classic_glass_check import check_glass_allocations
+    check_glass_allocations(args.telegram_source, args.swiftc)
     print(f"Classic interface passed: {checks} reference and installation checks; {len(paths)} source files unchanged on replay")
 
 

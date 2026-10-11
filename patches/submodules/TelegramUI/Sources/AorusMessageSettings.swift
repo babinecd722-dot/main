@@ -693,7 +693,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
 
         let messages = aorusPreviewMessages(item)
         let chatItems: [ListViewItem] = messages.reversed().map { message in
-            return item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [message], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin)
+            return item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [message], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin, isGiftMessageComposerPreview: false)
         }
         let itemParams = ListViewItemLayoutParams(width: params.width, leftInset: params.leftInset, rightInset: params.rightInset, availableHeight: params.availableHeight, isStandalone: params.isStandalone)
 
@@ -715,7 +715,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
                     laidOut.append((messageNode, layout.size, {
                         messageNode.contentSize = layout.contentSize
                         messageNode.insets = layout.insets
-                        apply(ListViewItemApply(isOnScreen: true))
+                        apply(ListViewItemApply())
                     }))
                 } else {
                     laidOut.append((messageNode, messageNode.frame.size, {}))
@@ -728,7 +728,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
                 if case let (messageNode, apply)? = created {
                     messageNode.isUserInteractionEnabled = false
                     laidOut.append((messageNode, messageNode.frame.size, {
-                        apply().1(ListViewItemApply(isOnScreen: true))
+                        apply().1(ListViewItemApply())
                     }))
                 }
             }
@@ -919,7 +919,7 @@ final class AorusLookShuffleButton: UIButton {
     private var iconObserver: NSObjectProtocol?
     /// The button's plate: the same material a chat's date stands on, over this wallpaper.
     private var blur: NavigationBackgroundNode?
-    private var wallpaperContent: WallpaperBubbleBackgroundNode?
+    private var wallpaperContent: PortalView?
     private var spins = 0
     var shuffle: (() -> Void)?
 
@@ -960,9 +960,9 @@ final class AorusLookShuffleButton: UIButton {
         // Where a chat lays its dates on the wallpaper itself, dimmed, so does this; elsewhere
         // it is the tinted blur a chat's date uses.
         if let backgroundNode, backgroundNode.hasExtraBubbleBackground() {
-            if self.wallpaperContent == nil, let content = backgroundNode.makeBubbleBackground(for: .free) {
-                content.clipsToBounds = true
-                content.isUserInteractionEnabled = false
+            if self.wallpaperContent == nil, let content = backgroundNode.makeFreeBackground() {
+                content.view.clipsToBounds = true
+                content.view.isUserInteractionEnabled = false
                 self.insertSubview(content.view, at: 0)
                 self.wallpaperContent = content
             }
@@ -986,9 +986,8 @@ final class AorusLookShuffleButton: UIButton {
         self.glyph.tintColor = serviceMessageColorComponents(theme: theme, wallpaper: wallpaper).primaryText
         if let content = self.wallpaperContent {
             blur.isHidden = true
-            content.frame = bounds
-            content.cornerRadius = frame.height / 2.0
-            content.update(rect: frame, within: backgroundSize, transition: .immediate)
+            content.view.frame = bounds
+            content.view.layer.cornerRadius = frame.height / 2.0
         } else {
             blur.isHidden = false
             blur.frame = bounds

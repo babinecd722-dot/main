@@ -351,6 +351,8 @@ def main():
     check_proxies(args.telegram_source, args.swiftc)
     from telegram13_profile_check import check_profile
     check_profile(args.telegram_source, args.swiftc)
+    from telegram13_preview_check import check_previews, native_overlay_source
+    check_previews(args.telegram_source, args.swiftc)
     check_native_send(args.telegram_source)
     check_gift_patterns(args.telegram_source)
     check_lottie_calls(args.telegram_source)
@@ -379,6 +381,9 @@ def main():
             toolbar = work / "ToolbarTests.swift"
             toolbar.write_text(toolbar_source)
             subprocess.run([args.swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(toolbar)], check=True)
+            overlays = work / "OverlayTests.swift"
+            overlays.write_text(native_overlay_source(args.telegram_source))
+            subprocess.run([args.swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(overlays)], check=True)
             print("Telegram 13 font, round button and formatting toolbar SDK checks passed")
 
 
