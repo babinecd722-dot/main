@@ -48,6 +48,9 @@ def _patch_lens_effect_view(tg: Path) -> None:
         return
     start = text.find("private final class LensTransitionContainerEffectViewImpl: UIView, LensTransitionContainerEffectView {\n")
     if start < 0:
+        if "let contentContainer: LensTransitionContainer" in text:
+            print("GlassEverywhere: 13.0 menu surface is styled by GlassBackgroundView")
+            return
         raise RuntimeError("GlassEverywhere: LensTransitionContainerEffectViewImpl is missing")
     end = text.find("\npublic final class ContextControllerActionsStackNodeImpl", start)
     if end < 0:
@@ -210,6 +213,13 @@ def _patch_lens_container(tg: Path) -> None:
     text = _read(path, "LensTransitionContainer.swift")
     if "AorusGlassStyle" in text:
         print("GlassEverywhere: lens contents already clipped to the style")
+        return
+    if "public override init(frame: CGRect)" in text:
+        anchor = "        transition.setCornerRadius(layer: self.contentsView.layer, cornerRadius: cornerRadius)\n"
+        text = _replace_once(text, anchor,
+            "        transition.setCornerRadius(layer: self.contentsView.layer, cornerRadius: AorusGlassStyle.current(dark: isDark).clipRadius(cornerRadius))\n"
+            "        AorusGlassStyle.applyPixelClip(self.contentsView.layer, size: size, cornerRadius: cornerRadius, isDark: isDark)\n", "13.0 menu corners")
+        path.write_text(text, encoding="utf-8")
         return
     # The menu's rows are clipped to its corners: as round as the style makes them, and to the
     # steps of a pixel pane.

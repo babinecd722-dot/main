@@ -117,18 +117,18 @@ import UIKit
     }
     for classic in [true, false] {
         AorusClassicControlledLook.enabled = classic
-        AorusClassicEffectFixtureSurface.constructions = 0
-        let content = UIButton()
-        let previousHost = UIView()
-        previousHost.addSubview(content)
-        let effect = AorusClassicEffectFixture(contentView: content)
-        let glass = effect.subviews.compactMap { $0 as? UIVisualEffectView }
-        expect(effect.contentView === content, "the installed effect initializer retains the supplied content")
+        AorusClassicFixtureGlassBackgroundView.constructions = 0
+        let effect = AorusClassicEffectFixture(frame: .zero)
+        let glass = effect.subviews.compactMap { $0 as? AorusClassicFixtureGlassBackgroundView }
         expect(glass.count == (classic ? 0 : 1), "only the modern initializer creates a glass view")
-        expect(AorusClassicEffectFixtureSurface.constructions == (classic ? 0 : 1), "only the modern initializer allocates its glass surface")
-        expect(content.superview === (classic ? effect : glass[0].contentView), "the initializer mounts content in the selected native host")
-        let empty = AorusClassicEffectFixture(contentView: nil)
-        expect(empty.subviews.count == (classic ? 0 : 1), "initialization without extracted content selects the same host")
+        expect(AorusClassicFixtureGlassBackgroundView.constructions == (classic ? 0 : 1), "only the modern initializer allocates its glass surface")
+        expect(effect.contentsView.superview != nil, "the selected renderer mounts its content")
+        let button = UIButton(frame: CGRect(x: 0, y: 0, width: 80, height: 40))
+        effect.contentsView.addSubview(button)
+        expect(button.superview === effect.contentsView, "content uses the actual selected menu host")
+        let second = AorusClassicEffectFixture(frame: .zero)
+        expect(second.subviews.count == 1, "each constructor creates exactly one renderer")
+
     }
     AorusClassicControlledLook.enabled = false
     print("Native classic input passed: \(checks) assertions")

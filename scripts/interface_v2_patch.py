@@ -662,7 +662,7 @@ def _patch_editing_fields_glass(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "        let avatarSize: CGFloat = isModalOverlay ? 200.0 : 100.0\n",
+        "        let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0\n",
         "        // AorusGram: the derived theme is what makes the rows readable on the page -- their\n"
         "        // fill becomes the marker colour the glass shows through, their text and cursor\n"
         "        // become ink, and their separators become a hairline of it. The Set Photo button\n"
@@ -673,7 +673,7 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "        if aorusGlass {\n"
         "            presentationData = presentationData.withUpdated(theme: presentationData.theme.aorusGlassProfileTheme)\n"
         "        }\n"
-        "        let avatarSize: CGFloat = isModalOverlay ? 200.0 : 100.0\n",
+        "        let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0\n",
         "editing header glass theme",
     )
     text = _replace_once(
@@ -882,7 +882,7 @@ def _patch_header_centering(tg: Path) -> None:
         "        let usernameFrame: CGRect\n",
         "        // AorusGram: Interface 2.0 stacks the name, the status and the username down the\n"
         "        // middle in both states instead of only the collapsed one.\n"
-        "        let aorusCentredHeader = UserDefaults.standard.bool(forKey: \"" + INTERFACE_V2_KEY + "\")\n"
+        "        let aorusCentredHeader = UserDefaults.standard.bool(forKey: \"" + INTERFACE_V2_KEY + "\") && !AorusOldInterface.isEnabled\n"
         "        var titleFrame: CGRect\n"
         "        var subtitleFrame: CGRect\n"
         "        let usernameFrame: CGRect\n",
@@ -896,37 +896,39 @@ def _patch_header_centering(tg: Path) -> None:
         "            var minTitleFrame = CGRect(origin: CGPoint(x: aorusMinTitleX, y: expandedAvatarHeight - bottomInset - 58.0 - UIScreenPixel + (subtitleSize.height.isZero ? 10.0 : 0.0)), size: minTitleSize)\n",
         "centred header title",
     )
-    text = _replace_once(
-        text,
-        "            subtitleFrame = CGRect(origin: CGPoint(x: 16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
-        "            if self.subtitleRating != nil {\n"
-        "                subtitleFrame.origin.x += 22.0\n"
-        "            }\n"
-        "            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n",
-        "            // A badge sits 8pt to the right of the status and a rating badge immediately\n"
-        "            // to its left, so what has to end up centred is the pair, not the words: the\n"
-        "            // status moves half a badge the other way for each. Stock moves a whole rating\n"
-        "            // badge because its status hangs off the left margin rather than the middle.\n"
-        "            var aorusCentredSubtitleWidth = subtitleSize.width\n"
-        "            if let subtitleBadgeSize {\n"
-        "                aorusCentredSubtitleWidth += subtitleBadgeSize.width + 8.0\n"
-        "            }\n"
-        "            let aorusSubtitleX: CGFloat = aorusCentredHeader\n"
-        "                ? floorToScreenPixels((width - aorusCentredSubtitleWidth) / 2.0)\n"
-        "                : (16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction))\n"
-        "            subtitleFrame = CGRect(origin: CGPoint(x: aorusSubtitleX, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
-        "            if self.subtitleRating != nil {\n"
-        "                subtitleFrame.origin.x += aorusCentredHeader ? 11.0 : 22.0\n"
-        "            }\n"
-        "            if aorusCentredHeader {\n"
-        "                // Under the status rather than opposite the name: at the edge it reads as a\n"
-        "                // second, unrelated label once the name is no longer beside it.\n"
-        "                usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 2.0), size: usernameSize)\n"
-        "            } else {\n"
-        "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
-        "            }\n",
-        "centred header subtitle",
-    )
+    if "let subtitleLeadingInset = self.isSettings ? subtitleRatingInset : 0.0" not in text:
+        text = _replace_once(
+            text,
+            "            subtitleFrame = CGRect(origin: CGPoint(x: 16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
+            "            if self.subtitleRating != nil {\n"
+            "                subtitleFrame.origin.x += 22.0\n"
+            "            }\n"
+            "            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n",
+            "            // A badge sits 8pt to the right of the status and a rating badge immediately\n"
+            "            // to its left, so what has to end up centred is the pair, not the words: the\n"
+            "            // status moves half a badge the other way for each. Stock moves a whole rating\n"
+            "            // badge because its status hangs off the left margin rather than the middle.\n"
+            "            var aorusCentredSubtitleWidth = subtitleSize.width\n"
+            "            if let subtitleBadgeSize {\n"
+            "                aorusCentredSubtitleWidth += subtitleBadgeSize.width + 8.0\n"
+            "            }\n"
+            "            let aorusSubtitleX: CGFloat = aorusCentredHeader\n"
+            "                ? floorToScreenPixels((width - aorusCentredSubtitleWidth) / 2.0)\n"
+            "                : (16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction))\n"
+            "            subtitleFrame = CGRect(origin: CGPoint(x: aorusSubtitleX, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
+            "            if self.subtitleRating != nil {\n"
+            "                subtitleFrame.origin.x += aorusCentredHeader ? 11.0 : 22.0\n"
+            "            }\n"
+            "            if aorusCentredHeader {\n"
+            "                // Under the status rather than opposite the name: at the edge it reads as a\n"
+            "                // second, unrelated label once the name is no longer beside it.\n"
+            "                usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 2.0), size: usernameSize)\n"
+            "            } else {\n"
+            "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
+            "            }\n",
+            "centred header subtitle",
+        )
+
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: centred the profile header")
 

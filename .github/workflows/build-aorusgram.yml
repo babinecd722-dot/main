@@ -19,8 +19,8 @@ jobs:
     env:
       # Quiets GitHub deprecation warnings for actions/cache, checkout, upload-artifact on Node 20.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      TELEGRAM_IOS_COMMIT: 6ad963e5b62d354da79040f388ae2b9132fb17b8
-      TELEGRAM_IOS_VERSION: 12.9.2
+      TELEGRAM_IOS_COMMIT: f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838
+      TELEGRAM_IOS_VERSION: 13.0
       PILLOW_VERSION: 11.3.0
       LIBXRAY_VERSION: v26.7.28
       LIBXRAY_APPLE_SHA256: 07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9
@@ -84,6 +84,9 @@ jobs:
 
       - name: Plugin documentation export preflight
         run: python3 aorusgram/scripts/plugin_exports_check.py aorusgram
+
+      - name: Native voice PCM and DSP preflight
+        run: python3 aorusgram/scripts/voice_twin_check.py aorusgram
 
       - name: Client lifecycle and Mach sampling preflight
         run: python3 aorusgram/scripts/client_lifecycle_check.py aorusgram
@@ -813,6 +816,8 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/SyncCore/AorusRoundVideoMessageAttribute.swift $TG/submodules/TelegramCore/Sources/SyncCore/
 
+          cp -a $PATCHES/submodules/AorusVoiceDSP $TG/submodules/
+
           # 0. AorusGram core (ClientSpoofManager, AorusGramBootstrap, etc.) — must link into TelegramUI
           mkdir -p $TG/submodules/AorusGram
           rm -rf $TG/submodules/AorusGram/Sources
@@ -1153,6 +1158,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Aorusgram" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
+
+      - name: Native voice capture integration preflight
+        run: python3 aorusgram/scripts/voice_twin_check.py aorusgram --telegram-source telegram-ios
 
       - name: Classic interface preflight
         run: python3 aorusgram/scripts/classic_components_check.py aorusgram --telegram-source telegram-ios

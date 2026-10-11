@@ -174,7 +174,7 @@ def _auxiliary_panels(tg: Path) -> None:
         ("        let sideInset: CGFloat = 8.0", "        let sideInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0"),
         ("        let innerInset: CGFloat = 4.0", "        let innerInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 4.0"),
         ("        let cornerRadius: CGFloat = 8.0", "        let cornerRadius: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0"),
-        ("y: size.height - bottomInset - 8.0 - listHeight", "y: size.height - (AorusOldInterface.isEnabled ? 0.0 : bottomInset + 8.0) - listHeight"),
+        ("y: size.height - bottomInset - 8.0 - panelHeight", "y: size.height - (AorusOldInterface.isEnabled ? 0.0 : bottomInset + 8.0) - panelHeight"),
     ):
         text = edit(text, old, new, "horizontal bot result " + old.strip())
     path.write_text(text)

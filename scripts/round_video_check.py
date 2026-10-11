@@ -41,13 +41,14 @@ enum PendingMessageUploadError: Error { case generic }
 
 def native_enqueue_source(tg: Path) -> str:
     source = (tg / 'submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift').read_text()
-    start = source.index('                    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {')
-    end = source.index('                        if let attribute = attribute as? AutoremoveTimeoutMessageAttribute {', start)
+    start = source.index('    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {')
+    end = source.index('        if let attribute = attribute as? AutoremoveTimeoutMessageAttribute {', start)
     # Compile the native decision with the transaction's bindings in their real order.
     # mediaList is deliberately built after attributes, as in Telegram's transaction.
     return '''import Foundation
 func nativeRoundEnqueueAttributes(mediaReference: ControlledMediaReference?, requestedAttributes: [MessageAttribute]) -> [MessageAttribute] {
     var attributes: [MessageAttribute] = []
+    let isInstantVideo = (mediaReference?.media as? TelegramMediaFile)?.isInstantVideo == true
 ''' + source[start:end] + '''        attributes.append(attribute)
     }
     var mediaList: [AnyObject] = []

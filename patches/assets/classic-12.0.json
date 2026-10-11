@@ -437,7 +437,11 @@
     "submodules/AttachmentUI/Sources/AttachmentContainer.swift": "cf5dff4cd87fdebef57eab1168b0510044f08f62008b274727483624f6638c8a",
     "submodules/AttachmentUI/Sources/AttachmentPanel.swift": "01872bce517c3f3c8fc402831cbfb6601dc0c92a1956f341e435834675172e0e",
     "submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift": "98953a58a8b74ce5623cd09748da6b6ddcaee04a2a5ad2fef2e8cfc77e08173f",
-    "submodules/SearchBarNode/Sources/SearchBarNode.swift": "228b2bdbeaeb08dfd98f0d111b647775af1d9390b9c8b22bd9ebd9aec981a31f"
+    "submodules/SearchBarNode/Sources/SearchBarNode.swift": "228b2bdbeaeb08dfd98f0d111b647775af1d9390b9c8b22bd9ebd9aec981a31f",
+    "submodules/TelegramUI/Images.xcassets/Peer Info/PinnedLargeIcon.imageset/pin_48.pdf": "70269953725cb3abacac37f2b1140a14f24c7232bd8c9b14ff61a69d989548b2",
+    "submodules/TelegramUI/Images.xcassets/Peer Info/PinnedLargeIcon.imageset/Contents.json": "c7e90b7f8bfb90de32096c8ba9ed3f5864efb6ee0e3072b0b4896dfd09cdb4b1",
+    "submodules/TelegramUI/Images.xcassets/Camera/FlashOffIcon.imageset/off.pdf": "6dc35448ac94b5bf1255be41f9c83c61383b1c8ad4938c6bfbb3a206ce75d46b",
+    "submodules/TelegramUI/Images.xcassets/Camera/FlashOffIcon.imageset/Contents.json": "a00ae0a88ba9b6f458ee537c3f59d749720c9cf8b418a879cbd577ba3ad5ae96"
   },
   "layout_bodies": {
     "VIDEO_SCRUBBER_LAYOUT": "dd5fe18510cb36d3edfa951be03e65fa7529e023f6f9b0dee0985f13f61c5e13",

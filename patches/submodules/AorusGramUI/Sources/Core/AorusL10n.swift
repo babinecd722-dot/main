@@ -581,7 +581,7 @@ public struct AorusL10n {
 
     // MARK: Voice Twin
     public var voiceTwin: String { t("Голосовой двойник", "Voice Twin") }
-    public var voiceTwinFooter: String { t("Изменяет ваш голос на выбранный в исходящих голосовых сообщениях, видеосообщениях (кружочках) и звонках.", "Changes your voice to the selected one in outgoing voice messages, video messages (round videos) and calls.") }
+    public var voiceTwinFooter: String { t("Обрабатывает голос в исходящих голосовых сообщениях, кружочках и звонках. Сохраняет разборчивость речи и выравнивает громкость.", "Processes your voice in outgoing voice messages, round videos and calls. Preserves speech clarity and balances volume.") }
     public var voiceTwinVoiceHeader: String { t("ГОЛОС", "VOICE") }
     public var voiceAnonymous: String { t("Аноним", "Anonymous") }
     public var voiceMale: String { t("Мужской", "Male") }

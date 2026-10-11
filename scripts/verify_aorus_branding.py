@@ -480,7 +480,7 @@ def main() -> None:
         if "? .back : self.cameraState.position" in video_message_camera_text:
             err.append("VideoMessagesRearCamera: legacy configuration-only override is still present")
 
-    camera_core = tg / "submodules" / "Camera" / "Sources" / "Camera.swift"
+    camera_core = tg / "submodules" / "Camera" / "CameraLegacy" / "Sources" / "LegacyCamera.swift"
     if not camera_core.is_file():
         err.append("VideoMessagesRearCamera: Camera.swift is missing")
     else:
@@ -694,7 +694,7 @@ def main() -> None:
         if "self.imageView.layer.transform = CATransform3DIdentity" not in overlay_text or "CATransform3DRotate" in overlay_text:
             err.append("VideoMasks: local call overlay can freeze the native preview through 3D flattening")
 
-    camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
+    camera_output = tg / "submodules" / "Camera" / "CameraLegacy" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file():
         err.append("VideoMasks: CameraOutput.swift is missing")
     else:
@@ -1169,10 +1169,10 @@ def main() -> None:
         if "AorusMaskPresetItemNode: ItemListRevealOptionsItemNode" not in masks_controller_text or "trash.fill" not in masks_controller_text:
             err.append("VideoMasks: custom-mask swipe deletion is incomplete")
 
-    camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
+    camera_output = tg / "submodules" / "Camera" / "CameraLegacy" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
         err.append("VideoMasks: round-video capture hook is missing")
-    camera_preview = tg / "submodules" / "Camera" / "Sources" / "CameraPreviewView.swift"
+    camera_preview = tg / "submodules" / "Camera" / "CameraLegacy" / "Sources" / "CameraPreviewView.swift"
     if not camera_preview.is_file() or "AorusGram: local round-video mask preview" not in camera_preview.read_text(encoding="utf-8"):
         err.append("VideoMasks: local round-video preview overlay is missing")
 
@@ -1267,7 +1267,7 @@ def main() -> None:
     # to be created before the fail-closed VLESS requirement is published.
     bootstrap_call = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
     encryption_anchor = "let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters"
-    account_manager_anchor = "let accountManager = AccountManager"
+    account_manager_anchor = "let accountManager: AccountManager<TelegramAccountManagerTypes> = setupAccountManager"
     shared_context_anchor = "SharedAccountContextImpl("
     if bootstrap_call not in t:
         err.append("AppDelegate: missing AorusGramBootstrap.shared.setup() call (feature initialisation)")
@@ -1399,6 +1399,18 @@ def main() -> None:
         ):
             if forbidden in network_text:
                 err.append(f"MTProxyAntiDPI: legacy dd downgrade path remains {forbidden}")
+        for marker in (
+            "private let aorusNativeProxyServer = Atomic<ProxyServerSettings?>(value: nil)",
+            "func refreshAorusProxySettings()",
+            "self.aorusNativeProxyServer.with { $0 }",
+            "let _ = self.aorusNativeProxyServer.swap(activeServer)",
+            "ProxyServerSettings(host: $0.ip",
+            "WebProxyTransport.shared.apply(configuration:",
+            "self.dropConnectionStatus()",
+            'self.switchEngine(to: .rust, reason: "WEB proxy turned off")',
+        ):
+            if marker not in network_text:
+                err.append(f"RealityProxy: native 13.0 proxy routing is missing {marker}")
         # initializedNetwork() is shared by authorized accounts and by both
         # UnauthorizedAccount creation paths.  Keep the system proxy mutation before
         # MTContext construction so phone-number and code requests cannot escape it.
@@ -1422,7 +1434,7 @@ def main() -> None:
             '"since": aorusStateSince',
             'aorusConnectionState = "online"',
             'aorusConnectionState = aorusProxyHasIssues ? "proxy_issue" : "connecting"',
-            'network.dropConnectionStatus()',
+            'network?.refreshAorusProxySettings()',
         ):
             if marker not in account_text:
                 err.append(f"RealityProxy: runtime enforcement is missing {marker}")
@@ -1437,12 +1449,10 @@ def main() -> None:
                 "private var aorusProxyObserver: NSObjectProtocol?",
                 "private var aorusConnectionStatusDisposable: Disposable?",
                 'NSNotification.Name("aorusgram_proxy_config_updated")',
-                "network.context.updateApiEnvironment",
+                "network.refreshAorusProxySettings()",
                 "network.connectionStatus.start",
                 '"aorusgram_vless_unauthorized_connection_state"',
                 '"since": since',
-                "network.dropConnectionStatus()",
-                "withUpdatedSocksProxySettings(updated)",
                 "NotificationCenter.default.removeObserver(aorusProxyObserver)",
                 "self.aorusConnectionStatusDisposable?.dispose()",
             ):
@@ -2386,9 +2396,9 @@ def main() -> None:
     conversion_file = tg / "submodules" / "TextFormat" / "Sources" / "ChatInputContentConversion.swift"
     if conversion_file.is_file():
         conversion_text = conversion_file.read_text(encoding="utf-8")
-        for marker in ("var aorusOpenQuote: Int? = nil", "aorusMerged.append(.paragraph("):
+        for marker in ("case quote(collapsed: Bool)", "paragraphBlocks(in: carve.range)"):
             if marker not in conversion_text:
-                err.append(f"InputQuote: composer quotes are still split per line — missing {marker}")
+                err.append(f"InputQuote: 13.0 contiguous quote conversion is missing {marker}")
 
     # AccountBackupManager must stay byte-identical across the core and UI modules, so it
     # carries its own table instead of reaching for either module's. Nothing else checks it,
@@ -4068,11 +4078,9 @@ def main() -> None:
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift", "func shape(_ shape: GlassBackgroundView.Shape) -> GlassBackgroundView.Shape"),
         # The panes that draw their own material take the same style: the long-press menu and
         # the button it grows out of, what it holds, the tap menu with its arrow, the action sheet.
-        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "private func aorusTelegramUpdate(theme: PresentationTheme)"),
-        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.aorusSurface.beginMorph(duration: duration, toSize: keyframes[keyframes.count - 1], toCornerRadius: nil)"),
-        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.aorusSurface.morph(cornerRadius: nextValue)"),
+        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.contentContainer.updateClassicTheme(color: presentationData.theme.contextMenu.backgroundColor)"),
         ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.contentsView.layer"),
-        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.backgroundView.contentView.layer"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "private lazy var backgroundView = GlassBackgroundView()"),
         ("submodules/Display/Source/ContextMenuContainerNode.swift", "self.aorusSurface.attach(host: self.containerNode.view"),
         ("submodules/Display/Source/ContextMenuContainerNode.swift", "aorusPath = outline.copy(using: &shift) ?? outline"),
         ("submodules/Display/Source/ActionSheetItemGroupNode.swift", "self.aorusUpdateSurface(clippingNodeFrame: clippingNodeFrame"),

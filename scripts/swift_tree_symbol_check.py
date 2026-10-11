@@ -125,6 +125,14 @@ def main() -> int:
     # yet, which is a mistake worth catching rather than a reason to stay quiet.
     known |= declared(repo / "AorusGram" / "Sources")
     known |= declared(repo / "patches")
+    # Swift imports the public C functions of native modules through Clang.
+    # Read their declarations rather than treating valid C calls as missing Swift names.
+    for header in (tree / "submodules").glob("*/PublicHeaders/*.h"):
+        text = strip_comments_and_strings(header.read_text(encoding="utf-8", errors="replace"))
+        known.update(re.findall(
+            r"^\s*(?:[A-Za-z_]\w*\s+)+(?:\*\s*)?([A-Z]\w*)\s*\([^;{}]*\)\s*;",
+            text, re.M,
+        ))
     known |= SDK_NAMES
     # Module names read like type names when they qualify one, and Bazel decides whether a
     # module is visible, not this.

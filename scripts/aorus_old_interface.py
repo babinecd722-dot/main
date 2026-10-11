@@ -138,7 +138,7 @@ _LEGACY_STYLE_SITES = (
     ("submodules/AccountContext/Sources/ContactSelectionController.swift",
      "        self.context = context\n", "        self.style = style\n", "        self.updatedPresentationData = updatedPresentationData\n"),
     ("submodules/MediaPickerUI/Sources/MediaPickerScreen.swift",
-     "        self.updatedPresentationData = updatedPresentationData\n", "        self.style = style\n", "        self.peer = peer\n"),
+     "        self.updatedPresentationData = updatedPresentationData\n", "        self.style = style\n", "        self.warpContentsOnEdges = warpContentsOnEdges\n"),
     ("submodules/LocationUI/Sources/LocationPickerController.swift",
      "        self.context = context\n", "        self.style = style\n", "        self.mode = mode\n"),
     ("submodules/Components/SheetComponent/Sources/SheetComponent.swift",
@@ -183,13 +183,13 @@ def _patch_legacy_styles(tg: Path) -> None:
     # A field inside a header that brings its own capsule and close button stays as it is.
     by_file.setdefault("submodules/SearchBarNode/Sources/SearchBarNode.swift", []).append((
         "        self.fieldStyle = fieldStyle\n        self.forceSeparator = forceSeparator\n",
-        "        self.fieldStyle = AorusOldInterface.isEnabled && fieldStyle == .glass ? .modern : fieldStyle // " + MARK + "\n"
+        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // " + MARK + "\n"
         "        self.forceSeparator = forceSeparator\n",
     ))
     by_file.setdefault("submodules/SearchBarNode/Sources/SearchBarPlaceholderNode.swift", []).append((
-        "    init(fieldStyle: SearchBarStyle) {\n        self.fieldStyle = fieldStyle\n",
-        "    init(fieldStyle: SearchBarStyle) {\n"
-        "        self.fieldStyle = AorusOldInterface.isEnabled && fieldStyle == .glass ? .modern : fieldStyle // " + MARK + "\n",
+        "    init(fieldStyle: SearchBarStyle, hasOwnGlassContainer: Bool) {\n        self.fieldStyle = fieldStyle\n",
+        "    init(fieldStyle: SearchBarStyle, hasOwnGlassContainer: Bool) {\n"
+        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // " + MARK + "\n",
     ))
     # The large buttons: no glass sheen, no room left for it.
     by_file.setdefault("submodules/SolidRoundedButtonNode/Sources/SolidRoundedButtonNode.swift", []).append((
@@ -835,7 +835,8 @@ def _patch_classic_panels(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
     text = _read(path)
     anchor = "        self.aorusSurface.attach(host: self.glassView.contentView, backdrop: nil, haloHost: self, haloBelow: self.glassView)\n"
-    text = _edit(text, anchor, "        self.aorusSurface.classicMenu = true // " + MARK + "\n" + anchor, "menu colour")
+    if "LensTransitionContainerEffectViewImpl" in text:
+        text = _edit(text, anchor, "        self.aorusSurface.classicMenu = true // " + MARK + "\n" + anchor, "menu colour")
     path.write_text(text, encoding="utf-8")
     path = tg / "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift"
     text = _read(path)
@@ -913,15 +914,17 @@ def _patch_tabs(tg: Path) -> None:
     # chosen one in the accent colour with a line under it, 26 points apart.
     path = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "        private let lensView: LiquidLensView\n",
-        "        private let lensView: LiquidLensView\n"
-        "        // " + MARK + ": the line under the chosen tab.\n"
-        "        private let aorusSelectionLine = UIImageView()\n"
-        "        private var aorusSelectionLineTheme: PresentationTheme?\n",
-        "tabs line field",
-    )
+    if "private let aorusSelectionLine" not in text:
+        text = _edit(
+            text,
+            "        private let lensView: LiquidLensView\n",
+            "        private let lensView: LiquidLensView\n"
+            "        // " + MARK + ": the line under the chosen tab.\n"
+            "        private let aorusSelectionLine = UIImageView()\n"
+            "        private var aorusSelectionLineTheme: PresentationTheme?\n",
+            "tabs line field",
+        )
+
     text = _edit(
         text,
         "            self.addSubview(self.lensView)\n"
@@ -961,31 +964,31 @@ def _patch_tabs(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "                    containerSize: CGSize(width: 1000.0, height: sizeHeight - 3.0 * 2.0)\n",
-        "                    containerSize: CGSize(width: 1000.0, height: sizeHeight - (AorusOldInterface.isEnabled ? 0.0 : 3.0 * 2.0))\n",
+        "                    containerSize: CGSize(width: 1000.0, height: sizeHeight - lensInset * 2.0)\n",
+        "                    containerSize: CGSize(width: 1000.0, height: sizeHeight - (AorusOldInterface.isEnabled ? 0.0 : lensInset * 2.0))\n",
         "tabs item height",
         count=2,
     )
     text = _edit(
         text,
-        "            let contentSize = CGSize(width: scrollContentWidth, height: sizeHeight - 3.0 * 2.0)\n",
+        "            let contentSize = CGSize(width: scrollContentWidth, height: sizeHeight - lensInset * 2.0)\n",
         "            if AorusOldInterface.isEnabled {\n"
         "                self.aorusUpdateSelectionLine(component: component, sizeHeight: sizeHeight, transition: transition) // " + MARK + "\n"
         "            }\n"
         "            \n"
-        "            let contentSize = CGSize(width: scrollContentWidth, height: sizeHeight - 3.0 * 2.0)\n",
+        "            let contentSize = CGSize(width: scrollContentWidth, height: sizeHeight - lensInset * 2.0)\n",
         "tabs line update",
     )
     text = _edit(
         text,
-        "            let scrollViewFrame = CGRect(origin: CGPoint(x: 3.0, y: 0.0), size: CGSize(width: size.width - 3.0 * 2.0, height: size.height - 3.0 * 2.0))\n",
-        "            let scrollViewFrame = AorusOldInterface.isEnabled ? CGRect(origin: CGPoint(), size: size) : CGRect(origin: CGPoint(x: 3.0, y: 0.0), size: CGSize(width: size.width - 3.0 * 2.0, height: size.height - 3.0 * 2.0)) // " + MARK + "\n",
+        "            let scrollViewFrame = CGRect(origin: CGPoint(), size: lensSize)\n",
+        "            let scrollViewFrame = AorusOldInterface.isEnabled ? CGRect(origin: CGPoint(), size: size) : CGRect(origin: CGPoint(), size: lensSize) // " + MARK + "\n",
         "tabs scroll frame",
     )
     text = _edit(
         text,
-        "            self.scrollView.layer.cornerRadius = (size.height - 3.0 * 2.0) * 0.5\n",
-        "            self.scrollView.layer.cornerRadius = AorusOldInterface.isEnabled ? 0.0 : (size.height - 3.0 * 2.0) * 0.5 // " + MARK + "\n",
+        "            self.scrollView.layer.cornerRadius = lensSize.height * 0.5\n",
+        "            self.scrollView.layer.cornerRadius = AorusOldInterface.isEnabled ? 0.0 : lensSize.height * 0.5 // " + MARK + "\n",
         "tabs scroll corners",
     )
     text = _edit(
@@ -1023,6 +1026,24 @@ def _patch_tabs(tg: Path) -> None:
             "                    .foregroundColor: " + classic_colour + "component.theme.chat.inputPanel.panelControlColor\n",
             "tab title colour",
         )
+    if "// AorusGram: classic tabs allocate no lens" not in text:
+        text = _edit(text, "        private let lensView: LiquidLensView\n", "        private lazy var lensView = LiquidLensView(kind: .noContainer) // AorusGram: classic tabs allocate no lens\n", "lazy tab renderer")
+        eager = "            self.lensView = LiquidLensView(kind: .noContainer)\n"
+        if text.count(eager) != 1:
+            raise RuntimeError("OldInterface: tab lens initializer is missing")
+        text = text.replace(eager, "", 1)
+        text = _edit(text, "            return CGSize(width: self.size.width - lensInset * 2.0, height: self.size.height - lensInset * 2.0)", "            return AorusOldInterface.isEnabled ? self.size : CGSize(width: self.size.width - lensInset * 2.0, height: self.size.height - lensInset * 2.0)", "classic full tab layout")
+        text = _edit(text, "        private func updateScrolling(transition: ComponentTransition) {", "        private func updateScrolling(transition: ComponentTransition) {\n            if AorusOldInterface.isEnabled { return }", "classic tabs avoid morph work")
+        frame = "            transition.setFrame(view: self.lensView, frame: CGRect(origin: CGPoint(x: lensInset, y: lensInset), size: lensSize))\n            self.lensView.clipsToBounds = true\n            self.lensView.layer.cornerRadius = lensSize.height * 0.5"
+        text = _edit(text, frame, "            if !AorusOldInterface.isEnabled {\n" + "\n".join("    " + line for line in frame.split("\n")) + "\n            }", "classic tabs leave the unallocated lens alone")
+    text = _edit(text,
+        "            self.lensView.setLiftedContainer(view: overlayContainerView)\n",
+        "            if !AorusOldInterface.isEnabled {\n                self.lensView.setLiftedContainer(view: overlayContainerView)\n            }\n",
+        "classic tabs overlay")
+    text = _edit(text,
+        "        private func pointInLens(_ point: CGPoint) -> CGPoint {\n",
+        "        private func pointInLens(_ point: CGPoint) -> CGPoint {\n            if AorusOldInterface.isEnabled { return point }\n",
+        "classic tabs hit testing")
     path.write_text(text, encoding="utf-8")
 
 
@@ -1094,6 +1115,7 @@ def _patch_profile_tabs(tg: Path) -> None:
         "min(16.0, backgroundFrame.height * 0.5))",
         "min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))",
         "profile button corners",
+        count=2,
     )
     path.write_text(text, encoding="utf-8")
 
@@ -1389,18 +1411,19 @@ def _patch_context_menus(tg: Path) -> None:
     # 12.0's menu: rounded by 14 points, the pressed row lit edge to edge.
     path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "fromCornerRadius: normalCornerRadius, toCornerRadius: 30.0,",
-        "fromCornerRadius: normalCornerRadius, toCornerRadius: AorusOldInterface.isEnabled ? 14.0 : 30.0,",
-        "menu opening corners",
-    )
-    text = _edit(
-        text,
-        "toRect: toRect, fromCornerRadius: 30.0,",
-        "toRect: toRect, fromCornerRadius: AorusOldInterface.isEnabled ? 14.0 : 30.0,",
-        "menu closing corners",
-    )
+    if "fromCornerRadius: normalCornerRadius" in text:
+        text = _edit(
+            text,
+            "fromCornerRadius: normalCornerRadius, toCornerRadius: 30.0,",
+            "fromCornerRadius: normalCornerRadius, toCornerRadius: AorusOldInterface.isEnabled ? 14.0 : 30.0,",
+            "menu opening corners",
+        )
+        text = _edit(
+            text,
+            "toRect: toRect, fromCornerRadius: 30.0,",
+            "toRect: toRect, fromCornerRadius: AorusOldInterface.isEnabled ? 14.0 : 30.0,",
+            "menu closing corners",
+        )
     text = _edit(
         text,
         "            self.contentContainer.update(size: size, cornerRadius: min(30.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, transition: transition)\n",
@@ -1728,8 +1751,8 @@ def _patch_classic_heights(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "        let backgroundColor = self.theme?.chatList.regularSearchBarColor ?? .clear\n",
-        "        let backgroundColor = (AorusOldInterface.isEnabled ? self.theme?.rootController.navigationBar.opaqueBackgroundColor : self.theme?.chatList.regularSearchBarColor) ?? .clear\n",
+        "        if self.displayGlassBackgroundWhenInactive {\n",
+        "        if AorusOldInterface.isEnabled || self.displayGlassBackgroundWhenInactive {\n",
         "list search background",
     )
     path.write_text(text, encoding="utf-8")
@@ -1851,8 +1874,8 @@ def _patch_classic_chat_list_header(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "                    headerContentY = component.statusBarHeight + 10.0\n",
-        "                    headerContentY = component.statusBarHeight + (AorusOldInterface.isEnabled ? 5.0 : 10.0) // " + MARK + "\n",
+        "                headerContentY = component.statusBarHeight + 10.0\n",
+        "                headerContentY = component.statusBarHeight + (AorusOldInterface.isEnabled ? 5.0 : 10.0) // " + MARK + "\n",
         "chat list header position",
     )
     text = _edit(
@@ -1902,8 +1925,8 @@ def _patch_classic_chat_list_header(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "                containerInsets: UIEdgeInsets(top: 16.0, left: component.sideInset - 4.0,",
-        "                containerInsets: UIEdgeInsets(top: AorusOldInterface.isEnabled ? 4.0 : 16.0, left: component.sideInset - 4.0,",
+        "                containerInsets: UIEdgeInsets(top: 16.0, left: component.leftInset - 4.0,",
+        "                containerInsets: UIEdgeInsets(top: AorusOldInterface.isEnabled ? 4.0 : 16.0, left: component.leftInset - 4.0,",
         "stories insets",
     )
     path.write_text(text, encoding="utf-8")
@@ -2005,26 +2028,26 @@ def _patch_classic_chat_list_header(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "            centerContentLeftInset = nextLeftButtonX + 4.0\n",
-        "            centerContentLeftInset = AorusOldInterface.isEnabled ? sideInset + nextLeftButtonX + (nextLeftButtonX != 0.0 ? 8.0 : 0.0) - 4.0 : nextLeftButtonX + 4.0 // " + MARK + "\n",
+        "            let centerContentLeftInset: CGFloat = leftInset + nextLeftButtonX - 12.0\n",
+        "            let centerContentLeftInset: CGFloat = AorusOldInterface.isEnabled ? leftInset + nextLeftButtonX + (nextLeftButtonX != 0.0 ? 8.0 : 0.0) - 4.0 : leftInset + nextLeftButtonX - 12.0 // " + MARK + "\n",
         "header title left inset",
     )
     text = _edit(
         text,
-        "            centerContentRightInset = nextRightButtonX + 20.0\n",
-        "            centerContentRightInset = AorusOldInterface.isEnabled ? sideInset + nextRightButtonX - (nextRightButtonX != 0.0 ? 0.0 : 8.0) : nextRightButtonX + 20.0\n",
+        "            let centerContentRightInset: CGFloat = rightInset + nextRightButtonX + 4.0\n",
+        "            let centerContentRightInset: CGFloat = AorusOldInterface.isEnabled ? rightInset + nextRightButtonX - (nextRightButtonX != 0.0 ? 0.0 : 8.0) : rightInset + nextRightButtonX + 4.0\n",
         "header title right inset",
     )
     text = _edit(
         text,
-        "titleContentRect.maxX - 2.0 - (size.width - sideInset - nextRightButtonX))\n",
-        "titleContentRect.maxX - 2.0 - (size.width - sideInset - nextRightButtonX - (AorusOldInterface.isEnabled && nextRightButtonX != 0.0 ? 8.0 : 0.0)))\n",
+        "titleContentRect.maxX - 2.0 - (size.width - rightInset - nextRightButtonX))\n",
+        "titleContentRect.maxX - 2.0 - (size.width - rightInset - nextRightButtonX - (AorusOldInterface.isEnabled && nextRightButtonX != 0.0 ? 8.0 : 0.0)))\n",
         "header title offset",
     )
     text = _edit(
         text,
-        "                let rightButtonsContainerFrame = CGRect(origin: CGPoint(x: availableSize.width - component.sideInset - max(44.0, rightButtonsEffectiveWidth), y: 0.0),",
-        "                let rightButtonsContainerFrame = CGRect(origin: CGPoint(x: availableSize.width - component.sideInset - (AorusOldInterface.isEnabled ? rightButtonsEffectiveWidth : max(44.0, rightButtonsEffectiveWidth)), y: 0.0),",
+        "                let rightButtonsContainerFrame = CGRect(origin: CGPoint(x: availableSize.width - component.rightInset - max(44.0, rightButtonsEffectiveWidth), y: 0.0),",
+        "                let rightButtonsContainerFrame = CGRect(origin: CGPoint(x: availableSize.width - component.rightInset - (AorusOldInterface.isEnabled ? rightButtonsEffectiveWidth : max(44.0, rightButtonsEffectiveWidth)), y: 0.0),",
         "header right buttons edge",
     )
     path.write_text(text, encoding="utf-8")
@@ -2326,8 +2349,8 @@ def _patch_classic_message_panel(tg: Path) -> None:
         ("            sendActionButtonsSize = self.sendActionButtons.updateLayout(size: CGSize(width: 40.0, height: minimalHeight),",
          "            sendActionButtonsSize = self.sendActionButtons.updateLayout(size: CGSize(width: 40.0, height: AorusOldInterface.isEnabled ? 39.0 : minimalHeight),",
          "send button layout"),
-        ("            mediaActionButtonsSize = self.mediaActionButtons.updateLayout(size: CGSize(width: 40.0, height: minimalHeight),",
-         "            mediaActionButtonsSize = self.mediaActionButtons.updateLayout(size: CGSize(width: 40.0, height: AorusOldInterface.isEnabled ? 39.0 : minimalHeight),",
+        ("            mediaActionButtonsSize = self.mediaActionButtons.updateLayout(size: CGSize(width: 40.0, height: 40.0),",
+         "            mediaActionButtonsSize = self.mediaActionButtons.updateLayout(size: CGSize(width: 40.0, height: AorusOldInterface.isEnabled ? 39.0 : 40.0),",
          "microphone layout"),
         ("        var mediaActionButtonsFrame = CGRect(origin: CGPoint(x: textInputContainerBackgroundFrame.maxX + aorusOuterActionSpacing, y: textInputContainerBackgroundFrame.maxY - mediaActionButtonsSize.height), size: mediaActionButtonsSize)\n",
          "        var mediaActionButtonsFrame = CGRect(origin: CGPoint(x: textInputContainerBackgroundFrame.maxX + aorusOuterActionSpacing, y: textInputContainerBackgroundFrame.maxY - mediaActionButtonsSize.height), size: mediaActionButtonsSize)\n"
@@ -2370,23 +2393,22 @@ def _patch_classic_message_panel(tg: Path) -> None:
     )
     for old, new, label in edits:
         text = _edit(text, old, new, label)
-    # 12.0's field took the chat's text size, and its height with it; 12.9.2 holds it at 17.
+    # 13.0 already derives text attributes from the chat font size. Its three-line
+    # height cache must use that same font when drawing the classic field.
     text = _edit(
         text,
-        "if \"\".isEmpty {\n",
-        "if \"\".isEmpty && !AorusOldInterface.isEnabled { // " + MARK + ": the chat's text size, as in 12.0\n",
+        "        let baseFontSize: CGFloat = 17.0   // the field is pinned to 17 (see calclulateTextFieldMinHeight)\n",
+        "        let baseFontSize: CGFloat = AorusOldInterface.isEnabled ? self.presentationInterfaceState.map { chatTextInputBaseFontSize(for: $0.fontSize) } ?? 17.0 : 17.0 // " + MARK + "\n",
         "field text size",
-        count=8,
     )
     text = _edit(
         text,
-        "    } else {\n        result = 31.0\n    }\n    \n    return result\n}\n",
-        "    } else {\n        result = 31.0\n    }\n"
+        "    return chatTextInputFieldMinHeight(for: presentationInterfaceState.fontSize)\n",
+        "    let result = chatTextInputFieldMinHeight(for: presentationInterfaceState.fontSize)\n"
         "    if AorusOldInterface.isEnabled, case .regular = metrics.widthClass {\n"
-        "        // " + MARK + ": 12.0's taller field on a wide screen.\n"
-        "        result = max(33.0, result)\n"
+        "        return max(33.0, result) // " + MARK + "\n"
         "    }\n"
-        "    \n    return result\n}\n",
+        "    return result\n",
         "field minimal height",
     )
     text = _edit(
@@ -2540,6 +2562,48 @@ def _patch_classic_profile(tg: Path) -> None:
     )
     for old, new, label in edits:
         text = _edit(text, old, new, label)
+    native_subtitle = (
+        "            let subtitleLeadingInset = self.isSettings ? subtitleRatingInset : 0.0\n"
+        "            var effectiveSubtitleWidth = subtitleLeadingInset + subtitleSize.width\n"
+        "            if let subtitleBadgeSize {\n"
+        "                effectiveSubtitleWidth += (subtitleBadgeSize.width + 7.0) * (1.0 - titleCollapseFraction)\n"
+        "            }\n"
+        "            \n"
+        "            let totalSubtitleWidth = effectiveSubtitleWidth + usernameSpacing + usernameSize.width\n"
+        "            if usernameSize.width == 0.0 {\n"
+        "                subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - effectiveSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
+        "                usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 1.0), size: usernameSize)\n"
+        "            } else {\n"
+        "                subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - totalSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
+        "                usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)\n"
+        "            }"
+    )
+    classic_subtitle = (
+        "            if AorusOldInterface.isEnabled {\n"
+        "                // AorusGram: old interface: the expanded status and username retain 12.0's positions.\n"
+        "                subtitleFrame = CGRect(origin: CGPoint(x: 16.0, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
+        "                if self.subtitleRating != nil {\n"
+        "                    subtitleFrame.origin.x += 22.0\n"
+        "                }\n"
+        "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
+        "            } else {\n"
+        "                let subtitleLeadingInset = self.isSettings ? subtitleRatingInset : 0.0\n"
+        "                var effectiveSubtitleWidth = subtitleLeadingInset + subtitleSize.width\n"
+        "                if let subtitleBadgeSize {\n"
+        "                    effectiveSubtitleWidth += (subtitleBadgeSize.width + 7.0) * (1.0 - titleCollapseFraction)\n"
+        "                }\n"
+        "                \n"
+        "                let totalSubtitleWidth = effectiveSubtitleWidth + usernameSpacing + usernameSize.width\n"
+        "                if usernameSize.width == 0.0 {\n"
+        "                    subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - effectiveSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
+        "                    usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 1.0), size: usernameSize)\n"
+        "                } else {\n"
+        "                    subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - totalSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
+        "                    usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)\n"
+        "                }\n"
+        "            }"
+    )
+    text = _edit(text, native_subtitle, classic_subtitle, "expanded classic profile labels")
     path.write_text(text, encoding="utf-8")
 
     path = sources / "PeerInfoHeaderNavigationButtonContainerNode.swift"
@@ -2590,8 +2654,8 @@ def _patch_classic_profile(tg: Path) -> None:
     text = _read(path)
     text = _edit(
         text,
-        "            let navigationBarHeight: CGFloat = !self.isSettings && layout.isModalOverlay ? 68.0 : 60.0\n",
-        "            let navigationBarHeight: CGFloat = AorusOldInterface.isEnabled ? (!self.isSettings && layout.isModalOverlay ? 56.0 : 44.0) : (!self.isSettings && layout.isModalOverlay ? 68.0 : 60.0) // " + MARK + "\n",
+        "            let navigationBarHeight: CGFloat = !self.isSettings && layout.presentedInFormSheet ? 68.0 : 60.0\n",
+        "            let navigationBarHeight: CGFloat = AorusOldInterface.isEnabled ? (!self.isSettings && layout.presentedInFormSheet ? 56.0 : 44.0) : (!self.isSettings && layout.presentedInFormSheet ? 68.0 : 60.0) // " + MARK + "\n",
         "profile bar height",
     )
     text = _edit(
@@ -3264,10 +3328,10 @@ def _patch_message_field(tg: Path) -> None:
     if MARK not in text:
         text = _replace(
             text,
-            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, transition: ComponentTransition(transition))\n",
+            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording, transition: ComponentTransition(transition))\n",
             "        // " + MARK + ": the microphone is a plain icon on the classic panel; the send\n"
             "        // button keeps its own filled circle.\n"
-            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))\n",
+            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording && !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))\n",
             "microphone button",
         )
         text = _replace(
@@ -3372,7 +3436,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 20.0",
             "private var aorusItemSeparators: [ASDisplayNode] = []",
             "self.backgroundColor = presentationData.theme.contextMenu.sectionSeparatorColor",
-            "self.aorusSurface.classicMenu = true",
+            "self.contentContainer.updateClassicTheme(color: presentationData.theme.contextMenu.backgroundColor)",
         ],
         "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift": ["AorusOldInterface.menuColor(dark: isDark).map {"],
         "submodules/TelegramUI/Components/LiquidLens/Sources/LiquidLensView.swift": ["if #available(iOS 26.0, *), !AorusOldInterface.isEnabled {"],
@@ -3407,7 +3471,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "self.textInputBackgroundNode.layer.borderColor = interfaceState.theme.chat.inputPanel.inputStrokeColor.cgColor",
             "insets = UIEdgeInsets(top: 6.0, left: 8.0, bottom: 6.0, right: 42.0)",
             "return contentHeight + aorusToolbarOffset + (AorusOldInterface.isEnabled ? textFieldInsets.top + textFieldInsets.bottom : 0.0)",
-            "if \"\".isEmpty && !AorusOldInterface.isEnabled { // " + MARK + ": the chat's text size, as in 12.0",
+            "let baseFontSize: CGFloat = AorusOldInterface.isEnabled ? self.presentationInterfaceState.map { chatTextInputBaseFontSize(for: $0.fontSize) } ?? 17.0 : 17.0",
             "if AorusOldInterface.isEnabled, case .regular = metrics.widthClass {",
         ],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift": ["final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode"],
@@ -3425,7 +3489,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "aorusClassic.update(size: size, presentationData: presentationData,",
         ],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift": [
-            "AorusOldInterface.isEnabled ? (!self.isSettings && layout.isModalOverlay ? 56.0 : 44.0)",
+            "AorusOldInterface.isEnabled ? (!self.isSettings && layout.presentedInFormSheet ? 56.0 : 44.0)",
             "self.aorusClassicNavigationHeight = true",
         ],
         "submodules/TelegramUI/Components/GlassControls/Sources/GlassControlGroup.swift": ["case aorusPlain(UIColor)", "isVisible: !component.background.aorusIsPlain"],
@@ -3442,7 +3506,7 @@ def verify_old_interface(tg: Path) -> list[str]:
         ],
         "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift": [
             "innerSize.width = AorusOldInterface.isEnabled ? size.height : 40.0 + 3.0 * 2.0",
-            "self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !AorusOldInterface.isEnabled",
+            "self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording && !AorusOldInterface.isEnabled",
         ],
     }
     errors = []

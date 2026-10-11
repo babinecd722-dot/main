@@ -29,7 +29,7 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     /// The one place that decides whether a frame gets a mask at all. Was three copies of the
     /// same expression; they now cannot drift, and the off entry is honoured everywhere at once.
-    static var isMaskingActive: Bool {
+    public static var isMaskingActive: Bool {
         let defaults = UserDefaults.standard
         if !AorusLicenseAccess.isAllowed {
             return false

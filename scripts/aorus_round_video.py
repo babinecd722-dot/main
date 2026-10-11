@@ -411,17 +411,20 @@ def patch_enqueue(tg: Path) -> None:
     replace(account, old, old + '\n    declareEncodable(AorusRoundVideoMessageAttribute.self, f: { AorusRoundVideoMessageAttribute(decoder: $0) })')
     enqueue = tg / 'submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift'
     replace(enqueue, 'private func filterMessageAttributesForOutgoingMessage(_ attributes: [MessageAttribute]) -> [MessageAttribute] {\n    return attributes.filter { attribute in\n        switch attribute {', 'private func filterMessageAttributesForOutgoingMessage(_ attributes: [MessageAttribute]) -> [MessageAttribute] {\n    return attributes.filter { attribute in\n        switch attribute {\n        case _ as AorusRoundVideoMessageAttribute:\n            return true')
-    replace(enqueue, '                    for attribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {', '''                    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {
-                        let attribute: MessageAttribute
-                        if let round = requestedAttribute as? AorusRoundVideoMessageAttribute,
-                           (mediaReference?.media as? TelegramMediaFile)?.isInstantVideo == true,
-                           !requestedAttributes.contains(where: { $0 is OutgoingScheduleInfoMessageAttribute }) {
-                            attribute = round.started(at: Date().timeIntervalSince1970)
-                        } else if requestedAttribute is AorusRoundVideoMessageAttribute {
-                            continue
-                        } else {
-                            attribute = requestedAttribute
-                        }''')
+    replace(enqueue, 'func outgoingMessageAttributes(requestedAttributes: [MessageAttribute], isSecretChat: Bool, peerAutoremoveTimeout: Int32?) -> [MessageAttribute] {', 'func outgoingMessageAttributes(requestedAttributes: [MessageAttribute], isSecretChat: Bool, peerAutoremoveTimeout: Int32?, isInstantVideo: Bool = false) -> [MessageAttribute] {')
+    replace(enqueue, 'outgoingMessageAttributes(requestedAttributes: requestedAttributes, isSecretChat: peer is TelegramSecretChat, peerAutoremoveTimeout: peerAutoremoveTimeout)', 'outgoingMessageAttributes(requestedAttributes: requestedAttributes, isSecretChat: peer is TelegramSecretChat, peerAutoremoveTimeout: peerAutoremoveTimeout, isInstantVideo: (mediaReference?.media as? TelegramMediaFile)?.isInstantVideo == true)')
+    replace(enqueue, '    for attribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {', '''    for requestedAttribute in filterMessageAttributesForOutgoingMessage(requestedAttributes) {
+        let attribute: MessageAttribute
+        if let round = requestedAttribute as? AorusRoundVideoMessageAttribute,
+           isInstantVideo,
+           !requestedAttributes.contains(where: { $0 is OutgoingScheduleInfoMessageAttribute }) {
+            attribute = round.started(at: Date().timeIntervalSince1970)
+        } else if requestedAttribute is AorusRoundVideoMessageAttribute {
+            continue
+        } else {
+            attribute = requestedAttribute
+        }''')
+
 
 
 def patch_round_zoom(lc: Path) -> None:

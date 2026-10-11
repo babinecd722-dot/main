@@ -108,11 +108,10 @@ def native_menu_source(tg):
     background = block((tg / 'submodules/Display/Source/NavigationBackgroundView.swift').read_text(), 'open class BlurredBackgroundView:')
     background = background.replace('ContainedViewLayoutTransition', 'AorusClassicMenuFixtureTransition').replace('ControlledTransitionAnimator', 'AorusClassicMenuFixtureAnimator')
     source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition')
-    context = (tg / 'submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift').read_text()
-    effect = block(context, 'private final class LensTransitionContainerEffectViewImpl:')
-    check_initializer_order(effect, 'LensTransitionContainerEffectViewImpl')
-    effect = effect[:effect.index('    required init?(coder:')] + block(effect, 'required init?(coder:') + '\n    func update(theme: AorusClassicEffectFixtureTheme) { self.theme = theme }\n}\n'
-    effect = effect.replace('private final class LensTransitionContainerEffectViewImpl: UIView, LensTransitionContainerEffectView', 'final class AorusClassicEffectFixture: UIView').replace('PresentationTheme', 'AorusClassicEffectFixtureTheme').replace('AorusGlassSurface', 'AorusClassicEffectFixtureSurface').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
+    effect = block(text, 'public final class LensTransitionContainer:')
+    check_initializer_order(effect, 'LensTransitionContainer')
+    effect = effect[:effect.index('    public func updateClassicTheme')] + '\n}\n'
+    effect = effect.replace('public final class LensTransitionContainer: UIView', 'final class AorusClassicEffectFixture: UIView').replace('GlassBackgroundView', 'AorusClassicFixtureGlassBackgroundView').replace('ContextMenuSourceLease', 'AorusClassicFixtureSourceLease').replace('LiquidMorphTransition', 'AorusClassicFixtureMorph').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
     return '''
 protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
@@ -130,17 +129,17 @@ public struct AorusClassicMenuFixtureAnimator {
     func updateFrame(layer: CALayer, frame: CGRect, completion: (() -> Void)?) { layer.frame = frame; completion?() }
     func updateCornerRadius(layer: CALayer, cornerRadius: CGFloat, completion: (() -> Void)?) { layer.cornerRadius = cornerRadius; completion?() }
 }
-struct AorusClassicEffectFixtureTheme {}
-struct AorusClassicEffectFixtureStyle {
-    func clipRadius(_ value: CGFloat) -> CGFloat { value }
-}
-final class AorusClassicEffectFixtureSurface {
+final class AorusClassicFixtureSourceLease {}
+final class AorusClassicFixtureMorph { static let isSupported = true }
+final class AorusClassicFixtureGlassBackgroundView: UIView {
     static var constructions = 0
-    var classicMenu = false
-    var cornerRadius: CGFloat = 0
-    var styleUpdated: ((AorusClassicEffectFixtureStyle) -> Void)?
-    init() { Self.constructions += 1 }
-    func attach(host: UIView, backdrop: UIView?, haloHost: UIView, haloBelow: UIView) {}
+    let contentView = UIView()
+    override init(frame: CGRect) {
+        Self.constructions += 1
+        super.init(frame: frame)
+        self.addSubview(self.contentView)
+    }
+    required init?(coder: NSCoder) { fatalError() }
 }
 ''' + background + '\n' + source + '\n' + effect
 

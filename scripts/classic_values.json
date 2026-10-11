@@ -1,8 +1,8 @@
 {
  "reference": "release-12.0",
  "commit": "29b266d5adb0d3a32b93f5506210fe7d20b8f81f",
- "current": "12.9.2",
- "current_commit": "6ad963e5b62d354da79040f388ae2b9132fb17b8",
+ "current": "13.0",
+ "current_commit": "f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838",
  "values": [
   {
    "path": "submodules/AttachmentUI/Sources/AttachmentController.swift",
@@ -102,17 +102,6 @@
    "new": "            let bottomInset: CGFloat = environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 10.0 : bottomPanelPadding",
    "form": "if-expression",
    "replacement": "            let bottomInset: CGFloat = if AorusOldInterface.isEnabled { environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 5.0 : bottomPanelPadding } else { environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 10.0 : bottomPanelPadding }"
-  },
-  {
-   "path": "submodules/BotPaymentsUI/Sources/BotCheckoutPriceItem.swift",
-   "reference": "submodules/BotPaymentsUI/Sources/BotCheckoutPriceItem.swift",
-   "reference_sha256": "67c51f079aa16e1694a34c54b05acbf5b58ae39f8fb2f308063fc3604665d66e",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                    naturalContentHeight = 34.0",
-   "new": "                    naturalContentHeight = 42.0",
-   "form": "if-statement",
-   "replacement": "                    if AorusOldInterface.isEnabled {\n                        naturalContentHeight = 34.0\n                    } else {\n                        naturalContentHeight = 42.0\n                    }"
   },
   {
    "path": "submodules/BotPaymentsUI/Sources/BotCheckoutPriceItem.swift",
@@ -577,6 +566,61 @@
    "replacement": "            if AorusOldInterface.isEnabled {\n                transition.updateFrame(view: compassView, frame:  CGRect(origin: CGPoint(x: size.width - compassView.frame.width - 11.0, y: inset + 110.0 + topPadding), size: compassView.frame.size))\n            } else {\n                transition.updateFrame(view: compassView, frame:  CGRect(origin: CGPoint(x: size.width - compassView.frame.width - 16.0, y: inset + 14.0 + topPadding), size: compassView.frame.size))\n            }"
   },
   {
+   "path": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference_sha256": "0299297fe41706da0e84946308e55d95afce0b18df6c6575769159d1f263e631",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "                    self.backgroundNode.image = self.isFailed ? generateStretchableFilledCircleImage(diameter: 20.0, color: self.theme.list.itemDestructiveColor.withAlphaComponent(0.1)) : generateStretchableFilledCircleImage(diameter: 20.0, color: self.theme.list.freePlainInputField.backgroundColor)",
+   "new": "                    self.backgroundNode.image = self.isFailed ? generateStretchableFilledCircleImage(diameter: 52.0, color: self.theme.list.itemDestructiveColor.withAlphaComponent(0.1)) : generateStretchableFilledCircleImage(diameter: 52.0, color: self.theme.list.freePlainInputField.backgroundColor)",
+   "form": "if-statement",
+   "replacement": "                    if AorusOldInterface.isEnabled {\n                        self.backgroundNode.image = self.isFailed ? generateStretchableFilledCircleImage(diameter: 20.0, color: self.theme.list.itemDestructiveColor.withAlphaComponent(0.1)) : generateStretchableFilledCircleImage(diameter: 20.0, color: self.theme.list.freePlainInputField.backgroundColor)\n                    } else {\n                        self.backgroundNode.image = self.isFailed ? generateStretchableFilledCircleImage(diameter: 52.0, color: self.theme.list.itemDestructiveColor.withAlphaComponent(0.1)) : generateStretchableFilledCircleImage(diameter: 52.0, color: self.theme.list.freePlainInputField.backgroundColor)\n                    }"
+  },
+  {
+   "path": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference_sha256": "0299297fe41706da0e84946308e55d95afce0b18df6c6575769159d1f263e631",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let inputNodeSize = CGSize(width: rowWidth, height: 50.0)",
+   "new": "            let inputNodeSize = CGSize(width: rowWidth, height: 52.0)",
+   "form": "if-expression",
+   "replacement": "            let inputNodeSize = if AorusOldInterface.isEnabled { CGSize(width: rowWidth, height: 50.0) } else { CGSize(width: rowWidth, height: 52.0) }"
+  },
+  {
+   "path": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference_sha256": "0299297fe41706da0e84946308e55d95afce0b18df6c6575769159d1f263e631",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "        let buttonHeight: CGFloat = 50.0",
+   "new": "        let buttonHeight: CGFloat = 52.0",
+   "form": "if-expression",
+   "replacement": "        let buttonHeight: CGFloat = if AorusOldInterface.isEnabled { 50.0 } else { 52.0 }"
+  },
+  {
+   "path": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference": "submodules/PasswordSetupUI/Sources/TwoFactorAuthDataInputScreen.swift",
+   "reference_sha256": "0299297fe41706da0e84946308e55d95afce0b18df6c6575769159d1f263e631",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "        self.backgroundNode.image = generateStretchableFilledCircleImage(diameter: 20.0, color: theme.list.freePlainInputField.backgroundColor)",
+   "new": "        self.backgroundNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.freePlainInputField.backgroundColor)",
+   "form": "if-statement",
+   "replacement": "        if AorusOldInterface.isEnabled {\n            self.backgroundNode.image = generateStretchableFilledCircleImage(diameter: 20.0, color: theme.list.freePlainInputField.backgroundColor)\n        } else {\n            self.backgroundNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.freePlainInputField.backgroundColor)\n        }"
+  },
+  {
+   "path": "submodules/PasswordSetupUI/Sources/TwoFactorAuthSplashScreen.swift",
+   "reference": "submodules/PasswordSetupUI/Sources/TwoFactorAuthSplashScreen.swift",
+   "reference_sha256": "d6427c208fe13379794ddc35003e75534743c4e7324a95fa17e354476cade941",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "        let buttonHeight: CGFloat = 50.0",
+   "new": "        let buttonHeight: CGFloat = 52.0",
+   "form": "if-expression",
+   "replacement": "        let buttonHeight: CGFloat = if AorusOldInterface.isEnabled { 50.0 } else { 52.0 }"
+  },
+  {
    "path": "submodules/PremiumUI/Sources/PremiumGiftCodeScreen.swift",
    "reference": "submodules/PremiumUI/Sources/PremiumGiftCodeScreen.swift",
    "reference_sha256": "e7b77a510f7993d5cfbfebdbf2980e6c855ad259434c76f6649cd7eef3eab970",
@@ -586,17 +630,6 @@
    "new": "                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0, height: 52.0),",
    "form": "ternary-argument",
    "replacement": "                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0)),"
-  },
-  {
-   "path": "submodules/PremiumUI/Sources/PremiumGiftScreen.swift",
-   "reference": "submodules/PremiumUI/Sources/PremiumGiftScreen.swift",
-   "reference_sha256": "f616c7e8ab72676f6c0b030655f7f2e6e93ed7898cece81d17059d3112e1742c",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: 50.0),",
-   "new": "                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: 52.0),",
-   "form": "ternary-argument",
-   "replacement": "                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0)),"
   },
   {
    "path": "submodules/PremiumUI/Sources/PremiumIntroScreen.swift",
@@ -993,6 +1026,17 @@
    "new": "        self.emitterLayer.setValue(20.0 + Float(value * 200.0), forKeyPath: \"emitterCells.emitter.birthRate\")",
    "form": "if-statement",
    "replacement": "        if AorusOldInterface.isEnabled {\n            self.emitterLayer.setValue(20.0 + Float(value * 40.0), forKeyPath: \"emitterCells.emitter.birthRate\")\n        } else {\n            self.emitterLayer.setValue(20.0 + Float(value * 200.0), forKeyPath: \"emitterCells.emitter.birthRate\")\n        }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift",
+   "reference": "submodules/TelegramUI/Sources/ChatTextInputPanelNode.swift",
+   "reference_sha256": "84ba3d6a722ae35a4a3861e1bdd6b05c64fbe20cd3fbf20e7aef64be3fc83da6",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            menuTextSize = self.menuButtonTextNode.updateLayout(CGSize(width: width / 2.0 - 60.0, height: 44.0))",
+   "new": "            menuTextSize = self.menuButtonTextNode.updateLayout(CGSize(width: width / 2.0 - 60.0, height: 40.0))",
+   "form": "if-statement",
+   "replacement": "            if AorusOldInterface.isEnabled {\n                menuTextSize = self.menuButtonTextNode.updateLayout(CGSize(width: width / 2.0 - 60.0, height: 44.0))\n            } else {\n                menuTextSize = self.menuButtonTextNode.updateLayout(CGSize(width: width / 2.0 - 60.0, height: 40.0))\n            }"
   },
   {
    "path": "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift",
@@ -1664,39 +1708,6 @@
    "new": "                    containerSize: CGSize(width: withdrawWidth, height: 52.0)",
    "form": "ternary-argument",
    "replacement": "                    containerSize: CGSize(width: withdrawWidth, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsStatisticsScreen.swift",
-   "reference": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsStatisticsScreen.swift",
-   "reference_sha256": "c400410efe7f2d801f3d735648e601645a3094801f5c7d13ab3d1f8155d6c39d",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                let panelContainerCornerRadius: CGFloat = self.listIsExpanded ? 0.0 : 11.0",
-   "new": "                let panelContainerCornerRadius: CGFloat = self.listIsExpanded ? 0.0 : 26.0",
-   "form": "if-expression",
-   "replacement": "                let panelContainerCornerRadius: CGFloat = if AorusOldInterface.isEnabled { self.listIsExpanded ? 0.0 : 11.0 } else { self.listIsExpanded ? 0.0 : 26.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsTransactionsPanelContainerComponent.swift",
-   "reference": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsTransactionsPanelContainerComponent.swift",
-   "reference_sha256": "8e6dd7c8c37c17cf1efe6f9865cac9d70d006d769757f3a3d1039871baf96d9d",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            transition.setCornerRadius(layer: self.topPanelClippingView.layer, cornerRadius: component.insets.left > 0.0 ? 11.0 : 0.0)",
-   "new": "            transition.setCornerRadius(layer: self.topPanelClippingView.layer, cornerRadius: component.insets.left > 0.0 ? 26.0 : 0.0)",
-   "form": "if-statement",
-   "replacement": "            if AorusOldInterface.isEnabled {\n                transition.setCornerRadius(layer: self.topPanelClippingView.layer, cornerRadius: component.insets.left > 0.0 ? 11.0 : 0.0)\n            } else {\n                transition.setCornerRadius(layer: self.topPanelClippingView.layer, cornerRadius: component.insets.left > 0.0 ? 26.0 : 0.0)\n            }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsTransactionsScreen.swift",
-   "reference": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsTransactionsScreen.swift",
-   "reference_sha256": "269651a8b66e9fcb75609e328426f93a440f04651936112db86aeb6478cdbcba",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                let panelContainerCornerRadius: CGFloat = self.listIsExpanded ? 0.0 : 11.0",
-   "new": "                let panelContainerCornerRadius: CGFloat = self.listIsExpanded ? 0.0 : 26.0",
-   "form": "if-expression",
-   "replacement": "                let panelContainerCornerRadius: CGFloat = if AorusOldInterface.isEnabled { self.listIsExpanded ? 0.0 : 11.0 } else { self.listIsExpanded ? 0.0 : 26.0 }"
   },
   {
    "path": "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsTransactionsScreen.swift",

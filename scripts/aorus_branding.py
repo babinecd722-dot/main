@@ -331,7 +331,7 @@ def patch_app_delegate_launch_fixes(tg: Path) -> None:
 
     start = "        if let traitCollection = window.rootViewController?.traitCollection {\n"
     end = "        self.window = window\n"
-    if start in t:
+    if start in t and t.index(start) < t.index(end):
         first = t.index(start)
         last = t.index(end, first)
         t = t[:first] + "        // AorusGram: the launch surface stays black until presentation data arrives.\n        window.backgroundColor = .black\n        hostView.containerView.backgroundColor = .black\n" + t[last:]
@@ -896,111 +896,28 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
 
 
 def patch_forward_preserved_deleted(tg: Path) -> None:
-    """Let a message the sender deleted still be forwarded.
-
-    A deleted incoming message is kept in the postbox under its original cloud id, carrying
-    the invisible marker suffix. Forwarding sends that id to the server, which no longer has
-    the message: the forward resolves to nothing and the user sees a chat where their
-    forward simply never arrives.
-
-    Upstream already has the route for this. `forwardedMessageToBeReuploaded` turns a
-    `.forward` into a `.message` rebuilt from the local copy whenever the source never
-    reached the cloud, and a preserved deleted message is the same situation from the
-    server's point of view. So it joins that branch, the media travels with it — otherwise
-    a deleted photo would arrive as an empty message — and the invisible marker is taken
-    off the text, because the copy the recipient gets is not a deleted message.
-
-    The reply attribute is dropped for the same reason: it points at a message id in the
-    chat the copy came from, which means nothing in the chat it is going to.
-    """
     path = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
-    if not path.is_file():
-        print("ForwardDeleted: EnqueueMessage.swift not found — skip")
-        return
     text = path.read_text(encoding="utf-8")
     if "aorusPreservedDeleted" in text:
-        print("ForwardDeleted: already patched")
         return
-
-    old_decision = (
-        "private func forwardedMessageToBeReuploaded(transaction: Transaction, id: MessageId) -> Message? {\n"
-        "    if let message = transaction.getMessage(id) {\n"
-        "        if message.id.namespace != Namespaces.Message.Cloud {\n"
-        "            return message\n"
-        "        } else {\n"
-        "            return nil\n"
-        "        }\n"
-        "    } else {\n"
-        "        return nil\n"
-        "    }\n"
-        "}\n"
-    )
-    new_decision = (
-        "private func aorusPreservedDeleted(_ message: Message) -> Bool {\n"
-        "    // AorusGram: the invisible suffix a preserved deleted message carries.\n"
-        "    return message.text.hasSuffix(\"\\u{2063}\\u{2064}\")\n"
-        "}\n"
-        "\n"
-        "private func forwardedMessageToBeReuploaded(transaction: Transaction, id: MessageId) -> Message? {\n"
-        "    if let message = transaction.getMessage(id) {\n"
-        "        if message.id.namespace != Namespaces.Message.Cloud {\n"
-        "            return message\n"
-        "        }\n"
-        "        // AorusGram: a message the sender deleted is kept locally under its original\n"
-        "        // cloud id, but the server has nothing left to copy — forwarding by that id\n"
-        "        // quietly produces nothing at all. It is re-uploaded from the local copy\n"
-        "        // instead, which is the route upstream already takes for a source that never\n"
-        "        // reached the cloud.\n"
-        "        if aorusPreservedDeleted(message) {\n"
-        "            return message\n"
-        "        }\n"
-        "        return nil\n"
-        "    } else {\n"
-        "        return nil\n"
-        "    }\n"
-        "}\n"
-    )
-    if text.count(old_decision) != 1:
-        raise RuntimeError(f"ForwardDeleted: reupload decision anchor not unique ({text.count(old_decision)})")
-    text = text.replace(old_decision, new_decision, 1)
-
-    old_branch = (
-        "                if let sourceMessage = forwardedMessageToBeReuploaded(transaction: transaction, id: sourceId) {\n"
-        "                    var mediaReference: AnyMediaReference?\n"
-        "                    if sourceMessage.id.peerId.namespace == Namespaces.Peer.SecretChat {\n"
-        "                        if let media = sourceMessage.media.first {\n"
-        "                            mediaReference = .standalone(media: media)\n"
-        "                        }\n"
-        "                    }\n"
-        "                    updatedMessages.append((transformedMedia, .message(text: sourceMessage.text, attributes: sourceMessage.attributes,"
-    )
-    new_branch = (
-        "                if let sourceMessage = forwardedMessageToBeReuploaded(transaction: transaction, id: sourceId) {\n"
-        "                    var mediaReference: AnyMediaReference?\n"
-        "                    var aorusText = sourceMessage.text\n"
-        "                    var aorusAttributes = sourceMessage.attributes\n"
-        "                    if sourceMessage.id.peerId.namespace == Namespaces.Peer.SecretChat {\n"
-        "                        if let media = sourceMessage.media.first {\n"
-        "                            mediaReference = .standalone(media: media)\n"
-        "                        }\n"
-        "                    } else if aorusPreservedDeleted(sourceMessage) {\n"
-        "                        // AorusGram: the copy the recipient gets is an ordinary message, so\n"
-        "                        // the marker comes off; the media travels with it, or a deleted photo\n"
-        "                        // would arrive as an empty message; and the reply attribute is dropped\n"
-        "                        // because it names a message in the chat this was copied from.\n"
-        "                        aorusText = String(aorusText.dropLast(2))\n"
-        "                        aorusAttributes = aorusAttributes.filter { !($0 is ReplyMessageAttribute) }\n"
-        "                        if let media = sourceMessage.media.first {\n"
-        "                            mediaReference = .standalone(media: media)\n"
-        "                        }\n"
-        "                    }\n"
-        "                    updatedMessages.append((transformedMedia, .message(text: aorusText, attributes: aorusAttributes,"
-    )
-    if text.count(old_branch) != 1:
-        raise RuntimeError(f"ForwardDeleted: reupload branch anchor not unique ({text.count(old_branch)})")
-    text = text.replace(old_branch, new_branch, 1)
+    helper = "private func forwardedMessageToBeReuploaded(transaction: Transaction, id: MessageId) -> Message? {"
+    definition = 'private func aorusPreservedDeleted(_ message: Message) -> Bool {\n    return message.text.hasSuffix("\\u{2063}\\u{2064}")\n}\n\n'
+    decision = "        if message.id.namespace != Namespaces.Message.Cloud && !Namespaces.Message.allEphemeral.contains(message.id.namespace) {"
+    anchor = "                    var text = sourceMessage.text\n"
+    attributes = "attributes: forwardCopyRequestedAttributes(sourceAttributes: sourceMessage.attributes, forwardAttributes: forwardAttributes, hidesCaption: hidesCaption)"
+    for value in (helper, decision, anchor, attributes):
+        if text.count(value) != 1:
+            raise RuntimeError(f"ForwardDeleted: 13.0 anchor is not unique: {value[:90]}")
+    text = text.replace(helper, definition + helper, 1)
+    text = text.replace(decision, "        if aorusPreservedDeleted(message) || (message.id.namespace != Namespaces.Message.Cloud && !Namespaces.Message.allEphemeral.contains(message.id.namespace)) {", 1)
+    text = text.replace(anchor,
+        "                    let aorusDeleted = aorusPreservedDeleted(sourceMessage)\n"
+        "                    if aorusDeleted, let media = sourceMessage.media.first { mediaReference = .standalone(media: media) }\n"
+        "                    let aorusSourceAttributes = aorusDeleted ? sourceMessage.attributes.filter { !($0 is ReplyMessageAttribute) } : sourceMessage.attributes\n"
+        "                    var text = aorusDeleted ? String(sourceMessage.text.dropLast(2)) : sourceMessage.text\n", 1)
+    text = text.replace(attributes, attributes.replace("sourceMessage.attributes", "aorusSourceAttributes"), 1)
     path.write_text(text, encoding="utf-8")
-    print("ForwardDeleted: preserved deleted messages are forwarded as a re-uploaded copy")
+    print("ForwardDeleted: preserved messages use the native 13.0 forwarding flow")
 
 
 def patch_deleted_messages_interception(tg: Path) -> None:
@@ -1029,7 +946,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
         if sentinel in t:
             print("DeleteMessages.swift: hook already present")
         else:
-            anchor = "transaction.deleteMessages(ids, forEachMedia: { _ in"
+            anchor = "transaction.deleteMessages(ids + replacementMessageIds, forEachMedia: { _ in"
             # Architecture (when aorusgram_feature_deleted_messages == true, the default):
             #   1. For each ID, fetch the message. Only preserve if it's an INCOMING
             #      message (sent by someone else). When the user deletes their OWN
@@ -1072,7 +989,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "    let __aorusPreserve = (UserDefaults.standard.object(forKey: \"aorusgram_feature_deleted_messages\") as? Bool) ?? true\n"
                 "    var __aorusIdsToDelete: [MessageId] = []\n"
                 "    for id in ids {\n"
-                "        guard __aorusPreserve, !aorusUserInitiatedDelete, !aorusInternalMessageMaintenance, let currentMessage = transaction.getMessage(id), currentMessage.flags.contains(.Incoming), ((transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo == nil) else {\n"
+                "        guard __aorusPreserve, !aorusUserInitiatedDelete, !aorusInternalMessageMaintenance, !Namespaces.Message.allEphemeral.contains(id.namespace), let currentMessage = transaction.getMessage(id), currentMessage.flags.contains(.Incoming), ((transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo == nil) else {\n"
                 "            __aorusIdsToDelete.append(id)\n"
                 "            continue\n"
                 "        }\n"
@@ -1127,8 +1044,9 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                         1)
                 # Inject hook AND swap the `ids` argument for our filtered list so
                 # only non-preserved (outgoing / unknown) messages actually delete.
-                new_call = "transaction.deleteMessages(__aorusIdsToDelete, forEachMedia: { _ in"
+                new_call = "transaction.deleteMessages(__aorusIdsToDelete + _internal_ephemeralReplacementMessageIds(transaction: transaction, anchorIds: __aorusIdsToDelete), forEachMedia: { _ in"
                 t = t.replace(anchor, hook + new_call, 1)
+                t = t.replace("    let replacementMessageIds = _internal_ephemeralReplacementMessageIds(transaction: transaction, anchorIds: ids)\n", "", 1)
                 delete_msgs_path.write_text(t, encoding="utf-8")
                 print("DeleteMessages.swift: peer-scoped delete hook injected (filtered ids)")
             else:
@@ -1520,11 +1438,11 @@ def patch_app_delegate_bootstrap(tg: Path) -> None:
             print("WARNING: AppDelegate encryption params anchor not found — bootstrap not injected")
 
     active_anchor = (
-        "    func applicationDidBecomeActive(_ application: UIApplication) {\n"
+        "    func handleDidBecomeActive() {\n"
         "        self.isInForegroundValue = true\n"
     )
     active_repl = (
-        "    func applicationDidBecomeActive(_ application: UIApplication) {\n"
+        "    func handleDidBecomeActive() {\n"
         "        if let aorusSettings = UserDefaults.standard.dictionary(forKey: \"aorusgram_settings_v1\"), (aorusSettings[\"performanceStatsEnabled\"] as? Bool) == true {\n"
         "            AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()\n"
         "        }\n"
@@ -1562,7 +1480,7 @@ def patch_client_spoof_app_version(tg: Path) -> None:
         tg / "submodules/BuildConfig/Sources/BuildConfig.swift",
         tg / "Telegram/Telegram-iOS/BuildConfig.swift",
     ]
-    official_version = "12.9.2"
+    official_version = "13.0"
 
     for vpath in version_candidates:
         if not vpath.is_file():
@@ -1919,7 +1837,7 @@ def patch_video_message_rear_camera(tg: Path) -> None:
     # CameraOutput has its own selected-position state that decides which stream
     # is encoded in dual-camera mode. Initialize it from the same configuration;
     # otherwise the preview can show the rear camera while recording the front.
-    camera_path = tg / "submodules/Camera/Sources/Camera.swift"
+    camera_path = tg / "submodules/Camera/CameraLegacy/Sources/LegacyCamera.swift"
     if not camera_path.is_file():
         raise RuntimeError("VideoMessagesRearCamera: Camera.swift not found")
     camera_text = camera_path.read_text(encoding="utf-8")
@@ -4520,6 +4438,7 @@ def patch_app_delegate_siri_continue_activity(tg: Path) -> None:
     # Find a matching signature. Telegram iOS overloads this method; we target the
     # one with NSUserActivity + restorationHandler signature (the canonical form).
     candidates = [
+        "func handleUserActivity(_ userActivity: NSUserActivity) -> Bool",
         "func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler",
         "func application(_ application: UIApplication, continue userActivity: NSUserActivity,",
     ]
@@ -5106,6 +5025,11 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
     if "aorusgram_proxy_config_updated" in t:
         print("Account.swift: system proxy runtime monitor already present")
         return
+    native_anchor = "        |> distinctUntilChanged).start(next: { activeServer in\n            network.updateProxySettings(activeServer)\n        }))\n"
+    if native_anchor in t:
+        from aorus_telegram13 import patch_native_proxy_updates
+        patch_native_proxy_updates(tg, _AORUS_PROXY_SNIPPET)
+        return
     # 1) Force system proxy to win inside the existing monitor.
     monitor_anchor = (
         "        |> distinctUntilChanged).start(next: { activeServer in\n"
@@ -5281,7 +5205,8 @@ def patch_unauthorized_system_proxy_runtime_monitor(tg: Path) -> None:
     if reset_index < 0 or method_index < 0:
         raise RuntimeError("UnauthorizedAccount initializer boundary not found")
     initializer_tail = block[reset_index + len(reset_anchor):method_index]
-    if initializer_tail.strip() != "}":
+    aorusNativeProxyMonitor = "self.proxySettingsDisposable.set(" in initializer_tail
+    if initializer_tail.strip() != "}" and not aorusNativeProxyMonitor:
         raise RuntimeError("Unexpected declarations after UnauthorizedAccount initializer")
 
     init_replacement = (
@@ -5351,7 +5276,17 @@ def patch_unauthorized_system_proxy_runtime_monitor(tg: Path) -> None:
         "    }\n"
         "    \n"
     )
-    block = block[:reset_index] + init_replacement + block[method_index:]
+    if aorusNativeProxyMonitor:
+        # WEB proxies and engine selection must be updated together with MTContext.
+        start = init_replacement.index("            let updated = ")
+        end = init_replacement.index("        }\n        self.aorusConnectionStatusDisposable", start)
+        init_replacement = init_replacement[:start] + "            network.refreshAorusProxySettings()\n" + init_replacement[end:]
+        setup = init_replacement[:init_replacement.index("\n    }\n\n    deinit")]
+        block = block.replace(reset_anchor, setup + "\n", 1)
+        cleanup = "        if let aorusProxyObserver { NotificationCenter.default.removeObserver(aorusProxyObserver) }\n        self.aorusConnectionStatusDisposable?.dispose()\n"
+        block = block.replace("    deinit {\n", "    deinit {\n" + cleanup, 1)
+    else:
+        block = block[:reset_index] + init_replacement + block[method_index:]
     block = block.replace(property_anchor, property_replacement, 1)
     t = t[:class_start] + block + t[class_end:]
     path.write_text(t, encoding="utf-8")
@@ -6525,6 +6460,9 @@ def patch_fix_input_quote_split(tg: Path) -> None:
         print("InputQuoteSplit: ChatInputContentConversion.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
+    if "case quote(collapsed: Bool)" in t and "paragraphBlocks(in: carve.range)" in t:
+        print("InputQuoteSplit: 13.0 groups contiguous quoted paragraphs natively")
+        return
     if "aorusOpenQuote" in t:
         print("InputQuoteSplit: already patched")
         return
@@ -9634,7 +9572,7 @@ def patch_local_premium(tg: Path) -> None:
             )
             method_anchor = (
                 "    deinit {\n"
-                "        self.limitsConfigurationDisposable?.dispose()\n"
+                "        self.walletTonConnectDisposable.dispose()\n"
             )
             deinit_anchor = (
                 "        self.userLimitsConfigurationDisposable?.dispose()\n"
@@ -13157,7 +13095,7 @@ def patch_fake_stars_purchases(tg: Path) -> None:
     if marker not in text:
         anchor = (
             "            let finalPrice = acceptedPrice ?? resellAmount\n"
-            "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice)\n"
+            "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice, message.hideName, message.text, message.entities)\n"
         )
         replacement = (
             "            let finalPrice = acceptedPrice ?? resellAmount\n"
@@ -13169,13 +13107,13 @@ def patch_fake_stars_purchases(tg: Path) -> None:
             "                    HapticFeedback().error()\n"
             "                    return\n"
             "                }\n"
-            "                AorusFakeGiftsStore.recordLocalGiftMessage(account: context.account, recipientPeerId: recipientPeerId, gift: .unique(uniqueGift), stars: finalPrice.amount.value, text: \"\", entities: [], hideName: false)\n"
+            "                AorusFakeGiftsStore.recordLocalGiftMessage(account: context.account, recipientPeerId: recipientPeerId, gift: .unique(uniqueGift), stars: finalPrice.amount.value, text: message.text ?? \"\", entities: message.entities ?? [], hideName: message.hideName)\n"
             "                beforeCompletion()\n"
             "                completion()\n"
             "                updateProgress(false)\n"
             "                return\n"
             "            }\n"
-            "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice)\n"
+            "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice, message.hideName, message.text, message.entities)\n"
         )
         if anchor not in text:
             raise RuntimeError("FakeStarsPurchases: collectible payment anchor is missing")
@@ -13205,6 +13143,7 @@ def patch_local_gift_upgrade(tg: Path) -> None:
         return
     anchor = (
         "func _internal_upgradeStarGift(account: Account, formId: Int64?, reference: StarGiftReference, keepOriginalInfo: Bool) -> Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError> {\n"
+        "    let signal: Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError>\n"
         "    if let formId {\n"
     )
     if source.count(anchor) != 1:
@@ -13216,6 +13155,7 @@ def patch_local_gift_upgrade(tg: Path) -> None:
         "    if let aorusLocal = AorusFakeGiftsStore.upgradeLocally(account: account, reference: reference, keepOriginalInfo: keepOriginalInfo) {\n"
         "        return aorusLocal\n"
         "    }\n"
+        "    let signal: Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError>\n"
         "    if let formId {\n"
     )
     path.write_text(source.replace(anchor, replacement, 1), encoding="utf-8")
@@ -16564,127 +16504,65 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
 
 
 def patch_voice_twin_recorder(tg: Path) -> None:
-    """Apply the Voice Twin transform to OUTGOING voice messages.
-
-    Captured microphone PCM (Int16, mono, 48 kHz) passes through
-    ManagedAudioRecorder.processAndDisposeAudioBuffer just before Opus encoding.
-    We call AorusVoiceTwin (AorusGram core module, which the main TelegramUI
-    module already links against) to mutate the samples in place when the
-    feature is enabled — no re-encoding, identical sample count, so the
-    recorder's packet accounting is untouched.
-    """
+    """Own DSP history in the recorder, after its paused-buffer guard and before Opus."""
     path = tg / "submodules/TelegramUI/Sources/ManagedAudioRecorder.swift"
-    if not path.is_file():
-        print("VoiceTwin: ManagedAudioRecorder.swift not found, skip")
+    text = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: voice twin capture v2"
+    if sentinel in text:
         return
-    t = path.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: voice twin"
-    if sentinel in t:
-        print("VoiceTwin: already injected")
-        return
-    anchor = "func processAndDisposeAudioBuffer(_ buffer: AudioBuffer) {"
-    if anchor not in t:
-        print("VoiceTwin: processAndDisposeAudioBuffer anchor not found — skipped")
-        return
-
-    # 1) ensure `import AorusGram` (core module is a TelegramUI dep)
-    if "import AorusGram" not in t:
-        needle = "import Foundation"
-        pos = t.find(needle)
-        if pos != -1:
-            le = t.find("\n", pos)
-            if le != -1:
-                t = t[:le + 1] + "import AorusGram\n" + t[le + 1:]
-                print("VoiceTwin: added import AorusGram")
-        else:
-            t = "import AorusGram\n" + t
-            print("VoiceTwin: prepended import AorusGram (no import Foundation anchor)")
-
-    # 2) inject the in-place transform at the very top of the buffer handler
-    inject = anchor + "\n" + (
-        "        " + sentinel + "\n"
-        "        AorusVoiceTwin.shared.processBuffer(buffer)"
-    )
-    t = t.replace(anchor, inject, 1)
-    path.write_text(t, encoding="utf-8")
-    print("VoiceTwin: injected processBuffer call into recorder")
+    if "import AorusGram\n" not in text:
+        text = text.replace("import Foundation\n", "import Foundation\nimport AorusGram\n", 1)
+    text = text.replace("        // AorusGram: voice twin\n        AorusVoiceTwin.shared.processBuffer(buffer)\n", "")
+    anchor = "final class ManagedAudioRecorderContext {"
+    if text.count(anchor) != 1:
+        raise RuntimeError("VoiceTwin: recorder owner anchor is missing")
+    text = text.replace(anchor, anchor + "\n    private let aorusVoiceTwin = AorusVoiceTwin()\n", 1)
+    anchor = "        if !self.processSamples {\n            return\n        }\n"
+    if text.count(anchor) != 1:
+        raise RuntimeError("VoiceTwin: recorder paused-buffer guard is missing")
+    text = text.replace(anchor, anchor + "        " + sentinel + "\n        self.aorusVoiceTwin.processBuffer(buffer)\n", 1)
+    path.write_text(text, encoding="utf-8")
+    print("VoiceTwin: recorder owns its processing state")
 
 
 def patch_voice_twin_video_notes(tg: Path) -> None:
-    """Apply Voice Twin to video notes (round videos) / camera audio.
-
-    CameraOutput.processVideoRecording computes `let type = CMFormatDescriptionGetMediaType(...)`
-    once, then branches: a round-video path (appends `processedSampleBuffer`) and an
-    else path that appends the raw `sampleBuffer` (this is where audio is written).
-    The literal `videoRecorder.appendSampleBuffer(sampleBuffer)` occurs more than once
-    (a video fallback inside the round-video branch AND the audio append), so anchoring
-    on it and replacing the first match hooked the VIDEO fallback — a no-op for audio,
-    which is why round-video voice was never transformed.
-
-    Instead we transform the audio in place ONCE right after `type` is computed, before
-    any branch. AorusVoiceTwin.processSampleBuffer mutates the CMSampleBuffer's PCM data
-    in place, so whichever append fires later writes the already-transformed audio. It
-    reads the buffer format and transforms mono Int16/Float32 PCM only — anything else
-    is a safe no-op, so it can never corrupt the recording or crash the camera pipeline.
-
-    Requires the Camera module to link the AorusGram core module. AorusGram depends
-    only on Display, so Camera -> AorusGram introduces no dependency cycle.
-    """
-    out = tg / "submodules/Camera/Sources/CameraOutput.swift"
-    if not out.is_file():
-        print("VoiceTwinVideo: CameraOutput.swift not found, skip")
-        return
-    t = out.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: voice twin video"
-    if sentinel in t:
-        print("VoiceTwinVideo: already injected")
-        return
-    anchor = "let type = CMFormatDescriptionGetMediaType(formatDescriptor)"
-    if anchor not in t:
-        print("VoiceTwinVideo: media-type anchor not found — skipped")
-        return
-
-    # 1) ensure `import AorusGram`
-    if "import AorusGram" not in t:
-        pos = t.find("import Foundation")
-        if pos != -1:
-            le = t.find("\n", pos)
-            t = t[:le + 1] + "import AorusGram\n" + t[le + 1:]
-            print("VoiceTwinVideo: added import AorusGram to CameraOutput")
-        else:
-            t = "import AorusGram\n" + t
-
-    # 2) transform audio buffers in place once, right after the media type is known,
-    #    so every downstream append (audio or round-video fallback) sees mutated PCM.
-    idx = t.find(anchor)
-    line_start = t.rfind("\n", 0, idx) + 1
-    indent = t[line_start:idx]
-    inject = (
-        anchor + "\n"
-        + indent + "if type == kCMMediaType_Audio { AorusVoiceTwin.shared.processSampleBuffer(sampleBuffer) }  "
-        + sentinel
+    """Install the same PCM processor in both native 13.0 camera implementations."""
+    routes = (
+        ("CameraLegacy", "CameraOutput.swift", "final class CameraOutput: NSObject {", "        let type = CMFormatDescriptionGetMediaType(formatDescriptor)"),
+        ("CameraNeo", "VideoRecorder.swift", "final class VideoRecorder {", "    func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {"),
     )
-    t = t.replace(anchor, inject, 1)
-    out.write_text(t, encoding="utf-8")
-    print("VoiceTwinVideo: hooked CameraOutput audio (transform-before-branch)")
-
-    # 3) Camera BUILD must link AorusGram core
-    build = tg / "submodules/Camera/BUILD"
-    if build.is_file():
-        bt = build.read_text(encoding="utf-8")
-        if "//submodules/AorusGram:AorusGram" in bt:
-            print("VoiceTwinVideo: Camera BUILD dep already present")
-        else:
-            idx = bt.find("deps = [")
-            if idx != -1:
-                insert_at = bt.find("\n", idx) + 1
-                bt = bt[:insert_at] + '        "//submodules/AorusGram:AorusGram",\n' + bt[insert_at:]
-                build.write_text(bt, encoding="utf-8")
-                print("VoiceTwinVideo: added AorusGram dep to Camera BUILD")
+    for module, filename, owner, anchor in routes:
+        path = tg / "submodules/Camera" / module / "Sources" / filename
+        text = path.read_text(encoding="utf-8")
+        sentinel = "// AorusGram: voice twin camera v2"
+        if sentinel not in text:
+            if "import AorusGram\n" not in text:
+                text = text.replace("import Foundation\n", "import Foundation\nimport AorusGram\n", 1)
+            text = text.replace("AorusVoiceTwin.shared.processSampleBuffer(sampleBuffer)", "self.aorusVoiceTwin.processSampleBuffer(sampleBuffer)")
+            if text.count(owner) != 1 or text.count(anchor) != 1:
+                raise RuntimeError(f"VoiceTwin: {module} capture anchors are missing")
+            text = text.replace(owner, owner + "\n    private let aorusVoiceTwin = AorusVoiceTwin()\n", 1)
+            if module == "CameraLegacy":
+                legacy = "if type == kCMMediaType_Audio { self.aorusVoiceTwin.processSampleBuffer(sampleBuffer) }  // AorusGram: voice twin video"
+                text = text.replace(legacy, "if type == kCMMediaType_Audio { self.aorusVoiceTwin.processSampleBuffer(sampleBuffer) }  " + sentinel)
+                if sentinel not in text:
+                    text = text.replace(anchor, anchor + "\n        if type == kCMMediaType_Audio { self.aorusVoiceTwin.processSampleBuffer(sampleBuffer) }  " + sentinel, 1)
+                start = "    func startRecording(mode: RecorderMode, position: Camera.Position? = nil, orientation: AVCaptureVideoOrientation, additionalOutput: CameraOutput? = nil) -> Signal<CameraRecordingData, CameraRecordingError> {"
+                if text.count(start) != 1:
+                    raise RuntimeError("VoiceTwin: legacy recording start is missing")
+                text = text.replace(start, start + "\n        self.aorusVoiceTwin.reset()", 1)
             else:
-                print("VoiceTwinVideo: WARNING — Camera BUILD deps anchor not found")
-    else:
-        print("VoiceTwinVideo: Camera BUILD not found")
+                text = text.replace(anchor, anchor + "\n        " + sentinel + "\n        self.aorusVoiceTwin.processSampleBuffer(sampleBuffer)", 1)
+            path.write_text(text, encoding="utf-8")
+        build = path.parent.parent / "BUILD"
+        source = build.read_text(encoding="utf-8")
+        dependency = '        "//submodules/AorusGram:AorusGram",\n'
+        if dependency not in source:
+            if source.count("    deps = [\n") != 1:
+                raise RuntimeError(f"VoiceTwin: {module} dependencies are ambiguous")
+            source = source.replace("    deps = [\n", "    deps = [\n" + dependency, 1)
+            build.write_text(source, encoding="utf-8")
+    print("VoiceTwin: independent legacy/neo camera processing installed")
 
 
 def patch_glass_global_toggle(tg: Path) -> None:
@@ -17270,7 +17148,7 @@ def patch_video_masks(tg: Path) -> None:
     skips original video frames until the asynchronous tracker has rendered a
     masked frame, so the encoded file cannot begin with an exposed face.
     """
-    camera = tg / "submodules/Camera/Sources/CameraOutput.swift"
+    camera = tg / "submodules/Camera/CameraLegacy/Sources/CameraOutput.swift"
     if camera.is_file():
         text = camera.read_text(encoding="utf-8")
         text = text.replace(
@@ -17393,7 +17271,7 @@ def patch_video_masks(tg: Path) -> None:
     else:
         raise RuntimeError("VideoMasks: CameraOutput.swift not found")
 
-    camera_preview = tg / "submodules/Camera/Sources/CameraPreviewView.swift"
+    camera_preview = tg / "submodules/Camera/CameraLegacy/Sources/CameraPreviewView.swift"
     if not camera_preview.is_file():
         raise RuntimeError("VideoMasks: CameraPreviewView.swift not found")
     text = camera_preview.read_text(encoding="utf-8")
@@ -17429,7 +17307,7 @@ def patch_video_masks(tg: Path) -> None:
     else:
         print("VideoMasks: local round-video preview already patched")
 
-    camera_build = tg / "submodules/Camera/BUILD"
+    camera_build = tg / "submodules/Camera/CameraLegacy/BUILD"
     if camera_build.is_file():
         text = camera_build.read_text(encoding="utf-8")
         if "//submodules/AorusGram:AorusGram" not in text:
@@ -17713,289 +17591,44 @@ def patch_video_mask_call_phase(tg: Path) -> None:
 # any other PCM layout is a safe no-op (original audio passes through untouched).
 _AORUS_CALL_VOICE_TWIN_HEADER = r"""#ifndef AorusCallVoiceTwin_h
 #define AorusCallVoiceTwin_h
-
-// AorusGram: voice twin (calls) — formant-preserving real-time voice transform.
-// Faithful C++ port of the Swift AorusVoiceTwin DSP. See the patch comment in
-// scripts/aorus_branding.py (patch_voice_twin_calls) for the rationale.
-
-#include <cstdint>
-#include <cstddef>
-#include <vector>
-#include <cmath>
-
+#include "AorusVoiceDSP.h"
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
 #endif
 
 class AorusCallVoiceTwin {
 public:
-    AorusCallVoiceTwin() {
-        xh.assign(kOrder, 0.0f);
-        yh.assign(kOrder, 0.0f);
-        pred.assign(kOrder, 0.0f);
-        autoc.assign(kOrder + 1, 0.0f);
-        win.assign(kFrame, 0.0f);
-        scratch.assign(kFrame, 0.0f);
-        ring.assign(kRingSize, 0.0f);
-        hann.assign(kFrame, 0.0f);
-        for (int i = 0; i < kFrame; i++) {
-            hann[i] = 0.5f - 0.5f * std::cos(2.0f * (float)M_PI * (float)i / (float)(kFrame - 1));
-        }
-    }
-
-    // Refresh enabled flag + preset from UserDefaults. Throttled by the caller so
-    // the real-time path does not hit the defaults store on every 10 ms frame.
+    AorusCallVoiceTwin() : processor_(AorusVoiceDSPCreate()) {}
+    ~AorusCallVoiceTwin() { AorusVoiceDSPDestroy(processor_); }
+    AorusCallVoiceTwin(const AorusCallVoiceTwin &) = delete;
+    AorusCallVoiceTwin &operator=(const AorusCallVoiceTwin &) = delete;
     void refreshParams() {
 #ifdef __OBJC__
-        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
-        _enabled = [d boolForKey:@"aorusgram_voice_twin_enabled"];
-        NSString *preset = [d stringForKey:@"aorusgram_voice_twin_preset"];
-        float semis = -5.0f;
-        float ringHz = 0.0f;
-        float ringMix = 0.0f;
-        float tone = 0.95f;
-        float drive = 1.03f;
-        bool formantMove = false;
-        // Mirrors AorusVoiceTwin.params() exactly: wetMix is 1.0 everywhere (no dry
-        // pitch bleed) and gender/age presets move the formants with the pitch.
-        if ([preset isEqualToString:@"male"]) { semis = -4.5f; tone = 0.92f; drive = 1.02f; formantMove = true; }
-        else if ([preset isEqualToString:@"female"]) { semis = 4.0f; tone = 1.06f; drive = 1.0f; formantMove = true; }
-        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 90.0f; ringMix = 0.80f; tone = 0.85f; drive = 1.10f; }
-        else if ([preset isEqualToString:@"child"] || [preset isEqualToString:@"high"]) { semis = 7.5f; tone = 1.10f; drive = 0.98f; formantMove = true; }
-        else { semis = -5.0f; ringHz = 40.0f; ringMix = 0.08f; tone = 0.95f; drive = 1.03f; }
-        _ratio = std::pow(2.0f, semis / 12.0f);
-        _ringHz = ringHz;
-        _ringMix = ringMix;
-        _wetMix = 1.0f;
-        _tone = tone;
-        _drive = drive;
-        _formantMove = formantMove;
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        const bool nextEnabled = [defaults boolForKey:@"aorusgram_voice_twin_enabled"];
+        NSString *value = [defaults stringForKey:@"aorusgram_voice_twin_preset"];
+        int nextPreset = 0;
+        if ([value isEqualToString:@"male"]) { nextPreset = 1; }
+        else if ([value isEqualToString:@"female"]) { nextPreset = 2; }
+        else if ([value isEqualToString:@"robot"]) { nextPreset = 3; }
+        else if ([value isEqualToString:@"child"] || [value isEqualToString:@"high"]) { nextPreset = 4; }
+        if (nextEnabled != enabled_ || nextPreset != preset_) { AorusVoiceDSPReset(processor_); }
+        enabled_ = nextEnabled;
+        preset_ = nextPreset;
 #endif
     }
-
-    bool enabled() const { return _enabled; }
-
-    // Transform interleaved PCM in place. Only mono Int16 is processed; anything
-    // else is a safe no-op so the call audio can never be corrupted.
-    void process(void *samples, size_t nSamples, size_t nBytesPerSample, size_t nChannels, uint32_t sampleRate) {
-        if (!_enabled) { return; }
-        if (samples == nullptr || nSamples == 0 || nChannels != 1 || nBytesPerSample != 2) { return; }
-        if (_ratio == 1.0f && _ringMix <= 0.0f) { return; }
-        const float sr = sampleRate > 0 ? (float)sampleRate : 48000.0f;
-        const float ringStep = _ringHz > 0.0f ? (2.0f * (float)M_PI * _ringHz / sr) : 0.0f;
-        int16_t *p = (int16_t *)samples;
-        for (size_t i = 0; i < nSamples; i++) {
-            float y = transformSample((float)p[i] / 32768.0f, ringStep);
-            float v = y * 32767.0f;
-            if (v > 32767.0f) { v = 32767.0f; }
-            if (v < -32768.0f) { v = -32768.0f; }
-            p[i] = (int16_t)v;
-        }
+    bool enabled() const { return enabled_; }
+    void process(void *samples, size_t frames, size_t bytes, size_t channels, uint32_t rate) {
+        if (!enabled_ || !samples || bytes != 2 || channels < 1 || channels > 2 || rate < 8000 || rate > 192000) { return; }
+        AorusVoiceDSPConfigure(processor_, preset_, rate, static_cast<unsigned>(channels));
+        AorusVoiceDSPProcessInt16(processor_, static_cast<int16_t *>(samples), frames);
     }
-
 private:
-    static constexpr int kOrder = 24;
-    static constexpr int kFrame = 1024;
-    static constexpr int kHop = 256;
-    static constexpr float kGamma = 0.995f;     // bandwidth expansion (pole damping)
-    static constexpr float kPreemph = 0.95f;    // analysis pre-emphasis / output de-emphasis
-    static constexpr int kRingSize = 8192;
-    static constexpr float kGrain = 1024.0f;
-
-    float transformSample(float x0, float ringStep) {
-        float y;
-        if (_ratio == 1.0f) {
-            y = x0;
-        } else if (_formantMove) {
-            // Plain pitch shift of the full signal → formants move with the pitch
-            // (natural gender/age change).
-            y = granStep(x0, _ratio);
-        } else {
-            // Formant-preserving LPC shift (disguise / robot base).
-            y = formantStep(x0, _ratio);
-        }
-        y = x0 * (1.0f - _wetMix) + y * _wetMix;
-        y = applyTone(y);
-        if (ringStep > 0.0f && _ringMix > 0.0f) {
-            const float modulated = y * std::cos(ringModPhase);
-            y = y * (1.0f - _ringMix) + modulated * _ringMix;
-            ringModPhase += ringStep;
-            if (ringModPhase > 2.0f * (float)M_PI) { ringModPhase -= 2.0f * (float)M_PI; }
-        }
-        if (_drive > 1.0f) {
-            y = std::tanh(y * _drive) / std::tanh(_drive);
-        } else {
-            y *= _drive;
-        }
-        if (y > 1.0f) { y = 1.0f; }
-        if (y < -1.0f) { y = -1.0f; }
-        return y;
-    }
-
-    float applyTone(float x) {
-        toneLP = 0.86f * toneLP + 0.14f * x;
-        if (_tone >= 1.0f) {
-            return x + (x - toneLP) * (_tone - 1.0f);
-        } else {
-            return toneLP + (x - toneLP) * _tone;
-        }
-    }
-
-    float formantStep(float x0, float ratio) {
-        const float xp = x0 - kPreemph * prevIn;
-        prevIn = x0;
-
-        win[wpos] = xp;
-        wpos++;
-        if (wpos >= kFrame) { wpos = 0; }
-        if (filled < kFrame) { filled++; }
-
-        if (cnt % kHop == 0 && filled >= kFrame) { updateLPC(); }
-        cnt++;
-
-        float e = xp;
-        for (int k = 0; k < kOrder; k++) { e -= pred[k] * xh[k]; }
-
-        const float es = granStep(e, ratio);
-
-        float y = es;
-        for (int k = 0; k < kOrder; k++) { y += pred[k] * yh[k]; }
-
-        if (!std::isfinite(y) || std::fabs(y) > 8.0f) {
-            for (int k = 0; k < kOrder; k++) { yh[k] = 0.0f; }
-            y = es;
-        }
-
-        int k = kOrder - 1;
-        while (k > 0) { xh[k] = xh[k - 1]; yh[k] = yh[k - 1]; k--; }
-        xh[0] = xp;
-        yh[0] = y;
-
-        deemph = y + kPreemph * deemph;
-        float yo = deemph;
-
-        inEnergy = 0.999f * inEnergy + 0.001f * x0 * x0;
-        outEnergy = 0.999f * outEnergy + 0.001f * yo * yo;
-        float gain = std::sqrt((inEnergy + 1e-9f) / (outEnergy + 1e-9f));
-        if (gain > 4.0f) { gain = 4.0f; }
-        yo *= gain;
-
-        if (yo > 1.0f) { yo = 1.0f; }
-        if (yo < -1.0f) { yo = -1.0f; }
-        return yo;
-    }
-
-    void updateLPC() {
-        for (int i = 0; i < kFrame; i++) { scratch[i] = win[(wpos + i) % kFrame] * hann[i]; }
-        for (int lag = 0; lag <= kOrder; lag++) {
-            float acc = 0.0f;
-            for (int i = lag; i < kFrame; i++) { acc += scratch[i] * scratch[i - lag]; }
-            autoc[lag] = acc;
-        }
-        if (autoc[0] <= 1e-9f) { zeroPred(); return; }
-        autoc[0] *= 1.0002f;   // white-noise floor regularisation
-
-        // Levinson-Durbin on fixed-size stack arrays (kOrder is a compile-time
-        // constant) — no heap traffic on the real-time call-capture thread.
-        float a[kOrder + 1] = { 0.0f };
-        float e = autoc[0];
-        for (int i = 1; i <= kOrder; i++) {
-            float acc = autoc[i];
-            for (int j = 1; j < i; j++) { acc += a[j] * autoc[i - j]; }
-            const float k = -acc / e;
-            if (!std::isfinite(k) || std::fabs(k) >= 0.999f) { zeroPred(); return; }
-            float na[kOrder + 1];
-            for (int j = 1; j < i; j++) { na[j] = a[j] + k * a[i - j]; }
-            na[i] = k;
-            for (int j = 1; j <= i; j++) { a[j] = na[j]; }
-            e *= (1.0f - k * k);
-            if (e <= 0.0f) { zeroPred(); return; }
-        }
-        // Predictor coefficients (-a[k+1]) with bandwidth expansion (pole damping).
-        float g = 1.0f;
-        for (int k = 0; k < kOrder; k++) { g *= kGamma; pred[k] = (-a[k + 1]) * g; }
-    }
-
-    void zeroPred() { for (int k = 0; k < kOrder; k++) { pred[k] = 0.0f; } }
-
-    float granStep(float x, float ratio) {
-        const int n = kRingSize;
-        const float g = kGrain;
-        const float half = g * 0.5f;
-        ring[writeIndex] = x;
-
-        float y;
-        if (ratio == 1.0f) {
-            y = x;
-        } else {
-            const float p1 = phase;
-            float p2 = phase + half;
-            if (p2 >= g) { p2 -= g; }
-            const float r1 = readRing((float)writeIndex - p1, n);
-            const float r2 = readRing((float)writeIndex - p2, n);
-            // Raised-cosine (Hann) crossfade — each tap fades to zero AT its own grain
-            // wrap discontinuity instead of peaking there (the old triangular window),
-            // which removes the periodic warble.
-            const float w1 = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * p1 / g));
-            y = r1 * w1 + r2 * (1.0f - w1);
-        }
-
-        writeIndex++;
-        if (writeIndex >= n) { writeIndex = 0; }
-        phase += (1.0f - ratio);
-        while (phase >= g) { phase -= g; }
-        while (phase < 0.0f) { phase += g; }
-        return y;
-    }
-
-    float readRing(float pos, int n) {
-        float fp = pos;
-        const float nf = (float)n;
-        while (fp < 0.0f) { fp += nf; }
-        while (fp >= nf) { fp -= nf; }
-        const int i0 = (int)fp;
-        const float frac = fp - (float)i0;
-        const int i1 = (i0 + 1) % n;
-        return ring[i0] * (1.0f - frac) + ring[i1] * frac;
-    }
-
-    // Granular residual pitch-shifter state.
-    std::vector<float> ring;
-    int writeIndex = 0;
-    float phase = 0.0f;
-
-    // LPC analysis / filter state.
-    std::vector<float> win;
-    int wpos = 0;
-    int filled = 0;
-    std::vector<float> xh;       // inverse-filter input history
-    std::vector<float> yh;       // synthesis-filter output history
-    std::vector<float> pred;     // LPC predictor coefficients
-    std::vector<float> hann;
-    std::vector<float> scratch;
-    std::vector<float> autoc;
-    int cnt = 0;
-    float prevIn = 0.0f;
-    float deemph = 0.0f;
-    float inEnergy = 1e-6f;
-    float outEnergy = 1e-6f;
-
-    // Ring modulation phase (robot).
-    float ringModPhase = 0.0f;
-    float toneLP = 0.0f;
-
-    // Active configuration (refreshed from UserDefaults).
-    bool _enabled = false;
-    float _ratio = 1.0f;
-    float _ringHz = 0.0f;
-    float _ringMix = 0.0f;
-    float _wetMix = 1.0f;
-    float _tone = 0.96f;
-    float _drive = 1.04f;
-    bool _formantMove = false;
+    AorusVoiceDSPHandle *processor_;
+    bool enabled_ = false;
+    int preset_ = 0;
 };
-
-#endif /* AorusCallVoiceTwin_h */
+#endif
 """
 
 
@@ -18024,14 +17657,23 @@ def patch_voice_twin_calls(tg: Path) -> None:
         return
     t = mm.read_text(encoding="utf-8")
     sentinel = "// AorusGram: voice twin (calls)"
-    if sentinel in t:
-        print("VoiceTwinCalls: already injected")
-        return
 
     # 1) Write the self-contained DSP header next to the .mm.
     header = tg / "submodules/TgVoipWebrtc/Sources/AorusCallVoiceTwin.h"
     header.write_text(_AORUS_CALL_VOICE_TWIN_HEADER, encoding="utf-8")
     print("VoiceTwinCalls: wrote AorusCallVoiceTwin.h")
+
+    build = mm.parent.parent / "BUILD"
+    source = build.read_text(encoding="utf-8")
+    dependency = '        "//submodules/AorusVoiceDSP:AorusVoiceDSP",\n'
+    target = source.index('    name = "TgVoipWebrtc",')
+    deps = source.index("    deps = [\n", target)
+    if dependency not in source[target:]:
+        source = source[:deps] + source[deps:].replace("    deps = [\n", "    deps = [\n" + dependency, 1)
+        build.write_text(source, encoding="utf-8")
+    if sentinel in t:
+        print("VoiceTwinCalls: updated shared DSP for the existing capture hook")
+        return
 
     # 2) Include the header (before the class that holds the DSP instance).
     inc_anchor = "#import <TdBinding/TdBinding.h>\n"
@@ -20411,7 +20053,7 @@ def patch_plugin_outgoing_messages(tg: Path) -> None:
         "        guard let peerId = self.chatLocation.peerId else {\n"
         "            return\n"
         "        }\n"
-        "        \n"
+        "\n"
         "        let _ = (self.shouldDivertMessagesToScheduled(messages: messages)\n"
     )
     if source.count(anchor) != 1:
@@ -20439,7 +20081,7 @@ def patch_plugin_outgoing_messages(tg: Path) -> None:
         "            return .message(text: replacement, attributes: updatedAttributes, inlineStickers: [:], mediaReference: nil, threadId: threadId, replyToMessageId: replyToMessageId, replyToStoryId: replyToStoryId, localGroupingKey: localGroupingKey, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets)\n"
         "        }\n"
         "        guard !aorusPluginMessages.isEmpty else { return }\n"
-        "        \n"
+        "\n"
         "        let _ = (self.shouldDivertMessagesToScheduled(messages: aorusPluginMessages)\n"
     )
     source = source.replace(anchor, replacement, 1)
@@ -20487,7 +20129,7 @@ def patch_plugin_outgoing_hook_composer(tg: Path) -> None:
         "            guard let strongSelf = self else {\n"
         "                return\n"
         "            }\n"
-        "            \n"
+        "\n"
         "            var correlationIds: [Int64] = []\n"
         "            for message in messages {\n"
     )
@@ -29672,7 +29314,6 @@ def patch_device_microphone(tg: Path) -> None:
         return
 
     state_anchor = (
-        "    private var currentTypeAndOutputMode: (ManagedAudioSessionType, AudioSessionOutputMode)?\n"
         "    private var deactivateTimer: SwiftSignalKit.Timer?\n"
     )
     state_replacement = state_anchor + '''
@@ -30288,12 +29929,12 @@ def patch_document_picker_copy_mode(tg: Path) -> None:
     }
 '''
             mode_anchor = '''        case .default:
-            return .open
+            return false
 '''
             mode_replacement = '''        case .default:
             // AorusGram: copy mode — iOS places a local copy in the app container;
             // no security scope or iCloud entitlement is needed to read it.
-            return .import
+            return true
 '''
             construction_anchor = '''    var dismissImpl: (() -> Void)?
     let legacyController = LegacyICloudFileController(presentation: .modal(animateIn: true), theme: theme, completion: { urls in
@@ -30730,6 +30371,9 @@ def main() -> None:
     # Last: discovers every file the patches above left calling aorusL() and gives its
     # package the AorusGramUI dep and the import.
     patch_translation_deps(tg)
+    from aorus_telegram13 import patch_camera_selection, patch_bazel9_imports
+    patch_camera_selection(tg)
+    patch_bazel9_imports(tg)
 
 
 if __name__ == "__main__":

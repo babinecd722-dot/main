@@ -163,8 +163,8 @@ def _search_display(tg: Path) -> None:
             "stored bar height",
         ),
         (
-            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver), navigationBarHeight: navigationBarHeight, transition: transition)\n",
-            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver), navigationBarHeight: aorusClassicHeights ? defaultNavigationBarHeight : navigationBarHeight, transition: transition)\n",
+            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: navigationBarHeight, transition: transition)\n",
+            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: aorusClassicHeights ? defaultNavigationBarHeight : navigationBarHeight, transition: transition)\n",
             "results under the bar",
         ),
         (
@@ -565,17 +565,13 @@ def _profile(tg: Path) -> None:
             "search over the profile",
         ),
         (
-            "        if self.isSettings {\n"
-            "            controller.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: true), transition: transition)\n",
-            "        if self.isSettings && !AorusOldInterface.isEnabled { // " + MARK + "\n"
-            "            controller.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: true), transition: transition)\n",
-            "no tab bar field",
+            "            (controller.parent as? TabBarController)?.updateIsTabBarHidden(true, transition: .animated(duration: 0.4, curve: .spring))\n",
+            "            (controller.parent as? TabBarController)?.updateIsTabBarHidden(true, transition: AorusOldInterface.isEnabled ? .animated(duration: 0.3, curve: .linear) : .animated(duration: 0.4, curve: .spring)) // " + MARK + "\n",
+            "settings tab bar away transition",
         ),
         (
-            "            (self.controller?.parent as? TabBarController)?.updateIsTabBarHidden(false, transition: .animated(duration: 0.4, curve: .spring))\n"
-            "            controller.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: false), transition: .animated(duration: 0.4, curve: .spring))\n",
-            "            (self.controller?.parent as? TabBarController)?.updateIsTabBarHidden(false, transition: AorusOldInterface.isEnabled ? .animated(duration: 0.3, curve: .linear) : .animated(duration: 0.4, curve: .spring)) // " + MARK + "\n"
-            "            controller.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: false), transition: .animated(duration: 0.4, curve: .spring))\n",
+            "            (self.controller?.parent as? TabBarController)?.updateIsTabBarHidden(false, transition: .animated(duration: 0.4, curve: .spring))\n",
+            "            (self.controller?.parent as? TabBarController)?.updateIsTabBarHidden(false, transition: AorusOldInterface.isEnabled ? .animated(duration: 0.3, curve: .linear) : .animated(duration: 0.4, curve: .spring)) // " + MARK + "\n",
             "settings tab bar back",
         ),
     ))

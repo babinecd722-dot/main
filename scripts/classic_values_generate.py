@@ -12,7 +12,7 @@ A line is restored when it reads the same in both versions except for its number
 weight, and the code around it, four lines either way, is the same code in both up to the
 same differences. Font declarations are paired by their variable and `font:` arguments by the
 line above them, since their meaning does not depend on the code around them. Constants that
-12.9.2 added and only ever adds to 12.0's own expressions are zero in 12.0. Everything else
+13.0 added and only ever adds to 12.0's own expressions are zero in 12.0. Everything else
 below is a review decision, written down with its reason.
 """
 import argparse
@@ -23,8 +23,8 @@ import re
 from pathlib import Path
 
 REFERENCE_COMMIT = "29b266d5adb0d3a32b93f5506210fe7d20b8f81f"
-CURRENT = "12.9.2"
-CURRENT_COMMIT = "6ad963e5b62d354da79040f388ae2b9132fb17b8"
+CURRENT = "13.0"
+CURRENT_COMMIT = "f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838"
 ISENABLED = "AorusOldInterface.isEnabled"
 WINDOW = 4
 
@@ -46,7 +46,7 @@ SKIP_FILES = (
     "LegacyMediaPickerUI/Sources/LegacyMediaPickers.swift", "MediaPickerUI/Sources/MediaPickerGridItem.swift",
 )
 
-# Reviewed exclusions: files whose changed values belong to code 12.9.2 rebuilt, so a 12.0
+# Reviewed exclusions: files whose changed values belong to code 13.0 rebuilt, so a 12.0
 # value alone would draw neither version.
 EXCLUDE_PATHS = (
     "CameraScreen/Sources/ShutterBlobView.swift",        # Metal argument indices, not layout
@@ -65,7 +65,7 @@ EXCLUDE_PATHS = (
     "PeerInfoVisualMediaPaneNode/Sources/AddGiftsScreen.swift",
 )
 # Reviewed exclusions by line: (path, part of the current line). Images drawn at one size and
-# stretched by caps of another, and frames that 12.9.2 computes from a layout 12.0 did not have.
+# stretched by caps of another, and frames that 13.0 computes from a layout 12.0 did not have.
 EXCLUDE_LINES = (
     ("ChatEntityKeyboardInputNode.swift", "|> delay("),
     ("StickerPackScreen.swift", "generateImage(CGSize(width: 220.0"),
@@ -107,7 +107,7 @@ def lines_of(path: Path) -> list[str]:
 def file_pairs(reference: Path, current: Path, *, moved_unique_in_both: bool):
     """(path, reference path, reference lines, current lines) for each changed interface file.
 
-    12.9.2 moved some 12.0 files into components of their own; a basename that is unique in
+    13.0 moved some 12.0 files into components of their own; a basename that is unique in
     the reference (and, for value lines, in the current tree too) names the same file.
     """
     by_name: dict[str, list[Path]] = {}
@@ -442,7 +442,7 @@ class Generator:
                     self.add(rel, reference, index, len(group), old, new, form, replacement)
 
     def added_terms(self) -> None:
-        """`let separatorRightInset: CGFloat = 16.0` is new in 12.9.2, and every line that reads
+        """`let separatorRightInset: CGFloat = 16.0` is new in 13.0, and every line that reads
         it is a 12.0 line with ` - separatorRightInset` appended: in 12.0 the term was zero."""
         for path in sorted((self.current / "submodules").rglob("*.swift")):
             rel = path.relative_to(self.current).as_posix()

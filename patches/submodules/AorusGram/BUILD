@@ -65,6 +65,7 @@ swift_library(
     ],
     deps = [
         ":LibXray",
+        "//submodules/AorusVoiceDSP:AorusVoiceDSP",
         ":LibXraySystemLibraries",
         "//submodules/Display:Display",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
