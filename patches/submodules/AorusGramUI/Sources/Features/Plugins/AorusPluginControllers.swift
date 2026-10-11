@@ -2978,6 +2978,8 @@ private enum AorusPluginDocumentation {
             const proxy = await aorus.telegramProxy.status()
             await aorus.telegramProxy.add({ type: 'socks5', host: 'proxy.example', port: 1080, username: 'user', password: 'pass' })
             await aorus.telegramProxy.add({ type: 'mtp', host: 'proxy.example', port: 443, secret: 'ee...' })
+            await aorus.telegramProxy.add({ type: 'web', host: 'proxy.example/base-path', secret: '00112233445566778899aabbccddeeff' })
+            WEB использует HTTPS и порт 443. host принимает адрес с базовым путём; адрес и secret разбираются штатным механизмом Telegram. status сохраняет базовый путь в host.
             await aorus.telegramProxy.select(0)
             await aorus.telegramProxy.setEnabled(true)
             await aorus.telegramProxy.setUseForCalls(true)
@@ -3394,6 +3396,8 @@ private enum AorusPluginDocumentation {
     const proxy = await aorus.telegramProxy.status()
     await aorus.telegramProxy.add({ type: 'socks5', host: 'proxy.example', port: 1080, username: 'user', password: 'pass' })
     await aorus.telegramProxy.add({ type: 'mtp', host: 'proxy.example', port: 443, secret: 'ee...' })
+    await aorus.telegramProxy.add({ type: 'web', host: 'proxy.example/base-path', secret: '00112233445566778899aabbccddeeff' })
+    WEB uses HTTPS on port 443. host accepts a base path; Telegram parses the address and secret. status preserves the base path in host.
     await aorus.telegramProxy.select(0)
     await aorus.telegramProxy.setEnabled(true)
     await aorus.telegramProxy.setUseForCalls(true)

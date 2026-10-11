@@ -198,6 +198,8 @@ def main():
     args = parser.parse_args()
     from telegram13_list_check import check_lists
     check_lists(args.telegram_source, args.swiftc)
+    from telegram13_proxy_check import check_proxies
+    check_proxies(args.telegram_source, args.swiftc)
     check_gift_patterns(args.telegram_source)
     check_lottie_calls(args.telegram_source)
     with tempfile.TemporaryDirectory(prefix="aorus-telegram13-") as directory:

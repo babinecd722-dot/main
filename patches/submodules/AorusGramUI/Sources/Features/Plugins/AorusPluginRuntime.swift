@@ -1793,8 +1793,8 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginAddTelegramProxy(_ pluginId: String, type: String, host: String, port: Int32, username: String?, password: String?, secret: String?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedHost.isEmpty, normalizedHost.count <= 253, port > 0 else {
+        var normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedHost.isEmpty, normalizedHost.count <= (type == "web" ? 2_048 : 253), port > 0 else {
             completion(.failure(AorusPluginRequestError("Invalid Telegram proxy address")))
             return
         }
@@ -1812,6 +1812,13 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 return
             }
             connection = .mtp(secret: decoded)
+        case "web":
+            guard let value = secret, let server = makeWebProxySettings(address: normalizedHost, secret: value) else {
+                completion(.failure(AorusPluginRequestError("Invalid WEB proxy address or secret")))
+                return
+            }
+            normalizedHost = server.host
+            connection = server.connection
         default:
             completion(.failure(AorusPluginRequestError("Unsupported Telegram proxy type")))
             return
@@ -1903,10 +1910,13 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             case .mtp:
                 type = "mtp"
                 hasCredentials = true
+            case .web:
+                type = "web"
+                hasCredentials = true
             }
             return [
                 "index": NSNumber(value: index),
-                "host": server.host,
+                "host": server.webProxyAddress ?? server.host,
                 "port": NSNumber(value: server.port),
                 "type": type,
                 "active": NSNumber(value: server == settings.activeServer),

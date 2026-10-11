@@ -14,6 +14,16 @@ function payload(kind) {
     return call.args[1];
 }
 (async function () {
+    await aorus.telegramProxy.add({ type: 'web', host: 'proxy.example/base-path', secret: '00112233445566778899aabbccddeeff' });
+    assert.equal(payload('telegramProxy.add').type, 'web');
+    assert.equal(payload('telegramProxy.add').port, 443);
+    assert.equal(payload('telegramProxy.add').host, 'proxy.example/base-path');
+    await aorus.telegramProxy.add({ type: 'web', host: 'proxy.example', port: 123 });
+    assert.equal(payload('telegramProxy.add').port, 443);
+    await aorus.telegramProxy.add({ type: 'socks5', host: 'proxy.example', port: 1080 });
+    assert.equal(payload('telegramProxy.add').port, 1080);
+    assert.throws(() => aorus.telegramProxy.add({ type: 'socks5', host: 'proxy.example' }), RangeError);
+    assert.throws(() => aorus.telegramProxy.add({ type: 'unsupported', host: 'proxy.example', port: 443 }));
     assert.ok(Object.isFrozen(aorus.mtproto));
     assert.ok(Object.isFrozen(aorus.network));
     __answers['mtproto.info'] = { methods: 799, accountId: '9223372036854775807' };

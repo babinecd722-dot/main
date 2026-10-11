@@ -2794,9 +2794,9 @@ public enum AorusPluginPrelude {
                 var value = optionalObject(server, 'server');
                 var type = requireString(value.type, 'server.type').toLowerCase();
                 var hostName = requireString(value.host, 'server.host').trim();
-                var port = Number(value.port);
-                if (type !== 'socks5' && type !== 'mtp') { throw new Error('server.type must be socks5 or mtp'); }
-                if (!hostName || hostName.length > 253) { throw new Error('server.host is invalid'); }
+                var port = type === 'web' ? 443 : Number(value.port);
+                if (type !== 'socks5' && type !== 'mtp' && type !== 'web') { throw new Error('server.type must be socks5, mtp or web'); }
+                if (!hostName || hostName.length > (type === 'web' ? 2048 : 253)) { throw new Error('server.host is invalid'); }
                 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) { throw new RangeError('server.port must be between 1 and 65535'); }
                 return request('telegramProxy.add', {
                     type: type,

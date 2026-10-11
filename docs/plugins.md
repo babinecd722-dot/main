@@ -2680,6 +2680,7 @@ await aorus.proxy.startAutoSwitch();      await aorus.proxy.stopAutoSwitch();
 
 await aorus.telegramProxy.status();
 await aorus.telegramProxy.add({ type: 'socks5', host: '…', port: 1080 });
+await aorus.telegramProxy.add({ type: 'web', host: 'proxy.example/base-path', secret: '00112233445566778899aabbccddeeff' });
 await aorus.telegramProxy.select(index);
 await aorus.telegramProxy.remove(index);
 await aorus.telegramProxy.setEnabled(true);
@@ -2687,7 +2688,10 @@ await aorus.telegramProxy.setUseForCalls(true);
 ```
 
 `aorus.proxy` — соединение AorusGram (`connectionControl`), `aorus.telegramProxy` — список
-прокси самого Telegram (`telegramProxy`). `type` — `socks5` или `mtp`.
+прокси самого Telegram (`telegramProxy`). `type` — `socks5`, `mtp` или `web`.
+WEB использует HTTPS и порт 443. `host` может содержать базовый путь; адрес и секрет
+разбираются штатным механизмом Telegram. `status()` сохраняет базовый путь в `host`
+и сообщает наличие учётных данных, не возвращая их содержимое.
 
 ## 30. Хуки, дерево вью и Objective-C
 
