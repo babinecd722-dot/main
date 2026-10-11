@@ -125,18 +125,89 @@ def check_gift_patterns(tg):
     print(f"Telegram 13 collectible patterns passed: {checks} installed native matches")
 
 
+def lottie_test_source(tg):
+    source = (tg / "submodules/AnimatedStickerNode/Sources/AnimatedStickerNode.swift").read_text()
+    constructor = balanced(source, source.index("    public init(useMetalCache:"))
+    tab_source = (tg / "submodules/TabBarUI/Sources/TabBarNode.swift").read_text()
+    tab_constructor = balanced(tab_source, tab_source.index("    init(theme: PresentationTheme, itemSelected:"))
+    controller = (tg / "submodules/TabBarUI/Sources/TabBarContollerNode.swift").read_text()
+    tab_call = balanced(controller, controller.index("TabBarNode(theme: self.theme, itemSelected:"))
+    files = (
+        "submodules/AorusGram/Sources/Features/Subscription/SubscriptionDuckView.swift",
+        "submodules/AorusGramUI/Sources/ATunnelStatusViewController.swift",
+        "submodules/AorusGramUI/Sources/AorusBackupHeaderItem.swift",
+        "submodules/QrCodeUI/Sources/AorusClassicQrCodeScreen.swift",
+        "submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift",
+    )
+    calls = []
+    for relative in files:
+        text = (tg / relative).read_text()
+        calls.append(balanced(text, text.index("DefaultAnimatedStickerNodeImpl(")))
+    native_settings = (tg / "submodules/LottieSettings/Sources/LottieRenderingSettings.swift").read_text()
+    return native_settings + r'''
+class DefaultAnimatedStickerNodeImpl {
+    let backend: LottieBackend
+''' + constructor + r''' { self.backend = lottieSettings.backend }
+}
+struct PresentationTheme {}
+class ASDisplayNode {}
+class ContextExtractedContentContainingNode {}
+class ContextGesture {}
+enum TabBarItemSwipeDirection { case left, right }
+class TabBarNode {
+    let backend: LottieBackend
+''' + tab_constructor + r''' { self.backend = lottieSettings.backend }
+}
+class ClassicTabOwner {
+    let theme = PresentationTheme()
+    var aorusSwipeAction: ((Int, TabBarItemSwipeDirection) -> Void)?
+    func itemSelected(_ index: Int, _ longTap: Bool, _ nodes: [ASDisplayNode]) {}
+    func aorusClassicContextAction(index: Int, node: ContextExtractedContentContainingNode, gesture: ContextGesture) {}
+    func makeTab() -> TabBarNode { return ''' + tab_call + r''' }
+}
+var checks = 0
+func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
+''' + "\n".join(f'expect({call}.backend == .rlottie, "installed local or classic animation renderer {index}")' for index, call in enumerate(calls)) + r'''
+expect(ClassicTabOwner().makeTab().backend == .rlottie, "classic tab uses the renderer from 12.0")
+print("Telegram 13 Lottie integration passed: \(checks) assertions")
+'''
+
+
+def check_lottie_calls(tg):
+    from uikit_required_init_check import strip
+    checks = 0
+    for path in (tg / "submodules").rglob("*.swift"):
+        if "Tests" in path.parts:
+            continue
+        source = path.read_text()
+        if "DefaultAnimatedStickerNodeImpl" not in source:
+            continue
+        code = strip(source)
+        for match in re.finditer(r"\bDefaultAnimatedStickerNodeImpl\s*\(", code):
+            call = balanced(code, match.start())
+            if "lottieSettings:" not in call:
+                raise RuntimeError(f"{path}: animation constructor omits the native renderer settings")
+            checks += 1
+    print(f"Telegram 13 Lottie calls passed: {checks} installed constructors")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("telegram_source", type=Path)
     parser.add_argument("--swiftc", default="swiftc")
     args = parser.parse_args()
     check_gift_patterns(args.telegram_source)
+    check_lottie_calls(args.telegram_source)
     with tempfile.TemporaryDirectory(prefix="aorus-telegram13-") as directory:
         work = Path(directory)
         gifts = work / "GiftTests.swift"
         gifts.write_text(gift_test_source(args.telegram_source))
         subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(gifts), "-o", str(work / "gift-tests")], check=True)
         subprocess.run([str(work / "gift-tests")], check=True)
+        lottie = work / "LottieTests.swift"
+        lottie.write_text(lottie_test_source(args.telegram_source))
+        subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(lottie), "-o", str(work / "lottie-tests")], check=True)
+        subprocess.run([str(work / "lottie-tests")], check=True)
         if platform.system() == "Darwin":
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
             font = args.telegram_source / "submodules/Display/Source/Font.swift"

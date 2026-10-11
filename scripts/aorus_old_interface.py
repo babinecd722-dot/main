@@ -3048,7 +3048,7 @@ _TAB_BAR_METHODS = r'''    // AorusGram: old interface. The classic bar is laid 
                 self?.aorusClassicContextAction(index: index, node: node, gesture: gesture)
             }, swipeAction: { [weak self] index, direction in
                 self?.aorusSwipeAction?(index, direction)
-            })
+            }, lottieSettings: .init(backend: .rlottie))
             tabBar.selectedIndex = self.selectedIndex
             tabBar.tabBarItems = self.tabBarItems
             separator = ASDisplayNode()
@@ -3381,6 +3381,8 @@ def patch_old_interface(tg: Path) -> None:
     patch_classic_spacing(tg)
     from aorus_classic_sheets import patch_classic_sheets
     patch_classic_sheets(tg)
+    from aorus_telegram13 import patch_classic_lottie
+    patch_classic_lottie(tg)
     print("OldInterface: classic bars, tab bar, lists, alerts, menus and message panel behind the switch")
 
 

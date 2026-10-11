@@ -6,6 +6,7 @@ import SwiftSignalKit
 import TelegramPresentationData
 import ItemListUI
 import AnimatedStickerNode
+import LottieSettings
 import MediaResources
 import AppBundle
 
@@ -107,7 +108,7 @@ final class AorusBackupHeaderItemNode: ListViewItemNode, ItemListItemNode {
     }
 
     init() {
-        self.animationNode = DefaultAnimatedStickerNodeImpl()
+        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
 
         super.init(layerBacked: false)
 

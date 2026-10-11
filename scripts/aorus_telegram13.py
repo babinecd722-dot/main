@@ -92,3 +92,26 @@ def patch_bazel9_imports(tg: Path) -> None:
                 additions.append(f'load("@rules_cc//cc:{rule}.bzl", "{rule}")\n')
         if additions:
             path.write_text("".join(additions) + text)
+
+
+def patch_classic_lottie(tg: Path) -> None:
+    # Keep the verified 12.0 snapshots intact; adapt their renderer API on install.
+    for relative in (
+        "submodules/QrCodeUI/Sources/AorusClassicQrCodeScreen.swift",
+        "submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift",
+    ):
+        path = tg / relative
+        text = path.read_text()
+        text = replace(text, "DefaultAnimatedStickerNodeImpl()",
+                       "DefaultAnimatedStickerNodeImpl(lottieSettings: .init(backend: .rlottie))",
+                       relative + " classic animation renderer")
+        if "import LottieSettings\n" not in text:
+            text = replace(text, "import AnimatedStickerNode\n", "import AnimatedStickerNode\nimport LottieSettings\n", relative + " renderer import")
+        path.write_text(text)
+        build = path.parent.parent / "BUILD"
+        # Component packages place their BUILD beside Sources, like QrCodeUI.
+        source = build.read_text()
+        dependency = '        "//submodules/LottieSettings:LottieSettings",\n'
+        if dependency not in source:
+            source = replace(source, "    deps = [\n", "    deps = [\n" + dependency, relative + " renderer dependency")
+            build.write_text(source)

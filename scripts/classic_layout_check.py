@@ -7,6 +7,17 @@ from pathlib import Path
 import classic_layout_reference
 
 
+def classic_reference_bytes(path: Path) -> bytes:
+    data = path.read_bytes()
+    if path.name in ("AorusClassicQrCodeScreen.swift", "AorusClassicChatThemeNodes.swift"):
+        # The only source adaptation to the pinned 12.0 renderer is the new
+        # required Lottie parameter and its import. Verify every other byte.
+        data = data.replace(b"DefaultAnimatedStickerNodeImpl(lottieSettings: .init(backend: .rlottie))",
+                            b"DefaultAnimatedStickerNodeImpl()")
+        data = data.replace(b"import LottieSettings\n", b"")
+    return data
+
+
 def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) -> int:
     manifest = json.loads((repo / "scripts/classic_geometry.json").read_text())
     if manifest["commit"] != "29b266d5adb0d3a32b93f5506210fe7d20b8f81f":
@@ -59,7 +70,7 @@ def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) ->
 
     for source in (repo / "patches/submodules").rglob("AorusClassic*.swift"):
         rel = source.relative_to(repo / "patches")
-        if (tg / rel).read_bytes() != source.read_bytes():
+        if classic_reference_bytes(tg / rel) != source.read_bytes():
             raise RuntimeError(f"Classic renderer was not installed: {rel}")
         checks += 1
 

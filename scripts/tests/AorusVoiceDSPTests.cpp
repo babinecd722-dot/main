@@ -22,20 +22,22 @@ static std::vector<float> tone(double rate, double frequency, unsigned channels 
 static double frequencyOf(const std::vector<float> &samples, double rate, int minimum, int maximum) {
     double best = 0.0; int frequency = 0;
     for (int hz = minimum; hz <= maximum; ++hz) {
-        double real = 0.0, imaginary = 0.0;
+        const double coefficient = 2.0 * std::cos(2.0 * M_PI * hz / rate);
+        double first = 0.0, second = 0.0;
         for (size_t i = samples.size() / 2; i < samples.size(); ++i) {
-            real += samples[i] * std::cos(2.0 * M_PI * hz * double(i) / rate);
-            imaginary += samples[i] * std::sin(2.0 * M_PI * hz * double(i) / rate);
+            const double next = samples[i] + coefficient * first - second;
+            second = first; first = next;
         }
-        const double power = real * real + imaginary * imaginary;
+        const double power = first * first + second * second - coefficient * first * second;
         if (power > best) { best = power; frequency = hz; }
     }
     return frequency;
 }
+
 int main() {
     const auto started = std::chrono::steady_clock::now();
     const float semitones[] = {-4, -3, 3, 0, 6};
-    for (double rate : {8000., 16000., 24000., 32000., 44100., 48000., 96000.}) {
+    for (double rate : {8000., 16000., 24000., 32000., 44100., 48000., 96000., 22050., 88200., 176400., 192000.}) {
         for (int preset = 0; preset < 5; ++preset) {
             auto *dsp = AorusVoiceDSPCreate();
             expect(dsp != nullptr, "processor allocation");
@@ -43,7 +45,7 @@ int main() {
             auto input = tone(rate, 180.0), output = input;
             AorusVoiceDSPProcessFloat(dsp, output.data(), output.size());
             const double target = 180.0 * std::pow(2.0, semitones[preset] / 12.0);
-            expect(std::abs(frequencyOf(output, rate, int(target) - 4, int(target) + 4) - target) < 2.0, "pitch follows the preset at every sample rate");
+            expect(std::abs(frequencyOf(output, rate, 60, 500) - target) < 2.0, "pitch follows the preset at every sample rate");
             double power = 0.0, peak = 0.0;
             for (size_t i = output.size() / 2; i < output.size(); ++i) {
                 power += output[i] * output[i]; peak = std::max(peak, double(std::abs(output[i])));

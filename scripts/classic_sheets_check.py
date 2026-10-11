@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from aorus_classic_sheets import COPIES, REFERENCE, canonical_dependency
+from classic_layout_check import classic_reference_bytes
 from swift_call_label_check import match_paren
 from swift_protocol_conformance_check import matching_brace, strip_comments
 
@@ -162,7 +163,7 @@ def check_classic_sheets(repo: Path, tg: Path, reference: Path | None, swiftc: s
             checks += 1
     for rel in COPIES:
         installed = (tg / 'submodules' / rel).read_bytes()
-        if (repo / 'patches/submodules' / rel).read_bytes() != installed:
+        if (repo / 'patches/submodules' / rel).read_bytes() != classic_reference_bytes(tg / 'submodules' / rel):
             raise RuntimeError('Original sheet not installed: ' + rel)
         check_initializer_order(installed.decode(), rel)
         checks += 1

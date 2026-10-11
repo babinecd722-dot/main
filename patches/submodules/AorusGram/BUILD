@@ -72,6 +72,7 @@ swift_library(
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/MediaResources:MediaResources",
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
+        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AorusBadge:AorusBadge",
     ],
     visibility = [
