@@ -1,10 +1,10 @@
 import UIKit
 
-@MainActor func runClassicInputRegression() -> Int {
+@MainActor func runClassicInputRegression(window: UIWindow) -> Int {
     var checks = 0
     checks += runClassicGlassRegression()
     if #available(iOS 15.0, *) {
-        checks += runOverlayButtonRegression()
+        checks += runOverlayButtonRegression(window: window)
     }
     func expect(_ value: Bool, _ message: String) {
         checks += 1

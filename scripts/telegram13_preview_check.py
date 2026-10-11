@@ -92,16 +92,13 @@ private func aorusUIFont(_ size: CGFloat, _ weight: UIFont.Weight) -> UIFont { r
 ''' + color + '\n' + build + '''
 }
 @available(iOS 15.0, *)
-@MainActor func runOverlayButtonRegression() -> Int {
+@MainActor func runOverlayButtonRegression(window: UIWindow) -> Int {
     var checks = 0
     func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError("Overlay button: " + label) } }
     let host = AorusPluginOverlayHost(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
-    let window = UIWindow(frame: UIScreen.main.bounds)
-    let controller = UIViewController()
-    window.rootViewController = controller
-    controller.view.addSubview(host)
-    window.makeKeyAndVisible()
-    defer { window.isHidden = true }
+    let parent = window.rootViewController?.view ?? window
+    parent.addSubview(host)
+    defer { host.removeFromSuperview() }
     for mode in [AorusPluginOverlay.Mode.text, .icon, .mixed] {
         var overlay = AorusPluginOverlay(); overlay.displayMode = mode
         let button = host.make(overlay)
