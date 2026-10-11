@@ -279,13 +279,18 @@ private enum AorusPluginIconsUIKitTests {
         let navigationChecks = await runNavigationIconRegression()
         checks += navigationChecks
         print("Native navigation and composer passed: \(navigationChecks) assertions")
+        stage("checking native bubble rendering")
         guard let window = (UIApplication.shared.delegate as? AorusPluginIconsTestApplication)?.window else {
             fatalError("The native theme regression requires the application's visible window")
         }
         checks += runBubbleBitmapRegression()
+        stage("checking round video and device badges")
         checks += await runRoundVideoUIKitRegression(window: window)
+        stage("checking RGB lifecycle")
         checks += await runRGBRegression(window: window)
+        stage("checking classic input")
         checks += runClassicInputRegression()
+        stage("checking presentation traits and toolbar colours")
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks
         print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")

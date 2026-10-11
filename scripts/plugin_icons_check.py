@@ -9,6 +9,42 @@ import os
 import plistlib
 import subprocess
 import tempfile
+import time
+
+
+def simulator_failure_diagnostics(device_id: str, since: float) -> None:
+    """Preserve the test process's native failure before uninstalling its bundle."""
+    roots = [Path.home() / "Library/Logs/DiagnosticReports",
+             Path.home() / "Library/Developer/CoreSimulator/Devices" / device_id
+             / "data/Library/Logs/CrashReporter"]
+    for root in roots:
+        if not root.is_dir():
+            continue
+        reports = []
+        for path in root.iterdir():
+            if path.suffix not in (".ips", ".crash") or not any(
+                    name in path.name for name in ("uikit-icon-tests", "PluginIconTests")):
+                continue
+            try:
+                if path.stat().st_mtime >= since:
+                    reports.append(path)
+            except OSError:
+                continue
+        for path in sorted(reports, key=lambda value: value.name)[-3:]:
+            try:
+                print("UIKit simulator crash report: " + path.name, flush=True)
+                print(path.read_text(errors="replace")[:24000], flush=True)
+            except OSError as failure:
+                print("Cannot read UIKit crash report: " + str(failure), flush=True)
+    try:
+        result = subprocess.run([
+            "xcrun", "simctl", "spawn", device_id, "log", "show", "--last", "3m",
+            "--style", "compact", "--predicate", 'process == "uikit-icon-tests"',
+        ], capture_output=True, text=True, timeout=15, check=False)
+        print("UIKit simulator process log:\n" + result.stdout[-24000:]
+              + result.stderr[-2000:], flush=True)
+    except (OSError, subprocess.TimeoutExpired) as failure:
+        print("Cannot collect UIKit simulator process log: " + str(failure), flush=True)
 
 FUNCTIONS = ["Pixels", "PixelGrid", "PixelAxes", "PixelStamp", "connectedParts", "squaredDistances",
              "pixelated", "pixelFloorDivide", "pixelModulo", "pixelBounds", "pixelThin",
@@ -191,6 +227,7 @@ def main():
                 subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(editor_object), str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
+                launched_at = time.time()
                 try:
                     # UIKit's screen configuration requires a real application launch;
                     # simctl spawn of a command-line tool can wait indefinitely on it.
@@ -217,9 +254,13 @@ def main():
                             subprocess.run(["xcrun", "simctl", "terminate", device["udid"], bundle_id], check=False)
                     print(result.stdout, end="", flush=True)
                     print(result.stderr, end="", flush=True)
+                    print("UIKit simulator launcher exit status: " + str(result.returncode), flush=True)
                     result.check_returncode()
                     if "UIKit icon resolver passed:" not in result.stdout:
                         raise RuntimeError("The UIKit application exited without completing its assertions")
+                except Exception:
+                    simulator_failure_diagnostics(device["udid"], launched_at)
+                    raise
                 finally:
                     subprocess.run(["xcrun", "simctl", "uninstall", device["udid"], bundle_id], check=False)
             finally:
