@@ -15058,52 +15058,15 @@ def patch_anti_search(tg: Path) -> None:
                 outboundMessages = aorusMessages
             }
             outboundMessages = outboundMessages.map { AorusPremiumEmojiGuard.strip($0, isAccountPremium: aorusIsPremium, allowedPackId: aorusAllowedPackId) }
-            let signal: Signal<[(Bool, EnqueueMessage)], NoError>
-            if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
-                signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
-            } else {
-                signal = .single(outboundMessages.map { (false, $0) })
-            }
-            return signal
-            |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
-                return account.postbox.transaction { transaction -> [MessageId?] in
-                    return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
-                }
-            }
+            return aorusEnqueueNativeMessages(account: account, peerId: peerId, messages: outboundMessages)
         }
     }
 }
 """
-        if "AorusOutgoingPrivacy.transform" in t or "AorusAntiSearch.normalize" in t:
-            upgraded, count = re.subn(
-                r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
-                enqueue_function + "\npublic func resendMessages",
-                t,
-                count=1,
-                flags=re.S,
-            )
-            if count:
-                enqueue.write_text(upgraded, encoding="utf-8")
-                print("OutgoingPrivacy: upgraded EnqueueMessage transform hook")
-            else:
-                print("WARNING: OutgoingPrivacy EnqueueMessage upgrade anchor not found")
-        else:
-            anchor = (
-                "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
-                "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
-            )
-            if anchor in t:
-                t = re.sub(
-                    r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
-                    enqueue_function + "\npublic func resendMessages",
-                    t,
-                    count=1,
-                    flags=re.S,
-                )
-                enqueue.write_text(t, encoding="utf-8")
-                print("OutgoingPrivacy: patched EnqueueMessage.swift (send hook)")
-            else:
-                print("WARNING: OutgoingPrivacy EnqueueMessage anchor not found")
+        from aorus_telegram13 import install_native_enqueue_hook
+        t = install_native_enqueue_hook(t, enqueue_function)
+        enqueue.write_text(t, encoding="utf-8")
+        print("OutgoingPrivacy: transforms feed the native 13.0 send flow")
     else:
         print("OutgoingPrivacy: EnqueueMessage.swift not found — skip send hook")
 

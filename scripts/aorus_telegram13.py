@@ -11,6 +11,29 @@ def replace(text, anchor, replacement, label):
     return text.replace(anchor, replacement, 1)
 
 
+def install_native_enqueue_hook(text: str, wrapper: str) -> str:
+    from swift_protocol_conformance_check import matching_brace, strip_comments
+    header = "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {"
+    native_header = header.replace("public func enqueueMessages", "private func aorusEnqueueNativeMessages")
+    if text.count(header) != 1 or text.count("public func enqueueWelcomeMessages(") != 1:
+        raise RuntimeError("Telegram13: native regular and welcome send entry points must exist once")
+    start = text.index(header)
+    opening = text.index("{", start)
+    end = matching_brace(strip_comments(text), opening)
+    if end >= len(text):
+        raise RuntimeError("Telegram13: enqueue function has no closing boundary")
+    if native_header not in text:
+        original = text[start:end]
+        if "var ephemeralMessageIds: [MessageId]" not in original:
+            raise RuntimeError("Telegram13: original ephemeral send flow is missing")
+        native = original.replace(header, native_header, 1) + "\n\n"
+    else:
+        if text.count(native_header) != 1:
+            raise RuntimeError("Telegram13: native send helper is ambiguous")
+        native = ""
+    return text[:start] + native + wrapper.rstrip() + text[end:]
+
+
 def patch_native_proxy_updates(tg: Path, proxy_expression: str) -> None:
     network = tg / "submodules/TelegramCore/Sources/Network/Network.swift"
     text = network.read_text()
@@ -115,6 +138,22 @@ def patch_classic_lottie(tg: Path) -> None:
         if dependency not in source:
             source = replace(source, "    deps = [\n", "    deps = [\n" + dependency, relative + " renderer dependency")
             build.write_text(source)
+
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift"
+    text = path.read_text()
+    text = replace(text, "super.init(size: CGSize(width: 30.0, height: 30.0))",
+                   "super.init(size: CGSize(width: 30.0, height: 30.0), lottieSettings: .init(backend: .rlottie))",
+                   "classic profile animation renderer")
+    if "import LottieSettings\n" not in text:
+        text = replace(text, "import ManagedAnimationNode\n", "import ManagedAnimationNode\nimport LottieSettings\n",
+                       "classic profile renderer import")
+    path.write_text(text)
+    build = path.parent.parent / "BUILD"
+    text = build.read_text()
+    dependency = '        "//submodules/LottieSettings:LottieSettings",\n'
+    if dependency not in text:
+        text = replace(text, "    deps = [\n", "    deps = [\n" + dependency, "classic profile renderer dependency")
+        build.write_text(text)
 
 
 def patch_classic_list_item(tg: Path) -> None:

@@ -2578,32 +2578,28 @@ def _patch_classic_profile(tg: Path) -> None:
         "                usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)\n"
         "            }"
     )
-    classic_subtitle = (
-        "            if AorusOldInterface.isEnabled {\n"
-        "                // AorusGram: old interface: the expanded status and username retain 12.0's positions.\n"
-        "                subtitleFrame = CGRect(origin: CGPoint(x: 16.0, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
-        "                if self.subtitleRating != nil {\n"
-        "                    subtitleFrame.origin.x += 22.0\n"
-        "                }\n"
-        "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
-        "            } else {\n"
-        "                let subtitleLeadingInset = self.isSettings ? subtitleRatingInset : 0.0\n"
-        "                var effectiveSubtitleWidth = subtitleLeadingInset + subtitleSize.width\n"
-        "                if let subtitleBadgeSize {\n"
-        "                    effectiveSubtitleWidth += (subtitleBadgeSize.width + 7.0) * (1.0 - titleCollapseFraction)\n"
-        "                }\n"
-        "                \n"
-        "                let totalSubtitleWidth = effectiveSubtitleWidth + usernameSpacing + usernameSize.width\n"
-        "                if usernameSize.width == 0.0 {\n"
-        "                    subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - effectiveSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
-        "                    usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 1.0), size: usernameSize)\n"
-        "                } else {\n"
-        "                    subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - totalSubtitleWidth) / 2.0) + subtitleLeadingInset - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: titleFrame.maxY + 1.0), size: subtitleSize)\n"
-        "                    usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)\n"
-        "                }\n"
-        "            }"
-    )
-    text = _edit(text, native_subtitle, classic_subtitle, "expanded classic profile labels")
+    from classic_layout_reference import PROFILE_EXPANDED_SUBTITLE, PROFILE_COLLAPSED_SUBTITLE
+    classic_collapsed = PROFILE_COLLAPSED_SUBTITLE.strip("\n")
+    classic_subtitle = ("            if AorusOldInterface.isEnabled {\n"
+        + "\n".join("    " + line for line in classic_collapsed.split("\n"))
+        + "\n            } else {\n"
+        + "\n".join("    " + line for line in native_subtitle.split("\n"))
+        + "\n            }")
+    text = _edit(text, native_subtitle, classic_subtitle, "collapsed classic profile labels")
+    native_expanded = """            subtitleFrame = CGRect(origin: CGPoint(x: 16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: minTitleFrame.maxY + 2.0), size: subtitleSize)
+            if self.isSettings {
+                subtitleFrame.origin.x += subtitleRatingInset
+            } else if subtitleRatingSize != nil {
+                subtitleFrame.origin.x += 22.0
+            }
+            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)"""
+    classic_expanded = PROFILE_EXPANDED_SUBTITLE.strip("\n")
+    expanded = ("            if AorusOldInterface.isEnabled {\n"
+        + "\n".join("    " + line for line in classic_expanded.split("\n"))
+        + "\n            } else {\n"
+        + "\n".join("    " + line for line in native_expanded.split("\n"))
+        + "\n            }")
+    text = _edit(text, native_expanded, expanded, "expanded classic profile labels")
     path.write_text(text, encoding="utf-8")
 
     path = sources / "PeerInfoHeaderNavigationButtonContainerNode.swift"

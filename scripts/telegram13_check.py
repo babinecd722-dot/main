@@ -6,6 +6,34 @@ import platform
 import re
 import subprocess
 import tempfile
+import hashlib
+
+
+def check_native_send(tg):
+    from telegram13_list_check import block
+    from aorus_telegram13 import install_native_enqueue_hook
+    source = (tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift").read_text()
+    # Bodies from the pinned official release-13.0.0, before any client patches.
+    expected = {
+        "enqueueMessages": "21dd38c28b9f3cd8261eb3a663c9800c54bcc6a6ca6fde42833a24c9aa8b82f0",
+        "enqueueWelcomeMessages": "0b047a177fa53c68e82b4b34c39dead77c624b5bbbe69b42a3de019de22d374d",
+    }
+    native = block(source, "private func aorusEnqueueNativeMessages(account:").replace(
+        "private func aorusEnqueueNativeMessages", "public func enqueueMessages", 1).strip()
+    welcome = block(source, "public func enqueueWelcomeMessages(account:").strip()
+    for name, body in (("enqueueMessages", native), ("enqueueWelcomeMessages", welcome)):
+        if hashlib.sha256(body.encode()).hexdigest() != expected[name]:
+            raise RuntimeError("Telegram13: original native send body changed: " + name)
+    wrapper = block(source, "public func enqueueMessages(account:").strip()
+    if "return aorusEnqueueNativeMessages(account: account, peerId: peerId, messages: outboundMessages)" not in wrapper:
+        raise RuntimeError("Telegram13: outgoing transforms must feed the native send helper")
+    original = native + "\n\n" + welcome + "\n\npublic func resendMessages() {}\n"
+    installed = install_native_enqueue_hook(original, wrapper)
+    if block(installed, "public func enqueueWelcomeMessages(account:").strip() != welcome:
+        raise RuntimeError("Telegram13: send installation changed the welcome queue")
+    if install_native_enqueue_hook(installed, wrapper) != installed:
+        raise RuntimeError("Telegram13: send hook is not stable on replay")
+    print("Telegram 13 native regular, ephemeral and welcome send bodies and replay passed")
 
 
 def balanced(source, start):
@@ -252,6 +280,10 @@ def lottie_test_source(tg):
     for relative in files:
         text = (tg / relative).read_text()
         calls.append(balanced(text, text.index("DefaultAnimatedStickerNodeImpl(")))
+    managed = (tg / "submodules/ManagedAnimationNode/Sources/ManagedAnimationNode.swift").read_text()
+    managed_constructor = balanced(managed, managed.index("    public init(size:"))
+    profile = (tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift").read_text()
+    managed_call = balanced(profile, profile.index("super.init(size:"))
     native_settings = (tg / "submodules/LottieSettings/Sources/LottieRenderingSettings.swift").read_text()
     return native_settings + r'''
 class DefaultAnimatedStickerNodeImpl {
@@ -274,10 +306,18 @@ class ClassicTabOwner {
     func aorusClassicContextAction(index: Int, node: ContextExtractedContentContainingNode, gesture: ContextGesture) {}
     func makeTab() -> TabBarNode { return ''' + tab_call + r''' }
 }
+class ManagedAnimationNode {
+    let backend: LottieBackend
+''' + managed_constructor + r''' { self.backend = lottieSettings.backend }
+}
+class ClassicProfileAnimation: ManagedAnimationNode {
+    init() { ''' + managed_call + r''' }
+}
 var checks = 0
 func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
 ''' + "\n".join(f'expect({call}.backend == .rlottie, "installed local or classic animation renderer {index}")' for index, call in enumerate(calls)) + r'''
 expect(ClassicTabOwner().makeTab().backend == .rlottie, "classic tab uses the renderer from 12.0")
+expect(ClassicProfileAnimation().backend == .rlottie, "classic profile uses the renderer from 12.0")
 print("Telegram 13 Lottie integration passed: \(checks) assertions")
 '''
 
@@ -309,6 +349,9 @@ def main():
     check_lists(args.telegram_source, args.swiftc)
     from telegram13_proxy_check import check_proxies
     check_proxies(args.telegram_source, args.swiftc)
+    from telegram13_profile_check import check_profile
+    check_profile(args.telegram_source, args.swiftc)
+    check_native_send(args.telegram_source)
     check_gift_patterns(args.telegram_source)
     check_lottie_calls(args.telegram_source)
     toolbar_source = toolbar_test_source(args.telegram_source)

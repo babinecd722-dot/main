@@ -441,7 +441,8 @@
     "submodules/TelegramUI/Images.xcassets/Peer Info/PinnedLargeIcon.imageset/pin_48.pdf": "70269953725cb3abacac37f2b1140a14f24c7232bd8c9b14ff61a69d989548b2",
     "submodules/TelegramUI/Images.xcassets/Peer Info/PinnedLargeIcon.imageset/Contents.json": "c7e90b7f8bfb90de32096c8ba9ed3f5864efb6ee0e3072b0b4896dfd09cdb4b1",
     "submodules/TelegramUI/Images.xcassets/Camera/FlashOffIcon.imageset/off.pdf": "6dc35448ac94b5bf1255be41f9c83c61383b1c8ad4938c6bfbb3a206ce75d46b",
-    "submodules/TelegramUI/Images.xcassets/Camera/FlashOffIcon.imageset/Contents.json": "a00ae0a88ba9b6f458ee537c3f59d749720c9cf8b418a879cbd577ba3ad5ae96"
+    "submodules/TelegramUI/Images.xcassets/Camera/FlashOffIcon.imageset/Contents.json": "a00ae0a88ba9b6f458ee537c3f59d749720c9cf8b418a879cbd577ba3ad5ae96",
+    "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift": "121ec989fb0948be98b610d6ffb7639f87d21b17a0ab4fa992fd11b673575301"
   },
   "layout_bodies": {
     "VIDEO_SCRUBBER_LAYOUT": "dd5fe18510cb36d3edfa951be03e65fa7529e023f6f9b0dee0985f13f61c5e13",
@@ -458,6 +459,8 @@
     "MEDIA_EDITOR_DONE_COMPONENT": "c31533e1019e06c41017385ae810ff83c9c2f0006e1605db6d7145335b34dfa6",
     "MEDIA_EDITOR_DONE_CONTENT": "8152626c6040b8727897c8aa1f68cd5116596687d6f8e36b96000b9d5e3cd329",
     "SEARCH_BAR_ANIMATE_IN": "e850a8ebec96c4cee94d48740f63cf56eae1e031f4833c0da5edf6e50d75a4b8",
-    "SEARCH_BAR_TRANSITION_OUT": "eed76d782de70e2c7e5c8355310c78c986f288b8198cca077728715863df21b4"
+    "SEARCH_BAR_TRANSITION_OUT": "eed76d782de70e2c7e5c8355310c78c986f288b8198cca077728715863df21b4",
+    "PROFILE_EXPANDED_SUBTITLE": "667f3d8c0df3fe88e753b1abc5e5b27c987ba8e656095e260906e60bec6e7f0f",
+    "PROFILE_COLLAPSED_SUBTITLE": "2d8f10c87038acc434366abd74b11977c57e2d8d3cc44fa60c5d3d57543d1db1"
   }
 }

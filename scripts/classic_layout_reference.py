@@ -1126,3 +1126,29 @@ SEARCH_BAR_TRANSITION_OUT = r"""
         self.cancelButton.layer.animatePosition(from: self.cancelButton.layer.position, to: CGPoint(x: self.bounds.size.width + cancelButtonFrame.size.width / 2.0, y: targetTextBackgroundFrame.midY), duration: duration, timingFunction: timingFunction, removeOnCompletion: false)
     }
 """
+
+
+PROFILE_EXPANDED_SUBTITLE = r'''
+            subtitleFrame = CGRect(origin: CGPoint(x: 16.0, y: minTitleFrame.maxY + 2.0), size: subtitleSize)
+            if self.subtitleRating != nil {
+                subtitleFrame.origin.x += 22.0
+            }
+            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)
+'''
+
+
+PROFILE_COLLAPSED_SUBTITLE = r'''
+            var effectiveSubtitleWidth = subtitleSize.width
+            if let subtitleBadgeSize {
+                effectiveSubtitleWidth += (subtitleBadgeSize.width + 7.0) * (1.0 - titleCollapseFraction)
+            }
+
+            let totalSubtitleWidth = effectiveSubtitleWidth + usernameSpacing + usernameSize.width
+            if usernameSize.width == 0.0 {
+                subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - effectiveSubtitleWidth) / 2.0), y: titleFrame.maxY + 1.0), size: subtitleSize)
+                usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 1.0), size: usernameSize)
+            } else {
+                subtitleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - totalSubtitleWidth) / 2.0), y: titleFrame.maxY + 1.0), size: subtitleSize)
+                usernameFrame = CGRect(origin: CGPoint(x: subtitleFrame.maxX + usernameSpacing, y: titleFrame.maxY + 1.0), size: usernameSize)
+            }
+'''
