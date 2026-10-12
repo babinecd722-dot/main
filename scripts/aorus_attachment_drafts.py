@@ -228,7 +228,8 @@ def patch_composer(tg):
         }
 ''' + anchor
     s = edit(s, anchor, new, 'strip inside input material')
-    s = edit(s, '            self.textInputBackgroundNode.layer.borderWidth = UIScreenPixel\n', '            self.textInputBackgroundNode.layer.borderWidth = aorusAttachmentHeight > 0 ? 0 : UIScreenPixel\n', 'frameless media draft')
+    anchor = '            self.textInputBackgroundNode.layer.borderColor = interfaceState.theme.chat.inputPanel.inputStrokeColor.cgColor\n        }\n'
+    s = edit(s, anchor, anchor + '        if aorusAttachmentHeight > 0 { self.textInputBackgroundNode.layer.borderWidth = 0 }\n', 'frameless media draft')
     path.write_text(s)
 
 
