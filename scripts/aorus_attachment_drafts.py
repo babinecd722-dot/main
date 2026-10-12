@@ -127,6 +127,7 @@ def patch_picker(tg):
     gateway = anchor + '''
     public var aorusPersistAttachmentDraft: ((@escaping (Bool) -> Void) -> Void)?
     public var aorusAttachmentPreviewIndex: Int?
+    public var aorusAttachmentRestoreFailed = false
     public var aorusHasSentAttachmentSelection = false
     private var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false

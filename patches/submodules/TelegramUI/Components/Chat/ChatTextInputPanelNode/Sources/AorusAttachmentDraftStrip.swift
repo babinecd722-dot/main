@@ -6,12 +6,17 @@ import TelegramCore
 import TelegramPresentationData
 import GlassBackgroundComponent
 
-final class AorusAttachmentDraftStrip: UIView {
+final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
     var open: (String) -> Void = { _ in }
     var remove: (String) -> Void = { _ in }
     private let scrollView = UIScrollView()
     private var tiles: [String: AorusAttachmentDraftTile] = [:]
     private var draft: AorusAttachmentDraft?
+    private var accountBasePath = ""
+    private var theme: PresentationTheme?
+    private var strings: PresentationStrings?
+    private var side: CGFloat = 0
+    private var renderedRange: Range<Int> = 0..<0
 
     static func height(width: CGFloat) -> CGFloat {
         return min(160, max(78, floor((width - 32) / 3))) + 16
@@ -24,6 +29,7 @@ final class AorusAttachmentDraftStrip: UIView {
         self.scrollView.contentInsetAdjustmentBehavior = .never
         self.scrollView.directionalLockEnabled = true
         self.scrollView.semanticContentAttribute = .forceLeftToRight
+        self.scrollView.delegate = self
         self.addSubview(self.scrollView)
     }
 
@@ -32,13 +38,39 @@ final class AorusAttachmentDraftStrip: UIView {
     func update(draft: AorusAttachmentDraft, accountBasePath: String, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings) {
         let resetScroll = self.draft?.directory != draft.directory
         self.draft = draft
+        self.accountBasePath = accountBasePath
+        self.theme = theme
+        self.strings = strings
         let side = Self.height(width: width) - 16
-        let identifiers = Set(draft.items.map(\.id))
+        self.side = side
+        self.scrollView.frame = CGRect(x: 0, y: 0, width: width, height: side + 16)
+        self.scrollView.contentSize = CGSize(width: max(width, 16 + CGFloat(draft.items.count) * (side + 8) - 8), height: side + 16)
+        self.scrollView.alwaysBounceHorizontal = self.scrollView.contentSize.width > width
+        if resetScroll { self.scrollView.setContentOffset(.zero, animated: false) }
+        else {
+            let limit = max(0, self.scrollView.contentSize.width - width)
+            self.scrollView.contentOffset.x = min(limit, max(0, self.scrollView.contentOffset.x))
+        }
+        self.updateVisibleTiles(force: true)
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) { self.updateVisibleTiles() }
+
+    private func updateVisibleTiles(force: Bool = false) {
+        guard let draft = self.draft, let theme = self.theme, let strings = self.strings, self.side > 0 else { return }
+        let side = self.side
+        let first = max(0, Int(floor(self.scrollView.contentOffset.x / (side + 8))) - 1)
+        let last = min(draft.items.count, Int(ceil((max(0, self.scrollView.contentOffset.x) + self.scrollView.bounds.width) / (side + 8))) + 1)
+        let range = min(first, last)..<last
+        guard force || self.renderedRange != range else { return }
+        self.renderedRange = range
+        let identifiers = Set(range.map { draft.items[$0].id })
         for (id, tile) in self.tiles where !identifiers.contains(id) {
             tile.removeFromSuperview()
             self.tiles.removeValue(forKey: id)
         }
-        for (index, item) in draft.items.enumerated() {
+        for index in range {
+            let item = draft.items[index]
             let tile: AorusAttachmentDraftTile
             if let current = self.tiles[item.id] { tile = current }
             else {
@@ -49,16 +81,8 @@ final class AorusAttachmentDraftStrip: UIView {
                 self.scrollView.addSubview(tile)
             }
             tile.frame = CGRect(x: 8 + CGFloat(index) * (side + 8), y: 8, width: side, height: side)
-            let previewURL = draft.itemDirectoryURL(accountBasePath: accountBasePath, id: item.id)?.appendingPathComponent("preview.jpg")
+            let previewURL = draft.itemDirectoryURL(accountBasePath: self.accountBasePath, id: item.id)?.appendingPathComponent("preview.jpg")
             tile.update(item: item, previewURL: previewURL, theme: theme, strings: strings)
-        }
-        self.scrollView.frame = CGRect(x: 0, y: 0, width: width, height: side + 16)
-        self.scrollView.contentSize = CGSize(width: max(width, 16 + CGFloat(draft.items.count) * (side + 8) - 8), height: side + 16)
-        self.scrollView.alwaysBounceHorizontal = self.scrollView.contentSize.width > width
-        if resetScroll { self.scrollView.setContentOffset(.zero, animated: false) }
-        else {
-            let limit = max(0, self.scrollView.contentSize.width - width)
-            self.scrollView.contentOffset.x = min(limit, max(0, self.scrollView.contentOffset.x))
         }
     }
 }

@@ -204,6 +204,7 @@ def check_draft_sdk(tg, swiftc):
     """Bind the Swift adapter and C codec to real LegacyComponents and Apple headers."""
     import platform
     if platform.system() != 'Darwin': return
+    tg = tg.resolve()
     sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
     with tempfile.TemporaryDirectory(prefix='aorus-draft-sdk-') as directory:
         work = Path(directory)

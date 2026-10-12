@@ -226,6 +226,7 @@ extension MediaPickerScreenImpl {
             if let data = entry.adjustments {
                 var error: NSError?
                 guard let values = AorusMediaDraftReadAdjustments(data, folder.path, &error), error == nil else { return false }
+                if !item.isVideo, !values.isDefaultValues(forAvatar: false), UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path) == nil { return false }
                 restoredAdjustments[entry.id] = values
             }
             restored.append((item, entry, folder))
@@ -251,7 +252,7 @@ extension MediaPickerScreenImpl {
             if let value = entry.livePhotoMode, (0...3).contains(value), let mode = TGMediaLivePhotoMode(rawValue: UInt(value)) {
                 editing.setLivePhotoMode(mode, for: item)
             }
-            if !selection.setItem(item, selected: true) { return false }
+            if !selection.setItem(item, selected: true) { selection.clear(); return false }
         }
         complete = true
         return true

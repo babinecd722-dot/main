@@ -57,6 +57,24 @@ import UIKit
     }
     mini.update(previews: [], side: 18)
     expect(mini.subviews.isEmpty, "recycled list row removes stale draft miniatures")
+    let many = (0..<100).map { index in
+        AorusAttachmentDraft.Item(source: .library, assetIdentifier: "asset-\(index)", isVideo: false, duration: 0, thumbnail: images[index % images.count].pngData(), adjustments: nil, timer: nil, spoiler: false, price: nil, livePhotoMode: nil)
+    }
+    let draft = AorusAttachmentDraft(items: many, grouping: true, captionAbove: false, highQuality: false, forceLivePhoto: false)
+    let strip = AorusAttachmentDraftStrip(frame: CGRect(x: 0, y: 0, width: 300, height: AorusAttachmentDraftStrip.height(width: 300)))
+    window.rootViewController!.view.addSubview(strip)
+    strip.update(draft: draft, accountBasePath: root.path, width: 300, theme: theme, strings: strings)
+    let scroll = strip.subviews.compactMap { $0 as? UIScrollView }.first!
+    func tiles() -> [UIView] { scroll.subviews.filter { $0.subviews.compactMap { $0 as? UIButton }.count == 2 } }
+    expect(tiles().count < 10, "a hundred attachments do not allocate a hundred glass views")
+    scroll.setContentOffset(CGPoint(x: scroll.contentSize.width - scroll.bounds.width, y: 0), animated: false)
+    strip.layoutIfNeeded()
+    let last = tiles().max { $0.frame.minX < $1.frame.minX }!
+    var opened: String?
+    strip.open = { opened = $0 }
+    last.subviews.compactMap { $0 as? UIButton }.first!.sendActions(for: .touchUpInside)
+    expect(opened == many.last?.id && tiles().count < 10, "scrolling to the final attachment loads its actual editor target with bounded view count")
+    strip.removeFromSuperview()
     print("Native media draft views passed: \(checks) assertions")
     return checks
 }

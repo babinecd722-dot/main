@@ -3,6 +3,10 @@
 #import <LegacyComponents/TGVideoEditAdjustments.h>
 #import <LegacyComponents/TGPaintingData.h>
 
+static void AorusMediaDraftSetFileError(NSError **error, NSString *path) {
+    if (error != NULL) *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadNoSuchFileError userInfo:@{NSFilePathErrorKey: path}];
+}
+
 NSDictionary *AorusMediaDraftSnapshotAdjustments(id<TGMediaEditAdjustments> adjustments) {
     if (adjustments == nil) return nil;
     NSMutableDictionary *result;
@@ -37,6 +41,10 @@ NSData *AorusMediaDraftWriteAdjustments(NSDictionary *snapshot, NSString *direct
     UIImage *painting = result[@"draftPaintingImage"];
     NSString *previousPath = result[@"paintingImagePath"];
     NSData *paintingData = painting != nil ? UIImagePNGRepresentation(painting) : (previousPath != nil ? [NSData dataWithContentsOfFile:previousPath] : nil);
+    if ((painting != nil || previousPath != nil) && paintingData == nil) {
+        AorusMediaDraftSetFileError(error, previousPath ?: [directory stringByAppendingPathComponent:@"painting.png"]);
+        return nil;
+    }
     if (paintingData != nil) {
         if (![paintingData writeToFile:[directory stringByAppendingPathComponent:@"painting.png"] options:NSDataWritingAtomic error:error]) return nil;
         result[@"paintingImagePath"] = @"painting.png";
@@ -67,6 +75,15 @@ NSObject<TGMediaEditAdjustments> *AorusMediaDraftReadAdjustments(NSData *data, N
     if (![decoded isKindOfClass:[NSDictionary class]]) return nil;
     NSMutableDictionary *values = [decoded mutableCopy];
     NSString *paintingPath = [directory stringByAppendingPathComponent:@"painting.png"];
+    for (NSArray *entry in @[@[@"paintingImagePath", @"painting.png"], @[@"draftStillImagePath", @"painting-still.png"], @[@"draftDrawingPath", @"drawing.bin"]]) {
+        if (values[entry[0]] != nil) {
+            NSString *path = [directory stringByAppendingPathComponent:entry[1]];
+            if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
+                AorusMediaDraftSetFileError(error, path);
+                return nil;
+            }
+        }
+    }
     if (values[@"paintingImagePath"] != nil) values[@"paintingImagePath"] = paintingPath;
     TGVideoEditAdjustments *video = [TGVideoEditAdjustments editAdjustmentsWithDictionary:values];
     if (video == nil) return nil;

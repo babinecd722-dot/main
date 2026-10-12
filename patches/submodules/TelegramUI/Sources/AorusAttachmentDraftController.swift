@@ -23,10 +23,9 @@ extension ChatControllerImpl {
         let captureKey = "\(peerId.toInt64()):\(threadId ?? 0)"
         if let draft = self.presentationInterfaceState.interfaceState.attachmentDraft {
             if !controller.aorusRestoreAttachmentDraft(draft) {
+                controller.aorusAttachmentRestoreFailed = true
                 self.aorusShowAttachmentDraftError()
-                return
-            }
-            if let id = self.aorusAttachmentPreviewId, let index = draft.items.firstIndex(where: { $0.id == id }) {
+            } else if let id = self.aorusAttachmentPreviewId, let index = draft.items.firstIndex(where: { $0.id == id }) {
                 controller.aorusAttachmentPreviewIndex = index
                 self.aorusAttachmentPreviewId = nil
             }
@@ -34,6 +33,18 @@ extension ChatControllerImpl {
         controller.mediaPickerContext?.setCaption(self.presentationInterfaceState.interfaceState.composeInputState.inputText)
         controller.aorusPersistAttachmentDraft = { [weak self, weak controller] completion in
             guard let controller else { completion(false); return }
+            if controller.aorusAttachmentRestoreFailed, controller.aorusDraftSelection?.count() == 0 {
+                if let caption = controller.aorusDraftCurrentCaption {
+                    let update: (ChatInterfaceState) -> ChatInterfaceState = { $0.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)) }
+                    if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
+                        self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: true, { $0.updatedInterfaceState(update) })
+                    } else {
+                        let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, update).startStandalone()
+                    }
+                }
+                completion(true)
+                return
+            }
             let token = UUID()
             self?.aorusAttachmentCaptureTokens[captureKey] = token
             controller.aorusCaptureAttachmentDraft { [weak self] result in
@@ -132,6 +143,7 @@ extension ChatControllerImpl {
         }
         self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: bannedPhotos, bannedSendVideos: bannedVideos, enableMultiselection: true, present: { [weak self] controller, context in
             guard let self else { return }
+            guard !controller.aorusAttachmentRestoreFailed else { return }
             if Int(controller.aorusDraftSelection?.count() ?? 0) != draft.items.count { self.aorusShowAttachmentDraftError(); return }
             self.aorusSendingAttachmentDraft = draft
             self.aorusAttachmentExpectedCount = draft.items.count
