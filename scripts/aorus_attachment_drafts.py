@@ -205,6 +205,14 @@ def patch_composer(tg):
 '''
     s = edit(s, anchor, new, 'media-only send state')
     anchor = '        let baseWidth = width - leftInset - leftMenuInset - rightInset - rightSlowModeInset\n'
+    # The composer adjusts these insets for its active controls. Resolve that native
+    # block before the draft height and menu position, using the final input width.
+    start = s.index('        var textFieldInsets = self.textFieldInsets(metrics: metrics, bottomInset: bottomInset)\n')
+    end = s.index('        var audioRecordingItemsAlpha: CGFloat = 1.0\n', start)
+    if start > s.index(anchor):
+        insets = s[start:end]
+        s = s[:start] + s[end:]
+        s = edit(s, anchor, insets + anchor, 'native input insets before draft geometry')
     s = edit(s, anchor, anchor + '        let aorusAttachmentHeight: CGFloat = aorusAttachmentDraft?.items.isEmpty == false ? AorusAttachmentDraftStrip.height(width: baseWidth - textFieldInsets.left - textFieldInsets.right) : 0\n', 'strip geometry')
     anchor = '        let menuButtonFrame = CGRect(x: leftInset + 8.0, y: menuButtonOriginY,'
     s = edit(s, anchor, '        menuButtonOriginY += aorusAttachmentHeight\n' + anchor, 'classic menu position')

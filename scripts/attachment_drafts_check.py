@@ -204,6 +204,72 @@ print("Media draft native send lifecycle passed: \(checks) assertions")
 """
 
 
+def geometry_fixture_source(tg):
+    """Compile native composer insets and height in their installed declaration order."""
+    composer = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift').read_text()
+    strip = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusAttachmentDraftStrip.swift').read_text()
+    start = composer.index('        var textFieldInsets = self.textFieldInsets(metrics: metrics, bottomInset: bottomInset)\n')
+    glass = block(composer, '        if !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && mediaRecordingState == nil && !AorusOldInterface.isEnabled {')
+    end = composer.index(glass, start) + len(glass)
+    segments = [(start, composer[start:end])]
+    for marker in ('        let baseWidth = width - leftInset - leftMenuInset - rightInset - rightSlowModeInset', '        let aorusAttachmentHeight: CGFloat =', '        let textInputWidth = baseWidth - textFieldInsets.left - textFieldInsets.right'):
+        position = composer.index(marker)
+        segments.append((position, composer[position:composer.index('\n', position)]))
+    body = '\n'.join(text for _, text in sorted(segments))
+    height = block(strip, '    static func height(width: CGFloat)')
+    return '''import Foundation
+struct UIEdgeInsets { var top: CGFloat = 0; var left: CGFloat = 0; var bottom: CGFloat = 0; var right: CGFloat = 0 }
+enum AorusOldInterface { static var isEnabled = false }
+enum AorusAttachmentDraftStrip {
+''' + height + '''
+}
+struct Draft { var items: [Int] }
+enum RightAction { case empty, other }
+enum LeftAction { case empty, toggleExpanded(Bool, Int, Int), other }
+enum SecondaryLeftAction { case settings(Bool, Int), other }
+final class Composer {
+    var extendedSearchLayout = false
+    var customRightAction: RightAction?
+    var customLeftAction: LeftAction?
+    var customSecondaryLeftAction: SecondaryLeftAction?
+    func textFieldInsets(metrics: Int, bottomInset: CGFloat) -> UIEdgeInsets {
+        UIEdgeInsets(top: 6, left: 42, bottom: bottomInset, right: AorusOldInterface.isEnabled ? 42 : 52)
+    }
+    func measure(width: CGFloat, sideInset: CGFloat, draft: Draft?, controls: Int) -> (CGFloat, CGFloat) {
+        let metrics = 0, bottomInset: CGFloat = 0
+        let leftInset: CGFloat = 0, leftMenuInset: CGFloat = 0, rightInset: CGFloat = 0, rightSlowModeInset: CGFloat = 0
+        let additionalSideInsets = UIEdgeInsets(right: sideInset)
+        let inputHasText = false, hasMediaDraft = draft?.items.isEmpty == false
+        let hasForward = false, hasSlowmodeButton = false, isEditingMedia = false
+        let mediaRecordingState: Int? = nil
+        let starReactionButtonSize: CGSize? = controls == 4 ? CGSize(width: 40, height: 40) : nil
+        let liveMicrophoneButtonSize: CGSize? = controls >= 3 ? CGSize(width: 40, height: 40) : nil
+        let aorusAttachmentDraft = draft
+        self.customRightAction = nil
+        self.customLeftAction = controls == 1 ? .empty : (controls == 2 ? .toggleExpanded(false, 0, 0) : nil)
+        self.customSecondaryLeftAction = controls == 2 ? .settings(true, 0) : nil
+''' + body + '''
+        return (textInputWidth, aorusAttachmentHeight)
+    }
+}
+var checks = 0
+func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
+let defaults = UserDefaults.standard, key = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
+let previous = defaults.object(forKey: key)
+defer { if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) } }
+let composer = Composer()
+for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] {
+    AorusOldInterface.isEnabled = old
+    defaults.set(!glass, forKey: key)
+    let draft: Draft? = count == 0 ? nil : Draft(items: Array(0..<count))
+    let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls)
+    expect(inputWidth > 0 && inputWidth < width, "native controls leave a usable input field")
+    expect(height == (count == 0 ? 0 : AorusAttachmentDraftStrip.height(width: inputWidth)), "draft and composer use the same final width and height")
+} } } } } }
+print("Media draft native composer geometry passed: \\(checks) assertions")
+'''
+
+
 def check_bindings(tg):
     source = (tg / 'submodules/ChatInterfaceState/Sources/ChatInterfaceState.swift').read_text()
     code = source[source.index('public final class ChatInterfaceState:'):]
@@ -247,6 +313,12 @@ def check_drafts(tg, swiftc):
         source.write_text(send_fixture_source(tg))
         subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(source), '-o', str(work / 'send')], check=True)
         subprocess.run([str(work / 'send')], check=True)
+    with tempfile.TemporaryDirectory(prefix='aorus-media-geometry-tests-') as directory:
+        work = Path(directory)
+        source = work / 'Geometry.swift'
+        source.write_text(geometry_fixture_source(tg))
+        subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(source), '-o', str(work / 'geometry')], check=True)
+        subprocess.run([str(work / 'geometry')], check=True)
     check_draft_sdk(tg, swiftc)
 
 
