@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Impossibile elaborare gli allegati. Verifica l’accesso ai file selezionati e riprova.",
         "Old Interface": "Interfaccia classica",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L'interfaccia classica è attiva: niente vetro, i pannelli sono piatti come in Telegram 12.0. Queste impostazioni torneranno quando la disattiverai.",
         "File picker and sharing": "Selezione file e condivisione",
@@ -1036,6 +1037,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Nie udało się przetworzyć załączników. Sprawdź dostęp do wybranych plików i spróbuj ponownie.",
         "Old Interface": "Stary interfejs",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Stary interfejs jest włączony: nie ma szkła, a panele są płaskie jak w Telegramie 12.0. Te ustawienia wrócą, gdy go wyłączysz.",
         "File picker and sharing": "Wybór plików i udostępnianie",
@@ -2019,6 +2021,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "De bijlagen konden niet worden verwerkt. Controleer de toegang tot de geselecteerde bestanden en probeer het opnieuw.",
         "Old Interface": "Oude interface",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "De oude interface staat aan: er is geen glas en panelen zijn vlak zoals in Telegram 12.0. Deze instellingen keren terug als je hem uitzet.",
         "File picker and sharing": "Bestanden kiezen en delen",
@@ -3002,6 +3005,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "No s’han pogut processar els fitxers adjunts. Comprova l’accés als fitxers seleccionats i torna-ho a provar.",
         "Old Interface": "Interfície antiga",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfície antiga està activada: no hi ha vidre i els panells són plans com a Telegram 12.0. Aquests ajustos tornaran quan la desactivis.",
         "File picker and sharing": "Selecció de fitxers i compartició",
@@ -3985,6 +3989,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Lampiran tidak dapat diproses. Periksa akses ke file yang dipilih dan coba lagi.",
         "Old Interface": "Antarmuka lama",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antarmuka lama aktif: tidak ada kaca, dan panel datar seperti di Telegram 12.0. Pengaturan ini kembali saat Anda mematikannya.",
         "File picker and sharing": "Pemilih file dan berbagi",
@@ -4968,6 +4973,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Lampiran tidak dapat diproses. Semak akses kepada fail yang dipilih dan cuba lagi.",
         "Old Interface": "Antara Muka Lama",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antara muka lama dihidupkan: tiada kaca, dan panel rata seperti dalam Telegram 12.0. Tetapan ini kembali apabila anda mematikannya.",
         "File picker and sharing": "Pemilih fail dan perkongsian",
@@ -5951,6 +5957,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Не ўдалося апрацаваць укладанні. Праверце доступ да выбраных файлаў і паўтарыце спробу.",
         "Old Interface": "Стары інтэрфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Уключаны стары інтэрфейс: шкла няма, панэлі плоскія, як у Telegram 12.0. Гэтыя налады вернуцца, калі вы яго выключыце.",
         "File picker and sharing": "Выбар файлаў і «Падзяліцца»",
@@ -6934,6 +6941,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Biriktirilgan fayllarni qayta ishlash imkoni bo‘lmadi. Tanlangan fayllarga kirish ruxsatini tekshiring va qayta urinib ko‘ring.",
         "Old Interface": "Eski interfeys",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski interfeys yoqilgan: shisha yo‘q, panellar Telegram 12.0 dagidek tekis. Uni o‘chirganingizda bu sozlamalar qaytadi.",
         "File picker and sharing": "Fayl tanlash va ulashish",
@@ -7917,6 +7925,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "첨부 파일을 처리할 수 없습니다. 선택한 파일에 대한 접근 권한을 확인하고 다시 시도해 주세요.",
         "Old Interface": "이전 인터페이스",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "이전 인터페이스가 켜져 있습니다. 유리 효과가 없고 패널은 Telegram 12.0처럼 평평합니다. 끄면 이 설정이 다시 적용됩니다.",
         "File picker and sharing": "파일 선택 및 공유",
@@ -8900,6 +8909,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "تعذرت معالجة المرفقات. تحقق من إمكانية الوصول إلى الملفات المحددة وحاول مرة أخرى.",
         "Old Interface": "الواجهة القديمة",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "الواجهة القديمة مفعّلة: لا يوجد زجاج، واللوحات مسطحة كما في تيليجرام 12.0. ستعود هذه الإعدادات عند إيقافها.",
         "File picker and sharing": "اختيار الملفات والمشاركة",
@@ -9883,6 +9893,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "پردازش پیوست‌ها انجام نشد. دسترسی به فایل‌های انتخاب‌شده را بررسی کنید و دوباره تلاش کنید.",
         "Old Interface": "رابط کاربری قدیمی",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "رابط کاربری قدیمی روشن است: شیشه‌ای در کار نیست و پنل‌ها مانند تلگرام ۱۲٫۰ تخت هستند. با خاموش کردن آن، این تنظیمات برمی‌گردند.",
         "File picker and sharing": "انتخاب فایل و اشتراک‌گذاری",
@@ -10866,6 +10877,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Тіркемелерді өңдеу мүмкін болмады. Таңдалған файлдарға қолжетімділікті тексеріп, қайталап көріңіз.",
         "Old Interface": "Ескі интерфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Ескі интерфейс қосулы: шыны жоқ, панельдер Telegram 12.0 сияқты тегіс. Оны өшіргенде бұл баптаулар қайтады.",
         "File picker and sharing": "Файл таңдау және бөлісу",
@@ -11849,6 +11861,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "无法处理附件。请检查所选文件的访问权限，然后重试。",
         "Old Interface": "旧版界面",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧版界面已开启：没有玻璃效果，面板像 Telegram 12.0 那样是平的。关闭后这些设置会恢复。",
         "File picker and sharing": "文件选择与分享",
@@ -12833,6 +12846,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "無法處理附件。請檢查所選檔案的存取權限，然後重試。",
         "Old Interface": "舊版介面",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "舊版介面已開啟：沒有玻璃效果，面板像 Telegram 12.0 一樣是平的。關閉後這些設定會恢復。",
         "File picker and sharing": "檔案選擇與分享",
@@ -13816,6 +13830,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "添付ファイルを処理できませんでした。選択したファイルへのアクセス権を確認して、もう一度お試しください。",
         "Old Interface": "旧インターフェース",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧インターフェースがオンです。ガラス効果はなく、パネルは Telegram 12.0 と同じくフラットです。オフにするとこれらの設定が戻ります。",
         "File picker and sharing": "ファイルの選択と共有",
@@ -14799,6 +14814,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Liitteitä ei voitu käsitellä. Tarkista valittujen tiedostojen käyttöoikeus ja yritä uudelleen.",
         "Old Interface": "Vanha käyttöliittymä",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Vanha käyttöliittymä on käytössä: lasia ei ole, ja paneelit ovat litteitä kuten Telegram 12.0:ssa. Nämä asetukset palaavat, kun poistat sen käytöstä.",
         "File picker and sharing": "Tiedostojen valinta ja jakaminen",
@@ -15782,6 +15798,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "לא ניתן לעבד את הקבצים המצורפים. בדוק את הגישה לקבצים שנבחרו ונסה שוב.",
         "Old Interface": "ממשק ישן",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "הממשק הישן פעיל: אין זכוכית, והלוחות שטוחים כמו ב-Telegram 12.0. ההגדרות האלה יחזרו כשתכבה אותו.",
         "File picker and sharing": "בחירת קבצים ושיתוף",
@@ -16765,6 +16782,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Prilozi se ne mogu obraditi. Provjerite pristup odabranim datotekama i pokušajte ponovno.",
         "Old Interface": "Staro sučelje",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staro sučelje je uključeno: nema stakla, a ploče su ravne kao u Telegramu 12.0. Ove postavke vratit će se kad ga isključite.",
         "File picker and sharing": "Odabir datoteka i dijeljenje",
@@ -17748,6 +17766,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Није могуће обрадити прилоге. Проверите приступ изабраним датотекама и покушајте поново.",
         "Old Interface": "Стари интерфејс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Стари интерфејс је укључен: нема стакла, а панели су равни као у Telegram-у 12.0. Ова подешавања ће се вратити када га искључите.",
         "File picker and sharing": "Избор датотека и дељење",
@@ -18731,6 +18750,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Přílohy se nepodařilo zpracovat. Zkontrolujte přístup k vybraným souborům a zkuste to znovu.",
         "Old Interface": "Staré rozhraní",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhraní je zapnuté: žádné sklo, panely jsou ploché jako v Telegramu 12.0. Tato nastavení se vrátí, až ho vypnete.",
         "File picker and sharing": "Výběr souborů a sdílení",
@@ -19714,6 +19734,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Prílohy sa nepodarilo spracovať. Skontrolujte prístup k vybraným súborom a skúste to znova.",
         "Old Interface": "Staré rozhranie",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhranie je zapnuté: žiadne sklo, panely sú ploché ako v Telegrame 12.0. Tieto nastavenia sa vrátia, keď ho vypnete.",
         "File picker and sharing": "Výber súborov a zdieľanie",
@@ -20697,6 +20718,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Fișierele atașate nu au putut fi procesate. Verifică accesul la fișierele selectate și încearcă din nou.",
         "Old Interface": "Interfață veche",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Interfața veche este activă: nu există sticlă, iar panourile sunt plate ca în Telegram 12.0. Aceste setări revin când o dezactivezi.",
         "File picker and sharing": "Selectarea fișierelor și partajare",
@@ -21680,6 +21702,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "A mellékleteket nem sikerült feldolgozni. Ellenőrizd a hozzáférést a kijelölt fájlokhoz, és próbáld újra.",
         "Old Interface": "Régi felület",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A régi felület be van kapcsolva: nincs üveg, a panelek laposak, mint a Telegram 12.0-ban. Ezek a beállítások visszatérnek, ha kikapcsolod.",
         "File picker and sharing": "Fájlválasztás és megosztás",
@@ -22663,6 +22686,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Vedleggene kunne ikke behandles. Kontroller tilgangen til de valgte filene og prøv igjen.",
         "Old Interface": "Gammelt grensesnitt",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamle grensesnittet er på: det er ikke noe glass, og panelene er flate som i Telegram 12.0. Disse innstillingene kommer tilbake når du slår det av.",
         "File picker and sharing": "Filvelger og deling",
@@ -23646,6 +23670,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Bilagorna kunde inte bearbetas. Kontrollera åtkomsten till de valda filerna och försök igen.",
         "Old Interface": "Gammalt gränssnitt",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamla gränssnittet är på: inget glas, och panelerna är platta som i Telegram 12.0. De här inställningarna återkommer när du stänger av det.",
         "File picker and sharing": "Filväljare och delning",
@@ -24629,6 +24654,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Không thể xử lý tệp đính kèm. Hãy kiểm tra quyền truy cập vào các tệp đã chọn rồi thử lại.",
         "Old Interface": "Giao diện cũ",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Giao diện cũ đang bật: không có kính, các bảng phẳng như trong Telegram 12.0. Các cài đặt này sẽ trở lại khi bạn tắt nó.",
         "File picker and sharing": "Chọn tệp và chia sẻ",
@@ -25612,6 +25638,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Не вдалося обробити вкладення. Перевірте доступ до вибраних файлів і спробуйте ще раз.",
         "Old Interface": "Старий інтерфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Увімкнено старий інтерфейс: скла немає, панелі пласкі, як у Telegram 12.0. Ці налаштування повернуться, коли ви його вимкнете.",
         "File picker and sharing": "Вибір файлів і «Поділитися»",
@@ -26604,6 +26631,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "No se pudieron procesar los archivos adjuntos. Comprueba el acceso a los archivos seleccionados e inténtalo de nuevo.",
         "Old Interface": "Interfaz antigua",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfaz antigua está activada: no hay cristal y los paneles son planos como en Telegram 12.0. Estos ajustes volverán cuando la desactives.",
         "File picker and sharing": "Selector de archivos y compartir",
@@ -27596,6 +27624,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Não foi possível processar os anexos. Verifique o acesso aos arquivos selecionados e tente novamente.",
         "Old Interface": "Interface antiga",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A interface antiga está ativada: não há vidro, e os painéis são planos como no Telegram 12.0. Essas configurações voltam quando você a desativar.",
         "File picker and sharing": "Seletor de arquivos e compartilhamento",
@@ -28588,6 +28617,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Die Anhänge konnten nicht verarbeitet werden. Prüfe den Zugriff auf die ausgewählten Dateien und versuche es erneut.",
         "Old Interface": "Alte Oberfläche",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Die alte Oberfläche ist an: Es gibt kein Glas, und die Leisten sind flach wie in Telegram 12.0. Diese Einstellungen kehren zurück, wenn du sie ausschaltest.",
         "File picker and sharing": "Dateiauswahl und Teilen",
@@ -29580,6 +29610,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Impossible de traiter les pièces jointes. Vérifiez l’accès aux fichiers sélectionnés et réessayez.",
         "Old Interface": "Ancienne interface",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L’ancienne interface est activée : il n’y a pas de verre et les panneaux sont plats comme dans Telegram 12.0. Ces réglages reviendront quand vous la désactiverez.",
         "File picker and sharing": "Sélection de fichiers et partage",
@@ -30572,6 +30603,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Unable to process the attachments. Check access to the selected files and try again.": "Ekler işlenemedi. Seçilen dosyalara erişimi kontrol edip tekrar deneyin.",
         "Old Interface": "Eski arayüz",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski arayüz açık: cam yok, paneller Telegram 12.0'daki gibi düz. Kapattığınızda bu ayarlar geri gelir.",
         "File picker and sharing": "Dosya seçme ve paylaşma",

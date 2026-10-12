@@ -48,6 +48,7 @@ extension MediaPickerScreenImpl {
             return
         }
         let basePath = self.aorusDraftAccountPath
+        let retainedPicker = self
         let directory = UUID().uuidString
         let draft = AorusAttachmentDraft(directory: directory, items: [], grouping: selection.grouping, captionAbove: editing.isCaptionAbove(), highQuality: editing.isHighQualityPhoto(), forceLivePhoto: editing.isForceLivePhotoEnabled())
         guard let root = draft.directoryURL(accountBasePath: basePath) else {
@@ -177,10 +178,12 @@ extension MediaPickerScreenImpl {
                         entries.append(AorusAttachmentDraft.Item(id: id, source: source, assetIdentifier: assetIdentifier, isVideo: item.isVideo, duration: duration, thumbnail: thumbnail, adjustments: adjustments, timer: timers[index], spoiler: spoilers[index], price: prices[index], livePhotoMode: liveModes[index], isAnimation: (item as? TGCameraCapturedVideo)?.isAnimation ?? false, coverPosition: coverPositions[index]))
                     }
                     let captured = AorusAttachmentDraft(directory: directory, timestamp: draft.timestamp, items: entries, grouping: draft.grouping, captionAbove: draft.captionAbove, highQuality: draft.highQuality, forceLivePhoto: draft.forceLivePhoto)
-                    DispatchQueue.main.async { completion(.success(AorusAttachmentDraftCapture(draft: captured, caption: caption))) }
+                    DispatchQueue.main.async {
+                        withExtendedLifetime(retainedPicker) { completion(.success(AorusAttachmentDraftCapture(draft: captured, caption: caption))) }
+                    }
                 } catch {
                     try? FileManager.default.removeItem(at: root)
-                    DispatchQueue.main.async { completion(.failure(error)) }
+                    DispatchQueue.main.async { withExtendedLifetime(retainedPicker) { completion(.failure(error)) } }
                 }
             }
         }

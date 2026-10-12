@@ -7,6 +7,7 @@ import ChatInterfaceState
 import ChatPresentationInterfaceState
 import MediaPickerUI
 import ChatSendMessageActionUI
+import ChatScheduleTimeController
 import AccountContext
 import Display
 import AlertUI
@@ -108,6 +109,12 @@ extension ChatControllerImpl {
             self.aorusCancelAttachmentDraftSend()
         }
         guard canSendMessagesToChat(self.presentationInterfaceState), !self.presentAccountFrozenInfoIfNeeded(delay: true) else { return true }
+        if case .scheduledMessages = self.subject, scheduleTime == nil {
+            self.presentScheduleTimePicker(style: .media, completion: { [weak self] result in
+                self?.aorusSendAttachmentDraft(silentPosting: result.silentPosting, scheduleTime: result.time, parameters: parameters)
+            })
+            return true
+        }
         let caption = self.presentationInterfaceState.interfaceState.composeInputState.inputText
         let bypass = canBypassRestrictions(chatPresentationInterfaceState: self.presentationInterfaceState)
         var bannedPhotos: (Int32, Bool)?
@@ -182,7 +189,8 @@ extension ChatControllerImpl {
             }
             return result
         }
-        if self.chatLocation.peerId == self.aorusAttachmentSendPeer, self.chatLocation.threadId == self.aorusAttachmentSendThread {
+        if self.chatLocation.peerId == self.aorusAttachmentSendPeer,
+           self.chatLocation.threadId == self.aorusAttachmentSendThread || self.presentationInterfaceState.interfaceState.attachmentDraft?.directory == sent.directory {
             self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: true, { $0.updatedInterfaceState(update) })
         }
         if let peer = self.aorusAttachmentSendPeer {

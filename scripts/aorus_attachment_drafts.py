@@ -313,6 +313,8 @@ def patch_controller(tg):
 '''
     new = anchor.replace('[weak self] _ in', '[weak self] ids in') + '                    if let revision = aorusAttachmentSendRevision, !ids.isEmpty, ids.allSatisfy({ $0 != nil }) { self?.aorusAttachmentDraftDidEnqueue(revision: revision) }\n'
     s = edit(s, anchor, new, 'clear only after Postbox accepts outgoing messages')
+    anchor = '            if commit || !isScheduledMessages {\n'
+    s = edit(s, anchor, '            let aorusAlreadyScheduledDraft = aorusAttachmentSendRevision != nil && messages.allSatisfy { $0.attributes.contains { $0 is OutgoingScheduleInfoMessageAttribute } }\n            if commit || !isScheduledMessages || aorusAlreadyScheduledDraft {\n', 'a scheduled artifact selection keeps its chosen date')
     anchor = '        if let _ = self.presentationInterfaceState.sendPaidMessageStars {\n            self.presentPaidMessageAlertIfNeeded(count: Int32(signals?.count ?? 1), forceDark: fromGallery, completion:'
     s = edit(s, anchor, anchor.replace('forceDark: fromGallery, completion:', 'forceDark: fromGallery, cancelled: { [weak self] in self?.aorusCancelAttachmentDraftSend() }, completion:'), 'paid send cancellation keeps the draft reusable')
     anchor = '        self.enqueueMediaMessageDisposable.set((legacyAssetPickerEnqueueMessages(context:'
