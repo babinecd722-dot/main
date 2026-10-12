@@ -15,8 +15,16 @@ import AorusGramUI
 import TelegramPresentationData
 
 extension ChatControllerImpl {
+    func aorusCanUseAttachmentDraft() -> Bool {
+        guard self.presentationInterfaceState.interfaceState.editMessage == nil,
+              self.presentationInterfaceState.interfaceState.mediaDraftState == nil,
+              self.presentationInterfaceState.inputTextPanelState.mediaRecordingState == nil else { return false }
+        if case .customChatContents = self.subject { return false }
+        return true
+    }
+
     func aorusConfigureAttachmentDraftPicker(_ controller: MediaPickerScreenImpl) {
-        guard let peerId = self.chatLocation.peerId, self.presentationInterfaceState.interfaceState.editMessage == nil else { return }
+        guard let peerId = self.chatLocation.peerId, self.aorusCanUseAttachmentDraft() else { return }
         if !controller.isNodeLoaded { controller.loadDisplayNode() }
         let context = self.context
         let threadId = self.chatLocation.threadId
@@ -114,6 +122,7 @@ extension ChatControllerImpl {
 
     @discardableResult
     func aorusSendAttachmentDraft(silentPosting: Bool, scheduleTime: Int32? = nil, parameters: ChatSendMessageActionSheetController.SendParameters? = nil) -> Bool {
+        guard self.aorusCanUseAttachmentDraft() else { return false }
         guard let draft = self.presentationInterfaceState.interfaceState.attachmentDraft, !draft.items.isEmpty else { return false }
         if self.aorusSendingAttachmentDraft != nil {
             guard !self.aorusAttachmentDraftConverting else { return true }
@@ -180,6 +189,7 @@ extension ChatControllerImpl {
     }
 
     func aorusTrackNativeAttachmentSelection(_ controller: MediaPickerScreenImpl) {
+        guard self.aorusCanUseAttachmentDraft() else { return }
         guard self.aorusSendingAttachmentDraft == nil, let draft = self.presentationInterfaceState.interfaceState.attachmentDraft else { return }
         self.aorusSendingAttachmentDraft = draft
         self.aorusAttachmentExpectedCount = Int(controller.aorusDraftSelection?.count() ?? 0)

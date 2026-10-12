@@ -97,15 +97,14 @@ extension MediaPickerScreenImpl {
                 let request = AorusDraftImageRequest(group)
                 requests.append(request)
                 let options = PHImageRequestOptions()
-                options.isNetworkAccessAllowed = true
-                options.deliveryMode = .highQualityFormat
+                options.isNetworkAccessAllowed = false
+                options.deliveryMode = .opportunistic
                 options.resizeMode = .exact
                 let requestId = PHImageManager.default().requestImage(for: asset.backingAsset, targetSize: CGSize(width: 384, height: 384), contentMode: .aspectFill, options: options) { image, info in
-                    if (info?[PHImageResultIsDegradedKey] as? Bool) == true { return }
                     DispatchQueue.main.async {
                         guard !request.finished else { return }
-                        images[index].original = image
-                        request.finish()
+                        if let image { images[index].original = image }
+                        if (info?[PHImageResultIsDegradedKey] as? Bool) != true { request.finish() }
                     }
                 }
                 photoRequests.append(requestId)
@@ -193,7 +192,7 @@ extension MediaPickerScreenImpl {
     public func aorusRestoreAttachmentDraft(_ draft: AorusAttachmentDraft) -> Bool {
         guard let selection = self.aorusDraftSelection, let editing = self.aorusDraftEditing else { return false }
         var restored: [(NSObject & TGMediaEditableItem & TGMediaSelectableItem, AorusAttachmentDraft.Item, URL)] = []
-        var restoredAdjustments: [String: NSObject & TGMediaEditAdjustments] = [:]
+        var restoredAdjustments: [String: TGMediaEditAdjustments] = [:]
         var workingVideos: [URL] = []
         var complete = false
         defer {
@@ -214,7 +213,7 @@ extension MediaPickerScreenImpl {
                 item = wrapped
             case .photo:
                 guard let image = UIImage(contentsOfFile: folder.appendingPathComponent("original.png").path) else { return false }
-                item = TGCameraCapturedPhoto(existingImage: image, identifier: entry.id)
+                item = TGCameraCapturedPhoto(existing: image, identifier: entry.id)
             case .video:
                 let original = folder.appendingPathComponent("original.mp4")
                 guard FileManager.default.fileExists(atPath: original.path) else { return false }
@@ -244,7 +243,7 @@ extension MediaPickerScreenImpl {
                 editing.setFullSizeImage(image, for: item)
             }
             if let image = UIImage(contentsOfFile: folder.appendingPathComponent("cover.png").path) {
-                editing.setCoverImage(image, position: entry.coverPosition.map { NSNumber(value: $0) }, for: item)
+                editing.setCoverImage(image, position: entry.coverPosition.map { NSNumber(value: $0) }, forItem: item)
             }
             editing.setTimer(entry.timer.map { NSNumber(value: $0) }, for: item)
             editing.setSpoiler(entry.spoiler, for: item)

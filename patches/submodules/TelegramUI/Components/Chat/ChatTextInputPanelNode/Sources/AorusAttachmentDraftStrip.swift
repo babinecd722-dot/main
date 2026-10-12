@@ -74,7 +74,7 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
             let tile: AorusAttachmentDraftTile
             if let current = self.tiles[item.id] { tile = current }
             else {
-                tile = AorusAttachmentDraftTile()
+                tile = AorusAttachmentDraftTile(frame: .zero)
                 tile.open = { [weak self] in self?.open(item.id) }
                 tile.remove = { [weak self] in self?.remove(item.id) }
                 self.tiles[item.id] = tile
@@ -98,8 +98,8 @@ private final class AorusAttachmentDraftTile: UIView {
     private let duration = UILabel()
     private var itemId: String?
 
-    init() {
-        super.init(frame: .zero)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
         self.layer.cornerRadius = 14
         self.clipsToBounds = true
         self.imageView.contentMode = .scaleAspectFill

@@ -79,7 +79,7 @@ print("Media draft persistence passed: \(checks) assertions")
 
 def send_fixture_source(tg):
     controller = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
-    methods = block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend()')
+    methods = block(controller, '    func aorusCanUseAttachmentDraft()') + block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend()')
     core = (tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift').read_text()
     return core + SEND_STUBS + methods + "\n}\n" + SEND_TESTS
 
@@ -96,6 +96,12 @@ enum EnqueueMessage {
     case forward
 }
 final class ChatControllerImpl {
+    struct Interface { var editMessage: Int?; var mediaDraftState: Int? }
+    struct Panel { var mediaRecordingState: Int? }
+    struct Presentation { var interfaceState = Interface(); var inputTextPanelState = Panel() }
+    enum Subject { case customChatContents(Int); case scheduledMessages }
+    var subject: Subject?
+    var presentationInterfaceState = Presentation()
     var aorusSendingAttachmentDraft: AorusAttachmentDraft?
     var aorusAttachmentDraftPicker: Int?
     var aorusAttachmentExpectedCount: Int?
@@ -148,6 +154,22 @@ expect(controller.aorusAttachmentDraftPrepared(messages: [message(video)]), "the
 controller.aorusCancelAttachmentDraftSend()
 expectReset()
 expect(controller.errors == 3, "each invalid conversion reports one recoverable error")
+expect(controller.aorusCanUseAttachmentDraft(), "ordinary chats allow artifact drafts")
+controller.subject = .scheduledMessages
+expect(controller.aorusCanUseAttachmentDraft(), "scheduled message chats keep their native draft flow")
+controller.subject = .customChatContents(1)
+expect(!controller.aorusCanUseAttachmentDraft(), "quick replies, welcome messages and custom histories retain their native send handlers")
+controller.subject = nil
+controller.presentationInterfaceState.interfaceState.editMessage = 1
+expect(!controller.aorusCanUseAttachmentDraft(), "editing a sent message never sends the preserved attachment draft")
+controller.presentationInterfaceState.interfaceState.editMessage = nil
+controller.presentationInterfaceState.interfaceState.mediaDraftState = 1
+expect(!controller.aorusCanUseAttachmentDraft(), "a voice or round-video recording draft keeps its send handler")
+controller.presentationInterfaceState.interfaceState.mediaDraftState = nil
+controller.presentationInterfaceState.inputTextPanelState.mediaRecordingState = 1
+expect(!controller.aorusCanUseAttachmentDraft(), "an active recording does not reveal or consume artifact drafts")
+controller.presentationInterfaceState.inputTextPanelState.mediaRecordingState = nil
+expect(controller.aorusCanUseAttachmentDraft(), "leaving an editor or recording restores the preserved attachment draft")
 print("Media draft native send lifecycle passed: \(checks) assertions")
 """
 

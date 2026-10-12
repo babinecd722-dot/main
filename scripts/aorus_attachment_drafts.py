@@ -197,7 +197,10 @@ def patch_composer(tg):
     anchor = '    private var mediaPreviewPanelNode: ChatRecordingPreviewInputPanelNodeImpl?\n'
     s = edit(s, anchor, anchor + '    private var aorusAttachmentStrip: AorusAttachmentDraftStrip?\n', 'strip field')
     anchor = '        hasMediaDraft = interfaceState.interfaceState.mediaDraftState != nil\n'
-    new = anchor + '''        let aorusAttachmentDraft = (interfaceState.editMessageState == nil && interfaceState.inputTextPanelState.mediaRecordingState == nil && interfaceState.interfaceState.mediaDraftState == nil) ? interfaceState.interfaceState.attachmentDraft : nil
+    new = anchor + '''        let aorusAllowsAttachmentDrafts: Bool
+        if case .customChatContents = interfaceState.subject { aorusAllowsAttachmentDrafts = false }
+        else { aorusAllowsAttachmentDrafts = true }
+        let aorusAttachmentDraft = (aorusAllowsAttachmentDrafts && interfaceState.editMessageState == nil && interfaceState.inputTextPanelState.mediaRecordingState == nil && interfaceState.interfaceState.mediaDraftState == nil) ? interfaceState.interfaceState.attachmentDraft : nil
         hasMediaDraft = hasMediaDraft || aorusAttachmentDraft?.items.isEmpty == false
 '''
     s = edit(s, anchor, new, 'media-only send state')
