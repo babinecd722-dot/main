@@ -79,7 +79,7 @@ print("Media draft persistence passed: \(checks) assertions")
 
 def send_fixture_source(tg):
     controller = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
-    methods = block(controller, '    func aorusCanUseAttachmentDraft()') + block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend()')
+    methods = block(controller, '    func aorusCanUseAttachmentDraft()') + block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend()') + block(controller, '    func aorusTrackNativeAttachmentSelection(')
     core = (tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift').read_text()
     return core + SEND_STUBS + methods + "\n}\n" + SEND_TESTS
 
@@ -91,19 +91,40 @@ struct Representation { let resource: MediaResource }
 final class TelegramMediaImage { let representations: [Representation]; init(_ values: [Representation]) { self.representations = values } }
 final class TelegramMediaFile { let resource: MediaResource; init(_ resource: MediaResource) { self.resource = resource } }
 struct Reference { let media: Any }
+struct ChatTextInputState { let inputText: NSAttributedString }
+final class MediaPickerScreenImpl {
+    struct Selection { func count() -> Int { 2 } }
+    var aorusDraftSelection: Selection? = Selection()
+    var aorusDraftCurrentCaption: NSAttributedString?
+}
 enum EnqueueMessage {
     case message(String, Int, Int, Reference?, Int, Int, Int, Int, Int, Int)
     case forward
 }
 final class ChatControllerImpl {
-    struct Interface { var editMessage: Int?; var mediaDraftState: Int? }
+    struct Interface {
+        var editMessage: Int?; var mediaDraftState: Int?
+        var attachmentDraft: AorusAttachmentDraft?
+        var composeInputState = ChatTextInputState(inputText: NSAttributedString(string: "Original caption"))
+        func withUpdatedComposeInputState(_ value: ChatTextInputState) -> Interface { var result = self; result.composeInputState = value; return result }
+        func withUpdatedTimestamp(_ value: Int32) -> Interface { self }
+    }
     struct Panel { var mediaRecordingState: Int? }
-    struct Presentation { var interfaceState = Interface(); var inputTextPanelState = Panel() }
+    struct Presentation {
+        var interfaceState = Interface(); var inputTextPanelState = Panel()
+        func updatedInterfaceState(_ f: (Interface) -> Interface) -> Presentation { var result = self; result.interfaceState = f(self.interfaceState); return result }
+    }
     enum Subject { case customChatContents(Int); case scheduledMessages }
     var subject: Subject?
     var presentationInterfaceState = Presentation()
+    var chatLocation: (peerId: Int64?, threadId: Int64?) = (1, 2)
+    var savedCaption: NSAttributedString?
+    func updateChatPresentationInterfaceState(animated: Bool, interactive: Bool, saveInterfaceState: Bool, _ f: (Presentation) -> Presentation) {
+        self.presentationInterfaceState = f(self.presentationInterfaceState)
+        if saveInterfaceState { self.savedCaption = self.presentationInterfaceState.interfaceState.composeInputState.inputText }
+    }
     var aorusSendingAttachmentDraft: AorusAttachmentDraft?
-    var aorusAttachmentDraftPicker: Int?
+    var aorusAttachmentDraftPicker: MediaPickerScreenImpl?
     var aorusAttachmentExpectedCount: Int?
     var aorusAttachmentPreparedResources: [MediaResource] = []
     var aorusAttachmentSendCaption: NSAttributedString?
@@ -124,7 +145,7 @@ let draft = AorusAttachmentDraft(items: entries, grouping: true, captionAbove: f
 let controller = ChatControllerImpl()
 func begin(_ count: Int = 2) {
     controller.aorusSendingAttachmentDraft = draft
-    controller.aorusAttachmentDraftPicker = 1
+    controller.aorusAttachmentDraftPicker = MediaPickerScreenImpl()
     controller.aorusAttachmentExpectedCount = count
     controller.aorusAttachmentSendCaption = NSAttributedString(string: "Caption")
     controller.aorusAttachmentSendPeer = 1
@@ -170,6 +191,15 @@ controller.presentationInterfaceState.inputTextPanelState.mediaRecordingState = 
 expect(!controller.aorusCanUseAttachmentDraft(), "an active recording does not reveal or consume artifact drafts")
 controller.presentationInterfaceState.inputTextPanelState.mediaRecordingState = nil
 expect(controller.aorusCanUseAttachmentDraft(), "leaving an editor or recording restores the preserved attachment draft")
+controller.presentationInterfaceState.interfaceState.attachmentDraft = draft
+let picker = MediaPickerScreenImpl()
+picker.aorusDraftCurrentCaption = NSAttributedString(string: "Caption changed in the gallery")
+controller.aorusTrackNativeAttachmentSelection(picker)
+expect(controller.savedCaption?.string == picker.aorusDraftCurrentCaption?.string, "gallery caption is persisted before the native send confirmation")
+expect(controller.aorusAttachmentSendCaption?.isEqual(to: controller.presentationInterfaceState.interfaceState.composeInputState.inputText) == true, "accepted send compares the same caption that is visible in the composer")
+controller.aorusCancelAttachmentDraftSend()
+expect(controller.presentationInterfaceState.interfaceState.composeInputState.inputText.string == "Caption changed in the gallery", "cancelling payment preserves the edited gallery caption")
+expect(controller.presentationInterfaceState.interfaceState.attachmentDraft == draft, "cancelling payment preserves all draft attachments")
 print("Media draft native send lifecycle passed: \(checks) assertions")
 """
 

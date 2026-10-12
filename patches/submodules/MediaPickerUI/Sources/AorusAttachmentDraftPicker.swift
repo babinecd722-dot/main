@@ -243,7 +243,7 @@ extension MediaPickerScreenImpl {
                 editing.setFullSizeImage(image, for: item)
             }
             if let image = UIImage(contentsOfFile: folder.appendingPathComponent("cover.png").path) {
-                editing.setCoverImage(image, position: entry.coverPosition.map { NSNumber(value: $0) }, forItem: item)
+                editing.setCover(image, position: entry.coverPosition.map { NSNumber(value: $0) }, for: item)
             }
             editing.setTimer(entry.timer.map { NSNumber(value: $0) }, for: item)
             editing.setSpoiler(entry.spoiler, for: item)

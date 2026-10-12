@@ -194,6 +194,11 @@ extension ChatControllerImpl {
         self.aorusSendingAttachmentDraft = draft
         self.aorusAttachmentExpectedCount = Int(controller.aorusDraftSelection?.count() ?? 0)
         self.aorusAttachmentSendCaption = controller.aorusDraftCurrentCaption ?? self.presentationInterfaceState.interfaceState.composeInputState.inputText
+        if let caption = self.aorusAttachmentSendCaption {
+            self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: true, { state in
+                state.updatedInterfaceState { $0.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970)) }
+            })
+        }
         self.aorusAttachmentSendPeer = self.chatLocation.peerId
         self.aorusAttachmentSendThread = self.chatLocation.threadId
         self.aorusAttachmentDraftPicker = controller
