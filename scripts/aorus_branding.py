@@ -9964,7 +9964,14 @@ public struct AorusStoredGift: Codable, Equatable {
     public var ownerPeerId: Int64    // 0 = legacy own-profile gift
     public var senderPeerId: Int64   // 0 = no sender / anonymous
     public var date: Int32
-    public var comment: String
+    public var comment: String {
+        didSet {
+            if self.comment != oldValue {
+                self.commentEntities = []
+            }
+        }
+    }
+    public var commentEntities: [MessageTextEntity]
     public var showInProfile: Bool
     public var pinnedToTop: Bool
     public var worn: Bool
@@ -9974,7 +9981,7 @@ public struct AorusStoredGift: Codable, Equatable {
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
     public var collectionOrders: [String: Int32] // stable local order inside each collection
 
-    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, convertedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = [], collectionOrders: [String: Int32] = [:]) {
+    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, convertedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, commentEntities: [MessageTextEntity] = [], showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = [], collectionOrders: [String: Int32] = [:]) {
         self.giftData = giftData
         self.instanceId = instanceId
         self.referencePeerId = referencePeerId
@@ -9984,6 +9991,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.senderPeerId = senderPeerId
         self.date = date
         self.comment = comment
+        self.commentEntities = comment.isEmpty ? [] : commentEntities
         self.showInProfile = showInProfile
         self.pinnedToTop = pinnedToTop
         self.worn = worn
@@ -9995,7 +10003,7 @@ public struct AorusStoredGift: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, instanceId, referencePeerId, purchasedLocally, convertedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds, collectionOrders
+        case giftData, instanceId, referencePeerId, purchasedLocally, convertedLocally, ownerPeerId, senderPeerId, date, comment, commentEntities, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds, collectionOrders
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
@@ -10010,6 +10018,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.senderPeerId = try c.decode(Int64.self, forKey: .senderPeerId)
         self.date = try c.decode(Int32.self, forKey: .date)
         self.comment = try c.decode(String.self, forKey: .comment)
+        self.commentEntities = self.comment.isEmpty ? [] : (try c.decodeIfPresent([MessageTextEntity].self, forKey: .commentEntities) ?? [])
         self.showInProfile = try c.decode(Bool.self, forKey: .showInProfile)
         self.pinnedToTop = try c.decodeIfPresent(Bool.self, forKey: .pinnedToTop) ?? false
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
@@ -10431,26 +10440,20 @@ public enum AorusFakeGiftsStore {
     // another peer are namespaced by that peer and only rendered on that profile.
     /// Stores a gift bought locally, and answers the instance it was stored as.
     @discardableResult
-    public static func addPurchasedGift(_ gift: StarGift, accountPeerId: Int64, ownerPeerId: Int64, date: Int32, comment: String, hideName: Bool) -> Int64? {
+    public static func addPurchasedGift(_ gift: StarGift, accountPeerId: Int64, ownerPeerId: Int64, date: Int32, comment: String, entities: [MessageTextEntity] = [], hideName: Bool) -> Int64? {
         guard let baseData = try? JSONEncoder().encode(gift) else { return nil }
         let ownedData = dataWithOwner(baseData, ownerPeerId: ownerPeerId) ?? baseData
         let storedOwner = ownerPeerId == accountPeerId ? 0 : ownerPeerId
-        let isCollectiblePurchase: Bool
-        if case .unique = gift {
-            isCollectiblePurchase = true
-        } else {
-            isCollectiblePurchase = false
-        }
         let stored = AorusStoredGift(
             giftData: ownedData,
             referencePeerId: ownerPeerId,
             purchasedLocally: true,
             ownerPeerId: storedOwner,
-            // A collectible keeps the immutable originalInfo of the ordinary gift it
-            // originated from. Buying/reselling it never creates a new sender/recipient.
-            senderPeerId: isCollectiblePurchase || hideName ? 0 : accountPeerId,
+            // Purchase metadata is separate from the collectible's immutable originalInfo.
+            senderPeerId: hideName ? 0 : accountPeerId,
             date: date,
-            comment: isCollectiblePurchase ? "" : comment,
+            comment: comment,
+            commentEntities: entities,
             showInProfile: true
         )
         var gifts = all()
@@ -10487,6 +10490,7 @@ public enum AorusFakeGiftsStore {
             ownerPeerId: recipientPeerId.toInt64(),
             date: timestamp,
             comment: text,
+            entities: entities,
             hideName: hideName
         )
         AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
@@ -10582,12 +10586,12 @@ public enum AorusFakeGiftsStore {
         } else {
             preservePurchasedCollectibleProvenance = false
         }
-        let renderedSenderPeerId = preservePurchasedCollectibleProvenance ? 0 : stored.senderPeerId
+        let renderedSenderPeerId = stored.senderPeerId
         // Reflect the local resale state on the unique gift (nested under "value"), and
         // rewrite its originalInfo attribute so the native gift detail shows the chosen
         // sender, the user as recipient and the local comment — exactly like a real
-        // received collectible gift (unique gifts carry their message in originalInfo,
-        // never in the plain "text" field, which the gift screen forces to nil for them).
+        // received collectible gift. Telegram 13 separately displays purchase comments
+        // from the wrapper's text/entities without replacing the originalInfo attribute.
         if var root = giftObject as? [String: Any], var value = root["value"] as? [String: Any] {
             // Reflect local resale as a proper currency-tagged resellAmounts entry (stars or TON),
             // exactly like a server-listed gift — instead of the legacy currency-less "resellStars"
@@ -10620,6 +10624,11 @@ public enum AorusFakeGiftsStore {
                 }
                 if !stored.comment.isEmpty {
                     originalInfo["text"] = stored.comment
+                    if !stored.commentEntities.isEmpty,
+                       let data = try? JSONEncoder().encode(stored.commentEntities),
+                       let entities = try? JSONSerialization.jsonObject(with: data) {
+                        originalInfo["entities"] = entities
+                    }
                 }
                 attributes.append(originalInfo)
                 value["attributes"] = attributes
@@ -10665,8 +10674,13 @@ public enum AorusFakeGiftsStore {
                 }
             }
         }
-        if !stored.comment.isEmpty && !preservePurchasedCollectibleProvenance {
+        if !stored.comment.isEmpty {
             dict["text"] = stored.comment
+            if !stored.commentEntities.isEmpty,
+               let data = try? JSONEncoder().encode(stored.commentEntities),
+               let entities = try? JSONSerialization.jsonObject(with: data) {
+                dict["entities"] = entities
+            }
         }
         if !stored.collectionIds.isEmpty {
             dict["collectionIds"] = stored.collectionIds.map { Int($0) }

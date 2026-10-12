@@ -728,7 +728,7 @@ private final class AorusAIConversationListController: ViewController, UITableVi
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        let top = self.navigationLayout(layout: layout).navigationFrame.maxY + (AorusOldInterface.isEnabled ? 12.0 : 0.0)
         let searchFrame = CGRect(x: 16.0, y: top, width: max(0.0, layout.size.width - 32.0), height: 38.0)
         transition.updateFrame(view: searchField, frame: searchFrame)
         // The list runs to the bottom of the screen, the way every list in Telegram does.
