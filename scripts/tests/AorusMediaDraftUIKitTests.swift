@@ -3,6 +3,22 @@ import UIKit
 @MainActor func runMediaDraftUIKitRegression(window: UIWindow) -> Int {
     var checks = 0
     func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError("Media draft: " + message) } }
+    func samePixels(_ actual: UIImage?, _ expected: UIImage) -> Bool {
+        guard let actual = actual?.cgImage, let expected = expected.cgImage,
+              actual.width == expected.width, actual.height == expected.height else { return false }
+        func pixels(_ image: CGImage) -> [UInt8] {
+            var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                    bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            }
+            return bytes
+        }
+        // PNG re-encoding may change metadata or compression without changing a single pixel.
+        return pixels(actual) == pixels(expected)
+    }
     AorusClassicBackgroundProbe.useCustomGlassImpl = false
     let theme = PresentationTheme(), strings = PresentationStrings()
     let renderer = UIGraphicsImageRenderer(size: CGSize(width: 72, height: 72))
@@ -30,7 +46,7 @@ import UIKit
         let first = tiles[0]
         first.layoutIfNeeded()
         let photo = first.subviews.first as! UIImageView
-        expect(photo.image?.pngData() == images[0].pngData() && photo.contentMode == .scaleAspectFill, "draft shows the selected photo without template tint")
+        expect(samePixels(photo.image, images[0]) && photo.image?.renderingMode != .alwaysTemplate && photo.contentMode == .scaleAspectFill, "draft shows the selected photo without template tint")
         expect(first.layer.borderWidth == 0 && first.layer.cornerRadius == 14, "large photo has no outline")
         let buttons = first.subviews.compactMap { $0 as? UIButton }
         expect(buttons.count == 2 && buttons[1].bounds.width == 44, "remove has its own accessible touch target")
@@ -53,7 +69,7 @@ import UIKit
     expect(mini.subviews.count == 3, "list displays the first three selected miniatures")
     for (index, view) in mini.subviews.enumerated() {
         let photo = view as! UIImageView
-        expect(photo.image?.pngData() == images[index].pngData() && photo.frame.origin.x == CGFloat(index) * 20, "list thumbnails preserve order, pixels and native spacing")
+        expect(samePixels(photo.image, images[index]) && photo.image?.renderingMode != .alwaysTemplate && photo.frame.origin.x == CGFloat(index) * 20, "list thumbnails preserve order, pixels and native spacing")
     }
     mini.update(previews: [], side: 18)
     expect(mini.subviews.isEmpty, "recycled list row removes stale draft miniatures")
