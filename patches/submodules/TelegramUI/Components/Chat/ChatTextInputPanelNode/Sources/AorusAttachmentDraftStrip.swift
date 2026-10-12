@@ -27,7 +27,7 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
         self.scrollView.showsHorizontalScrollIndicator = false
         self.scrollView.showsVerticalScrollIndicator = false
         self.scrollView.contentInsetAdjustmentBehavior = .never
-        self.scrollView.directionalLockEnabled = true
+        self.scrollView.isDirectionalLockEnabled = true
         self.scrollView.semanticContentAttribute = .forceLeftToRight
         self.scrollView.delegate = self
         self.addSubview(self.scrollView)
