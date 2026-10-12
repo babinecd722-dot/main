@@ -313,7 +313,7 @@ def patch_controller(tg):
     s = edit(s, anchor, anchor + fields, 'controller draft lifecycle')
     anchor = '        }, sendCurrentMessage: { [weak self] silentPosting, messageEffect in\n            if let self {\n'
     s = edit(s, anchor, anchor + '''                let parameters = ChatSendMessageActionSheetController.SendParameters(effect: messageEffect.flatMap { .init(id: $0.id) }, textIsAboveMedia: self.presentationInterfaceState.interfaceState.attachmentDraft?.captionAbove ?? false)
-                if self.aorusSendAttachmentDraft(silentPosting: silentPosting ?? self.presentationInterfaceState.interfaceState.silentPosting, parameters: parameters) { return }
+                if self.aorusSendAttachmentDraft(silentPosting: silentPosting, parameters: parameters) { return }
 ''', 'native send action')
     anchor = '                    if let _ = strongSelf.presentationInterfaceState.interfaceState.mediaDraftState {\n                        strongSelf.sendMediaRecording(silentPosting: result.silentPosting, scheduleTime: result.time,'
     s = edit(s, anchor, '                    if strongSelf.aorusSendAttachmentDraft(silentPosting: result.silentPosting, scheduleTime: result.time, parameters: params) {\n                        return\n                    }\n' + anchor, 'native scheduling action')

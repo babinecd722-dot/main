@@ -319,9 +319,117 @@ def check_drafts(tg, swiftc):
         source.write_text(geometry_fixture_source(tg))
         subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(source), '-o', str(work / 'geometry')], check=True)
         subprocess.run([str(work / 'geometry')], check=True)
+    check_controller_bindings(tg, swiftc)
     check_draft_sdk(tg, swiftc)
 
 
+
+
+def check_controller_bindings(tg, swiftc):
+    """Keep alert overloads in separate modules and use the native send callback type."""
+    helper = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
+    native = (tg / 'submodules/TelegramUI/Sources/ChatController.swift').read_text()
+    interaction = (tg / 'submodules/TelegramUI/Components/ChatControllerInteraction/Sources/ChatControllerInteraction.swift').read_text()
+    callback_type = re.search(r'public let sendCurrentMessage: ([^\n]+)', interaction).group(1)
+    marker = '        }, sendCurrentMessage: { [weak self] silentPosting, messageEffect in\n'
+    start = native.index(marker) + len('        }, sendCurrentMessage: ')
+    end = native.index('                if let _ = self.presentationInterfaceState.interfaceState.mediaDraftState {', start)
+    callback = native[start:end] + '\n            }\n        }'
+    error_method = block(helper, '    func aorusShowAttachmentDraftError()')
+    imports = '\n'.join(line for line in helper.splitlines() if line in ('import AlertUI', 'import PresentationDataUtils'))
+    types = '''import Foundation
+public enum NoError: Error {}
+public struct Signal<T, E: Error> { public init() {} }
+public final class AccountContext { public init() {} }
+public struct PresentationTheme { public init() {} }
+public struct Strings { public var Common_OK = "OK"; public init() {} }
+public struct PresentationData { public var strings = Strings(); public init() {} }
+public struct AlertControllerContext { public init() {} }
+public enum TextAlertContentActionLayout { case horizontal }
+public struct TextAlertAction {
+    public enum ActionType { case defaultAction }
+    public init(type: ActionType, title: String, action: @escaping () -> Void) {}
+}
+public class ViewController { public let text: String; public init(text: String) { self.text = text } }
+public typealias AlertController = ViewController
+public struct ChatSendMessageEffect { public let id: Int64; public init(id: Int64) { self.id = id } }
+public enum ChatSendMessageActionSheetController {
+    public struct SendParameters {
+        public struct Effect { public let id: Int64; public init(id: Int64) { self.id = id } }
+        public let effect: Effect?, textIsAboveMedia: Bool
+        public init(effect: Effect?, textIsAboveMedia: Bool) { self.effect = effect; self.textIsAboveMedia = textIsAboveMedia }
+    }
+}
+'''
+    modules = {'BindingTypes': types}
+    for module, path, marker in (
+        ('PresentationDataUtils', 'submodules/PresentationDataUtils/Sources/AlertTheme.swift', 'public func textAlertController(\n    context:'),
+        ('AlertUI', 'submodules/AlertUI/Sources/ThemedTextAlertController.swift', 'public func textAlertController(alertContext:'),
+    ):
+        body = block((tg / path).read_text(), marker)
+        declaration = body[:body.index('{')]
+        modules[module] = 'import Foundation\nimport BindingTypes\n' + declaration + '{ return ViewController(text: text) }\n'
+    fixture = 'import Foundation\nimport BindingTypes\n' + imports + '''
+func aorusL(_ ru: String, _ en: String) -> String { en }
+struct Draft { var captionAbove = false }
+struct InterfaceState { var attachmentDraft: Draft?; var silentPosting = false }
+struct PresentationInterfaceState { var interfaceState = InterfaceState() }
+enum Parent { case window(Window) }
+enum Window { case root }
+typealias SendCurrentMessage = ''' + callback_type + '''
+final class Controller {
+    let context = AccountContext(), presentationData = PresentationData()
+    var updatedPresentationData: (PresentationData, Signal<PresentationData, NoError>) { (presentationData, Signal()) }
+    var presentationInterfaceState = PresentationInterfaceState()
+    var alert: ViewController?, sendCount = 0, lastSilent = false
+    var lastParameters: ChatSendMessageActionSheetController.SendParameters?
+    func present(_ controller: ViewController, in parent: Parent) { self.alert = controller }
+    func aorusSendAttachmentDraft(silentPosting: Bool, parameters: ChatSendMessageActionSheetController.SendParameters) -> Bool {
+        self.sendCount += 1; self.lastSilent = silentPosting; self.lastParameters = parameters; return true
+    }
+''' + error_method + '\n    func makeSend() -> SendCurrentMessage { return ' + callback + '\n    }\n}\n' + '''
+var checks = 0
+func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
+let controller = Controller()
+controller.aorusShowAttachmentDraftError()
+expect(controller.alert != nil, "the recoverable attachment error uses the native presentation overload")
+expect(controller.alert?.text.isEmpty == false, "the native alert contains its localized attachment explanation")
+var sends = 0
+for silent in [false, true] { for preference in [false, true] { for above in [false, true] { for effect: ChatSendMessageEffect? in [nil, ChatSendMessageEffect(id: 42)] {
+    controller.presentationInterfaceState.interfaceState.silentPosting = preference
+    controller.presentationInterfaceState.interfaceState.attachmentDraft = Draft(captionAbove: above)
+    controller.makeSend()(silent, effect)
+    sends += 1
+    expect(controller.sendCount == sends, "the native send action starts one artifact send")
+    expect(controller.lastSilent == silent, "the explicit native silent-posting choice is preserved")
+    expect(controller.lastParameters?.textIsAboveMedia == above, "the native action preserves caption placement")
+    expect(controller.lastParameters?.effect?.id == effect?.id, "the native action preserves the chosen effect")
+} } } }
+print("Media draft native controller bindings passed: \\(checks) assertions")
+'''
+    with tempfile.TemporaryDirectory(prefix='aorus-controller-bindings-') as directory:
+        work = Path(directory)
+        common = [swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), '-I', str(work)]
+        objects = []
+        for module, text in modules.items():
+            source = work / (module + '.swift')
+            source.write_text(text)
+            obj = work / (module + '.o')
+            subprocess.run(common + ['-parse-as-library', '-module-name', module, '-emit-module', '-emit-module-path', str(work / (module + '.swiftmodule')), '-emit-object', str(source), '-o', str(obj)], check=True)
+            objects.append(str(obj))
+        source = work / 'Controller.swift'
+        source.write_text(fixture)
+        subprocess.run(common + [str(source)] + objects + ['-o', str(work / 'bindings')], check=True)
+        subprocess.run([str(work / 'bindings')], check=True)
+        for label, negative in (
+            ('missing presentation import', fixture.replace('import PresentationDataUtils\n', '')),
+            ('nonoptional native silent flag', fixture.replace('silentPosting: silentPosting, parameters:', 'silentPosting: silentPosting ?? self.presentationInterfaceState.interfaceState.silentPosting, parameters:')),
+        ):
+            source.write_text(negative)
+            result = subprocess.run(common + ['-typecheck', str(source)], capture_output=True, text=True)
+            if result.returncode == 0:
+                raise RuntimeError('Native controller negative control did not reject ' + label)
+        print('Media draft controller negative controls rejected both original build failures')
 
 
 def check_draft_sdk(tg, swiftc):
