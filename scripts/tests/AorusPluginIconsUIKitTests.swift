@@ -290,6 +290,8 @@ private enum AorusPluginIconsUIKitTests {
         checks += await runRGBRegression(window: window)
         stage("checking classic input")
         checks += runClassicInputRegression(window: window)
+        stage("checking media draft previews")
+        checks += runMediaDraftUIKitRegression(window: window)
         stage("checking presentation traits and toolbar colours")
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks

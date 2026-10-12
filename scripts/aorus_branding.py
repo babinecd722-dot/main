@@ -30306,6 +30306,8 @@ def main() -> None:
     # Telegram as 12.0 drew it, behind AorusGram -> Interface -> Old Interface.
     from aorus_old_interface import patch_old_interface
     patch_old_interface(tg)
+    from aorus_attachment_drafts import patch_attachment_drafts
+    patch_attachment_drafts(tg)
     # After every patch of the message nodes: it anchors on the side buttons and the deleted
     # dim the earlier ones add.
     patch_deleted_side_buttons(tg)

@@ -47,7 +47,8 @@ METHOD
     point = attachment[start:end].replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     from classic_glass_check import native_glass_source
     from telegram13_preview_check import native_overlay_source
-    return fixture + native_glass_source(tg) + native_overlay_source(tg) + native_timer_source(tg) + """
+    from attachment_drafts_check import native_draft_views
+    return fixture + native_glass_source(tg) + native_draft_views(tg) + native_overlay_source(tg) + native_timer_source(tg) + """
 final class AorusClassicNodeViewFixture: UIView {
     var view: UIView { return self }
 }
