@@ -25,6 +25,14 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
     static var requests: [URLRequest] = []
     static var vote = "none", downloaded = false, nextStatus = 200, wrongVote = false
     static var active = 0, maximumActive = 0
+    static var holdNextRead = false
+    static var heldRead: (() -> Void)?
+    static var hasHeldRead: Bool { lock.lock(); defer { lock.unlock() }; return heldRead != nil }
+    static func releaseRead() {
+        lock.lock(); let response = heldRead; heldRead = nil; lock.unlock()
+        guard let response else { fatalError("The stale response was not held") }
+        response()
+    }
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "plugins.aorusgram.com" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     static func transmittedBody(_ request: URLRequest) -> Data {
@@ -64,14 +72,18 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
             row["id"] = "aa"; row["version"] = "1.0.0"; row["name"] = "Aorus"; row["status"] = "approved"
             json = ["ok": true, "plugin": row]
         }
+        let hold = request.httpMethod == "GET" && Self.holdNextRead
+        if hold { Self.holdNextRead = false }
         Self.lock.unlock()
         let bytes = try! JSONSerialization.data(withJSONObject: json)
-        DispatchQueue.global().asyncAfter(deadline: .now() + (request.httpMethod == "GET" ? 0.12 : 0.02)) {
+        let response: @Sendable () -> Void = {
             Self.lock.lock(); Self.active -= 1; Self.lock.unlock()
             self.client?.urlProtocol(self, didReceive: HTTPURLResponse(url: self.request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
             self.client?.urlProtocol(self, didLoad: bytes)
             self.client?.urlProtocolDidFinishLoading(self)
         }
+        if hold { Self.lock.lock(); Self.heldRead = response; Self.lock.unlock() }
+        else { DispatchQueue.global().asyncAfter(deadline: .now() + 0.02, execute: response) }
     }
     override func stopLoading() {}
 }
@@ -169,15 +181,19 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
         client.vote(id: "aa", vote: .none) { result in expect(result == .failure(.malformedResponse), "success must echo the submitted choice"); done = true }
         wait { done }
         var stale: AorusPluginMarketCard?
+        MarketTestProtocol.holdNextRead = true
         client.card(id: "aa") { result in stale = try? result.get() }
-        // Let the GET snapshot reach the mock server before the more recent POST.
-        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        wait { MarketTestProtocol.hasHeldRead }
         vote(.dislike, expected: .init(dislikes: 1, downloads: 1))
+        MarketTestProtocol.releaseRead()
         wait { stale != nil }
         expect(stale?.stats.dislikes == 1, "an earlier GET cannot undo a confirmed vote")
         MarketTestProtocol.nextStatus = 503
         client.recordInstalledDownload(id: "aa")
-        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        // A write queued behind the failed event is a completion barrier, not a guessed delay.
+        var failureCompleted = false
+        client.vote(id: "aa", vote: .dislike) { _ in failureCompleted = true }
+        wait { failureCompleted }
         let pendingKey = "aorusgram.market.stats." + DeviceFingerprint.deviceHash() + ".downloads"
         expect(UserDefaults.standard.stringArray(forKey: pendingKey)?.contains("aa") == true, "unreported installation is retained across restarts")
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)

@@ -85,6 +85,9 @@ jobs:
       - name: Plugin documentation export preflight
         run: python3 aorusgram/scripts/plugin_exports_check.py aorusgram
 
+      - name: Plugin marketplace statistics preflight
+        run: python3 aorusgram/scripts/plugin_market_stats_check.py aorusgram
+
       - name: Native voice PCM and DSP preflight
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram
 
@@ -1183,7 +1186,6 @@ jobs:
         run: |
           python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
           python3 aorusgram/scripts/plugin_market_permissions_check.py aorusgram
-          python3 aorusgram/scripts/plugin_market_stats_check.py aorusgram
 
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
