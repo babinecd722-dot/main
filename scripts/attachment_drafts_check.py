@@ -500,12 +500,12 @@ extension AorusClassicBackgroundProbe {
         self.updatePlainContent(size: size)
     }
 }
-typealias ContainedViewLayoutTransition = AorusClassicImmediateTransition
-extension AorusClassicImmediateTransition {
+enum ContainedViewLayoutTransition {
+    case immediate
     var isAnimated: Bool { false }
-    func updateFrame(view: UIView, frame: CGRect) { view.frame = frame }
-    func updateAlpha(layer: CALayer, alpha: CGFloat, completion: ((Bool) -> Void)? = nil) { layer.opacity = Float(alpha); completion?(true) }
-    func updateTransformScale(layer: CALayer, scale: CGFloat) { layer.transform = CATransform3DMakeScale(scale, scale, 1) }
+    @MainActor func updateFrame(view: UIView, frame: CGRect) { view.frame = frame }
+    @MainActor func updateAlpha(layer: CALayer, alpha: CGFloat, completion: ((Bool) -> Void)? = nil) { layer.opacity = Float(alpha); completion?(true) }
+    @MainActor func updateTransformScale(layer: CALayer, scale: CGFloat) { layer.transform = CATransform3DMakeScale(scale, scale, 1) }
 }
 extension AorusClassicImmediateTransition { static var immediate: AorusClassicImmediateTransition { AorusClassicImmediateTransition() } }
 """
