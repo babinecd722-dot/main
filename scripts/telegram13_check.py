@@ -357,6 +357,8 @@ def main():
     check_companion_layout(args.telegram_source, args.swiftc)
     from attachment_drafts_check import check_drafts
     check_drafts(args.telegram_source, args.swiftc)
+    from composer_profile_refinements_check import check_refinements
+    check_refinements(args.telegram_source, args.swiftc)
     from telegram13_preview_check import check_previews, native_overlay_source
     check_previews(args.telegram_source, args.swiftc)
     check_native_send(args.telegram_source)

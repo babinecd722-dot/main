@@ -6,9 +6,9 @@ import TelegramCore
 import TelegramPresentationData
 import GlassBackgroundComponent
 
-final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
-    var open: (String) -> Void = { _ in }
-    var remove: (String) -> Void = { _ in }
+public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
+    public var open: (String) -> Void = { _ in }
+    public var remove: (String) -> Void = { _ in }
     private let scrollView = UIScrollView()
     private var tiles: [String: AorusAttachmentDraftTile] = [:]
     private var draft: AorusAttachmentDraft?
@@ -17,12 +17,13 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
     private var strings: PresentationStrings?
     private var side: CGFloat = 0
     private var renderedRange: Range<Int> = 0..<0
+    private var updating = false
 
-    static func height(width: CGFloat) -> CGFloat {
+    public static func height(width: CGFloat) -> CGFloat {
         return min(160, max(78, floor((width - 32) / 3))) + 16
     }
 
-    override init(frame: CGRect) {
+    public override init(frame: CGRect) {
         super.init(frame: frame)
         self.scrollView.showsHorizontalScrollIndicator = false
         self.scrollView.showsVerticalScrollIndicator = false
@@ -33,10 +34,11 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
         self.addSubview(self.scrollView)
     }
 
-    required init?(coder: NSCoder) { fatalError("Created in code") }
+    required public init?(coder: NSCoder) { fatalError("Created in code") }
 
-    func update(draft: AorusAttachmentDraft, accountBasePath: String, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings) {
+    public func update(draft: AorusAttachmentDraft, accountBasePath: String, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings, transition: ContainedViewLayoutTransition = .immediate) {
         let resetScroll = self.draft?.directory != draft.directory
+        self.updating = true
         self.draft = draft
         self.accountBasePath = accountBasePath
         self.theme = theme
@@ -51,12 +53,13 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
             let limit = max(0, self.scrollView.contentSize.width - width)
             self.scrollView.contentOffset.x = min(limit, max(0, self.scrollView.contentOffset.x))
         }
-        self.updateVisibleTiles(force: true)
+        self.updating = false
+        self.updateVisibleTiles(force: true, transition: transition)
     }
 
-    func scrollViewDidScroll(_ scrollView: UIScrollView) { self.updateVisibleTiles() }
+    public func scrollViewDidScroll(_ scrollView: UIScrollView) { if !self.updating { self.updateVisibleTiles() } }
 
-    private func updateVisibleTiles(force: Bool = false) {
+    private func updateVisibleTiles(force: Bool = false, transition: ContainedViewLayoutTransition = .immediate) {
         guard let draft = self.draft, let theme = self.theme, let strings = self.strings, self.side > 0 else { return }
         let side = self.side
         let first = max(0, Int(floor(self.scrollView.contentOffset.x / (side + 8))) - 1)
@@ -66,8 +69,12 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
         self.renderedRange = range
         let identifiers = Set(range.map { draft.items[$0].id })
         for (id, tile) in self.tiles where !identifiers.contains(id) {
-            tile.removeFromSuperview()
             self.tiles.removeValue(forKey: id)
+            if transition.isAnimated && !draft.items.contains(where: { $0.id == id }) {
+                tile.isUserInteractionEnabled = false
+                transition.updateAlpha(layer: tile.layer, alpha: 0, completion: { [weak tile] _ in tile?.removeFromSuperview() })
+                transition.updateTransformScale(layer: tile.layer, scale: 0.8)
+            } else { tile.removeFromSuperview() }
         }
         for index in range {
             let item = draft.items[index]
@@ -79,8 +86,10 @@ final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
                 tile.remove = { [weak self] in self?.remove(item.id) }
                 self.tiles[item.id] = tile
                 self.scrollView.addSubview(tile)
+                tile.frame = CGRect(x: 8 + CGFloat(index) * (side + 8), y: 8, width: side, height: side)
+                if transition.isAnimated { tile.alpha = 0; transition.updateAlpha(layer: tile.layer, alpha: 1) }
             }
-            tile.frame = CGRect(x: 8 + CGFloat(index) * (side + 8), y: 8, width: side, height: side)
+            transition.updateFrame(view: tile, frame: CGRect(x: 8 + CGFloat(index) * (side + 8), y: 8, width: side, height: side))
             let previewURL = draft.itemDirectoryURL(accountBasePath: self.accountBasePath, id: item.id)?.appendingPathComponent("preview.jpg")
             tile.update(item: item, previewURL: previewURL, theme: theme, strings: strings)
         }

@@ -14,6 +14,7 @@ import AlertUI
 import PresentationDataUtils
 import AorusGramUI
 import TelegramPresentationData
+import TextFormat
 
 extension ChatControllerImpl {
     func aorusCanUseAttachmentDraft() -> Bool {
@@ -100,6 +101,7 @@ extension ChatControllerImpl {
 
     func aorusRemoveAttachmentDraft(_ id: String) {
         guard let draft = self.presentationInterfaceState.interfaceState.attachmentDraft, draft.items.contains(where: { $0.id == id }) else { return }
+        if let peerId = self.chatLocation.peerId { self.aorusAttachmentCaptureTokens["\(peerId.toInt64()):\(self.chatLocation.threadId ?? 0)"] = UUID() }
         let updated = draft.removing(id)
         self.updateChatPresentationInterfaceState(animated: true, interactive: true, saveInterfaceState: true, { state in
             state.updatedInterfaceState { $0.withUpdatedAttachmentDraft(updated).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970)) }
@@ -116,20 +118,40 @@ extension ChatControllerImpl {
     }
 
     func aorusOpenAttachmentDraft(_ id: String) {
-        guard self.presentationInterfaceState.interfaceState.attachmentDraft?.items.contains(where: { $0.id == id }) == true else { return }
-        self.aorusAttachmentPreviewId = id
-        self.presentAttachmentMenu(subject: .default)
+        guard self.aorusCanUseAttachmentDraft(), self.aorusAttachmentPreviewPicker == nil, self.aorusSendingAttachmentDraft == nil,
+              let draft = self.presentationInterfaceState.interfaceState.attachmentDraft,
+              let index = draft.items.firstIndex(where: { $0.id == id }),
+              let layout = self.chatDisplayNode.validLayout?.0 else { return }
+        self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, present: { [weak self] controller, _ in
+            guard let self, !controller.aorusAttachmentRestoreFailed else { return }
+            self.aorusAttachmentPreviewPicker = controller
+            controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self] editor, arguments in
+                self?.present(editor, in: .window(.root), with: arguments)
+            }, closed: { [weak self, weak controller] in
+                guard let controller else { return }
+                controller.aorusRequestAttachmentPersistence { [weak self, controller] in
+                    if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
+                }
+            })
+        }, updateMediaPickerContext: { _ in }, completion: { [weak self] fromGallery, signals, silently, time, parameters, _, completion in
+            self?.enqueueMediaMessages(fromGallery: fromGallery, signals: signals, silentPosting: silently, scheduleTime: time, parameters: parameters, completion: completion)
+        })
     }
 
     @discardableResult
     func aorusSendAttachmentDraft(silentPosting: Bool, scheduleTime: Int32? = nil, parameters: ChatSendMessageActionSheetController.SendParameters? = nil) -> Bool {
         guard self.aorusCanUseAttachmentDraft() else { return false }
         guard let draft = self.presentationInterfaceState.interfaceState.attachmentDraft, !draft.items.isEmpty else { return false }
+        guard self.aorusAttachmentPreviewPicker == nil else { return true }
         if self.aorusSendingAttachmentDraft != nil {
             guard !self.aorusAttachmentDraftConverting else { return true }
             self.aorusCancelAttachmentDraftSend()
         }
         guard canSendMessagesToChat(self.presentationInterfaceState), !self.presentAccountFrozenInfoIfNeeded(delay: true) else { return true }
+        if self.presentationInterfaceState.slowmodeState != nil, self.subject != .scheduledMessages, scheduleTime == nil {
+            if let rect = self.chatDisplayNode.frameForInputActionButton() { self.interfaceInteraction?.displaySlowmodeTooltip(self.chatDisplayNode.view, rect) }
+            return true
+        }
         if case .scheduledMessages = self.subject, scheduleTime == nil {
             self.presentScheduleTimePicker(style: .media, completion: { [weak self] result in
                 self?.aorusSendAttachmentDraft(silentPosting: result.silentPosting, scheduleTime: result.time, parameters: parameters)
@@ -161,6 +183,7 @@ extension ChatControllerImpl {
             self.aorusAttachmentSendThread = self.chatLocation.threadId
             self.aorusAttachmentSendCaption = caption
             self.aorusAttachmentDraftPicker = controller
+            self.aorusAttachmentSendTextSeparately = true
             context?.setCaption(caption)
             controller.aorusSendAttachmentDraft(silently: silentPosting, scheduleTime: scheduleTime, parameters: parameters)
         }, updateMediaPickerContext: { _ in }, completion: { [weak self] fromGallery, signals, silently, time, parameters, _, completion in
@@ -168,6 +191,31 @@ extension ChatControllerImpl {
             self.enqueueMediaMessages(fromGallery: fromGallery, signals: signals, silentPosting: silently, scheduleTime: time, parameters: parameters, completion: completion)
         })
         return true
+    }
+
+    func aorusAttachmentDraftTextMessages() -> [EnqueueMessage] {
+        guard self.aorusAttachmentSendTextSeparately, let caption = self.aorusAttachmentSendCaption else { return [] }
+        let text = trimChatInputText(caption)
+        guard text.length > 0 else { return [] }
+        return breakChatInputText(text).map { part in
+            let entities = generateTextEntities(part.string, enabledTypes: .all, currentEntities: generateChatInputTextEntities(part))
+            let attributes: [MessageAttribute] = entities.isEmpty ? [] : [TextEntitiesMessageAttribute(entities: entities)]
+            var inlineStickers: [MediaId: Media] = [:]
+            part.enumerateAttribute(ChatTextInputAttributes.customEmoji, in: NSRange(location: 0, length: part.length), using: { value, _, _ in
+                if let emoji = value as? ChatTextInputTextCustomEmojiAttribute, let file = emoji.file { inlineStickers[file.fileId] = file }
+            })
+            return .message(text: part.string, attributes: attributes, inlineStickers: inlineStickers, mediaReference: nil, threadId: self.aorusAttachmentSendThread, replyToMessageId: self.presentationInterfaceState.interfaceState.replyMessageSubject?.subjectModel, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+        }
+    }
+
+    func aorusAttachmentDraftOutgoingMessages(_ messages: [EnqueueMessage]) -> [EnqueueMessage] {
+        guard self.aorusAttachmentSendTextSeparately else { return messages }
+        let media = messages.map { message -> EnqueueMessage in
+            guard case let .message(_, attributes, inlineStickers, reference, thread, reply, story, grouping, correlation, packs) = message else { return message }
+            return .message(text: "", attributes: attributes.filter { !($0 is TextEntitiesMessageAttribute) }, inlineStickers: inlineStickers, mediaReference: reference, threadId: thread, replyToMessageId: reply, replyToStoryId: story, localGroupingKey: grouping, correlationId: correlation, bubbleUpEmojiOrStickersets: packs)
+        }
+        let text = self.aorusAttachmentDraftTextMessages()
+        return self.aorusSendingAttachmentDraft?.captionAbove == true ? text + media : media + text
     }
 
     /// Runs only when every selected item has a native outgoing message.
@@ -202,6 +250,7 @@ extension ChatControllerImpl {
         }
         self.aorusAttachmentSendPeer = self.chatLocation.peerId
         self.aorusAttachmentSendThread = self.chatLocation.threadId
+        self.aorusAttachmentSendTextSeparately = controller.aorusPresentDraftGallery != nil
         self.aorusAttachmentDraftPicker = controller
     }
 
@@ -227,10 +276,11 @@ extension ChatControllerImpl {
                 AorusAttachmentDraftCleanup.track(account: account, draft: sent, resources: cleanupResources)
             })
         }
-        self.aorusCancelAttachmentDraftSend()
+        self.aorusCancelAttachmentDraftSend(keepSelection: false)
     }
 
-    func aorusCancelAttachmentDraftSend() {
+    func aorusCancelAttachmentDraftSend(keepSelection: Bool = true) {
+        if keepSelection { self.aorusAttachmentDraftPicker?.aorusResetAttachmentDraftSend() }
         self.aorusSendingAttachmentDraft = nil
         self.aorusAttachmentDraftPicker = nil
         self.aorusAttachmentExpectedCount = nil
@@ -239,5 +289,6 @@ extension ChatControllerImpl {
         self.aorusAttachmentSendPeer = nil
         self.aorusAttachmentSendThread = nil
         self.aorusAttachmentDraftConverting = false
+        self.aorusAttachmentSendTextSeparately = false
     }
 }

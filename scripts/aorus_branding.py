@@ -30308,6 +30308,8 @@ def main() -> None:
     patch_old_interface(tg)
     from aorus_attachment_drafts import patch_attachment_drafts
     patch_attachment_drafts(tg)
+    from aorus_composer_profile_refinements import patch_composer_profile_refinements
+    patch_composer_profile_refinements(tg)
     # After every patch of the message nodes: it anchors on the side buttons and the deleted
     # dim the earlier ones add.
     patch_deleted_side_buttons(tg)

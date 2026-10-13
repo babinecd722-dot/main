@@ -1347,9 +1347,7 @@ public final class AorusProfilePageImageView: UIImageView {
         UIView.animate(
             withDuration: duration,
             delay: 0.0,
-            usingSpringWithDamping: 1.0,
-            initialSpringVelocity: 0.0,
-            options: [.beginFromCurrentState, .allowUserInteraction],
+            options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut],
             animations: changes
         )
     }

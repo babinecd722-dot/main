@@ -79,7 +79,7 @@ print("Media draft persistence passed: \(checks) assertions")
 
 def send_fixture_source(tg):
     controller = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
-    methods = block(controller, '    func aorusCanUseAttachmentDraft()') + block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend()') + block(controller, '    func aorusTrackNativeAttachmentSelection(')
+    methods = block(controller, '    func aorusCanUseAttachmentDraft()') + block(controller, '    func aorusAttachmentDraftPrepared(messages:') + block(controller, '    func aorusCancelAttachmentDraftSend(') + block(controller, '    func aorusTrackNativeAttachmentSelection(')
     core = (tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift').read_text()
     return core + SEND_STUBS + methods + "\n}\n" + SEND_TESTS
 
@@ -96,6 +96,8 @@ final class MediaPickerScreenImpl {
     struct Selection { func count() -> Int { 2 } }
     var aorusDraftSelection: Selection? = Selection()
     var aorusDraftCurrentCaption: NSAttributedString?
+    var aorusPresentDraftGallery: Int?
+    func aorusResetAttachmentDraftSend() {}
 }
 enum EnqueueMessage {
     case message(String, Int, Int, Reference?, Int, Int, Int, Int, Int, Int)
@@ -131,6 +133,7 @@ final class ChatControllerImpl {
     var aorusAttachmentSendPeer: Int64?
     var aorusAttachmentSendThread: Int64?
     var aorusAttachmentDraftConverting = false
+    var aorusAttachmentSendTextSeparately = false
     var errors = 0
     func aorusShowAttachmentDraftError() { self.errors += 1 }
 """
@@ -216,7 +219,7 @@ def geometry_fixture_source(tg):
         position = composer.index(marker)
         segments.append((position, composer[position:composer.index('\n', position)]))
     body = '\n'.join(text for _, text in sorted(segments))
-    height = block(strip, '    static func height(width: CGFloat)')
+    height = block(strip, '    public static func height(width: CGFloat)')
     return '''import Foundation
 struct UIEdgeInsets { var top: CGFloat = 0; var left: CGFloat = 0; var bottom: CGFloat = 0; var right: CGFloat = 0 }
 enum AorusOldInterface { static var isEnabled = false }
@@ -476,7 +479,7 @@ def native_draft_views(tg):
         text = (tg / rel).read_text()
         for line in imports: text = text.replace(line, '')
         text = text.replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
-        sources.append(text)
+        sources.append(text.replace('public ', ''))
     adapter = """
 import UIKit
 final class PresentationTheme {
@@ -496,6 +499,13 @@ extension AorusClassicBackgroundProbe {
         self.nativeView?.frame = CGRect(origin: .zero, size: size)
         self.updatePlainContent(size: size)
     }
+}
+typealias ContainedViewLayoutTransition = AorusClassicImmediateTransition
+extension AorusClassicImmediateTransition {
+    var isAnimated: Bool { false }
+    func updateFrame(view: UIView, frame: CGRect) { view.frame = frame }
+    func updateAlpha(layer: CALayer, alpha: CGFloat, completion: ((Bool) -> Void)? = nil) { layer.opacity = Float(alpha); completion?(true) }
+    func updateTransformScale(layer: CALayer, scale: CGFloat) { layer.transform = CATransform3DMakeScale(scale, scale, 1) }
 }
 extension AorusClassicImmediateTransition { static var immediate: AorusClassicImmediateTransition { AorusClassicImmediateTransition() } }
 """

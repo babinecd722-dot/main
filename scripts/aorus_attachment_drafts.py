@@ -129,6 +129,8 @@ def patch_picker(tg):
     public var aorusAttachmentPreviewIndex: Int?
     public var aorusAttachmentRestoreFailed = false
     public var aorusHasSentAttachmentSelection = false
+    public var aorusPresentDraftGallery: ((ViewController, Any?) -> Void)?
+    public var aorusDraftGalleryClosed: (() -> Void)?
     private var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false
     public var aorusDraftSelection: TGMediaSelectionContext? { self.interaction?.selectionState }
@@ -159,6 +161,19 @@ def patch_picker(tg):
         self.controllerNode.send(fromGallery: false, asFile: false, silently: silently, scheduleTime: scheduleTime, animated: false, parameters: parameters, completion: {})
     }
 
+    public func aorusResetAttachmentDraftSend() {
+        self.aorusHasSentAttachmentSelection = false
+        self.completed = false
+        self.aorusAttachmentPersistenceFinished = false
+    }
+
+    public func aorusOpenAttachmentDraftPreview(index: Int, layout: ContainerViewLayout, present: @escaping (ViewController, Any?) -> Void, closed: @escaping () -> Void) {
+        self.aorusPresentDraftGallery = present
+        self.aorusDraftGalleryClosed = closed
+        self.aorusAttachmentPreviewIndex = index
+        self.containerLayoutUpdated(layout, transition: .immediate)
+    }
+
     private func aorusOpenPendingAttachmentPreview() {
         guard let index = self.aorusAttachmentPreviewIndex, self.validLayout != nil, let selection = self.interaction?.selectionState else { return }
         self.aorusAttachmentPreviewIndex = nil
@@ -183,6 +198,15 @@ def patch_picker(tg):
     s = edit(s, anchor, anchor + '                controller.aorusHasSentAttachmentSelection = true\n', 'sent selection is not recaptured')
     anchor = '        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: navigationLayout(layout: layout).navigationFrame.maxY, transition: transition)\n'
     s = edit(s, anchor, anchor + '        self.aorusOpenPendingAttachmentPreview()\n', 'preview after native layout')
+    start = s.index('        fileprivate func openSelectedMedia(')
+    body = block(s, '        fileprivate func openSelectedMedia(')
+    old = '                self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true)\n'
+    body = edit(body, old, '''                if let present = self?.controller?.aorusPresentDraftGallery { present(c, a) }
+                else { self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true) }
+''', 'direct editor presentation')
+    body = edit(body, '                self?.hasGallery = false\n', '                self?.controller?.aorusDraftGalleryClosed?()\n                self?.hasGallery = false\n', 'persist direct editor changes')
+    end = start + len(block(s, '        fileprivate func openSelectedMedia('))
+    s = s[:start] + body + s[end:]
     path.write_text(s)
 
 
@@ -204,6 +228,14 @@ def patch_composer(tg):
         hasMediaDraft = hasMediaDraft || aorusAttachmentDraft?.items.isEmpty == false
 '''
     s = edit(s, anchor, new, 'media-only send state')
+    anchor = '            if presentationInterfaceState.interfaceState.mediaDraftState != nil {\n                keepSendButtonEnabled = true\n            }\n'
+    s = edit(s, anchor, anchor + '''            if presentationInterfaceState.editMessageState == nil,
+               presentationInterfaceState.interfaceState.mediaDraftState == nil,
+               presentationInterfaceState.inputTextPanelState.mediaRecordingState == nil,
+               presentationInterfaceState.interfaceState.attachmentDraft?.items.isEmpty == false {
+                if case .customChatContents = presentationInterfaceState.subject {} else { keepSendButtonEnabled = true }
+            }
+''', 'attachment-only send visibility')
     anchor = '        let baseWidth = width - leftInset - leftMenuInset - rightInset - rightSlowModeInset\n'
     # The composer adjusts these insets for its active controls. Resolve that native
     # block before the draft height and menu position, using the final input width.
@@ -227,17 +259,30 @@ def patch_composer(tg):
                 self.aorusAttachmentStrip = strip
                 self.textInputContainerBackgroundView.contentView.addSubview(strip)
             }
-            strip.update(draft: draft, accountBasePath: self.context?.account.basePath ?? "", width: textInputWidth, theme: interfaceState.theme, strings: interfaceState.strings)
+            strip.update(draft: draft, accountBasePath: self.context?.account.basePath ?? "", width: textInputWidth, theme: interfaceState.theme, strings: interfaceState.strings, transition: transition)
             transition.updateFrame(view: strip, frame: CGRect(x: 0, y: contentHeight, width: textInputWidth, height: aorusAttachmentHeight))
             contentHeight += aorusAttachmentHeight
         } else if let strip = self.aorusAttachmentStrip {
             self.aorusAttachmentStrip = nil
-            strip.removeFromSuperview()
+            transition.updateAlpha(layer: strip.layer, alpha: 0.0, completion: { [weak strip] _ in strip?.removeFromSuperview() })
         }
 ''' + anchor
     s = edit(s, anchor, new, 'strip inside input material')
     anchor = '            self.textInputBackgroundNode.layer.borderColor = interfaceState.theme.chat.inputPanel.inputStrokeColor.cgColor\n        }\n'
     s = edit(s, anchor, anchor + '        if aorusAttachmentHeight > 0 { self.textInputBackgroundNode.layer.borderWidth = 0 }\n', 'frameless media draft')
+    path.write_text(s)
+
+    path = tg / 'submodules/TelegramUI/Sources/ChatControllerNode.swift'
+    s = path.read_text()
+    anchor = '        self.textInputPanelNode?.sendMessage = { [weak self] in\n            if let self, let controller = self.controller {\n'
+    s = edit(s, anchor, anchor + '''                if controller.aorusSendAttachmentDraft(silentPosting: self.chatPresentationInterfaceState.interfaceState.silentPosting) { return }
+''', 'composer send before text payment')
+    anchor = '        self.historyNode.justSentTextMessage = true\n'
+    s = edit(s, anchor, '''        if let controller = self.controller {
+            let parameters = ChatSendMessageActionSheetController.SendParameters(effect: messageEffect.flatMap { .init(id: $0.id) }, textIsAboveMedia: self.chatPresentationInterfaceState.interfaceState.attachmentDraft?.captionAbove ?? false)
+            if controller.aorusSendAttachmentDraft(silentPosting: silentPosting ?? self.chatPresentationInterfaceState.interfaceState.silentPosting, scheduleTime: scheduleTime, parameters: parameters) { completion(); return }
+        }
+''' + anchor, 'hardware and expanded editor native media send')
     path.write_text(s)
 
 
@@ -300,6 +345,7 @@ def patch_controller(tg):
         s = s.replace('import Foundation\n', 'import Foundation\nimport MediaPickerUI\n', 1)
     anchor = '    weak var attachmentController: AttachmentController?\n'
     fields = '''    var aorusAttachmentDraftPicker: MediaPickerScreenImpl?
+    var aorusAttachmentPreviewPicker: MediaPickerScreenImpl?
     var aorusSendingAttachmentDraft: AorusAttachmentDraft?
     var aorusAttachmentSendCaption: NSAttributedString?
     var aorusAttachmentExpectedCount: Int?
@@ -308,6 +354,7 @@ def patch_controller(tg):
     var aorusAttachmentSendThread: Int64?
     var aorusAttachmentPreviewId: String?
     var aorusAttachmentDraftConverting = false
+    var aorusAttachmentSendTextSeparately = false
     var aorusAttachmentCaptureTokens: [String: UUID] = [:]
 '''
     s = edit(s, anchor, anchor + fields, 'controller draft lifecycle')
@@ -329,7 +376,10 @@ def patch_controller(tg):
     anchor = '            if commit || !isScheduledMessages {\n'
     s = edit(s, anchor, '            let aorusAlreadyScheduledDraft = aorusAttachmentSendRevision != nil && messages.allSatisfy { $0.attributes.contains { $0 is OutgoingScheduleInfoMessageAttribute } }\n            if commit || !isScheduledMessages || aorusAlreadyScheduledDraft {\n', 'a scheduled artifact selection keeps its chosen date')
     anchor = '        if let _ = self.presentationInterfaceState.sendPaidMessageStars {\n            self.presentPaidMessageAlertIfNeeded(count: Int32(signals?.count ?? 1), forceDark: fromGallery, completion:'
-    s = edit(s, anchor, anchor.replace('forceDark: fromGallery, completion:', 'forceDark: fromGallery, cancelled: { [weak self] in self?.aorusCancelAttachmentDraftSend() }, completion:'), 'paid send cancellation keeps the draft reusable')
+    new = anchor.replace('Int32(signals?.count ?? 1)', 'Int32((signals?.count ?? 1) + self.aorusAttachmentDraftTextMessages().count)').replace('forceDark: fromGallery, completion:', 'forceDark: fromGallery, cancelled: { [weak self] in self?.aorusCancelAttachmentDraftSend() }, completion:')
+    s = edit(s, anchor, new, 'native payment includes each media/text message and preserves a cancelled draft')
+    anchor = '                let messages = strongSelf.transformEnqueueMessages(mappedMessages, silentPosting: silentPosting, scheduleTime: scheduleTime, postpone: postpone)\n'
+    s = edit(s, anchor, anchor.replace('mappedMessages, silentPosting:', 'strongSelf.aorusAttachmentDraftOutgoingMessages(mappedMessages), silentPosting:'), 'text and media share the native paid and scheduled enqueue')
     anchor = '        self.enqueueMediaMessageDisposable.set((legacyAssetPickerEnqueueMessages(context:'
     s = edit(s, anchor, '        if self.aorusSendingAttachmentDraft != nil { self.aorusAttachmentDraftConverting = true }\n' + anchor, 'conversion lifecycle')
     start = s.index('    private func commitEnqueueMediaMessages(')
