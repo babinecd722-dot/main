@@ -300,6 +300,8 @@ def check_bindings(tg):
 
 
 def check_drafts(tg, swiftc):
+    from attachment_draft_postbox_check import check_native_postbox
+    check_native_postbox(tg, swiftc)
     check_bindings(tg)
     with tempfile.TemporaryDirectory(prefix='aorus-media-draft-tests-') as directory:
         work = Path(directory)

@@ -46,6 +46,51 @@ public struct AorusAttachmentDraft: Codable, Equatable {
             self.isAnimation = isAnimation
             self.coverPosition = coverPosition
         }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, source, assetIdentifier, isVideo, duration, thumbnail, adjustments
+            case timer, spoiler, price, livePhotoMode, isAnimation, coverPosition
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.id = try container.decode(String.self, forKey: .id)
+            let sourceValue = try container.decode(String.self, forKey: .source)
+            guard let source = Source(rawValue: sourceValue) else {
+                throw DecodingError.dataCorruptedError(forKey: .source, in: container, debugDescription: "Unknown attachment source")
+            }
+            self.source = source
+            self.assetIdentifier = try container.decodeIfPresent(String.self, forKey: .assetIdentifier)
+            self.isVideo = try container.decode(Bool.self, forKey: .isVideo)
+            let duration = try container.decode(Double.self, forKey: .duration)
+            self.duration = duration.isFinite ? max(0, duration) : 0
+            self.thumbnail = try container.decodeIfPresent(Data.self, forKey: .thumbnail)
+            self.adjustments = try container.decodeIfPresent(Data.self, forKey: .adjustments)
+            self.timer = try container.decodeIfPresent(Int32.self, forKey: .timer)
+            self.spoiler = try container.decode(Bool.self, forKey: .spoiler)
+            self.price = try container.decodeIfPresent(Int64.self, forKey: .price)
+            self.livePhotoMode = try container.decodeIfPresent(Int32.self, forKey: .livePhotoMode)
+            self.isAnimation = try container.decodeIfPresent(Bool.self, forKey: .isAnimation)
+            self.coverPosition = try container.decodeIfPresent(Double.self, forKey: .coverPosition)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.id, forKey: .id)
+            // Postbox supports keyed strings, but deliberately traps on single-value enums.
+            try container.encode(self.source.rawValue, forKey: .source)
+            try container.encodeIfPresent(self.assetIdentifier, forKey: .assetIdentifier)
+            try container.encode(self.isVideo, forKey: .isVideo)
+            try container.encode(self.duration, forKey: .duration)
+            try container.encodeIfPresent(self.thumbnail, forKey: .thumbnail)
+            try container.encodeIfPresent(self.adjustments, forKey: .adjustments)
+            try container.encodeIfPresent(self.timer, forKey: .timer)
+            try container.encode(self.spoiler, forKey: .spoiler)
+            try container.encodeIfPresent(self.price, forKey: .price)
+            try container.encodeIfPresent(self.livePhotoMode, forKey: .livePhotoMode)
+            try container.encodeIfPresent(self.isAnimation, forKey: .isAnimation)
+            try container.encodeIfPresent(self.coverPosition, forKey: .coverPosition)
+        }
     }
 
     public let directory: String
