@@ -9,11 +9,12 @@ from telegram13_list_check import block
 def check_refinements(tg, swiftc='swiftc'):
     music = (tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusProfileMusicPlayback.swift').read_text()
     native = (tg / 'submodules/MediaPlayer/Sources/MediaPlayer.swift').read_text()
-    fixture = 'import Foundation\n' + block(native, 'public enum MediaPlayerPlaybackStatus:') + block(native, 'public struct MediaPlayerStatus:') + block(music, 'struct AorusProfileMusicVisualState {') + MUSIC_TESTS
+    geometry_import = '#if canImport(CoreGraphics)\nimport CoreGraphics\n#endif\n'
+    fixture = 'import Foundation\n' + geometry_import + block(native, 'public enum MediaPlayerPlaybackStatus:') + block(native, 'public struct MediaPlayerStatus:') + block(music, 'struct AorusProfileMusicVisualState {') + MUSIC_TESTS
     controller = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
     text = (tg / 'submodules/TextFormat/Sources/ChatTextInputAttributes.swift').read_text()
     core = (tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift').read_text()
-    send = core + '\n' + '\n'.join(block(text, sig) for sig in ('private func trimRangesForChatInputText(', 'public func trimChatInputText(', 'public func breakChatInputText('))
+    send = geometry_import + core + '\n' + '\n'.join(block(text, sig) for sig in ('private func trimRangesForChatInputText(', 'public func trimChatInputText(', 'public func breakChatInputText('))
     buttons = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift').read_text()
     fee = block(buttons, '        if let sendPaidMessageStars = interfaceState.sendPaidMessageStars, interfaceState.interfaceState.editMessage == nil {')
     send += SEND_TYPES + block(controller, '    func aorusAttachmentDraftTextMessages()') + block(controller, '    func aorusAttachmentDraftOutgoingMessages(')
