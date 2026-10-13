@@ -27,15 +27,31 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
     static var active = 0, maximumActive = 0
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "plugins.aorusgram.com" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    static func transmittedBody(_ request: URLRequest) -> Data {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open()
+        defer { stream.close() }
+        var bytes = Data(), buffer = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count >= 0 else { fatalError("Unable to read the transmitted request stream") }
+            if count == 0 { return bytes }
+            bytes.append(contentsOf: buffer.prefix(count))
+        }
+    }
     override func startLoading() {
+        let body = Self.transmittedBody(request)
+        var received = request
+        if request.httpMethod == "POST" { received.httpBody = body }
         Self.lock.lock()
-        Self.requests.append(request)
+        Self.requests.append(received)
         Self.active += 1; Self.maximumActive = max(Self.active, Self.maximumActive)
         let status = Self.nextStatus; Self.nextStatus = 200
         var json: [String: Any] = ["ok": true]
         if status == 200 {
             if request.url!.path.hasSuffix("/vote") {
-                Self.vote = (try! JSONSerialization.jsonObject(with: request.httpBody!) as! [String: String])["vote"]!
+                Self.vote = (try! JSONSerialization.jsonObject(with: body) as! [String: String])["vote"]!
                 json["vote"] = Self.wrongVote ? "unexpected" : Self.vote
                 Self.wrongVote = false
             } else if request.url!.path.hasSuffix("/download-event") { Self.downloaded = true }
@@ -69,6 +85,12 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
     }
     static func main() {
         defer { for key in [".downloads", ".vote.aa"] { UserDefaults.standard.removeObject(forKey: "aorusgram.market.stats." + DeviceFingerprint.deviceHash() + key) } }
+        for size in [0, 1, 4095, 4096, 4097, 16_384] {
+            let bytes = Data((0..<size).map { UInt8($0 % 251) })
+            var request = URLRequest(url: URL(string: "https://plugins.aorusgram.com/v1/plugins/aa/vote")!)
+            request.httpBodyStream = InputStream(data: bytes)
+            expect(MarketTestProtocol.transmittedBody(request) == bytes, "streamed requests retain every byte across buffer boundaries")
+        }
         let base: [String: Any] = ["id": "aa", "version": "1.0.0", "name": "Aorus", "status": "approved", "likes": 3, "dislikes": 2, "downloads": 10]
         expect(AorusPluginMarketCard(json: base)?.stats == .init(likes: 3, dislikes: 2, downloads: 10), "nested card totals")
         for key in ["likes", "dislikes", "downloads"] {
