@@ -93,6 +93,7 @@ final class TelegramMediaFile { let resource: MediaResource; init(_ resource: Me
 struct Reference { let media: Any }
 struct ChatTextInputState { let inputText: NSAttributedString }
 final class MediaPickerScreenImpl {
+    var aorusAttachmentStableIds: [String: String] = [:]
     struct Selection { func count() -> Int { 2 } }
     var aorusDraftSelection: Selection? = Selection()
     var aorusDraftCurrentCaption: NSAttributedString?
@@ -462,6 +463,7 @@ def check_draft_sdk(tg, swiftc):
 import UIKit
 import LegacyComponents
 final class MediaPickerScreenImpl {
+    var aorusAttachmentStableIds: [String: String] = [:]
     var aorusDraftSelection: TGMediaSelectionContext?
     var aorusDraftEditing: TGMediaEditingContext?
     var aorusDraftAccountPath = "/account"

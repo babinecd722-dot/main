@@ -15,6 +15,8 @@ import PresentationDataUtils
 import AorusGramUI
 import TelegramPresentationData
 import TextFormat
+import LegacyComponents
+import ChatTextInputPanelNode
 
 extension ChatControllerImpl {
     func aorusCanUseAttachmentDraft() -> Bool {
@@ -60,6 +62,11 @@ extension ChatControllerImpl {
             controller.aorusCaptureAttachmentDraft { [weak self] result in
                 switch result {
                 case let .success(capture):
+                    if controller.aorusHasSentAttachmentSelection {
+                        if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
+                        completion(true)
+                        return
+                    }
                     if let self, self.aorusAttachmentCaptureTokens[captureKey] != token {
                         if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
                         completion(true)
@@ -68,7 +75,7 @@ extension ChatControllerImpl {
                     let retainedDirectory = self?.aorusSendingAttachmentDraft?.directory
                     var replaced: AorusAttachmentDraft?
                     if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
-                        self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: false, { state in
+                        self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: false, { state in
                             state.updatedInterfaceState { previous in
                                 var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
                                 if let caption = capture.caption { updated = updated.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)) }
@@ -88,7 +95,7 @@ extension ChatControllerImpl {
                             DispatchQueue.main.async { completion(true) }
                         })
                 case .failure:
-                    self?.aorusShowAttachmentDraftError()
+                    if !controller.aorusIsPreparingAttachmentDraft { self?.aorusShowAttachmentDraftError() }
                     completion(false)
                 }
             }
@@ -125,6 +132,15 @@ extension ChatControllerImpl {
         self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, present: { [weak self] controller, _ in
             guard let self, !controller.aorusAttachmentRestoreFailed else { return }
             self.aorusAttachmentPreviewPicker = controller
+            let selected = controller.aorusDraftSelection?.selectedItems() ?? []
+            var identifiers: [String: String] = [:]
+            for (index, item) in selected.enumerated() where draft.items.indices.contains(index) {
+                if let item = item as? TGMediaSelectableItem { identifiers[item.uniqueIdentifier] = draft.items[index].id }
+            }
+            controller.aorusDraftTransitionView = { [weak self] identifier in
+                guard let id = identifiers[identifier] else { return nil }
+                return AorusAttachmentDraftStrip.activeTransitionView(id: id) ?? self?.chatDisplayNode.textInputPanelNode?.aorusDraftTransitionView(id: id)
+            }
             controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self] editor, arguments in
                 self?.present(editor, in: .window(.root), with: arguments)
             }, closed: { [weak self, weak controller] in

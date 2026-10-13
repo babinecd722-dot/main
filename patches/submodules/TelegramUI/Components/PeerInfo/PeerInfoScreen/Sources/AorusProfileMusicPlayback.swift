@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AorusGramUI
 import Postbox
 import SwiftSignalKit
 import Display
@@ -34,6 +35,12 @@ struct AorusProfileMusicVisualState {
         let elapsed = self.playing && status.generationTimestamp > 0 ? max(0, now - status.generationTimestamp) * status.baseRate : 0
         return min(1, max(0, (status.timestamp + elapsed) / status.duration))
     }
+}
+
+func aorusProfileMusicProgressColor(_ background: UIColor) -> UIColor {
+    var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+    background.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    return UIColor(red: red + (1 - red) * 0.32, green: green + (1 - green) * 0.32, blue: blue + (1 - blue) * 0.32, alpha: 0.52)
 }
 
 final class AorusProfileMusicPlayback {
@@ -74,7 +81,8 @@ final class AorusProfileMusicPlayback {
             capsule.contentView.clipsToBounds = true
             capsule.contentView.layer.cornerRadius = capsule.bounds.height * 0.5
         } else { self.fill.removeFromSuperview() }
-        self.fill.backgroundColor = color.withAlphaComponent(0.18)
+        let background = peerId.flatMap { AorusGlassProfileTint.pageBackgroundColor(for: $0.id._internalGetInt64Value()) } ?? capsule?.backgroundColor ?? .clear
+        self.fill.backgroundColor = aorusProfileMusicProgressColor(background)
         self.icon?.color = color
         self.refresh()
     }
@@ -135,13 +143,15 @@ final class AorusProfileMusicEqualizerView: UIView {
 
     func draw(phase: Double?) {
         self.phase = phase
-        let heights: [CGFloat] = [14, 11, 8, 5, 3]
+        let heights: [CGFloat] = [16, 11, 5, 0, 0]
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for index in self.bars.indices {
             let height: CGFloat
             if let phase { height = 3 + 11 * CGFloat((sin(phase * 5 + Double(index) * 1.7) + 1) * 0.5) }
             else { height = heights[index] }
-            self.bars[index].frame = CGRect(x: CGFloat(index) * 3, y: (self.bounds.height - height) * 0.5, width: 2, height: height)
+            self.bars[index].isHidden = phase == nil && index >= 3
+            self.bars[index].cornerRadius = phase == nil ? 1.5 : 1
+            self.bars[index].frame = CGRect(x: CGFloat(index) * (phase == nil ? 5.5 : 3), y: (self.bounds.height - height) * 0.5, width: phase == nil ? 3 : 2, height: height)
         }
         CATransaction.commit()
     }
@@ -158,6 +168,6 @@ final class AorusProfileMusicIconComponent: Component {
         view.playback = self.playback
         self.playback.icon = view
         view.color = self.color
-        return CGSize(width: 14, height: 16)
+        return CGSize(width: 14, height: 18)
     }
 }

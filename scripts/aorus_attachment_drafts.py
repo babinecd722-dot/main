@@ -128,9 +128,16 @@ def patch_picker(tg):
     public var aorusPersistAttachmentDraft: ((@escaping (Bool) -> Void) -> Void)?
     public var aorusAttachmentPreviewIndex: Int?
     public var aorusAttachmentRestoreFailed = false
+    public var aorusAttachmentStableIds: [String: String] = [:]
     public var aorusHasSentAttachmentSelection = false
     public var aorusPresentDraftGallery: ((ViewController, Any?) -> Void)?
     public var aorusDraftGalleryClosed: (() -> Void)?
+    public var aorusDraftTransitionView: ((String) -> UIView?)?
+    private var aorusWarmWork: DispatchWorkItem?
+    private var aorusWarmRunning = false
+    public var aorusIsPreparingAttachmentDraft: Bool { self.aorusWarmRunning && !self.aorusAttachmentPersistenceStarted }
+    private var aorusWarmDirty = false
+    private var aorusPersistenceWaiters: [() -> Void] = []
     private var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false
     public var aorusDraftSelection: TGMediaSelectionContext? { self.interaction?.selectionState }
@@ -142,10 +149,34 @@ def patch_picker(tg):
         return editing.caption(for: first)
     }
 
+    public func aorusPrepareAttachmentDraft() {
+        guard self.aorusPresentDraftGallery == nil, !self.aorusHasSentAttachmentSelection else { return }
+        self.aorusAttachmentPersistenceFinished = false
+        self.aorusWarmDirty = true
+        self.aorusWarmWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.aorusWarmRunning, !self.aorusAttachmentPersistenceStarted,
+                  let persist = self.aorusPersistAttachmentDraft else { return }
+            self.aorusWarmDirty = false
+            self.aorusWarmRunning = true
+            persist { [weak self] _ in
+                guard let self else { return }
+                self.aorusWarmRunning = false
+                if !self.aorusPersistenceWaiters.isEmpty {
+                    self.aorusRequestAttachmentPersistence(completion: {})
+                } else if self.aorusWarmDirty { self.aorusPrepareAttachmentDraft() }
+            }
+        }
+        self.aorusWarmWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
     public func aorusRequestAttachmentPersistence(completion: @escaping () -> Void) {
         guard !self.aorusHasSentAttachmentSelection, let persist = self.aorusPersistAttachmentDraft else { completion(); return }
         if self.aorusAttachmentPersistenceFinished { completion(); return }
-        if self.aorusAttachmentPersistenceStarted { return }
+        self.aorusPersistenceWaiters.append(completion)
+        self.aorusWarmWork?.cancel()
+        guard !self.aorusWarmRunning, !self.aorusAttachmentPersistenceStarted else { return }
         self.aorusAttachmentPersistenceStarted = true
         self.view.isUserInteractionEnabled = false
         persist { [weak self] saved in
@@ -153,7 +184,9 @@ def patch_picker(tg):
             self.view.isUserInteractionEnabled = true
             self.aorusAttachmentPersistenceStarted = false
             self.aorusAttachmentPersistenceFinished = saved
-            if saved { completion() }
+            let waiters = self.aorusPersistenceWaiters
+            self.aorusPersistenceWaiters.removeAll()
+            if saved { waiters.forEach { $0() } }
         }
     }
 
@@ -198,15 +231,26 @@ def patch_picker(tg):
     s = edit(s, anchor, anchor + '                controller.aorusHasSentAttachmentSelection = true\n', 'sent selection is not recaptured')
     anchor = '        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: navigationLayout(layout: layout).navigationFrame.maxY, transition: transition)\n'
     s = edit(s, anchor, anchor + '        self.aorusOpenPendingAttachmentPreview()\n', 'preview after native layout')
+    native = '                        self.updateSelectionState(animated: animated)\n'
+    s = edit(s, native, native + '                        self.controller?.aorusPrepareAttachmentDraft()\n', 'prepare previews before gallery dismissal')
     start = s.index('        fileprivate func openSelectedMedia(')
     body = block(s, '        fileprivate func openSelectedMedia(')
     old = '                self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true)\n'
     body = edit(body, old, '''                if let present = self?.controller?.aorusPresentDraftGallery { present(c, a) }
                 else { self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true) }
 ''', 'direct editor presentation')
-    body = edit(body, '                self?.hasGallery = false\n', '                self?.controller?.aorusDraftGalleryClosed?()\n                self?.hasGallery = false\n', 'persist direct editor changes')
+    body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionView?(item.uniqueIdentifier)?.window ?? self?.selectionNode?.view\n', 'composer transition host')
+    body = edit(body, '                return self?.transitionView(for: identifier)\n', '                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n', 'composer thumbnail transition source')
+    body = edit(body, '            }, editCover: { _, _ in\n', '            }, finishedTransitionOut: { [weak self] in\n                self?.controller?.aorusDraftGalleryClosed?()\n            }, editCover: { _, _ in\n', 'persist editor after its return transition')
     end = start + len(block(s, '        fileprivate func openSelectedMedia('))
     s = s[:start] + body + s[end:]
+    path.write_text(s)
+    path = tg / 'submodules/MediaPickerUI/Sources/LegacyMediaPickerGallery.swift'
+    s = path.read_text()
+    native = '    editCover: @escaping (CGSize, @escaping (UIImage) -> Void) -> Void = { _, _ in }\n'
+    s = edit(s, native, '    finishedTransitionOut: @escaping () -> Void = {},\n' + native, 'completed gallery return callback')
+    native = '        legacyController?.dismiss()\n    }\n'
+    s = edit(s, native, '        legacyController?.dismiss()\n        finishedTransitionOut()\n    }\n', 'complete before saving editor changes')
     path.write_text(s)
 
 
@@ -219,7 +263,7 @@ def patch_composer(tg):
     path = tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift'
     s = path.read_text()
     anchor = '    private var mediaPreviewPanelNode: ChatRecordingPreviewInputPanelNodeImpl?\n'
-    s = edit(s, anchor, anchor + '    private var aorusAttachmentStrip: AorusAttachmentDraftStrip?\n', 'strip field')
+    s = edit(s, anchor, anchor + '    private var aorusAttachmentStrip: AorusAttachmentDraftStrip?\n    public func aorusDraftTransitionView(id: String) -> UIView? { self.aorusAttachmentStrip?.transitionView(id: id) }\n', 'strip field')
     anchor = '        hasMediaDraft = interfaceState.interfaceState.mediaDraftState != nil\n'
     new = anchor + '''        let aorusAllowsAttachmentDrafts: Bool
         if case .customChatContents = interfaceState.subject { aorusAllowsAttachmentDrafts = false }
@@ -419,10 +463,25 @@ def patch_controller(tg):
         AorusAttachmentDraftCleanup.resume(account: self.context.account)
 ''', 'wire composer to native chat')
     path.write_text(s)
+    path = tg / 'submodules/AttachmentUI/Sources/AttachmentController.swift'
+    s = path.read_text()
+    anchor = '    public var willDismiss: () -> Void = {}\n'
+    s = edit(s, anchor, anchor + '    public var aorusPrepareDismissal: ((@escaping () -> Void) -> Void)?\n    func aorusRunDismissal(_ action: @escaping () -> Void) {\n        if let prepare = self.aorusPrepareDismissal { prepare(action) } else { action() }\n    }\n', 'prepare composer before native dismissal')
+    anchor = '                    controller.willDismiss()\n                    self.animateOut(damping: damping, initialVelocity: initialVelocity, completion: {\n                        self.controller?.dismiss(animated: false)\n                    })\n'
+    s = edit(s, anchor, '                    controller.aorusRunDismissal { [weak self] in\n                        guard let self else { return }\n                        controller.willDismiss()\n                        self.animateOut(damping: damping, initialVelocity: initialVelocity, completion: {\n                            self.controller?.dismiss(animated: false)\n                        })\n                    }\n', 'finish draft preparation before swipe animation')
+    anchor = '                self.willDismiss()\n                self.node.animateOut(completion: { [weak self] in\n'
+    s = edit(s, anchor, '                self.aorusRunDismissal { [weak self] in\n                    guard let self else { return }\n                    self.willDismiss()\n                    self.node.animateOut(completion: { [weak self] in\n', 'prepare programmatic animated dismissal')
+    anchor = '                    self?.node.container.removeFromSupernode()\n                })\n'
+    s = edit(s, anchor, '                    self?.node.container.removeFromSupernode()\n                    })\n                }\n', 'close prepared native dismissal')
+    path.write_text(s)
     path = tg / 'submodules/TelegramUI/Sources/ChatControllerOpenAttachmentMenu.swift'
     s = path.read_text()
     anchor = '                attachmentController.didDismiss = { [weak self] in\n'
-    s = edit(s, anchor, '''                attachmentController.willDismiss = {
+    s = edit(s, anchor, '''                attachmentController.aorusPrepareDismissal = { completion in
+                    if let picker = currentMediaController.with({ $0 }) { picker.aorusRequestAttachmentPersistence(completion: completion) }
+                    else { completion() }
+                }
+                attachmentController.willDismiss = {
                     currentMediaController.with { $0 }?.aorusRequestAttachmentPersistence(completion: {})
                 }
 ''' + anchor, 'programmatic dismissal persistence')

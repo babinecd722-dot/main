@@ -1306,7 +1306,7 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
             "        let count = self.avatarListNode.listContainerNode.galleryEntries.count\n"
             "        let target = fraction < 0.0 ? index + 1 : index - 1\n"
             "        let photo: Int? = fraction != 0.0 && target >= 0 && target < count ? target : nil\n"
-            "        AorusGlassProfileTint.followPage(for: peer.id.id._internalGetInt64Value(), photo: photo, photoCount: count, progress: abs(fraction))\n"
+            "        AorusGlassProfileTint.followPage(for: peer.id.id._internalGetInt64Value(), photo: photo, photoCount: count, progress: fraction, fallbackView: photo.flatMap { self.avatarListNode.listContainerNode.aorusAvatarPageView(at: $0) }, mirroredTail: self.aorusMirroredTail)\n"
             "    }\n"
             "\n"
             "    // AorusGram: the drag let go, from photo `from` onto photo `to`.\n"
@@ -1559,7 +1559,11 @@ def _patch_avatar_pager_progress(tg: Path) -> None:
         "    // zero the next photo is coming in, above it the previous one.\n"
         "    public var aorusPageProgressUpdated: ((Int, CGFloat) -> Void)?\n"
         "    // AorusGram: the drag let go, from one photo onto another -- or onto the same one.\n"
-        "    public var aorusPageReleased: ((Int, Int) -> Void)?\n",
+        "    public var aorusPageReleased: ((Int, Int) -> Void)?\n"
+        "    public func aorusAvatarPageView(at index: Int) -> UIView? {\n"
+        "        guard self.items.indices.contains(index) else { return nil }\n"
+        "        return self.itemNodes[self.items[index].id]?.view\n"
+        "    }\n",
         "pager progress callbacks",
     )
     text = _replace_once(

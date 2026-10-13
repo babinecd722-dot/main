@@ -338,6 +338,11 @@ public final class AorusPluginRuntimeManager {
 /// checked against `AorusPluginMarketClient.swift` by `release_security_check.py`.
 public final class AorusPluginMarketClient {
     public static let shared = AorusPluginMarketClient()
+    public static let statsChangedNotification = Notification.Name("aorusgram.plugins.market.stats")
+    public func confirmedVote(id: String) -> AorusPluginMarketVote { .none }
+    public func vote(id: String, vote: AorusPluginMarketVote, completion: @escaping (Result<AorusPluginMarketStats, AorusPluginMarketError>) -> Void) {}
+    public func downloadEvent(id: String, completion: @escaping (Result<AorusPluginMarketStats, AorusPluginMarketError>) -> Void) {}
+    public func recordInstalledDownload(id: String) {}
 
     public func catalog(completion: @escaping (Result<[AorusPluginMarketCard], AorusPluginMarketError>) -> Void) {}
     public func card(id: String, completion: @escaping (Result<AorusPluginMarketCard, AorusPluginMarketError>) -> Void) {}

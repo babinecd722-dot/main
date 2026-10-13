@@ -1,6 +1,6 @@
 import Foundation
 
-// The plugin Market's wire contract, as data (AORUSGRAM PLUGINS HTTP CONTRACT 2026-09-24.6).
+// The plugin Market's wire contract, as data (AORUSGRAM PLUGINS HTTP CONTRACT 2026-09-24.6, statistics 2026-10-12).
 //
 // Everything here is Foundation and nothing else, so the shapes the server sends and the rules
 // the client keeps about them — which version is live, what counts as an update, what a
@@ -97,6 +97,69 @@ public enum AorusPluginMarketStatus: String, Codable {
     case takenDown = "taken_down"
 }
 
+public enum AorusPluginMarketVote: String, CaseIterable {
+    case like, dislike, none
+    public func toggling(_ choice: AorusPluginMarketVote) -> AorusPluginMarketVote { self == choice ? .none : choice }
+}
+
+/// Server totals. Downloads count devices, not versions or HTTP requests.
+public struct AorusPluginMarketStats: Equatable {
+    public let likes: Int
+    public let dislikes: Int
+    public let downloads: Int
+
+    public init(likes: Int = 0, dislikes: Int = 0, downloads: Int = 0) {
+        self.likes = max(0, likes)
+        self.dislikes = max(0, dislikes)
+        self.downloads = max(0, downloads)
+    }
+
+    public init?(json: [String: Any], allowMissing: Bool = false) {
+        let hasStats = ["likes", "dislikes", "downloads"].contains { json[$0] != nil }
+        func count(_ key: String) -> Int? {
+            guard let value = json[key] else { return allowMissing && !hasStats ? 0 : nil }
+            guard let number = value as? NSNumber, String(cString: number.objCType) != "c",
+                  let integer = Int(number.stringValue), integer >= 0 else { return nil }
+            return integer
+        }
+        guard let likes = count("likes"), let dislikes = count("dislikes"), let downloads = count("downloads") else { return nil }
+        self.init(likes: likes, dislikes: dislikes, downloads: downloads)
+    }
+
+    public static func response(_ data: Data) -> AorusPluginMarketStats? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ok = json["ok"] as? NSNumber, String(cString: ok.objCType) == "c", ok.boolValue else { return nil }
+        return Self(json: json)
+    }
+}
+
+public enum AorusPluginMarketSort: String, CaseIterable {
+    case newest, name, popularity, likes, dislikes, downloads
+    public func apply(to cards: [AorusPluginMarketCard], query: String) -> [AorusPluginMarketCard] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cards.filter { query.isEmpty || $0.name.localizedStandardContains(query) }.sorted { lhs, rhs in
+            switch self {
+            case .name:
+                let order = lhs.name.localizedStandardCompare(rhs.name)
+                if order != .orderedSame { return order == .orderedAscending }
+            case .newest:
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+            case .popularity:
+                let left = lhs.stats.likes - lhs.stats.dislikes, right = rhs.stats.likes - rhs.stats.dislikes
+                if left != right { return left > right }
+                if lhs.stats.downloads != rhs.stats.downloads { return lhs.stats.downloads > rhs.stats.downloads }
+            case .likes:
+                if lhs.stats.likes != rhs.stats.likes { return lhs.stats.likes > rhs.stats.likes }
+            case .dislikes:
+                if lhs.stats.dislikes != rhs.stats.dislikes { return lhs.stats.dislikes > rhs.stats.dislikes }
+            case .downloads:
+                if lhs.stats.downloads != rhs.stats.downloads { return lhs.stats.downloads > rhs.stats.downloads }
+            }
+            return lhs.id < rhs.id
+        }
+    }
+}
+
 /// One plugin as the catalog shows it: the highest approved version of an id.
 public struct AorusPluginMarketCard: Equatable {
     public let id: String
@@ -114,8 +177,9 @@ public struct AorusPluginMarketCard: Equatable {
     /// states them. Empty and zero when a server does not say.
     public let sha256: String
     public let bytes: Int
+    public var stats: AorusPluginMarketStats
 
-    public init(id: String, version: String, name: String, description: String, authorId: Int64?, permissions: [String], status: AorusPluginMarketStatus, updatedAt: Date, hasIcon: Bool, reason: String = "", sha256: String = "", bytes: Int = 0) {
+    public init(id: String, version: String, name: String, description: String, authorId: Int64?, permissions: [String], status: AorusPluginMarketStatus, updatedAt: Date, hasIcon: Bool, reason: String = "", sha256: String = "", bytes: Int = 0, stats: AorusPluginMarketStats = AorusPluginMarketStats()) {
         self.id = id
         self.version = version
         self.name = name
@@ -128,6 +192,7 @@ public struct AorusPluginMarketCard: Equatable {
         self.reason = reason
         self.sha256 = sha256
         self.bytes = bytes
+        self.stats = stats
     }
 
     /// Whether downloaded code is the code the Market approved for this card: the same size and
@@ -142,6 +207,8 @@ public struct AorusPluginMarketCard: Equatable {
     /// A card from its JSON object. A row that breaks the contract — an id or version that
     /// does not match its pattern, a status nobody knows — is dropped rather than shown.
     public init?(json: [String: Any]) {
+        guard let stats = AorusPluginMarketStats(json: json, allowMissing: true) else { return nil }
+        self.stats = stats
         guard let id = json["id"] as? String, AorusPluginMarketID.isValid(id),
               let version = json["version"] as? String, AorusPluginSemVer(version) != nil,
               let name = json["name"] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

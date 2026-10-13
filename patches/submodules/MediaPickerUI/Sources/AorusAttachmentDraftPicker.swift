@@ -47,6 +47,19 @@ extension MediaPickerScreenImpl {
             completion(.success(AorusAttachmentDraftCapture(draft: nil, caption: caption)))
             return
         }
+        let keys: [String] = items.compactMap { $0.uniqueIdentifier }
+        guard keys.count == items.count, Set(keys).count == items.count, keys.allSatisfy({ !$0.isEmpty }) else {
+            completion(.failure(AorusAttachmentDraftError.unavailable))
+            return
+        }
+        var stableIds: [String: String] = [:]
+        let identifiers = keys.map { key -> String in
+            let previous = self.aorusAttachmentStableIds[key]
+            let id = previous.flatMap { UUID(uuidString: $0) != nil ? $0 : nil } ?? UUID().uuidString
+            stableIds[key] = id
+            return id
+        }
+        self.aorusAttachmentStableIds = stableIds
         let basePath = self.aorusDraftAccountPath
         let retainedPicker = self
         let directory = UUID().uuidString
@@ -137,7 +150,7 @@ extension MediaPickerScreenImpl {
                     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
                     var entries: [AorusAttachmentDraft.Item] = []
                     for (index, item) in items.enumerated() {
-                        let id = UUID().uuidString
+                        let id = identifiers[index]
                         let folder = root.appendingPathComponent(id, isDirectory: true)
                         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                         let source: AorusAttachmentDraft.Item.Source
@@ -236,6 +249,7 @@ extension MediaPickerScreenImpl {
         editing.setHighQualityPhoto(draft.highQuality)
         editing.setForceLivePhotoEnabled(draft.forceLivePhoto)
         for (item, entry, folder) in restored {
+            self.aorusAttachmentStableIds[item.uniqueIdentifier] = entry.id
             if let adjustments = restoredAdjustments[entry.id] { editing.setAdjustments(adjustments, for: item) }
             if let image = UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path) {
                 let thumbnail = UIImage(contentsOfFile: folder.appendingPathComponent("preview.jpg").path)

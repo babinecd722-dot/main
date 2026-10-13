@@ -37,7 +37,61 @@ def check_refinements(tg, swiftc='swiftc'):
     assert 'let isTallPanel = textFieldHeight >= 70.0' in composer
     assert 'aorusPresentDraftGallery { present(c, a) }' in block(picker, '        fileprivate func openSelectedMedia(')
     assert 'attachmentDraftPreview:' in block(node, '    func openExpandedInput()')
-    for name, source in [('playback', fixture), ('send', send)]:
+    gate = '''import Foundation
+final class GateView { var isUserInteractionEnabled = true }
+final class NativeDraftGate {
+    var view = GateView()
+    var aorusPresentDraftGallery: (() -> Void)?
+    var aorusHasSentAttachmentSelection = false
+    var aorusPersistAttachmentDraft: ((@escaping (Bool) -> Void) -> Void)?
+    private var aorusWarmWork: DispatchWorkItem?
+    private var aorusWarmRunning = false
+    private var aorusWarmDirty = false
+    private var aorusPersistenceWaiters: [() -> Void] = []
+    private var aorusAttachmentPersistenceStarted = false
+    private var aorusAttachmentPersistenceFinished = false
+''' + block(picker, '    public func aorusPrepareAttachmentDraft(') + block(picker, '    public func aorusRequestAttachmentPersistence(') + '\n}\n' + GATE_TESTS
+    adapter = (tg / 'submodules/MediaPickerUI/Sources/AorusAttachmentDraftPicker.swift').read_text()
+    start = adapter.index('        let keys: [String] = items.compactMap')
+    end = adapter.index('        let basePath = ', start)
+    gate += '''
+enum AorusAttachmentDraftError: Error { case unavailable }
+struct NativeDraftItem { var uniqueIdentifier: String? }
+final class NativeDraftIdentity {
+    var aorusAttachmentStableIds: [String: String] = [:]
+    var result: [String]?, failed = false
+    func prepare(_ keys: [String?]) {
+        let items = keys.map { NativeDraftItem(uniqueIdentifier: $0) }
+        self.result = nil; self.failed = false
+        let completion: (Result<Void, AorusAttachmentDraftError>) -> Void = { _ in self.failed = true }
+''' + adapter[start:end] + '''
+        self.result = identifiers
+    }
+}
+let identity = NativeDraftIdentity()
+identity.prepare(["photo", "video"])
+let first = identity.result!
+expect(Set(first).count == 2 && first.allSatisfy { UUID(uuidString: $0) != nil }, "draft files have distinct stable UUID identities")
+identity.prepare(["video", "photo"])
+expect(identity.result == first.reversed().map { $0 }, "warm preparation and final capture retain identities even after reorder")
+for keys: [String?] in [[nil], [""], ["photo", "photo"]] {
+    identity.prepare(keys)
+    expect(identity.failed && identity.result == nil, "incomplete or duplicated native identities never collapse media")
+}
+identity.aorusAttachmentStableIds["photo"] = "../../elsewhere"
+identity.prepare(["photo"])
+expect(UUID(uuidString: identity.result![0]) != nil, "untrusted previous identity cannot become a filesystem path")
+print("Native media draft identities passed: 6 assertions")
+'''
+    selected = block(picker, '        fileprivate func openSelectedMedia(')
+    assert 'aorusDraftTransitionView?(identifier)' in selected
+    assert 'aorusDraftGalleryClosed' not in selected.split('finishedTransitionOut:')[0]
+    legacy = (tg / 'submodules/MediaPickerUI/Sources/LegacyMediaPickerGallery.swift').read_text()
+    completed = block(legacy, '    controller.completedTransitionOut = ')
+    assert completed.index('legacyController?.dismiss()') < completed.index('finishedTransitionOut()')
+    attachment = (tg / 'submodules/AttachmentUI/Sources/AttachmentController.swift').read_text()
+    assert attachment.count('aorusRunDismissal {') == 2
+    for name, source in [('playback', fixture), ('send', send), ('dismissal', gate)]:
         with tempfile.TemporaryDirectory(prefix='aorus-composer-profile-' + name) as directory:
             work = Path(directory)
             path = work / 'main.swift'
@@ -167,6 +221,61 @@ controller.aorusAttachmentSendTextSeparately = true
 controller.aorusAttachmentSendCaption = NSAttributedString(string: "Custom emoji", attributes: [ChatTextInputAttributes.customEmoji: ChatTextInputTextCustomEmojiAttribute()])
 if case let .message(_, _, stickers, _, _, _, _, _, _, _) = controller.aorusAttachmentDraftTextMessages().first! { expect(stickers[77] != nil, "custom emoji files follow the caption into its native text message") }
 print("Media draft native text/media queue passed: \(checks) assertions")
+'''
+
+
+
+
+def native_profile_views(tg):
+    """The actual paging view, equalizer drawing and themed progress colour for UIKit tests."""
+    tint = (tg / 'submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift').read_text()
+    music = (tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusProfileMusicPlayback.swift').read_text()
+    adapter = '''
+import UIKit
+final class AorusProfileMusicPlayback { func updateVisibility() {} }
+enum AorusGlassProfileTint {
+    static let pageBlendNotification = Notification.Name("ProfilePagingFixture")
+    static let settleDuration = 0.3, refreshDuration = 0.25
+    static var slide: (base: UIImage, image: UIImage, fraction: CGFloat)?
+    static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat)? { slide }
+}
+'''
+    return adapter + block(tint, 'public final class AorusProfilePageImageView:') + block(music, 'func aorusProfileMusicProgressColor(') + block(music, 'final class AorusProfileMusicEqualizerView:')
+
+GATE_TESTS = r'''
+var checks = 0
+func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
+func wait(_ duration: Double) { RunLoop.current.run(until: Date().addingTimeInterval(duration)) }
+let gate = NativeDraftGate()
+var calls = 0, callbacks: [(Bool) -> Void] = [], closed = 0
+gate.aorusPersistAttachmentDraft = { completion in calls += 1; callbacks.append(completion) }
+gate.aorusPrepareAttachmentDraft(); gate.aorusPrepareAttachmentDraft(); gate.aorusPrepareAttachmentDraft()
+expect(calls == 0, "rapid native selection updates are debounced")
+wait(0.4)
+expect(calls == 1 && gate.view.isUserInteractionEnabled, "one background preparation keeps gallery interaction enabled")
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+expect(calls == 1 && closed == 0, "dismissal joins a running preparation instead of racing it")
+callbacks.removeFirst()(true)
+expect(calls == 2 && !gate.view.isUserInteractionEnabled && closed == 0, "latest edits are captured before closing")
+callbacks.removeFirst()(true)
+expect(closed == 2 && gate.view.isUserInteractionEnabled, "all dismissal waiters run once after save")
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+expect(calls == 2 && closed == 3, "an already committed selection does not write another draft")
+gate.aorusPrepareAttachmentDraft(); wait(0.4)
+expect(calls == 3, "new selection invalidates the previous finished snapshot")
+callbacks.removeFirst()(true)
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+callbacks.removeFirst()(false)
+expect(closed == 3 && gate.view.isUserInteractionEnabled, "failed final save preserves the gallery and permits retry")
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+callbacks.removeFirst()(true)
+expect(closed == 4 && calls == 5, "retry completes one final dismissal")
+gate.aorusHasSentAttachmentSelection = true
+gate.aorusPrepareAttachmentDraft(); wait(0.4)
+gate.aorusRequestAttachmentPersistence { closed += 1 }
+expect(calls == 5 && closed == 5, "sent selection cannot reappear as a prepared draft")
+print("Native draft dismissal gate passed: \(checks) assertions")
 '''
 
 

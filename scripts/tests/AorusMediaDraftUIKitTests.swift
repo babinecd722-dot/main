@@ -46,6 +46,7 @@ import UIKit
         let first = tiles[0]
         first.layoutIfNeeded()
         let photo = first.subviews.first as! UIImageView
+        expect(strip.transitionView(id: entries[0].id) === photo, "editor transition starts at the visible composer thumbnail")
         expect(samePixels(photo.image, images[0]) && photo.image?.renderingMode != .alwaysTemplate && photo.contentMode == .scaleAspectFill, "draft shows the selected photo without template tint")
         expect(first.layer.borderWidth == 0 && first.layer.cornerRadius == 14, "large photo has no outline")
         let buttons = first.subviews.compactMap { $0 as? UIButton }
@@ -90,7 +91,68 @@ import UIKit
     strip.open = { opened = $0 }
     last.subviews.compactMap { $0 as? UIButton }.first!.sendActions(for: .touchUpInside)
     expect(opened == many.last?.id && tiles().count < 10, "scrolling to the final attachment loads its actual editor target with bounded view count")
+    expect(AorusAttachmentDraftStrip.activeTransitionView(id: many.last!.id) === last.subviews.first, "editor return uses the strip that was tapped")
+    let offset = scroll.contentOffset
+    let refreshed = AorusAttachmentDraft(items: many, grouping: true, captionAbove: false, highQuality: false, forceLivePhoto: false)
+    strip.update(draft: refreshed, accountBasePath: root.path, width: 300, theme: theme, strings: strings)
+    expect(scroll.contentOffset == offset && strip.transitionView(id: many.last!.id) === last.subviews.first, "saving edits retains scroll position and the editor target across draft directories")
     strip.removeFromSuperview()
+    checks += runProfilePagingUIKitRegression(window: window)
     print("Native media draft views passed: \(checks) assertions")
+    return checks
+}
+
+@MainActor private func runProfilePagingUIKitRegression(window: UIWindow) -> Int {
+    var checks = 0
+    func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError("Profile paging: " + label) } }
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 1))
+    let red = renderer.image { context in UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 16, height: 1)) }
+    let blue = renderer.image { context in UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 16, height: 1)) }
+    UIView.setAnimationsEnabled(false)
+    defer { UIView.setAnimationsEnabled(true); AorusGlassProfileTint.slide = nil }
+    for width: CGFloat in [120, 230, 390, 768] {
+        let page = AorusProfilePageImageView(peerId: 55)
+        page.frame = CGRect(x: 0, y: 0, width: width, height: 120)
+        page.image = red
+        window.rootViewController!.view.addSubview(page)
+        page.layoutIfNeeded()
+        let base = page.subviews[0] as! UIImageView, incoming = page.subviews[1] as! UIImageView
+        for fraction: CGFloat in [-0.01, -0.25, -0.75, -1, 0.01, 0.25, 0.75, 1] {
+            AorusGlassProfileTint.slide = (red, blue, fraction)
+            NotificationCenter.default.post(name: AorusGlassProfileTint.pageBlendNotification, object: nil, userInfo: ["peerId": NSNumber(value: 55), "duration": NSNumber(value: 0)])
+            expect(base.image === red && incoming.image === blue, "both photos retain their own background row")
+            expect(base.alpha == 1 && incoming.alpha == 1, "horizontal paging never uniformly crossfades the rows")
+            expect(abs(base.frame.minX - fraction * width) < 0.001, "background tracks the native signed avatar offset")
+            expect(abs(incoming.frame.minX - (fraction * width + (fraction < 0 ? width : -width))) < 0.001, "adjacent rows meet without a gap")
+            expect(!base.isHidden && page.clipsToBounds, "moving tiles cover the page without escaping the viewport")
+        }
+        let before = incoming.frame
+        page.image = blue
+        expect(incoming.frame == before && base.image === red, "publishing the new index does not restart the slide")
+        AorusGlassProfileTint.slide = nil
+        NotificationCenter.default.post(name: AorusGlassProfileTint.pageBlendNotification, object: nil, userInfo: ["peerId": NSNumber(value: 55), "duration": NSNumber(value: 0)])
+        expect(base.isHidden && incoming.alpha == 0 && page.image === blue, "settling removes temporary tiles and keeps the new background")
+        page.removeFromSuperview()
+    }
+    let icon = AorusProfileMusicEqualizerView(frame: CGRect(x: 0, y: 0, width: 14, height: 18))
+    icon.draw(phase: nil)
+    let bars = icon.layer.sublayers!
+    expect(bars.filter { !$0.isHidden }.count == 3, "idle music icon has three bars")
+    expect(Array(bars.prefix(3)).map { $0.frame.height } == [16, 11, 5], "idle bars match the supplied descending design")
+    expect(Array(bars.prefix(3)).allSatisfy { abs($0.frame.midY - 9) < 0.001 && $0.cornerRadius == 1.5 }, "rounded bars share one centre")
+    icon.draw(phase: 2)
+    let frozen = bars.map(\.frame)
+    icon.layoutSubviews()
+    expect(bars.map(\.frame) == frozen && bars.allSatisfy { !$0.isHidden }, "a paused shape survives layout with all animated bars")
+    icon.draw(phase: nil)
+    expect(bars.filter { !$0.isHidden }.count == 3, "closing playback restores the idle icon")
+    for background in [UIColor(red: 0.15, green: 0.35, blue: 0.6, alpha: 1), UIColor(red: 0.7, green: 0.4, blue: 0.2, alpha: 1), .black, .white] {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        background.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let expected = [r + (1-r)*0.32, g + (1-g)*0.32, b + (1-b)*0.32]
+        aorusProfileMusicProgressColor(background).getRed(&r, green: &g, blue: &b, alpha: &a)
+        expect(zip([r,g,b], expected).allSatisfy { abs($0.0 - $0.1) < 0.001 } && abs(a-0.52) < 0.001, "progress is a lighter version of the profile background")
+    }
+    print("Native profile paging and music drawing passed: \(checks) assertions")
     return checks
 }

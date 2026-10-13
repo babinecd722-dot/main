@@ -7,6 +7,7 @@ import TelegramPresentationData
 import GlassBackgroundComponent
 
 public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
+    private static weak var activeTransitionStrip: AorusAttachmentDraftStrip?
     public var open: (String) -> Void = { _ in }
     public var remove: (String) -> Void = { _ in }
     private let scrollView = UIScrollView()
@@ -37,7 +38,8 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
     required public init?(coder: NSCoder) { fatalError("Created in code") }
 
     public func update(draft: AorusAttachmentDraft, accountBasePath: String, width: CGFloat, theme: PresentationTheme, strings: PresentationStrings, transition: ContainedViewLayoutTransition = .immediate) {
-        let resetScroll = self.draft?.directory != draft.directory
+        let identifiers = Set(draft.items.map(\.id))
+        let resetScroll = self.draft?.items.contains(where: { identifiers.contains($0.id) }) != true
         self.updating = true
         self.draft = draft
         self.accountBasePath = accountBasePath
@@ -55,6 +57,21 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
         }
         self.updating = false
         self.updateVisibleTiles(force: true, transition: transition)
+    }
+
+    public static func activeTransitionView(id: String) -> UIView? {
+        guard let strip = self.activeTransitionStrip, strip.window != nil else { return nil }
+        return strip.transitionView(id: id)
+    }
+
+    public func transitionView(id: String) -> UIView? {
+        guard let index = self.draft?.items.firstIndex(where: { $0.id == id }) else { return nil }
+        let frame = CGRect(x: 8 + CGFloat(index) * (self.side + 8), y: 8, width: self.side, height: self.side)
+        if !self.scrollView.bounds.contains(frame) {
+            self.scrollView.scrollRectToVisible(frame.insetBy(dx: -8, dy: 0), animated: false)
+            self.updateVisibleTiles(force: true)
+        }
+        return self.tiles[id]?.transitionImageView
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) { if !self.updating { self.updateVisibleTiles() } }
@@ -82,7 +99,10 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
             if let current = self.tiles[item.id] { tile = current }
             else {
                 tile = AorusAttachmentDraftTile(frame: .zero)
-                tile.open = { [weak self] in self?.open(item.id) }
+                tile.open = { [weak self] in
+                    Self.activeTransitionStrip = self
+                    self?.open(item.id)
+                }
                 tile.remove = { [weak self] in self?.remove(item.id) }
                 self.tiles[item.id] = tile
                 self.scrollView.addSubview(tile)
@@ -100,12 +120,14 @@ private final class AorusAttachmentDraftTile: UIView {
     var open: () -> Void = {}
     var remove: () -> Void = {}
     private let imageView = UIImageView()
+    var transitionImageView: UIView { self.imageView }
     private let openButton = UIButton(type: .custom)
     private let removeButton = UIButton(type: .custom)
     private let removeBackground = GlassBackgroundView(frame: .zero)
     private let removeIcon = UIImageView()
     private let duration = UILabel()
     private var itemId: String?
+    private var previewPath: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -138,14 +160,15 @@ private final class AorusAttachmentDraftTile: UIView {
     @objc private func removed() { self.remove() }
 
     func update(item: AorusAttachmentDraft.Item, previewURL: URL?, theme: PresentationTheme, strings: PresentationStrings) {
-        if self.itemId != item.id {
+        if self.itemId != item.id || self.previewPath != previewURL?.path {
             self.itemId = item.id
+            self.previewPath = previewURL?.path
             self.imageView.image = item.thumbnail.flatMap { UIImage(data: $0) }
             if let path = previewURL?.path {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     let image = UIImage(contentsOfFile: path)
                     DispatchQueue.main.async { [weak self] in
-                        guard let self, self.itemId == item.id, let image else { return }
+                        guard let self, self.itemId == item.id, self.previewPath == path, let image else { return }
                         self.imageView.image = image
                     }
                 }

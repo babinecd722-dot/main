@@ -18,6 +18,7 @@ def main():
     controllers = (args.repo / 'patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginControllers.swift').read_text()
     pure = '\n'.join(declaration(market, prefix) for prefix in [
         'public struct AorusPluginSemVer:', 'public enum AorusPluginMarketStatus:',
+        'public struct AorusPluginMarketStats:',
         'public struct AorusPluginMarketCard:', 'public enum AorusPluginMarketLimits',
         'public enum AorusPluginMarketPermission',
     ])

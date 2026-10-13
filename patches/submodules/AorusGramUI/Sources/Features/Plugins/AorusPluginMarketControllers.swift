@@ -168,6 +168,7 @@ enum AorusPluginMarketInstaller {
                 manifest.market = AorusPluginMarketLink(id: card.id, version: card.version, authorId: card.authorId, isOwn: false, hasIcon: card.hasIcon)
                 do {
                     try AorusPluginStore.shared.save(AorusPluginRecord(manifest: manifest, source: source))
+                    AorusPluginMarketClient.shared.recordInstalledDownload(id: card.id)
                     completion(.success(AorusPluginStore.shared.manifest(id: manifest.id) ?? manifest))
                 } catch {
                     completion(.failure(error))
@@ -200,6 +201,7 @@ enum AorusPluginMarketInstaller {
                 record.manifest.market = AorusPluginMarketLink(id: card.id, version: card.version, authorId: card.authorId, isOwn: false, hasIcon: card.hasIcon)
                 do {
                     try AorusPluginStore.shared.save(record)
+                    AorusPluginMarketClient.shared.recordInstalledDownload(id: card.id)
                     completion(.success((AorusPluginStore.shared.manifest(id: manifest.id) ?? record.manifest, wasEnabled)))
                 } catch {
                     completion(.failure(error))
@@ -492,7 +494,66 @@ final class AorusPluginModeSwitch: UIControl {
 
 /// The Market tab: the author's own plugins when there are any, then every approved plugin,
 /// each with its icon, its name and a button that says what installing it would do.
-final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDelegate {
+final class AorusPluginMarketStatsView: UIStackView {
+    private let buttons = [UIButton(type: .system), UIButton(type: .system), UIButton(type: .system)]
+    var onVote: ((AorusPluginMarketVote) -> Void)?
+
+    init(interactive: Bool) {
+        super.init(frame: .zero)
+        axis = .horizontal
+        spacing = interactive ? 12 : 8
+        alignment = .center
+        for (index, button) in buttons.enumerated() {
+            let symbols = ["hand.thumbsup", "hand.thumbsdown", "arrow.down.to.line"]
+            button.setImage(UIImage(systemName: symbols[index], withConfiguration: UIImage.SymbolConfiguration(pointSize: interactive ? 15 : 11, weight: .medium)), for: .normal)
+            button.titleLabel?.font = aorusUIFont(interactive ? 15 : 12, .medium)
+            button.contentEdgeInsets = interactive ? UIEdgeInsets(top: 10, left: 12, bottom: 10, right: 12) : .zero
+            button.titleEdgeInsets = UIEdgeInsets(top: 0, left: 5, bottom: 0, right: -5)
+            button.layer.cornerRadius = 12
+            button.isUserInteractionEnabled = interactive && index < 2
+            button.tag = index
+            button.addTarget(self, action: #selector(tapped(_:)), for: .touchUpInside)
+            addArrangedSubview(button)
+        }
+        if interactive { heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true }
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func update(stats: AorusPluginMarketStats, vote: AorusPluginMarketVote = .none, busy: Bool = false, theme: PresentationTheme) {
+        let counts = [stats.likes, stats.dislikes, stats.downloads]
+        let labels = [aorusL("Нравится", "Likes"), aorusL("Не нравится", "Dislikes"), aorusL("Скачивания", "Downloads")]
+        for (index, button) in buttons.enumerated() {
+            let selected = (index == 0 && vote == .like) || (index == 1 && vote == .dislike)
+            let countText: String
+            if #available(iOS 15.0, *) { countText = counts[index].formatted(.number.notation(.compactName)) }
+            else { countText = String(counts[index]) }
+            button.setTitle(" " + countText, for: .normal)
+            button.tintColor = selected ? theme.list.itemAccentColor : theme.list.itemSecondaryTextColor
+            button.backgroundColor = selected ? theme.list.itemAccentColor.withAlphaComponent(0.12) : .clear
+            button.accessibilityLabel = labels[index] + ": " + String(counts[index])
+            button.accessibilityTraits = selected ? [.button, .selected] : .button
+            button.isEnabled = !busy || index == 2
+        }
+    }
+
+    @objc private func tapped(_ button: UIButton) { onVote?(button.tag == 0 ? .like : .dislike) }
+}
+
+private extension AorusPluginMarketSort {
+    var title: String {
+        switch self {
+        case .newest: return aorusL("По обновлению", "Recently updated")
+        case .name: return aorusL("По названию", "Name")
+        case .popularity: return aorusL("По популярности", "Popularity")
+        case .likes: return aorusL("По лайкам", "Likes")
+        case .dislikes: return aorusL("По дизлайкам", "Dislikes")
+        case .downloads: return aorusL("По скачиваниям", "Downloads")
+        }
+    }
+}
+
+final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate {
     private enum Phase {
         case loading
         case failed(String)
@@ -508,6 +569,13 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private let messageBody = UILabel()
     private let retryButton = UIButton(type: .system)
     private var cards: [AorusPluginMarketCard] = []
+    private var visibleCards: [AorusPluginMarketCard] = []
+    private var sort = AorusPluginMarketSort.newest
+    private let searchBar = UISearchBar()
+    private let filterButton = UIButton(type: .system)
+    private let filterHeader = UIView()
+    private var statsObserver: NSObjectProtocol?
+    private var reloadGeneration = 0
     private var owned: [AorusPluginMarketOwnedPlugin] = []
     private var phase: Phase = .loading
     private var busy: Set<String> = []
@@ -533,6 +601,29 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         refresh.addTarget(self, action: #selector(reload), for: .valueChanged)
         tableView.refreshControl = refresh
         addSubview(tableView)
+        searchBar.searchBarStyle = .minimal
+        searchBar.placeholder = aorusL("Название плагина", "Plugin name")
+        searchBar.delegate = self
+        searchBar.tintColor = theme.list.itemAccentColor
+        searchBar.searchTextField.textColor = theme.list.itemPrimaryTextColor
+        searchBar.searchTextField.backgroundColor = theme.list.itemBlocksBackgroundColor
+        filterButton.tintColor = theme.list.itemAccentColor
+        filterButton.titleLabel?.font = aorusUIFont(15, .medium)
+        filterButton.setImage(UIImage(systemName: "line.3.horizontal.decrease"), for: .normal)
+        if #available(iOS 14.0, *) { filterButton.showsMenuAsPrimaryAction = true }
+        filterHeader.addSubview(searchBar)
+        filterHeader.addSubview(filterButton)
+        updateFilters()
+        tableView.keyboardDismissMode = .onDrag
+        statsObserver = NotificationCenter.default.addObserver(forName: AorusPluginMarketClient.statsChangedNotification, object: nil, queue: .main) { [weak self] note in
+            guard let self, let id = note.userInfo?["id"] as? String, let stats = note.userInfo?["stats"] as? AorusPluginMarketStats else { return }
+            for index in self.cards.indices where self.cards[index].id == id { self.cards[index].stats = stats }
+            if var card = AorusPluginMarketCatalog.shared.card(id: id) {
+                card.stats = stats
+                AorusPluginMarketCatalog.shared.store(AorusPluginMarketCatalog.shared.cards.map { $0.id == id ? card : $0 })
+            }
+            self.applyFilters()
+        }
 
         spinner.color = theme.list.itemSecondaryTextColor
         spinner.hidesWhenStopped = true
@@ -570,6 +661,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     deinit {
+        if let statsObserver { NotificationCenter.default.removeObserver(statsObserver) }
         if let storeObserver { NotificationCenter.default.removeObserver(storeObserver) }
         if let removedObserver { NotificationCenter.default.removeObserver(removedObserver) }
     }
@@ -578,8 +670,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     /// crossfade of its own, instead of the whole list being reloaded under it mid-animation.
     private func refreshVisibleRows() {
         for case let cell as AorusPluginMarketCell in tableView.visibleCells {
-            guard let indexPath = tableView.indexPath(for: cell), !(showsMine && indexPath.section == 0), indexPath.row < cards.count else { continue }
-            let card = cards[indexPath.row]
+            guard let indexPath = tableView.indexPath(for: cell), !(showsMine && indexPath.section == 0), indexPath.row < visibleCards.count else { continue }
+            let card = visibleCards[indexPath.row]
             cell.configure(card: card, state: AorusPluginMarketInstallState.of(card), busy: busy.contains(card.id), theme: theme)
         }
     }
@@ -589,7 +681,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
         cards.remove(at: index)
         owned.removeAll { $0.id == id }
-        tableView.reloadData()
+        applyFilters()
     }
 
     func setInsets(top: CGFloat, bottom: CGFloat) {
@@ -601,6 +693,13 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     override func layoutSubviews() {
         super.layoutSubviews()
         tableView.frame = bounds
+        if filterHeader.frame.width != bounds.width || tableView.tableHeaderView == nil {
+            filterHeader.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 100)
+            searchBar.frame = CGRect(x: 8, y: 0, width: bounds.width - 16, height: 56)
+            filterButton.frame = CGRect(x: 20, y: 56, width: bounds.width - 40, height: 36)
+            filterButton.contentHorizontalAlignment = .leading
+            tableView.tableHeaderView = filterHeader
+        }
         spinner.center = CGPoint(x: bounds.midX, y: bounds.midY - 40)
         let width = min(bounds.width - 64, 360)
         let height = messageView.systemLayoutSizeFitting(CGSize(width: width, height: UIView.layoutFittingCompressedSize.height)).height
@@ -619,8 +718,10 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 
     @objc func reload() {
+        reloadGeneration += 1
+        let generation = reloadGeneration
         AorusPluginMarketClient.shared.catalog { [weak self] result in
-            guard let self else { return }
+            guard let self, self.reloadGeneration == generation else { return }
             self.refresh.endRefreshing()
             switch result {
             case let .success(cards):
@@ -637,7 +738,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // The author's own plugins. Nothing is shown when there are none, and nothing when the
         // licence cannot ask: the row exists only for someone who has published.
         AorusPluginMarketClient.shared.mine { [weak self] result in
-            guard let self else { return }
+            guard let self, self.reloadGeneration == generation else { return }
             if case let .success(owned) = result {
                 self.owned = owned
                 self.tableView.reloadData()
@@ -646,6 +747,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 
     private func render() {
+        visibleCards = sort.apply(to: cards, query: searchBar.text ?? "")
         switch phase {
         case .loading:
             spinner.startAnimating()
@@ -682,7 +784,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         if showsMine && section == 0 { return 1 }
-        return cards.count
+        return visibleCards.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -699,7 +801,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
             return cell
         }
         let cell = tableView.dequeueReusableCell(withIdentifier: "card", for: indexPath) as! AorusPluginMarketCell
-        let card = cards[indexPath.row]
+        let card = visibleCards[indexPath.row]
         cell.configure(card: card, state: AorusPluginMarketInstallState.of(card), busy: busy.contains(card.id), theme: theme)
         cell.onAction = { [weak self] in self?.performQuickAction(card) }
         return cell
@@ -711,7 +813,30 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
             onOpenMine?(owned)
             return
         }
-        onOpen?(cards[indexPath.row])
+        searchBar.resignFirstResponder()
+        onOpen?(visibleCards[indexPath.row])
+    }
+
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { applyFilters() }
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+
+    private func applyFilters() {
+        visibleCards = sort.apply(to: cards, query: searchBar.text ?? "")
+        tableView.reloadData()
+    }
+
+    private func updateFilters() {
+        filterButton.setTitle("  " + aorusL("Фильтры", "Filters") + " · " + sort.title, for: .normal)
+        if #available(iOS 14.0, *) {
+        filterButton.menu = UIMenu(title: aorusL("Порядок плагинов", "Sort plugins"), children: AorusPluginMarketSort.allCases.map { choice in
+            UIAction(title: choice.title, state: choice == sort ? .on : .off) { [weak self] _ in
+                guard let self else { return }
+                self.sort = choice
+                self.updateFilters()
+                self.applyFilters()
+            }
+        })
+        }
     }
 
     /// The pill on a row: installs or updates without opening the sheet, and opens the sheet
@@ -899,6 +1024,7 @@ final class AorusPluginMarketCell: UITableViewCell {
     private let icon = UIImageView()
     private let nameLabel = UILabel()
     private let summaryLabel = UILabel()
+    private let statsView = AorusPluginMarketStatsView(interactive: false)
     private let actionButton = AorusPluginPillButton()
     private var representedId: String?
     var onAction: (() -> Void)?
@@ -916,7 +1042,7 @@ final class AorusPluginMarketCell: UITableViewCell {
         actionButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
         actionButton.layer.cornerRadius = 15
         actionButton.addTarget(self, action: #selector(actionTapped), for: .touchUpInside)
-        [icon, nameLabel, summaryLabel, actionButton].forEach {
+        [icon, nameLabel, statsView, summaryLabel, actionButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview($0)
         }
@@ -931,7 +1057,10 @@ final class AorusPluginMarketCell: UITableViewCell {
             nameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
             nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -10),
             summaryLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            summaryLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 2),
+            statsView.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            statsView.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 4),
+            statsView.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -10),
+            summaryLabel.topAnchor.constraint(equalTo: statsView.bottomAnchor, constant: 4),
             summaryLabel.trailingAnchor.constraint(lessThanOrEqualTo: actionButton.leadingAnchor, constant: -10),
             summaryLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -14),
             actionButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
@@ -953,6 +1082,7 @@ final class AorusPluginMarketCell: UITableViewCell {
         backgroundColor = theme.list.itemBlocksBackgroundColor
         nameLabel.text = card.name
         nameLabel.textColor = theme.list.itemPrimaryTextColor
+        statsView.update(stats: card.stats, theme: theme)
         summaryLabel.text = card.description
         summaryLabel.textColor = theme.list.itemSecondaryTextColor
         let accent = theme.list.itemAccentColor
@@ -1000,7 +1130,7 @@ final class AorusPluginMarketCell: UITableViewCell {
 /// is long, who published it, what it may do, and one button that stays at the bottom however
 /// far the page is scrolled.
 final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDelegate {
-    private let card: AorusPluginMarketCard
+    private var card: AorusPluginMarketCard
     private let theme: PresentationTheme
     private let host: AorusPluginMarketHost
     /// Opens a plugin of one's own in its Appearance, after the sheet has closed.
@@ -1014,6 +1144,9 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     private let iconView = UIImageView()
     private let nameLabel = UILabel()
     private let metaLabel = UILabel()
+    private let statsView = AorusPluginMarketStatsView(interactive: true)
+    private var statsObserver: NSObjectProtocol?
+    private var voteWorking = false
     private let descriptionLabel = UILabel()
     private let moreButton = UIButton(type: .system)
     private let bottomBar = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
@@ -1067,6 +1200,45 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         buildBottomBar()
         buildCloseButton()
         applyState()
+        statsView.onVote = { [weak self] choice in self?.submitVote(choice) }
+        updateStats()
+        statsObserver = NotificationCenter.default.addObserver(forName: AorusPluginMarketClient.statsChangedNotification, object: nil, queue: .main) { [weak self] note in
+            guard let self, note.userInfo?["id"] as? String == self.card.id, let stats = note.userInfo?["stats"] as? AorusPluginMarketStats else { return }
+            self.card.stats = stats
+            self.updateStats()
+        }
+        AorusPluginMarketClient.shared.card(id: card.id) { [weak self] result in
+            guard let self, case let .success(card) = result else { return }
+            self.card.stats = card.stats
+            self.updateStats()
+        }
+    }
+
+    deinit { if let statsObserver { NotificationCenter.default.removeObserver(statsObserver) } }
+
+    private func updateStats() {
+        statsView.update(stats: card.stats, vote: AorusPluginMarketClient.shared.confirmedVote(id: card.id), busy: voteWorking, theme: theme)
+    }
+
+    private func submitVote(_ choice: AorusPluginMarketVote) {
+        guard !voteWorking else { return }
+        voteWorking = true
+        updateStats()
+        let vote = AorusPluginMarketClient.shared.confirmedVote(id: card.id).toggling(choice)
+        AorusPluginMarketClient.shared.vote(id: card.id, vote: vote) { [weak self] result in
+            guard let self else { return }
+            self.voteWorking = false
+            switch result {
+            case let .success(stats):
+                self.card.stats = stats
+                UISelectionFeedbackGenerator().selectionChanged()
+            case let .failure(error):
+                let alert = UIAlertController(title: AorusPluginMarketText.loadFailed, message: AorusPluginMarketText.message(for: error), preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                self.present(alert, animated: true)
+            }
+            self.updateStats()
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -1198,6 +1370,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         header.addArrangedSubview(shadow)
         header.setCustomSpacing(18, after: shadow)
         header.addArrangedSubview(nameLabel)
+        header.addArrangedSubview(statsView)
         header.setCustomSpacing(4, after: nameLabel)
         header.addArrangedSubview(metaLabel)
         content.addArrangedSubview(padded(header, top: 44, bottom: 4, sides: 24))

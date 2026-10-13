@@ -17,6 +17,7 @@ import UIKit
 /// Completions arrive on the main queue.
 public final class AorusPluginMarketClient {
     public static let shared = AorusPluginMarketClient()
+    public static let statsChangedNotification = Notification.Name("aorusgram.plugins.market.stats")
 
     static let baseURL = URL(string: "https://plugins.aorusgram.com")!
 
@@ -25,6 +26,17 @@ public final class AorusPluginMarketClient {
     private let iconCache = NSCache<NSString, UIImage>()
     private let iconDirectory: URL
     private let iconQueue = DispatchQueue(label: "aorusgram.plugins.market.icons", qos: .utility)
+    private var statsRevisions: [String: Int] = [:]
+    private var statsWrites: [String: [(@escaping () -> Void) -> Void]] = [:]
+    private var confirmedStats: [String: AorusPluginMarketStats] = [:]
+    private var downloadsInFlight = Set<String>()
+    private var retryDownloads: DispatchWorkItem?
+    private var activationObserver: NSObjectProtocol?
+    private var devicePreferencesKey: String { "aorusgram.market.stats." + DeviceFingerprint.deviceHash().lowercased() }
+    private var pendingDownloads: Set<String> {
+        get { Set((UserDefaults.standard.stringArray(forKey: devicePreferencesKey + ".downloads") ?? []).filter(AorusPluginMarketID.isValid)) }
+        set { UserDefaults.standard.set(newValue.sorted(), forKey: devicePreferencesKey + ".downloads") }
+    }
 
     /// The Market has said this author is banned. A ban is the author's and not a plugin's,
     /// so from then on generating, publishing, uploading an icon and deleting are all off
@@ -47,27 +59,32 @@ public final class AorusPluginMarketClient {
         slowSession = makeSession(timeout: 150)
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
         iconDirectory = caches.appendingPathComponent("AorusGram", isDirectory: true).appendingPathComponent("MarketIcons", isDirectory: true)
+        activationObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.flushDownloads() }
+        DispatchQueue.main.async { [weak self] in self?.flushDownloads() }
     }
 
     // MARK: - Reading
 
     public func catalog(completion: @escaping (Result<[AorusPluginMarketCard], AorusPluginMarketError>) -> Void) {
+        let revisions = statsRevisions
         get("/v1/catalog", accept: "application/json") { result in
             completion(result.flatMap { data -> Result<[AorusPluginMarketCard], AorusPluginMarketError> in
                 guard let cards = AorusPluginMarketCard.list(from: data) else { return .failure(.malformedResponse) }
                 // The catalog only lists approved plugins; a row that says otherwise is not
                 // something the store may offer to install.
-                return .success(cards.filter { $0.status == .approved })
+                return .success(cards.filter { $0.status == .approved }.map { self.reconciling($0, revision: revisions[$0.id, default: 0]) })
             })
         }
     }
 
     public func card(id: String, completion: @escaping (Result<AorusPluginMarketCard, AorusPluginMarketError>) -> Void) {
         guard AorusPluginMarketID.isValid(id) else { return deliver(completion, .failure(.invalid("invalid_id"))) }
+        let revision = statsRevisions[id, default: 0]
         get("/v1/plugins/\(id)", accept: "application/json") { result in
             completion(result.flatMap { data -> Result<AorusPluginMarketCard, AorusPluginMarketError> in
                 guard let card = AorusPluginMarketCard.single(from: data), card.status == .approved else { return .failure(.malformedResponse) }
-                return .success(card)
+                guard card.id == id else { return .failure(.malformedResponse) }
+                return .success(self.reconciling(card, revision: revision))
             })
         }
     }
@@ -231,6 +248,94 @@ public final class AorusPluginMarketClient {
         iconQueue.async { try? FileManager.default.removeItem(at: file) }
     }
 
+    /// The last vote confirmed by this device. Catalog responses do not contain a vote.
+    public func confirmedVote(id: String) -> AorusPluginMarketVote {
+        AorusPluginMarketVote(rawValue: UserDefaults.standard.string(forKey: devicePreferencesKey + ".vote." + id) ?? "none") ?? .none
+    }
+
+    public func vote(id: String, vote: AorusPluginMarketVote, completion: @escaping (Result<AorusPluginMarketStats, AorusPluginMarketError>) -> Void) {
+        guard AorusPluginMarketID.isValid(id) else { return deliver(completion, .failure(.invalid("invalid_id"))) }
+        statsJSON(id: id, path: "/v1/plugins/\(id)/vote", body: ["vote": vote.rawValue]) { result in
+            completion(result.flatMap { data in
+                guard let stats = AorusPluginMarketStats.response(data),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      json["vote"] as? String == vote.rawValue else { return .failure(.malformedResponse) }
+                UserDefaults.standard.set(vote.rawValue, forKey: self.devicePreferencesKey + ".vote." + id)
+                self.publishStats(stats, id: id)
+                return .success(stats)
+            })
+        }
+    }
+
+    public func downloadEvent(id: String, completion: @escaping (Result<AorusPluginMarketStats, AorusPluginMarketError>) -> Void) {
+        guard AorusPluginMarketID.isValid(id) else { return deliver(completion, .failure(.invalid("invalid_id"))) }
+        statsJSON(id: id, path: "/v1/plugins/\(id)/download-event", body: [:]) { result in
+            completion(result.flatMap { data in
+                guard let stats = AorusPluginMarketStats.response(data) else { return .failure(.malformedResponse) }
+                self.publishStats(stats, id: id)
+                return .success(stats)
+            })
+        }
+    }
+
+    /// Called only after the verified source has been saved. Reporting failure never undoes
+    /// an installation; the id is retained for another signed attempt, including after restart.
+    public func recordInstalledDownload(id: String) {
+        guard AorusPluginMarketID.isValid(id) else { return }
+        pendingDownloads.insert(id)
+        flushDownloads()
+    }
+
+    private func flushDownloads() {
+        guard AorusLicenseAccess.isAllowed else { return }
+        for id in pendingDownloads.subtracting(downloadsInFlight) {
+            downloadsInFlight.insert(id)
+            downloadEvent(id: id) { [weak self] result in
+                guard let self else { return }
+                self.downloadsInFlight.remove(id)
+                if case .success = result { self.pendingDownloads.remove(id) }
+                else if self.retryDownloads == nil {
+                    let retry = DispatchWorkItem { [weak self] in self?.retryDownloads = nil; self?.flushDownloads() }
+                    self.retryDownloads = retry
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: retry)
+                }
+            }
+        }
+    }
+
+    private func reconciling(_ card: AorusPluginMarketCard, revision: Int) -> AorusPluginMarketCard {
+        var card = card
+        if revision != statsRevisions[card.id, default: 0], let stats = confirmedStats[card.id] { card.stats = stats }
+        return card
+    }
+
+    /// A vote and an install can happen together. Serialize writes for that plugin so an
+    /// earlier server snapshot never arrives after a later one and rolls its totals back.
+    private func statsJSON(id: String, path: String, body: [String: Any], completion: @escaping (Result<Data, AorusPluginMarketError>) -> Void) {
+        statsWrites[id, default: []].append { done in
+            self.postJSON(path, body: body, slow: false) { result in
+                completion(result)
+                done()
+            }
+        }
+        if statsWrites[id]?.count == 1 { startStatsWrite(id: id) }
+    }
+
+    private func startStatsWrite(id: String) {
+        statsWrites[id]?.first? { [weak self] in
+            guard let self else { return }
+            self.statsWrites[id]?.removeFirst()
+            if self.statsWrites[id]?.isEmpty == true { self.statsWrites[id] = nil }
+            else { self.startStatsWrite(id: id) }
+        }
+    }
+
+    private func publishStats(_ stats: AorusPluginMarketStats, id: String) {
+        statsRevisions[id, default: 0] += 1
+        confirmedStats[id] = stats
+        NotificationCenter.default.post(name: Self.statsChangedNotification, object: nil, userInfo: ["id": id, "stats": stats])
+    }
+
     // MARK: - Transport
 
     private func deliver<T>(_ completion: @escaping (Result<T, AorusPluginMarketError>) -> Void, _ result: Result<T, AorusPluginMarketError>) {
@@ -313,7 +418,7 @@ public final class AorusPluginMarketClient {
             } else {
                 result = .failure(.network)
             }
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 if case .failure(.authorBanned) = result { self?.isAuthorBanned = true }
                 completion(result)
             }

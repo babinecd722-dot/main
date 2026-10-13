@@ -321,92 +321,52 @@ public enum AorusGlassProfileTint {
     /// it, so the screen's backdrop, the fade under the header and every pane move together.
     public static let pageBlendNotification = Notification.Name("AorusGramProfilePageBlend")
 
-    /// How long the page takes to settle when the photo it follows does: the pager's own spring.
+    /// How long the page takes to settle when the photo it follows does: the pager's ease-in-out transition.
     public static let settleDuration: Double = 0.3
     /// How long a change of page takes when nothing is being dragged -- a tap to the next photo,
     /// the full photo arriving over its placeholder.
     public static let refreshDuration: Double = 0.25
 
-    /// The page of the photo being dragged in, laid over the page at the share of it on screen.
     private struct Blend {
+        let base: UIImage
         let image: UIImage
-        let alpha: CGFloat
+        let fraction: CGFloat
     }
-
-    /// How the next change of a peer's page comes in, for a short while after a drag let go onto
-    /// another photo: the page left behind kept over the new one at the share of it still showing.
-    private struct Handover {
-        let alpha: CGFloat
-        let duration: Double
-        let until: CFTimeInterval
-    }
-
     private static var blends: [Int64: Blend] = [:]
-    private static var handovers: [Int64: Handover] = [:]
+    private static var blendGeneration: [Int64: Int] = [:]
+    private static var nextBlendGeneration = 0
 
-    /// What is laid over a peer's page right now, if anything.
-    public static func pageBlend(for peerId: Int64) -> (image: UIImage, alpha: CGFloat)? {
-        return AorusGlassProfileTint.blends[peerId].map { ($0.image, $0.alpha) }
+    /// Both rows use the avatar pager's signed horizontal offset, not a uniform crossfade.
+    public static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat)? {
+        blends[peerId].map { ($0.base, $0.image, $0.fraction) }
     }
 
-    /// How a change of this peer's page arriving now should come in: from what share of the old
-    /// page, and over how long. Nil for the ordinary crossfade.
-    public static func pageHandover(for peerId: Int64) -> (alpha: CGFloat, duration: Double)? {
-        guard let handover = AorusGlassProfileTint.handovers[peerId], CACurrentMediaTime() < handover.until else {
-            return nil
+    public static func followPage(for peerId: Int64, photo: Int?, photoCount: Int, progress: CGFloat, fallbackView: UIView? = nil, mirroredTail: CGFloat = 98) {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else { return }
+        nextBlendGeneration &+= 1
+        blendGeneration[peerId] = nextBlendGeneration
+        if let photo, let view = fallbackView {
+            let key = PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)
+            if sampledColors[key] == nil, let sample = bottomBandSample(of: view, tail: mirroredTail) { record(sample, for: key) }
         }
-        return (handover.alpha, handover.duration)
+        if let photo, progress != 0,
+           let base = pageImages[peerId],
+           let image = sampledColors[PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)]?.image {
+            blends[peerId] = Blend(base: base, image: image, fraction: max(-1, min(1, progress)))
+        } else { blends[peerId] = nil; blendGeneration[peerId] = nil }
+        postBlend(for: peerId, duration: 0)
     }
 
-    /// The pager has been dragged `progress` of the way towards `photo`, or back to where it
-    /// started when `photo` is nil. The page of that photo is laid over the page at that share, so
-    /// the background moves with the finger rather than after it. Nothing is laid over when that
-    /// page is not known yet; the change then comes once it is.
-    public static func followPage(for peerId: Int64, photo: Int?, photoCount: Int, progress: CGFloat) {
-        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else {
-            return
-        }
-        var blend: Blend?
-        if let photo, progress > 0.0,
-           let image = AorusGlassProfileTint.sampledColors[PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)]?.image,
-           image !== AorusGlassProfileTint.pageImages[peerId] {
-            blend = Blend(image: image, alpha: min(1.0, progress))
-        }
-        if blend == nil, AorusGlassProfileTint.blends[peerId] == nil {
-            return
-        }
-        AorusGlassProfileTint.blends[peerId] = blend
-        AorusGlassProfileTint.handovers[peerId] = nil
-        AorusGlassProfileTint.postBlend(for: peerId, duration: 0.0)
-    }
-
-    /// The drag let go. Back on the photo it started from, what it laid over the page goes with
-    /// the photo's slide back. Onto another photo, that photo's page becomes the page as the index
-    /// changes, and the one it replaces is kept over it at the share still showing and goes with
-    /// the photo's own slide -- the same picture on the screen before and after, and then the
-    /// rest of the way at the pager's pace.
     public static func releasePage(for peerId: Int64, changed: Bool) {
-        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else {
-            return
-        }
-        guard let blend = AorusGlassProfileTint.blends.removeValue(forKey: peerId) else {
-            if changed {
-                AorusGlassProfileTint.handovers[peerId] = Handover(alpha: 1.0, duration: AorusGlassProfileTint.settleDuration, until: CACurrentMediaTime() + 0.6)
-            }
-            return
-        }
-        guard changed else {
-            AorusGlassProfileTint.postBlend(for: peerId, duration: AorusGlassProfileTint.settleDuration)
-            return
-        }
-        AorusGlassProfileTint.handovers[peerId] = Handover(alpha: 1.0 - blend.alpha, duration: AorusGlassProfileTint.settleDuration, until: CACurrentMediaTime() + 0.6)
-        // The views keep what the drag laid over them until the new page replaces it. Should that
-        // not come -- the photo landed on had no page yet -- it goes the ordinary way instead.
-        let image = blend.image
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            if AorusGlassProfileTint.pageImages[peerId] !== image {
-                AorusGlassProfileTint.postBlend(for: peerId, duration: AorusGlassProfileTint.refreshDuration)
-            }
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled, let blend = blends[peerId] else { return }
+        let generation = blendGeneration[peerId, default: 0]
+        blends[peerId] = Blend(base: blend.base, image: blend.image, fraction: changed ? (blend.fraction < 0 ? -1 : 1) : 0)
+        postBlend(for: peerId, duration: settleDuration)
+        DispatchQueue.main.asyncAfter(deadline: .now() + settleDuration) {
+            guard blendGeneration[peerId, default: 0] == generation else { return }
+            blends[peerId] = nil
+            blendGeneration[peerId] = nil
+            postBlend(for: peerId, duration: 0)
         }
     }
 
@@ -1257,14 +1217,16 @@ public final class AorusProfileHeaderFadeView: UIView {
 /// header and the page inside every pane are each one of these, so a photo paged to repaints all
 /// of them the same way at the same moment.
 ///
-/// It holds the page, and over it, while the reader drags towards another photo, that photo's
-/// page at the share of the photo that has slid in, so the background moves with the finger. When
-/// the drag lets go onto the other photo, the page left behind stays over the new one at the share
-/// still showing and goes at the pager's own pace. Any other change of page -- a tap to the next
-/// photo, the full photo arriving over its placeholder -- crossfades rather than cutting.
+/// During a drag, two background rows slide at the avatar pager's signed offset. Publishing
+/// the destination index keeps those rows in place until the shared settle animation finishes.
+/// A full-size image replacing its placeholder without a drag uses the ordinary crossfade.
 public final class AorusProfilePageImageView: UIImageView {
     public let peerId: Int64
     private let overlay = UIImageView()
+    private let slidingBase = UIImageView()
+    private var slideDirection: CGFloat = 1
+    private var slideFraction: CGFloat = 0
+    private var sliding = false
     private var observer: NSObjectProtocol?
 
     public init(peerId: Int64) {
@@ -1278,6 +1240,12 @@ public final class AorusProfilePageImageView: UIImageView {
         self.overlay.layer.magnificationFilter = .linear
         self.overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.overlay.alpha = 0.0
+        self.clipsToBounds = true
+        self.slidingBase.contentMode = .scaleToFill
+        self.slidingBase.layer.magnificationFilter = .linear
+        self.slidingBase.isUserInteractionEnabled = false
+        self.slidingBase.isHidden = true
+        self.addSubview(self.slidingBase)
         self.addSubview(self.overlay)
         self.observer = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageBlendNotification, object: nil, queue: .main) { [weak self] notification in
             guard let self, (notification.userInfo?["peerId"] as? NSNumber)?.int64Value == self.peerId else {
@@ -1300,7 +1268,14 @@ public final class AorusProfilePageImageView: UIImageView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
-        self.overlay.frame = self.bounds
+        if self.sliding { self.layoutSlide() }
+        else { self.overlay.frame = self.bounds }
+    }
+
+    private func layoutSlide() {
+        let offset = self.slideFraction * self.bounds.width
+        self.slidingBase.frame = self.bounds.offsetBy(dx: offset, dy: 0)
+        self.overlay.frame = self.bounds.offsetBy(dx: offset + self.slideDirection * self.bounds.width, dy: 0)
     }
 
     public override var image: UIImage? {
@@ -1308,6 +1283,9 @@ public final class AorusProfilePageImageView: UIImageView {
             guard self.image !== oldValue else {
                 return
             }
+            // The two moving tiles already cover the page. Index publication must not restart
+            // their movement or swap the old tile while the avatar is settling.
+            if AorusGlassProfileTint.pageSlide(for: self.peerId) != nil { return }
             self.overlay.layer.removeAllAnimations()
             guard let previous = oldValue, self.image != nil else {
                 // The first page, or none: there is nothing on the screen to carry on from.
@@ -1315,34 +1293,43 @@ public final class AorusProfilePageImageView: UIImageView {
                 self.overlay.alpha = 0.0
                 return
             }
-            // What was the page stays over the new one and goes: from the share of it still showing
-            // when a drag has just let go onto this photo, from all of it otherwise. This also
-            // replaces whatever the drag had laid over the page, which is the photo this now is.
-            let handover = AorusGlassProfileTint.pageHandover(for: self.peerId)
+            // A non-paged refresh keeps the previous row over the new one during its fade.
             self.overlay.image = previous
-            self.overlay.alpha = handover?.alpha ?? 1.0
-            AorusProfilePageImageView.animate(duration: handover?.duration ?? AorusGlassProfileTint.refreshDuration) { [weak self] in
+            self.overlay.alpha = 1.0
+            AorusProfilePageImageView.animate(duration: AorusGlassProfileTint.refreshDuration) { [weak self] in
                 self?.overlay.alpha = 0.0
             }
         }
     }
 
     private func applyBlend(duration: Double) {
-        if let blend = AorusGlassProfileTint.pageBlend(for: self.peerId) {
-            self.overlay.layer.removeAllAnimations()
-            self.overlay.image = blend.image
-            self.overlay.alpha = blend.alpha
-        } else if duration > 0.0 {
-            AorusProfilePageImageView.animate(duration: duration) { [weak self] in
-                self?.overlay.alpha = 0.0
+        if let slide = AorusGlassProfileTint.pageSlide(for: self.peerId) {
+            self.slidingBase.image = slide.base
+            self.slidingBase.isHidden = false
+            self.overlay.image = slide.image
+            self.overlay.alpha = 1
+            self.sliding = true
+            if slide.fraction != 0 { self.slideDirection = slide.fraction < 0 ? 1 : -1 }
+            self.slideFraction = slide.fraction
+            if duration > 0 { Self.animate(duration: duration) { self.layoutSlide() } }
+            else {
+                self.slidingBase.layer.removeAllAnimations()
+                self.overlay.layer.removeAllAnimations()
+                self.layoutSlide()
             }
         } else {
+            self.sliding = false
+            self.slidingBase.layer.removeAllAnimations()
+            self.slidingBase.isHidden = true
+            self.slidingBase.image = nil
             self.overlay.layer.removeAllAnimations()
-            self.overlay.alpha = 0.0
+            self.overlay.image = nil
+            self.overlay.alpha = 0
+            self.overlay.frame = self.bounds
         }
     }
 
-    /// The pager's own motion: a spring with no overshoot over the same time.
+    /// The pager's own motion: ease-in-out over the same duration.
     private static func animate(duration: Double, _ changes: @escaping () -> Void) {
         UIView.animate(
             withDuration: duration,
