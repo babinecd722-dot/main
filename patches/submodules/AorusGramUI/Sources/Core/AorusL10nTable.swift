@@ -53,6 +53,14 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Likes": "Mi piace",
+        "Dislikes": "Non mi piace",
+        "Downloads": "Download",
+        "Filters": "Filtri",
+        "Plugin name": "Nome del plugin",
+        "Popularity": "Popolarità",
+        "Recently updated": "Aggiornati di recente",
+        "Sort plugins": "Ordina plugin",
         "Unable to process the attachments. Check access to the selected files and try again.": "Impossibile elaborare gli allegati. Verifica l’accesso ai file selezionati e riprova.",
         "Old Interface": "Interfaccia classica",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L'interfaccia classica è attiva: niente vetro, i pannelli sono piatti come in Telegram 12.0. Queste impostazioni torneranno quando la disattiverai.",
@@ -1037,6 +1045,14 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Likes": "Polubienia",
+        "Dislikes": "Negatywne oceny",
+        "Downloads": "Pobrania",
+        "Filters": "Filtry",
+        "Plugin name": "Nazwa wtyczki",
+        "Popularity": "Popularność",
+        "Recently updated": "Ostatnio zaktualizowane",
+        "Sort plugins": "Sortuj wtyczki",
         "Unable to process the attachments. Check access to the selected files and try again.": "Nie udało się przetworzyć załączników. Sprawdź dostęp do wybranych plików i spróbuj ponownie.",
         "Old Interface": "Stary interfejs",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Stary interfejs jest włączony: nie ma szkła, a panele są płaskie jak w Telegramie 12.0. Te ustawienia wrócą, gdy go wyłączysz.",
@@ -2021,6 +2037,14 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Likes": "Vind-ik-leuks",
+        "Dislikes": "Vind-ik-niet-leuks",
+        "Downloads": "Downloads",
+        "Filters": "Filters",
+        "Plugin name": "Pluginnaam",
+        "Popularity": "Populariteit",
+        "Recently updated": "Recent bijgewerkt",
+        "Sort plugins": "Plugins sorteren",
         "Unable to process the attachments. Check access to the selected files and try again.": "De bijlagen konden niet worden verwerkt. Controleer de toegang tot de geselecteerde bestanden en probeer het opnieuw.",
         "Old Interface": "Oude interface",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "De oude interface staat aan: er is geen glas en panelen zijn vlak zoals in Telegram 12.0. Deze instellingen keren terug als je hem uitzet.",
@@ -3005,6 +3029,14 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Likes": "M’agrada",
+        "Dislikes": "No m’agrada",
+        "Downloads": "Baixades",
+        "Filters": "Filtres",
+        "Plugin name": "Nom del connector",
+        "Popularity": "Popularitat",
+        "Recently updated": "Actualitzats recentment",
+        "Sort plugins": "Ordena els connectors",
         "Unable to process the attachments. Check access to the selected files and try again.": "No s’han pogut processar els fitxers adjunts. Comprova l’accés als fitxers seleccionats i torna-ho a provar.",
         "Old Interface": "Interfície antiga",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfície antiga està activada: no hi ha vidre i els panells són plans com a Telegram 12.0. Aquests ajustos tornaran quan la desactivis.",
@@ -3989,6 +4021,14 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Likes": "Suka",
+        "Dislikes": "Tidak suka",
+        "Downloads": "Unduhan",
+        "Filters": "Filter",
+        "Plugin name": "Nama plugin",
+        "Popularity": "Popularitas",
+        "Recently updated": "Baru diperbarui",
+        "Sort plugins": "Urutkan plugin",
         "Unable to process the attachments. Check access to the selected files and try again.": "Lampiran tidak dapat diproses. Periksa akses ke file yang dipilih dan coba lagi.",
         "Old Interface": "Antarmuka lama",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antarmuka lama aktif: tidak ada kaca, dan panel datar seperti di Telegram 12.0. Pengaturan ini kembali saat Anda mematikannya.",
@@ -4973,6 +5013,14 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Likes": "Suka",
+        "Dislikes": "Tidak suka",
+        "Downloads": "Muat turun",
+        "Filters": "Penapis",
+        "Plugin name": "Nama pemalam",
+        "Popularity": "Populariti",
+        "Recently updated": "Baru dikemas kini",
+        "Sort plugins": "Isih pemalam",
         "Unable to process the attachments. Check access to the selected files and try again.": "Lampiran tidak dapat diproses. Semak akses kepada fail yang dipilih dan cuba lagi.",
         "Old Interface": "Antara Muka Lama",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Antara muka lama dihidupkan: tiada kaca, dan panel rata seperti dalam Telegram 12.0. Tetapan ini kembali apabila anda mematikannya.",
@@ -5957,6 +6005,14 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Likes": "Падабаецца",
+        "Dislikes": "Не падабаецца",
+        "Downloads": "Спампоўкі",
+        "Filters": "Фільтры",
+        "Plugin name": "Назва плагіна",
+        "Popularity": "Папулярнасць",
+        "Recently updated": "Нядаўна абноўленыя",
+        "Sort plugins": "Сартаваць плагіны",
         "Unable to process the attachments. Check access to the selected files and try again.": "Не ўдалося апрацаваць укладанні. Праверце доступ да выбраных файлаў і паўтарыце спробу.",
         "Old Interface": "Стары інтэрфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Уключаны стары інтэрфейс: шкла няма, панэлі плоскія, як у Telegram 12.0. Гэтыя налады вернуцца, калі вы яго выключыце.",
@@ -6941,6 +6997,14 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Likes": "Yoqtirishlar",
+        "Dislikes": "Yoqtirmasliklar",
+        "Downloads": "Yuklab olishlar",
+        "Filters": "Filtrlar",
+        "Plugin name": "Plagin nomi",
+        "Popularity": "Mashhurlik",
+        "Recently updated": "Yaqinda yangilangan",
+        "Sort plugins": "Plaginlarni saralash",
         "Unable to process the attachments. Check access to the selected files and try again.": "Biriktirilgan fayllarni qayta ishlash imkoni bo‘lmadi. Tanlangan fayllarga kirish ruxsatini tekshiring va qayta urinib ko‘ring.",
         "Old Interface": "Eski interfeys",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski interfeys yoqilgan: shisha yo‘q, panellar Telegram 12.0 dagidek tekis. Uni o‘chirganingizda bu sozlamalar qaytadi.",
@@ -7925,6 +7989,14 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Likes": "좋아요",
+        "Dislikes": "싫어요",
+        "Downloads": "다운로드",
+        "Filters": "필터",
+        "Plugin name": "플러그인 이름",
+        "Popularity": "인기도",
+        "Recently updated": "최근 업데이트",
+        "Sort plugins": "플러그인 정렬",
         "Unable to process the attachments. Check access to the selected files and try again.": "첨부 파일을 처리할 수 없습니다. 선택한 파일에 대한 접근 권한을 확인하고 다시 시도해 주세요.",
         "Old Interface": "이전 인터페이스",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "이전 인터페이스가 켜져 있습니다. 유리 효과가 없고 패널은 Telegram 12.0처럼 평평합니다. 끄면 이 설정이 다시 적용됩니다.",
@@ -8909,6 +8981,14 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Likes": "إعجابات",
+        "Dislikes": "عدم الإعجاب",
+        "Downloads": "التنزيلات",
+        "Filters": "الفلاتر",
+        "Plugin name": "اسم الإضافة",
+        "Popularity": "الشعبية",
+        "Recently updated": "تم تحديثها مؤخرًا",
+        "Sort plugins": "ترتيب الإضافات",
         "Unable to process the attachments. Check access to the selected files and try again.": "تعذرت معالجة المرفقات. تحقق من إمكانية الوصول إلى الملفات المحددة وحاول مرة أخرى.",
         "Old Interface": "الواجهة القديمة",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "الواجهة القديمة مفعّلة: لا يوجد زجاج، واللوحات مسطحة كما في تيليجرام 12.0. ستعود هذه الإعدادات عند إيقافها.",
@@ -9893,6 +9973,14 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Likes": "پسندها",
+        "Dislikes": "نپسندیدن‌ها",
+        "Downloads": "دانلودها",
+        "Filters": "فیلترها",
+        "Plugin name": "نام افزونه",
+        "Popularity": "محبوبیت",
+        "Recently updated": "به‌تازگی به‌روزرسانی‌شده",
+        "Sort plugins": "مرتب‌سازی افزونه‌ها",
         "Unable to process the attachments. Check access to the selected files and try again.": "پردازش پیوست‌ها انجام نشد. دسترسی به فایل‌های انتخاب‌شده را بررسی کنید و دوباره تلاش کنید.",
         "Old Interface": "رابط کاربری قدیمی",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "رابط کاربری قدیمی روشن است: شیشه‌ای در کار نیست و پنل‌ها مانند تلگرام ۱۲٫۰ تخت هستند. با خاموش کردن آن، این تنظیمات برمی‌گردند.",
@@ -10877,6 +10965,14 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Likes": "Ұнатулар",
+        "Dislikes": "Ұнатпаулар",
+        "Downloads": "Жүктеп алулар",
+        "Filters": "Сүзгілер",
+        "Plugin name": "Плагин атауы",
+        "Popularity": "Танымалдық",
+        "Recently updated": "Жақында жаңартылған",
+        "Sort plugins": "Плагиндерді сұрыптау",
         "Unable to process the attachments. Check access to the selected files and try again.": "Тіркемелерді өңдеу мүмкін болмады. Таңдалған файлдарға қолжетімділікті тексеріп, қайталап көріңіз.",
         "Old Interface": "Ескі интерфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Ескі интерфейс қосулы: шыны жоқ, панельдер Telegram 12.0 сияқты тегіс. Оны өшіргенде бұл баптаулар қайтады.",
@@ -11861,6 +11957,14 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Likes": "赞",
+        "Dislikes": "踩",
+        "Downloads": "下载",
+        "Filters": "筛选",
+        "Plugin name": "插件名称",
+        "Popularity": "热度",
+        "Recently updated": "最近更新",
+        "Sort plugins": "插件排序",
         "Unable to process the attachments. Check access to the selected files and try again.": "无法处理附件。请检查所选文件的访问权限，然后重试。",
         "Old Interface": "旧版界面",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧版界面已开启：没有玻璃效果，面板像 Telegram 12.0 那样是平的。关闭后这些设置会恢复。",
@@ -12846,6 +12950,14 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Likes": "讚",
+        "Dislikes": "倒讚",
+        "Downloads": "下載",
+        "Filters": "篩選",
+        "Plugin name": "外掛名稱",
+        "Popularity": "熱門程度",
+        "Recently updated": "最近更新",
+        "Sort plugins": "排序外掛",
         "Unable to process the attachments. Check access to the selected files and try again.": "無法處理附件。請檢查所選檔案的存取權限，然後重試。",
         "Old Interface": "舊版介面",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "舊版介面已開啟：沒有玻璃效果，面板像 Telegram 12.0 一樣是平的。關閉後這些設定會恢復。",
@@ -13830,6 +13942,14 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Likes": "高評価",
+        "Dislikes": "低評価",
+        "Downloads": "ダウンロード",
+        "Filters": "フィルター",
+        "Plugin name": "プラグイン名",
+        "Popularity": "人気度",
+        "Recently updated": "最近の更新",
+        "Sort plugins": "プラグインを並べ替え",
         "Unable to process the attachments. Check access to the selected files and try again.": "添付ファイルを処理できませんでした。選択したファイルへのアクセス権を確認して、もう一度お試しください。",
         "Old Interface": "旧インターフェース",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "旧インターフェースがオンです。ガラス効果はなく、パネルは Telegram 12.0 と同じくフラットです。オフにするとこれらの設定が戻ります。",
@@ -14814,6 +14934,14 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Likes": "Tykkäykset",
+        "Dislikes": "En tykkää",
+        "Downloads": "Lataukset",
+        "Filters": "Suodattimet",
+        "Plugin name": "Liitännäisen nimi",
+        "Popularity": "Suosio",
+        "Recently updated": "Äskettäin päivitetyt",
+        "Sort plugins": "Järjestä liitännäiset",
         "Unable to process the attachments. Check access to the selected files and try again.": "Liitteitä ei voitu käsitellä. Tarkista valittujen tiedostojen käyttöoikeus ja yritä uudelleen.",
         "Old Interface": "Vanha käyttöliittymä",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Vanha käyttöliittymä on käytössä: lasia ei ole, ja paneelit ovat litteitä kuten Telegram 12.0:ssa. Nämä asetukset palaavat, kun poistat sen käytöstä.",
@@ -15798,6 +15926,14 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Likes": "לייקים",
+        "Dislikes": "דיסלייקים",
+        "Downloads": "הורדות",
+        "Filters": "מסננים",
+        "Plugin name": "שם התוסף",
+        "Popularity": "פופולריות",
+        "Recently updated": "עודכנו לאחרונה",
+        "Sort plugins": "מיון תוספים",
         "Unable to process the attachments. Check access to the selected files and try again.": "לא ניתן לעבד את הקבצים המצורפים. בדוק את הגישה לקבצים שנבחרו ונסה שוב.",
         "Old Interface": "ממשק ישן",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "הממשק הישן פעיל: אין זכוכית, והלוחות שטוחים כמו ב-Telegram 12.0. ההגדרות האלה יחזרו כשתכבה אותו.",
@@ -16782,6 +16918,14 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Likes": "Sviđanja",
+        "Dislikes": "Nesviđanja",
+        "Downloads": "Preuzimanja",
+        "Filters": "Filtri",
+        "Plugin name": "Naziv dodatka",
+        "Popularity": "Popularnost",
+        "Recently updated": "Nedavno ažurirani",
+        "Sort plugins": "Poredaj dodatke",
         "Unable to process the attachments. Check access to the selected files and try again.": "Prilozi se ne mogu obraditi. Provjerite pristup odabranim datotekama i pokušajte ponovno.",
         "Old Interface": "Staro sučelje",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staro sučelje je uključeno: nema stakla, a ploče su ravne kao u Telegramu 12.0. Ove postavke vratit će se kad ga isključite.",
@@ -17766,6 +17910,14 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Likes": "Свиђања",
+        "Dislikes": "Несвиђања",
+        "Downloads": "Преузимања",
+        "Filters": "Филтери",
+        "Plugin name": "Назив додатка",
+        "Popularity": "Популарност",
+        "Recently updated": "Недавно ажурирани",
+        "Sort plugins": "Сортирај додатке",
         "Unable to process the attachments. Check access to the selected files and try again.": "Није могуће обрадити прилоге. Проверите приступ изабраним датотекама и покушајте поново.",
         "Old Interface": "Стари интерфејс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Стари интерфејс је укључен: нема стакла, а панели су равни као у Telegram-у 12.0. Ова подешавања ће се вратити када га искључите.",
@@ -18750,6 +18902,14 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Likes": "To se mi líbí",
+        "Dislikes": "To se mi nelíbí",
+        "Downloads": "Stažení",
+        "Filters": "Filtry",
+        "Plugin name": "Název pluginu",
+        "Popularity": "Popularita",
+        "Recently updated": "Nedávno aktualizované",
+        "Sort plugins": "Seřadit pluginy",
         "Unable to process the attachments. Check access to the selected files and try again.": "Přílohy se nepodařilo zpracovat. Zkontrolujte přístup k vybraným souborům a zkuste to znovu.",
         "Old Interface": "Staré rozhraní",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhraní je zapnuté: žádné sklo, panely jsou ploché jako v Telegramu 12.0. Tato nastavení se vrátí, až ho vypnete.",
@@ -19734,6 +19894,14 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Likes": "Páči sa mi",
+        "Dislikes": "Nepáči sa mi",
+        "Downloads": "Stiahnutia",
+        "Filters": "Filtre",
+        "Plugin name": "Názov pluginu",
+        "Popularity": "Popularita",
+        "Recently updated": "Nedávno aktualizované",
+        "Sort plugins": "Zoradiť pluginy",
         "Unable to process the attachments. Check access to the selected files and try again.": "Prílohy sa nepodarilo spracovať. Skontrolujte prístup k vybraným súborom a skúste to znova.",
         "Old Interface": "Staré rozhranie",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Staré rozhranie je zapnuté: žiadne sklo, panely sú ploché ako v Telegrame 12.0. Tieto nastavenia sa vrátia, keď ho vypnete.",
@@ -20718,6 +20886,14 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Likes": "Aprecieri",
+        "Dislikes": "Dezaprecieri",
+        "Downloads": "Descărcări",
+        "Filters": "Filtre",
+        "Plugin name": "Numele pluginului",
+        "Popularity": "Popularitate",
+        "Recently updated": "Actualizate recent",
+        "Sort plugins": "Sortează pluginurile",
         "Unable to process the attachments. Check access to the selected files and try again.": "Fișierele atașate nu au putut fi procesate. Verifică accesul la fișierele selectate și încearcă din nou.",
         "Old Interface": "Interfață veche",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Interfața veche este activă: nu există sticlă, iar panourile sunt plate ca în Telegram 12.0. Aceste setări revin când o dezactivezi.",
@@ -21702,6 +21878,14 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Likes": "Kedvelések",
+        "Dislikes": "Nem tetszik",
+        "Downloads": "Letöltések",
+        "Filters": "Szűrők",
+        "Plugin name": "Bővítmény neve",
+        "Popularity": "Népszerűség",
+        "Recently updated": "Nemrég frissített",
+        "Sort plugins": "Bővítmények rendezése",
         "Unable to process the attachments. Check access to the selected files and try again.": "A mellékleteket nem sikerült feldolgozni. Ellenőrizd a hozzáférést a kijelölt fájlokhoz, és próbáld újra.",
         "Old Interface": "Régi felület",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A régi felület be van kapcsolva: nincs üveg, a panelek laposak, mint a Telegram 12.0-ban. Ezek a beállítások visszatérnek, ha kikapcsolod.",
@@ -22686,6 +22870,14 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Likes": "Liker",
+        "Dislikes": "Liker ikke",
+        "Downloads": "Nedlastinger",
+        "Filters": "Filtre",
+        "Plugin name": "Navn på programtillegg",
+        "Popularity": "Popularitet",
+        "Recently updated": "Nylig oppdatert",
+        "Sort plugins": "Sorter programtillegg",
         "Unable to process the attachments. Check access to the selected files and try again.": "Vedleggene kunne ikke behandles. Kontroller tilgangen til de valgte filene og prøv igjen.",
         "Old Interface": "Gammelt grensesnitt",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamle grensesnittet er på: det er ikke noe glass, og panelene er flate som i Telegram 12.0. Disse innstillingene kommer tilbake når du slår det av.",
@@ -23670,6 +23862,14 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Likes": "Gilla",
+        "Dislikes": "Ogilla",
+        "Downloads": "Nedladdningar",
+        "Filters": "Filter",
+        "Plugin name": "Plugin-namn",
+        "Popularity": "Popularitet",
+        "Recently updated": "Nyligen uppdaterade",
+        "Sort plugins": "Sortera pluginer",
         "Unable to process the attachments. Check access to the selected files and try again.": "Bilagorna kunde inte bearbetas. Kontrollera åtkomsten till de valda filerna och försök igen.",
         "Old Interface": "Gammalt gränssnitt",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Det gamla gränssnittet är på: inget glas, och panelerna är platta som i Telegram 12.0. De här inställningarna återkommer när du stänger av det.",
@@ -24654,6 +24854,14 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Likes": "Lượt thích",
+        "Dislikes": "Lượt không thích",
+        "Downloads": "Lượt tải xuống",
+        "Filters": "Bộ lọc",
+        "Plugin name": "Tên tiện ích",
+        "Popularity": "Mức độ phổ biến",
+        "Recently updated": "Mới cập nhật",
+        "Sort plugins": "Sắp xếp tiện ích",
         "Unable to process the attachments. Check access to the selected files and try again.": "Không thể xử lý tệp đính kèm. Hãy kiểm tra quyền truy cập vào các tệp đã chọn rồi thử lại.",
         "Old Interface": "Giao diện cũ",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Giao diện cũ đang bật: không có kính, các bảng phẳng như trong Telegram 12.0. Các cài đặt này sẽ trở lại khi bạn tắt nó.",
@@ -25638,6 +25846,14 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Likes": "Вподобання",
+        "Dislikes": "Негативні оцінки",
+        "Downloads": "Завантаження",
+        "Filters": "Фільтри",
+        "Plugin name": "Назва плагіна",
+        "Popularity": "Популярність",
+        "Recently updated": "Нещодавно оновлені",
+        "Sort plugins": "Сортувати плагіни",
         "Unable to process the attachments. Check access to the selected files and try again.": "Не вдалося обробити вкладення. Перевірте доступ до вибраних файлів і спробуйте ще раз.",
         "Old Interface": "Старий інтерфейс",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Увімкнено старий інтерфейс: скла немає, панелі пласкі, як у Telegram 12.0. Ці налаштування повернуться, коли ви його вимкнете.",
@@ -26631,6 +26847,14 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Likes": "Me gusta",
+        "Dislikes": "No me gusta",
+        "Downloads": "Descargas",
+        "Filters": "Filtros",
+        "Plugin name": "Nombre del plugin",
+        "Popularity": "Popularidad",
+        "Recently updated": "Actualizados recientemente",
+        "Sort plugins": "Ordenar plugins",
         "Unable to process the attachments. Check access to the selected files and try again.": "No se pudieron procesar los archivos adjuntos. Comprueba el acceso a los archivos seleccionados e inténtalo de nuevo.",
         "Old Interface": "Interfaz antigua",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "La interfaz antigua está activada: no hay cristal y los paneles son planos como en Telegram 12.0. Estos ajustes volverán cuando la desactives.",
@@ -27624,6 +27848,14 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Likes": "Gostos",
+        "Dislikes": "Não gosto",
+        "Downloads": "Transferências",
+        "Filters": "Filtros",
+        "Plugin name": "Nome do plugin",
+        "Popularity": "Popularidade",
+        "Recently updated": "Atualizados recentemente",
+        "Sort plugins": "Ordenar plugins",
         "Unable to process the attachments. Check access to the selected files and try again.": "Não foi possível processar os anexos. Verifique o acesso aos arquivos selecionados e tente novamente.",
         "Old Interface": "Interface antiga",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "A interface antiga está ativada: não há vidro, e os painéis são planos como no Telegram 12.0. Essas configurações voltam quando você a desativar.",
@@ -28617,6 +28849,14 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Likes": "Gefällt mir",
+        "Dislikes": "Gefällt mir nicht",
+        "Downloads": "Downloads",
+        "Filters": "Filter",
+        "Plugin name": "Plugin-Name",
+        "Popularity": "Beliebtheit",
+        "Recently updated": "Kürzlich aktualisiert",
+        "Sort plugins": "Plugins sortieren",
         "Unable to process the attachments. Check access to the selected files and try again.": "Die Anhänge konnten nicht verarbeitet werden. Prüfe den Zugriff auf die ausgewählten Dateien und versuche es erneut.",
         "Old Interface": "Alte Oberfläche",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Die alte Oberfläche ist an: Es gibt kein Glas, und die Leisten sind flach wie in Telegram 12.0. Diese Einstellungen kehren zurück, wenn du sie ausschaltest.",
@@ -29610,6 +29850,14 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Likes": "J’aime",
+        "Dislikes": "Je n’aime pas",
+        "Downloads": "Téléchargements",
+        "Filters": "Filtres",
+        "Plugin name": "Nom du plugin",
+        "Popularity": "Popularité",
+        "Recently updated": "Récemment mis à jour",
+        "Sort plugins": "Trier les plugins",
         "Unable to process the attachments. Check access to the selected files and try again.": "Impossible de traiter les pièces jointes. Vérifiez l’accès aux fichiers sélectionnés et réessayez.",
         "Old Interface": "Ancienne interface",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "L’ancienne interface est activée : il n’y a pas de verre et les panneaux sont plats comme dans Telegram 12.0. Ces réglages reviendront quand vous la désactiverez.",
@@ -30603,6 +30851,14 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Likes": "Beğeniler",
+        "Dislikes": "Beğenilmeyenler",
+        "Downloads": "İndirmeler",
+        "Filters": "Filtreler",
+        "Plugin name": "Eklenti adı",
+        "Popularity": "Popülerlik",
+        "Recently updated": "Yakın zamanda güncellenenler",
+        "Sort plugins": "Eklentileri sırala",
         "Unable to process the attachments. Check access to the selected files and try again.": "Ekler işlenemedi. Seçilen dosyalara erişimi kontrol edip tekrar deneyin.",
         "Old Interface": "Eski arayüz",
         "The old interface is on: there is no glass, and panels are flat as in Telegram 12.0. These settings return when you turn it off.": "Eski arayüz açık: cam yok, paneller Telegram 12.0'daki gibi düz. Kapattığınızda bu ayarlar geri gelir.",
