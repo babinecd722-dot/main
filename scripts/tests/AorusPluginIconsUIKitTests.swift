@@ -297,6 +297,14 @@ private enum AorusPluginIconsUIKitTests {
         checks += themeChecks
         print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")
         print("UIKit icon resolver passed: \(checks) assertions")
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        do {
+            try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+            let result = try JSONSerialization.data(withJSONObject: ["completed": true, "checks": checks, "themeChecks": themeChecks])
+            try result.write(to: documents.appendingPathComponent("uikit-tests-completed.json"), options: .atomic)
+        } catch {
+            fatalError("Unable to write UIKit test completion: \(error)")
+        }
     }
 }
 
