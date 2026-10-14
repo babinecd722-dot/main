@@ -138,6 +138,7 @@ def patch_picker(tg):
     public var aorusIsPreparingAttachmentDraft: Bool { self.aorusWarmRunning && !self.aorusAttachmentPersistenceStarted }
     private var aorusWarmDirty = false
     private var aorusPersistenceWaiters: [() -> Void] = []
+    private var aorusPersistenceFailureWaiters: [() -> Void] = []
     private var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false
     public var aorusDraftSelection: TGMediaSelectionContext? { self.interaction?.selectionState }
@@ -155,7 +156,10 @@ def patch_picker(tg):
         self.aorusWarmDirty = true
         self.aorusWarmWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
+            // Checked again when it runs: a picker restored for an editor or a send is marked as
+            // one only after the restore's own selection changes have asked for this.
             guard let self, !self.aorusWarmRunning, !self.aorusAttachmentPersistenceStarted,
+                  self.aorusPresentDraftGallery == nil, !self.aorusHasSentAttachmentSelection,
                   let persist = self.aorusPersistAttachmentDraft else { return }
             self.aorusWarmDirty = false
             self.aorusWarmRunning = true
@@ -171,10 +175,14 @@ def patch_picker(tg):
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
-    public func aorusRequestAttachmentPersistence(completion: @escaping () -> Void) {
+    /// `completion` runs once the selection is saved; a save that fails keeps the picker as it
+    /// is for another try and tells `failed` instead, so a caller holding state for this picker
+    /// can let it go.
+    public func aorusRequestAttachmentPersistence(completion: @escaping () -> Void, failed: (() -> Void)? = nil) {
         guard !self.aorusHasSentAttachmentSelection, let persist = self.aorusPersistAttachmentDraft else { completion(); return }
         if self.aorusAttachmentPersistenceFinished { completion(); return }
         self.aorusPersistenceWaiters.append(completion)
+        if let failed { self.aorusPersistenceFailureWaiters.append(failed) }
         self.aorusWarmWork?.cancel()
         guard !self.aorusWarmRunning, !self.aorusAttachmentPersistenceStarted else { return }
         self.aorusAttachmentPersistenceStarted = true
@@ -185,8 +193,10 @@ def patch_picker(tg):
             self.aorusAttachmentPersistenceStarted = false
             self.aorusAttachmentPersistenceFinished = saved
             let waiters = self.aorusPersistenceWaiters
+            let failures = self.aorusPersistenceFailureWaiters
             self.aorusPersistenceWaiters.removeAll()
-            if saved { waiters.forEach { $0() } }
+            self.aorusPersistenceFailureWaiters.removeAll()
+            if saved { waiters.forEach { $0() } } else { failures.forEach { $0() } }
         }
     }
 
@@ -486,9 +496,12 @@ def patch_controller(tg):
                 }
 ''' + anchor, 'programmatic dismissal persistence')
     anchor = '        let mediaPickerContext = controller.mediaPickerContext\n'
+    # Gallery selections only. A pasted picture or video is not a library item: kept as a
+    # draft it came back into a gallery picker whose send path only takes library assets and
+    # crashed on it, and a gallery draft restored into the paste sheet replaced the pasted item.
     s = edit(s, anchor, '''        if !isEditingMessage {
             switch subject {
-            case .assets(_, .default), .media:
+            case .assets(_, .default):
                 self.aorusConfigureAttachmentDraftPicker(controller)
             default:
                 break

@@ -3461,7 +3461,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 20.0",
             "private var aorusItemSeparators: [ASDisplayNode] = []",
             "self.backgroundColor = presentationData.theme.contextMenu.sectionSeparatorColor",
-            "self.contentContainer.updateClassicTheme(color: presentationData.theme.contextMenu.backgroundColor)",
+            "self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)",
         ],
         "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift": ["AorusOldInterface.menuColor(dark: isDark).map {"],
         "submodules/TelegramUI/Components/LiquidLens/Sources/LiquidLensView.swift": ["if #available(iOS 26.0, *), !AorusOldInterface.isEnabled {"],

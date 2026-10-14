@@ -69,6 +69,20 @@ public final class AorusVoiceTwin {
         AorusVoiceDSPProcessInt16(self.processor, raw.assumingMemoryBound(to: Int16.self), Int(buffer.mDataByteSize) / 2)
     }
 
+    /// Whether a buffer starting at `timestamp` carries on from audio that ended at `end`.
+    ///
+    /// The capture's own buffers meet exactly, but the end is worked out in floating point
+    /// from a rational timestamp and a sample count, and lands a rounding error either side of
+    /// where the next buffer starts. Compared strictly, a third to two thirds of back-to-back
+    /// buffers read as a jump back in time, and each restarted the processor: its history
+    /// cleared, the next few hundred samples silent and the rest fading back in — round videos
+    /// came out chopped. Only a real jump, back by more than a few samples or forward by more
+    /// than 0.3 s, starts the voice over.
+    static func continues(from end: TimeInterval, to timestamp: TimeInterval, sampleRate: Double) -> Bool {
+        let slack = max(0.001, 4.0 / max(sampleRate, 1.0))
+        return timestamp >= end - slack && timestamp - end <= 0.3
+    }
+
     /// Camera audio keeps its native sample rate, channels, frame count and timestamps.
     /// Compressed, planar, big-endian and padded formats pass through untouched.
     public func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
@@ -101,7 +115,7 @@ public final class AorusVoiceTwin {
         }
         let timestamp = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         if timestamp.isFinite {
-            if let lastTimestamp = self.lastTimestamp, timestamp < lastTimestamp || timestamp - lastTimestamp > 0.3 {
+            if let lastTimestamp = self.lastTimestamp, !Self.continues(from: lastTimestamp, to: timestamp, sampleRate: asbd.mSampleRate) {
                 AorusVoiceDSPReset(self.processor)
             }
             self.lastTimestamp = timestamp + Double(CMSampleBufferGetNumSamples(sampleBuffer)) / asbd.mSampleRate

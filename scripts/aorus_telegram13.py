@@ -38,16 +38,53 @@ def patch_native_proxy_updates(tg: Path, proxy_expression: str) -> None:
     network = tg / "submodules/TelegramCore/Sources/Network/Network.swift"
     text = network.read_text()
     anchor = "    func updateProxySettings(_ activeServer: ProxyServerSettings?) {\n"
+    # Telegram applies its proxy from the shared-data queue and the local endpoint is refreshed
+    # from the main thread. One lock over both: the refresh reads the native choice and applies
+    # it in one step, so it cannot re-apply a choice the native path has just replaced, and the
+    # two never write the context's connection factory at the same time.
     replacement = (
         "    private let aorusNativeProxyServer = Atomic<ProxyServerSettings?>(value: nil)\n"
+        "    private let aorusProxyLock = NSRecursiveLock()\n"
         "    func refreshAorusProxySettings() {\n"
+        "        self.aorusProxyLock.lock()\n"
+        "        defer { self.aorusProxyLock.unlock() }\n"
         "        self.updateProxySettings(self.aorusNativeProxyServer.with { $0 })\n"
         "    }\n\n" + anchor
+        + "        self.aorusProxyLock.lock()\n"
+        + "        defer { self.aorusProxyLock.unlock() }\n"
         + "        let _ = self.aorusNativeProxyServer.swap(activeServer)\n"
         + "        let activeServer = " + proxy_expression
         + ".map { ProxyServerSettings(host: $0.ip, port: Int32($0.port), connection: .socks5(username: $0.username, password: $0.password)) } ?? activeServer\n"
     )
     text = replace(text, anchor, replacement, "native proxy selection")
+    # The transport chosen while the network is set up follows the same rule, so a WEB proxy
+    # the user saved is not used for the moments before the first settings update when the
+    # local endpoint is required; and the user's own choice is known from the start, so a
+    # refresh arriving before that update cannot drop it.
+    anchor = "            let initialActiveServer = proxySettings?.effectiveActiveServer\n"
+    text = replace(
+        text,
+        anchor,
+        "            let initialActiveServer = " + proxy_expression
+        + ".map { ProxyServerSettings(host: $0.ip, port: Int32($0.port), connection: .socks5(username: $0.username, password: $0.password)) } ?? proxySettings?.effectiveActiveServer\n",
+        "initial native proxy selection",
+    )
+    start = text.find("            let network = Network(queue: queue, datacenterId: datacenterId,")
+    if start < 0 or text.count("            let network = Network(queue: queue, datacenterId: datacenterId,") != 1:
+        raise RuntimeError("Telegram13: native network construction is missing or ambiguous")
+    end = text.index("\n", start) + 1
+    seed = "            network.aorusSeedNativeProxyServer(proxySettings?.effectiveActiveServer)\n"
+    if not text[end:].startswith(seed):
+        text = text[:end] + seed + text[end:]
+    text = replace(
+        text,
+        "    func refreshAorusProxySettings() {\n",
+        "    func aorusSeedNativeProxyServer(_ server: ProxyServerSettings?) {\n"
+        "        let _ = self.aorusNativeProxyServer.swap(server)\n"
+        "    }\n"
+        "    func refreshAorusProxySettings() {\n",
+        "native proxy seed",
+    )
     network.write_text(text)
 
     account = tg / "submodules/TelegramCore/Sources/Account/Account.swift"

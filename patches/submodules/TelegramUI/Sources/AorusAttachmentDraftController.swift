@@ -18,6 +18,17 @@ import TextFormat
 import LegacyComponents
 import ChatTextInputPanelNode
 
+extension ChatInterfaceState {
+    /// The picker's caption as the composer's text, written only when it says something else.
+    /// The picker hands back the text it was given even when nothing was typed there, and
+    /// rebuilding the composer from it would flatten the quotes, lists and code blocks of a
+    /// Telegram 13 composer into plain text.
+    func aorusWithAttachmentCaption(_ caption: NSAttributedString) -> ChatInterfaceState {
+        guard !caption.isEqual(to: self.composeInputState.inputText) else { return self }
+        return self.withUpdatedComposeInputState(ChatTextInputState(inputText: caption))
+    }
+}
+
 extension ChatControllerImpl {
     func aorusCanUseAttachmentDraft() -> Bool {
         guard self.presentationInterfaceState.interfaceState.editMessage == nil,
@@ -47,7 +58,7 @@ extension ChatControllerImpl {
             guard let controller else { completion(false); return }
             if controller.aorusAttachmentRestoreFailed, controller.aorusDraftSelection?.count() == 0 {
                 if let caption = controller.aorusDraftCurrentCaption {
-                    let update: (ChatInterfaceState) -> ChatInterfaceState = { $0.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)) }
+                    let update: (ChatInterfaceState) -> ChatInterfaceState = { $0.aorusWithAttachmentCaption(caption) }
                     if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
                         self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: true, { $0.updatedInterfaceState(update) })
                     } else {
@@ -78,7 +89,7 @@ extension ChatControllerImpl {
                         self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: false, { state in
                             state.updatedInterfaceState { previous in
                                 var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
-                                if let caption = capture.caption { updated = updated.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)) }
+                                if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
                                 return updated
                             }
                         })
@@ -86,7 +97,7 @@ extension ChatControllerImpl {
                     let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, { previous in
                             replaced = previous.attachmentDraft
                             var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
-                            if let caption = capture.caption { updated = updated.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)) }
+                            if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
                             return updated
                         }).startStandalone(completed: {
                             if let replaced, replaced.directory != capture.draft?.directory, replaced.directory != retainedDirectory {
@@ -145,9 +156,13 @@ extension ChatControllerImpl {
                 self?.present(editor, in: .window(.root), with: arguments)
             }, closed: { [weak self, weak controller] in
                 guard let controller else { return }
-                controller.aorusRequestAttachmentPersistence { [weak self, controller] in
+                controller.aorusRequestAttachmentPersistence(completion: { [weak self, controller] in
                     if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
-                }
+                }, failed: { [weak self, controller] in
+                    // The edit could not be kept; the editor is gone either way, and the composer
+                    // must not go on waiting for it, refusing every send and every preview.
+                    if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
+                })
             })
         }, updateMediaPickerContext: { _ in }, completion: { [weak self] fromGallery, signals, silently, time, parameters, _, completion in
             self?.enqueueMediaMessages(fromGallery: fromGallery, signals: signals, silentPosting: silently, scheduleTime: time, parameters: parameters, completion: completion)
@@ -235,20 +250,42 @@ extension ChatControllerImpl {
     }
 
     /// Runs only when every selected item has a native outgoing message.
+    ///
+    /// Counted by the media the messages carry, not by the messages: Telegram folds every item
+    /// that has a price into one paid message holding all of them, so a priced selection of
+    /// three is one message with three pieces of media, and counting messages refused every
+    /// paid send of a draft.
     func aorusAttachmentDraftPrepared(messages: [EnqueueMessage]) -> Bool {
         guard let sent = self.aorusSendingAttachmentDraft else { return true }
-        guard messages.count == (self.aorusAttachmentExpectedCount ?? sent.items.count) else {
+        func resource(_ media: Any?) -> MediaResource? {
+            if let image = media as? TelegramMediaImage { return image.representations.last?.resource }
+            if let file = media as? TelegramMediaFile { return file.resource }
+            return nil
+        }
+        var carried = 0
+        var resources: [MediaResource] = []
+        for message in messages {
+            // Anything that is not one of these media messages still counts, with nothing to
+            // keep: a partial conversion can never pass for a complete one.
+            guard case let .message(_, _, _, reference, _, _, _, _, _, _) = message else {
+                carried += 1
+                continue
+            }
+            if let paid = reference?.media as? TelegramMediaPaidContent {
+                for extended in paid.extendedMedia {
+                    carried += 1
+                    if case let .full(media) = extended, let found = resource(media) { resources.append(found) }
+                }
+            } else {
+                carried += 1
+                if let found = resource(reference?.media) { resources.append(found) }
+            }
+        }
+        guard carried == (self.aorusAttachmentExpectedCount ?? sent.items.count), resources.count == carried else {
             self.aorusCancelAttachmentDraftSend()
             self.aorusShowAttachmentDraftError()
             return false
         }
-        let resources = messages.compactMap { message -> MediaResource? in
-            guard case let .message(_, _, _, reference, _, _, _, _, _, _) = message else { return nil }
-            if let image = reference?.media as? TelegramMediaImage { return image.representations.last?.resource }
-            if let file = reference?.media as? TelegramMediaFile { return file.resource }
-            return nil
-        }
-        guard resources.count == messages.count else { self.aorusCancelAttachmentDraftSend(); self.aorusShowAttachmentDraftError(); return false }
         self.aorusAttachmentPreparedResources = resources
         return true
     }
@@ -261,7 +298,7 @@ extension ChatControllerImpl {
         self.aorusAttachmentSendCaption = controller.aorusDraftCurrentCaption ?? self.presentationInterfaceState.interfaceState.composeInputState.inputText
         if let caption = self.aorusAttachmentSendCaption {
             self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: true, { state in
-                state.updatedInterfaceState { $0.withUpdatedComposeInputState(ChatTextInputState(inputText: caption)).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970)) }
+                state.updatedInterfaceState { $0.aorusWithAttachmentCaption(caption).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970)) }
             })
         }
         self.aorusAttachmentSendPeer = self.chatLocation.peerId

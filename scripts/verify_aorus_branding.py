@@ -4078,7 +4078,7 @@ def main() -> None:
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift", "func shape(_ shape: GlassBackgroundView.Shape) -> GlassBackgroundView.Shape"),
         # The panes that draw their own material take the same style: the long-press menu and
         # the button it grows out of, what it holds, the tap menu with its arrow, the action sheet.
-        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.contentContainer.updateClassicTheme(color: presentationData.theme.contextMenu.backgroundColor)"),
+        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)"),
         ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.contentsView.layer"),
         ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "private lazy var backgroundView = GlassBackgroundView()"),
         ("submodules/Display/Source/ContextMenuContainerNode.swift", "self.aorusSurface.attach(host: self.containerNode.view"),

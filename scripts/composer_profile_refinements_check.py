@@ -48,6 +48,7 @@ final class NativeDraftGate {
     private var aorusWarmRunning = false
     private var aorusWarmDirty = false
     private var aorusPersistenceWaiters: [() -> Void] = []
+    private var aorusPersistenceFailureWaiters: [() -> Void] = []
     private var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false
 ''' + block(picker, '    public func aorusPrepareAttachmentDraft(') + block(picker, '    public func aorusRequestAttachmentPersistence(') + '\n}\n' + GATE_TESTS
@@ -267,12 +268,19 @@ expect(calls == 2 && closed == 3, "an already committed selection does not write
 gate.aorusPrepareAttachmentDraft(); wait(0.4)
 expect(calls == 3, "new selection invalidates the previous finished snapshot")
 callbacks.removeFirst()(true)
-gate.aorusRequestAttachmentPersistence { closed += 1 }
+var failed = 0
+gate.aorusRequestAttachmentPersistence(completion: { closed += 1 }, failed: { failed += 1 })
 callbacks.removeFirst()(false)
 expect(closed == 3 && gate.view.isUserInteractionEnabled, "failed final save preserves the gallery and permits retry")
+expect(failed == 1, "a failed save tells the caller once, so state held for the picker is released")
 gate.aorusRequestAttachmentPersistence { closed += 1 }
 callbacks.removeFirst()(true)
-expect(closed == 4 && calls == 5, "retry completes one final dismissal")
+expect(closed == 4 && calls == 5 && failed == 1, "retry completes one final dismissal")
+gate.aorusPrepareAttachmentDraft()
+gate.aorusPresentDraftGallery = {}
+wait(0.4)
+expect(calls == 5, "a picker marked as an editor after its restore asked for a save never writes one")
+gate.aorusPresentDraftGallery = nil
 gate.aorusHasSentAttachmentSelection = true
 gate.aorusPrepareAttachmentDraft(); wait(0.4)
 gate.aorusRequestAttachmentPersistence { closed += 1 }

@@ -15998,8 +15998,11 @@ def patch_session_platform_icon(tg: Path) -> None:
     old = 'if platform.contains("android") {'
     new = ('if platform.contains("android") || systemVersion.contains("android") '
            '|| device.contains("android") ' + sentinel + ' {')
+    # Every copy of the function: the old interface installs Telegram 12.0's iconForSession
+    # ahead of the current one, and patching only the first left the current interface on the
+    # stock branch.
     if old in t:
-        t = t.replace(old, new, 1)
+        t = t.replace(old, new)
         print("SessionIcon: Android icon now also keys off systemVersion/device")
     else:
         print("SessionIcon: WARNING — android branch anchor not found")
@@ -16014,7 +16017,7 @@ def patch_session_platform_icon(tg: Path) -> None:
                  '&& !systemVersion.contains("ubuntu") && !systemVersion.contains("android") '
                  '/* AorusGram: non-apple sysver exclusion */ {')
     if apple_old in t:
-        t = t.replace(apple_old, apple_new, 1)
+        t = t.replace(apple_old, apple_new)
         print("SessionIcon: Apple branch now excludes non-Apple systemVersions")
     else:
         print("SessionIcon: WARNING — apple branch anchor not found")
@@ -16504,6 +16507,13 @@ def patch_voice_twin_recorder(tg: Path) -> None:
     if text.count(anchor) != 1:
         raise RuntimeError("VoiceTwin: recorder paused-buffer guard is missing")
     text = text.replace(anchor, anchor + "        " + sentinel + "\n        self.aorusVoiceTwin.processBuffer(buffer)\n", 1)
+    # Every start of capture -- the first one and each resume after a pause -- begins the voice
+    # afresh, on the recorder's queue like every buffer: otherwise the tail of the audio before
+    # the pause was mixed into the first few dozen milliseconds after it.
+    anchor = "    func audioSessionAcquired(headset: Bool) {\n"
+    if text.count(anchor) != 1:
+        raise RuntimeError("VoiceTwin: recorder capture start is missing")
+    text = text.replace(anchor, anchor + "        self.aorusVoiceTwin.reset()\n", 1)
     path.write_text(text, encoding="utf-8")
     print("VoiceTwin: recorder owns its processing state")
 
@@ -16530,10 +16540,14 @@ def patch_voice_twin_video_notes(tg: Path) -> None:
                 text = text.replace(legacy, "if type == kCMMediaType_Audio { self.aorusVoiceTwin.processSampleBuffer(sampleBuffer) }  " + sentinel)
                 if sentinel not in text:
                     text = text.replace(anchor, anchor + "\n        if type == kCMMediaType_Audio { self.aorusVoiceTwin.processSampleBuffer(sampleBuffer) }  " + sentinel, 1)
-                start = "    func startRecording(mode: RecorderMode, position: Camera.Position? = nil, orientation: AVCaptureVideoOrientation, additionalOutput: CameraOutput? = nil) -> Signal<CameraRecordingData, CameraRecordingError> {"
+                # A new recording starts the voice over -- on the audio queue, where every
+                # buffer is processed, never on the queue that starts the recording, and only
+                # once a recording is really starting: a reset racing the buffer being
+                # processed read the processor's history mid-reset, out of its bounds.
+                start = "    func startRecording(mode: RecorderMode, position: Camera.Position? = nil, orientation: AVCaptureVideoOrientation, additionalOutput: CameraOutput? = nil) -> Signal<CameraRecordingData, CameraRecordingError> {\n        guard self.videoRecorder == nil else {\n            return .complete()\n        }\n"
                 if text.count(start) != 1:
                     raise RuntimeError("VoiceTwin: legacy recording start is missing")
-                text = text.replace(start, start + "\n        self.aorusVoiceTwin.reset()", 1)
+                text = text.replace(start, start + "        self.audioQueue.async { [weak self] in self?.aorusVoiceTwin.reset() }\n", 1)
             else:
                 text = text.replace(anchor, anchor + "\n        " + sentinel + "\n        self.aorusVoiceTwin.processSampleBuffer(sampleBuffer)", 1)
             path.write_text(text, encoding="utf-8")
@@ -17571,30 +17585,45 @@ def patch_video_mask_call_phase(tg: Path) -> None:
 _AORUS_CALL_VOICE_TWIN_HEADER = r"""#ifndef AorusCallVoiceTwin_h
 #define AorusCallVoiceTwin_h
 #include "AorusVoiceDSP.h"
+#include <atomic>
 #ifdef __OBJC__
 #import <Foundation/Foundation.h>
 #endif
 
+// The capture callback runs on the audio device's real-time thread, so it never reads the
+// settings itself: no Objective-C, no preferences lock, nothing autoreleased there. They are
+// read off that thread -- when a call's capture is created and whenever the defaults change --
+// into one atomic word, and the callback only loads it.
 class AorusCallVoiceTwin {
 public:
-    AorusCallVoiceTwin() : processor_(AorusVoiceDSPCreate()) {}
+    AorusCallVoiceTwin() : processor_(AorusVoiceDSPCreate()) { observeSettings(); }
     ~AorusCallVoiceTwin() { AorusVoiceDSPDestroy(processor_); }
     AorusCallVoiceTwin(const AorusCallVoiceTwin &) = delete;
     AorusCallVoiceTwin &operator=(const AorusCallVoiceTwin &) = delete;
-    void refreshParams() {
+    // Off the audio thread only.
+    static void reloadSettings() {
 #ifdef __OBJC__
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        const bool nextEnabled = [defaults boolForKey:@"aorusgram_voice_twin_enabled"];
-        NSString *value = [defaults stringForKey:@"aorusgram_voice_twin_preset"];
-        int nextPreset = 0;
-        if ([value isEqualToString:@"male"]) { nextPreset = 1; }
-        else if ([value isEqualToString:@"female"]) { nextPreset = 2; }
-        else if ([value isEqualToString:@"robot"]) { nextPreset = 3; }
-        else if ([value isEqualToString:@"child"] || [value isEqualToString:@"high"]) { nextPreset = 4; }
+        @autoreleasepool {
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            const bool enabled = [defaults boolForKey:@"aorusgram_voice_twin_enabled"];
+            NSString *value = [defaults stringForKey:@"aorusgram_voice_twin_preset"];
+            int preset = 0;
+            if ([value isEqualToString:@"male"]) { preset = 1; }
+            else if ([value isEqualToString:@"female"]) { preset = 2; }
+            else if ([value isEqualToString:@"robot"]) { preset = 3; }
+            else if ([value isEqualToString:@"child"] || [value isEqualToString:@"high"]) { preset = 4; }
+            settings().store((preset << 1) | (enabled ? 1 : 0), std::memory_order_release);
+        }
+#endif
+    }
+    // On the audio thread: one atomic load, and a reset when the voice changed.
+    void refreshParams() {
+        const int packed = settings().load(std::memory_order_acquire);
+        const bool nextEnabled = (packed & 1) != 0;
+        const int nextPreset = packed >> 1;
         if (nextEnabled != enabled_ || nextPreset != preset_) { AorusVoiceDSPReset(processor_); }
         enabled_ = nextEnabled;
         preset_ = nextPreset;
-#endif
     }
     bool enabled() const { return enabled_; }
     void process(void *samples, size_t frames, size_t bytes, size_t channels, uint32_t rate) {
@@ -17603,6 +17632,22 @@ public:
         AorusVoiceDSPProcessInt16(processor_, static_cast<int16_t *>(samples), frames);
     }
 private:
+    static std::atomic<int> &settings() {
+        static std::atomic<int> value{0};
+        return value;
+    }
+    static void observeSettings() {
+#ifdef __OBJC__
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
+            [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
+                (void)note;
+                AorusCallVoiceTwin::reloadSettings();
+            }];
+        });
+        reloadSettings();
+#endif
+    }
     AorusVoiceDSPHandle *processor_;
     bool enabled_ = false;
     int preset_ = 0;

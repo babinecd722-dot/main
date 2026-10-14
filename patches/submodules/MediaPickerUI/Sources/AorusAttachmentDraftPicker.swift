@@ -206,11 +206,10 @@ extension MediaPickerScreenImpl {
         guard let selection = self.aorusDraftSelection, let editing = self.aorusDraftEditing else { return false }
         var restored: [(NSObject & TGMediaEditableItem & TGMediaSelectableItem, AorusAttachmentDraft.Item, URL)] = []
         var restoredAdjustments: [String: TGMediaEditAdjustments] = [:]
-        var workingVideos: [URL] = []
-        var complete = false
-        defer {
-            if !complete { for url in workingVideos { try? FileManager.default.removeItem(at: url) } }
-        }
+        // The drawings the editor reads back from a path stay with this picker: they are read
+        // from a copy of their own, not from the draft's folder, which the next save of the
+        // selection replaces and deletes while this picker may still be about to send.
+        let working = aorusDraftWorkingDirectory()
         let identifiers = draft.items.compactMap(\.assetIdentifier)
         let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
         var assets: [String: PHAsset] = [:]
@@ -224,20 +223,25 @@ extension MediaPickerScreenImpl {
                       let asset = assets[identifier],
                       let wrapped = TGMediaAsset(phAsset: asset) else { return false }
                 item = wrapped
-            case .photo:
-                guard let image = UIImage(contentsOfFile: folder.appendingPathComponent("original.png").path) else { return false }
-                item = TGCameraCapturedPhoto(existing: image, identifier: entry.id)
-            case .video:
-                let original = folder.appendingPathComponent("original.mp4")
-                guard FileManager.default.fileExists(atPath: original.path) else { return false }
-                let working = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("aorus-draft-" + UUID().uuidString + ".mp4")
-                do { try FileManager.default.copyItem(at: original, to: working) } catch { return false }
-                workingVideos.append(working)
-                item = TGCameraCapturedVideo(url: working, isAnimation: entry.isAnimation ?? false)
+            case .photo, .video:
+                // Kept by an earlier version from a pasted picture or video. The gallery picker
+                // this restores into sends library assets only, and handed one of these it
+                // stopped on an object that is not one. The draft stays in the chat, as one whose
+                // source is unavailable does, and its previews can still be removed.
+                return false
             }
             if let data = entry.adjustments {
+                let edits = working.appendingPathComponent(entry.id, isDirectory: true)
+                do {
+                    try FileManager.default.createDirectory(at: edits, withIntermediateDirectories: true)
+                    for name in ["painting.png", "painting-still.png", "drawing.bin"] {
+                        let source = folder.appendingPathComponent(name)
+                        guard FileManager.default.fileExists(atPath: source.path) else { continue }
+                        try FileManager.default.copyItem(at: source, to: edits.appendingPathComponent(name))
+                    }
+                } catch { return false }
                 var error: NSError?
-                guard let values = AorusMediaDraftReadAdjustments(data, folder.path, &error), error == nil else { return false }
+                guard let values = AorusMediaDraftReadAdjustments(data, edits.path, &error), error == nil else { return false }
                 if !item.isVideo, !values.isDefaultValues(forAvatar: false), UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path) == nil { return false }
                 restoredAdjustments[entry.id] = values
             }
@@ -267,9 +271,24 @@ extension MediaPickerScreenImpl {
             }
             if !selection.setItem(item, selected: true) { selection.clear(); return false }
         }
-        complete = true
         return true
     }
+}
+
+/// A fresh folder for the drawings one restore hands its editor. Folders a day old or more
+/// are removed on the way: by then the media they belonged to has long been sent or dropped.
+private func aorusDraftWorkingDirectory() -> URL {
+    let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent("aorus-draft-edits", isDirectory: true)
+    DispatchQueue.global(qos: .utility).async {
+        let manager = FileManager.default
+        guard let folders = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else { return }
+        let limit = Date().addingTimeInterval(-24 * 60 * 60)
+        for folder in folders {
+            let modified = (try? folder.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if modified < limit { try? manager.removeItem(at: folder) }
+        }
+    }
+    return root.appendingPathComponent(UUID().uuidString, isDirectory: true)
 }
 
 private func aorusDraftThumbnail(_ image: UIImage, side: CGFloat) -> UIImage? {

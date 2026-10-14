@@ -73,7 +73,31 @@ struct AorusVoiceTwinAppleTests {
         }
     }
 
+    static func checkContinuity() {
+        // Back-to-back buffers on the clocks the cameras use: the sample-rate timescale and
+        // the nanosecond host clock, at the frame counts they deliver.
+        for rate in [44100.0, 48000.0] {
+            for frames in [940, 960, 1024] {
+                for timescale in [Int32(rate), Int32(1_000_000_000)] {
+                    var end: TimeInterval?
+                    var breaks = 0
+                    for index in 0 ..< 4000 {
+                        let start = CMTime(seconds: 1000.0 + Double(index * frames) / rate, preferredTimescale: timescale)
+                        let timestamp = CMTimeGetSeconds(start)
+                        if let end, !AorusVoiceTwin.continues(from: end, to: timestamp, sampleRate: rate) { breaks += 1 }
+                        end = timestamp + Double(frames) / rate
+                    }
+                    expect(breaks == 0, "back-to-back capture buffers never restart the voice")
+                }
+            }
+        }
+        expect(!AorusVoiceTwin.continues(from: 10.0, to: 9.9, sampleRate: 48000), "a timestamp going back restarts the voice")
+        expect(!AorusVoiceTwin.continues(from: 10.0, to: 10.5, sampleRate: 48000), "a gap in the capture restarts the voice")
+        expect(AorusVoiceTwin.continues(from: 10.0, to: 10.0002, sampleRate: 48000), "a buffer that follows on continues the voice")
+    }
+
     static func main() {
+        checkContinuity()
         let defaults = UserDefaults.standard
         let keys = ["aorusgram_voice_twin_enabled", "aorusgram_voice_twin_preset"]
         let previous = keys.map { defaults.object(forKey: $0) }

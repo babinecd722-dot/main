@@ -161,9 +161,12 @@ private final class AorusAttachmentDraftTile: UIView {
 
     func update(item: AorusAttachmentDraft.Item, previewURL: URL?, theme: PresentationTheme, strings: PresentationStrings) {
         if self.itemId != item.id || self.previewPath != previewURL?.path {
+            // The same attachment saved into a new folder keeps its picture until the new one is
+            // read, instead of dropping to the small thumbnail for a frame.
+            let sameItem = self.itemId == item.id && self.imageView.image != nil
             self.itemId = item.id
             self.previewPath = previewURL?.path
-            self.imageView.image = item.thumbnail.flatMap { UIImage(data: $0) }
+            if !sameItem { self.imageView.image = item.thumbnail.flatMap { UIImage(data: $0) } }
             if let path = previewURL?.path {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                     let image = UIImage(contentsOfFile: path)

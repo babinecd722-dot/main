@@ -91,6 +91,8 @@ struct Representation { let resource: MediaResource }
 final class TelegramMediaImage { let representations: [Representation]; init(_ values: [Representation]) { self.representations = values } }
 final class TelegramMediaFile { let resource: MediaResource; init(_ resource: MediaResource) { self.resource = resource } }
 struct Reference { let media: Any }
+enum TelegramExtendedMedia { case preview; case full(media: Any) }
+final class TelegramMediaPaidContent { let extendedMedia: [TelegramExtendedMedia]; init(_ media: [TelegramExtendedMedia]) { self.extendedMedia = media } }
 struct ChatTextInputState { let inputText: NSAttributedString }
 final class MediaPickerScreenImpl {
     var aorusAttachmentStableIds: [String: String] = [:]
@@ -110,6 +112,10 @@ final class ChatControllerImpl {
         var attachmentDraft: AorusAttachmentDraft?
         var composeInputState = ChatTextInputState(inputText: NSAttributedString(string: "Original caption"))
         func withUpdatedComposeInputState(_ value: ChatTextInputState) -> Interface { var result = self; result.composeInputState = value; return result }
+        func aorusWithAttachmentCaption(_ caption: NSAttributedString) -> Interface {
+            guard !caption.isEqual(to: self.composeInputState.inputText) else { return self }
+            return self.withUpdatedComposeInputState(ChatTextInputState(inputText: caption))
+        }
         func withUpdatedTimestamp(_ value: Int32) -> Interface { self }
     }
     struct Panel { var mediaRecordingState: Int? }
@@ -178,7 +184,16 @@ begin(1)
 expect(controller.aorusAttachmentDraftPrepared(messages: [message(video)]), "the current native selection, including deselection in the gallery, determines the expected count")
 controller.aorusCancelAttachmentDraftSend()
 expectReset()
-expect(controller.errors == 3, "each invalid conversion reports one recoverable error")
+// Priced items travel as one paid message holding every one of them.
+begin(3)
+expect(controller.aorusAttachmentDraftPrepared(messages: [message(photo), message(TelegramMediaPaidContent([.full(media: video), .full(media: photo)]))]), "a paid album counts each piece of media it carries")
+expect(controller.aorusAttachmentPreparedResources.compactMap { ($0 as? Resource)?.id } == [2, 3, 2], "cleanup waits for the media inside the paid message")
+controller.aorusCancelAttachmentDraftSend()
+expectReset()
+begin(2)
+expect(!controller.aorusAttachmentDraftPrepared(messages: [message(TelegramMediaPaidContent([.full(media: video), .preview]))]), "paid media that is not all converted never consumes the draft")
+expectReset()
+expect(controller.errors == 4, "each invalid conversion reports one recoverable error")
 expect(controller.aorusCanUseAttachmentDraft(), "ordinary chats allow artifact drafts")
 controller.subject = .scheduledMessages
 expect(controller.aorusCanUseAttachmentDraft(), "scheduled message chats keep their native draft flow")
@@ -200,6 +215,8 @@ let picker = MediaPickerScreenImpl()
 picker.aorusDraftCurrentCaption = NSAttributedString(string: "Caption changed in the gallery")
 controller.aorusTrackNativeAttachmentSelection(picker)
 expect(controller.savedCaption?.string == picker.aorusDraftCurrentCaption?.string, "gallery caption is persisted before the native send confirmation")
+let structured = controller.presentationInterfaceState.interfaceState.composeInputState
+expect(controller.presentationInterfaceState.interfaceState.aorusWithAttachmentCaption(structured.inputText).composeInputState.inputText === structured.inputText, "an unchanged caption leaves the composer's own state untouched")
 expect(controller.aorusAttachmentSendCaption?.isEqual(to: controller.presentationInterfaceState.interfaceState.composeInputState.inputText) == true, "accepted send compares the same caption that is visible in the composer")
 controller.aorusCancelAttachmentDraftSend()
 expect(controller.presentationInterfaceState.interfaceState.composeInputState.inputText.string == "Caption changed in the gallery", "cancelling payment preserves the edited gallery caption")

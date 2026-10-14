@@ -273,7 +273,20 @@ def _adaptive_sheets(tg: Path) -> None:
         end = text.index(terminator, start) + len(terminator)
         text = text[:start] + "            if !AorusOldInterface.isEnabled {\n" + text[start:end] + "\n            }" + text[end:]
     text = text.replace("cornerRadius = 40.0", "cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 40.0")
-    text = text.replace("let containerCornerRadius = max(22.0, sheetEnvironment.deviceMetrics.screenCornerRadius)", "let containerCornerRadius = AorusOldInterface.isEnabled ? 12.0 : max(22.0, sheetEnvironment.deviceMetrics.screenCornerRadius)")
-    text = text.replace("var bottomInsets = ContainerViewLayout.concentricInsets(bottomInset: sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)", "var bottomInsets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: 0.0, left: 16.0, bottom: sheetEnvironment.safeInsets.bottom.isZero ? 16.0 : sheetEnvironment.safeInsets.bottom + 14.0, right: 16.0) : ContainerViewLayout.concentricInsets(bottomInset: sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)")
+    # Telegram 13.0 also centres the sheet on a tablet; the classic sheet keeps that, with
+    # 12.0's corner and footer. A missing anchor stops the build instead of leaving the
+    # current footer and corners in the old interface.
+    text = edit(
+        text,
+        "let containerCornerRadius: CGFloat = isCentered ? 40.0 : max(22.0, sheetEnvironment.deviceMetrics.screenCornerRadius)",
+        "let containerCornerRadius: CGFloat = AorusOldInterface.isEnabled ? 12.0 : (isCentered ? 40.0 : max(22.0, sheetEnvironment.deviceMetrics.screenCornerRadius))",
+        "classic resizable sheet corners",
+    )
+    text = edit(
+        text,
+        "var bottomInsets = ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)",
+        "var bottomInsets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: 0.0, left: 16.0, bottom: isCentered ? 16.0 : (sheetEnvironment.safeInsets.bottom.isZero ? 16.0 : sheetEnvironment.safeInsets.bottom + 14.0), right: 16.0) : ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)",
+        "classic resizable sheet footer",
+    )
     text += "\n// AorusGram: classic resizable sheet\n"
     path.write_text(text)
