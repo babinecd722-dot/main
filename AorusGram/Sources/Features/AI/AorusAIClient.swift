@@ -765,10 +765,25 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
             result = .failure(.serverUnavailable)
         } else if receivedSuccessfulDone {
             result = .success(())
+        } else if isPlainJSONResponse, let control = Self.turnControlError(in: jsonBody, status: responseStatus ?? 200) {
+            // A turn-control answer sent as a plain object with a success status: what it
+            // says — the turn is over, or its journal is gone — is the answer, not an outage
+            // to retry.
+            result = .failure(control)
         } else {
             result = .failure(.serverUnavailable)
         }
         finish(result)
+    }
+
+    /// A resume or acknowledgement refusal carried in a JSON body, whatever its status.
+    private static func turnControlError(in body: Data, status: Int) -> AorusAIClientError? {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let code = (object["error"] as? String)?.lowercased(),
+              ["resume_not_found", "resume_journal_unavailable", "turn_in_progress", "invalid_turn_control", "ack_turn_required", "ack_turn_not_found"].contains(code) else {
+            return nil
+        }
+        return AorusAIClient.mapHTTP(status, data: body)
     }
 
     /// Reads a buffered chat-completion answer as the turn it is: its text, its files, and

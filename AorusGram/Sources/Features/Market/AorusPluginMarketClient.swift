@@ -31,11 +31,20 @@ public final class AorusPluginMarketClient {
     private var confirmedStats: [String: AorusPluginMarketStats] = [:]
     private var downloadsInFlight = Set<String>()
     private var retryDownloads: DispatchWorkItem?
+    /// Seconds before the next attempt at a download the Market could not take for now:
+    /// one minute, doubling to an hour, back to nothing once one gets through.
+    private var downloadRetryDelay: TimeInterval = 0
     private var activationObserver: NSObjectProtocol?
     private var devicePreferencesKey: String { "aorusgram.market.stats." + DeviceFingerprint.deviceHash().lowercased() }
     private var pendingDownloads: Set<String> {
         get { Set((UserDefaults.standard.stringArray(forKey: devicePreferencesKey + ".downloads") ?? []).filter(AorusPluginMarketID.isValid)) }
         set { UserDefaults.standard.set(newValue.sorted(), forKey: devicePreferencesKey + ".downloads") }
+    }
+    /// Plugins whose download the Market has counted for this device. It counts one per
+    /// device whatever the version, so an update of one of these sends nothing.
+    private var reportedDownloads: Set<String> {
+        get { Set((UserDefaults.standard.stringArray(forKey: devicePreferencesKey + ".reported") ?? []).filter(AorusPluginMarketID.isValid)) }
+        set { UserDefaults.standard.set(newValue.sorted(), forKey: devicePreferencesKey + ".reported") }
     }
 
     /// The Market has said this author is banned. A ban is the author's and not a plugin's,
@@ -281,7 +290,7 @@ public final class AorusPluginMarketClient {
     /// Called only after the verified source has been saved. Reporting failure never undoes
     /// an installation; the id is retained for another signed attempt, including after restart.
     public func recordInstalledDownload(id: String) {
-        guard AorusPluginMarketID.isValid(id) else { return }
+        guard AorusPluginMarketID.isValid(id), !reportedDownloads.contains(id) else { return }
         pendingDownloads.insert(id)
         flushDownloads()
     }
@@ -293,14 +302,32 @@ public final class AorusPluginMarketClient {
             downloadEvent(id: id) { [weak self] result in
                 guard let self else { return }
                 self.downloadsInFlight.remove(id)
-                if case .success = result { self.pendingDownloads.remove(id) }
-                else if self.retryDownloads == nil {
-                    let retry = DispatchWorkItem { [weak self] in self?.retryDownloads = nil; self?.flushDownloads() }
-                    self.retryDownloads = retry
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: retry)
+                switch result {
+                case .success:
+                    self.pendingDownloads.remove(id)
+                    self.reportedDownloads.insert(id)
+                    self.downloadRetryDelay = 0
+                case .failure(.notFound), .failure(.invalid):
+                    // An id the Market does not publish, or will not take: it would answer the
+                    // same way every time, so the event is dropped rather than resent forever.
+                    self.pendingDownloads.remove(id)
+                case .failure(.unauthorized), .failure(.unavailable), .failure(.authorBanned):
+                    // The licence said no. Nothing changes that within a minute; the event
+                    // waits for the next return to the app or the next launch.
+                    break
+                case .failure:
+                    self.scheduleDownloadRetry()
                 }
             }
         }
+    }
+
+    private func scheduleDownloadRetry() {
+        guard retryDownloads == nil else { return }
+        downloadRetryDelay = min(3600, max(60, downloadRetryDelay * 2))
+        let retry = DispatchWorkItem { [weak self] in self?.retryDownloads = nil; self?.flushDownloads() }
+        retryDownloads = retry
+        DispatchQueue.main.asyncAfter(deadline: .now() + downloadRetryDelay, execute: retry)
     }
 
     private func reconciling(_ card: AorusPluginMarketCard, revision: Int) -> AorusPluginMarketCard {

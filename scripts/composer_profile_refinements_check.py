@@ -236,8 +236,10 @@ final class AorusProfileMusicPlayback { func updateVisibility() {} }
 enum AorusGlassProfileTint {
     static let pageBlendNotification = Notification.Name("ProfilePagingFixture")
     static let settleDuration = 0.3, refreshDuration = 0.25
-    static var slide: (base: UIImage, image: UIImage, fraction: CGFloat)?
-    static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat)? { slide }
+    static var slide: (base: UIImage, image: UIImage, fraction: CGFloat, direction: CGFloat, trailing: UIImage?)?
+    static var page: UIImage?
+    static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat, direction: CGFloat, trailing: UIImage?)? { slide }
+    static func pageBackgroundImage(for peerId: Int64) -> UIImage? { page }
 }
 '''
     return adapter + block(tint, 'public final class AorusProfilePageImageView:') + block(music, 'func aorusProfileMusicProgressColor(') + block(music, 'final class AorusProfileMusicEqualizerView:')

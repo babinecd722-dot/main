@@ -126,32 +126,60 @@ final class AorusProfileMusicPlayback {
     }
 }
 
+/// Three rounded bars, tall, medium and short. Playing moves the same three bars, each at a
+/// rate of its own, and the motion starts from that resting shape, so the icon never changes
+/// its style: a new track begins exactly where the idle icon stands, a pause holds the bars
+/// where they are, and closing the player settles them back.
 final class AorusProfileMusicEqualizerView: UIView {
+    static let restingHeights: [CGFloat] = [16, 11, 5]
+    static let barWidth: CGFloat = 3
+    static let barPitch: CGFloat = 5.5
+    private static let lowest: CGFloat = 4
+    private static let highest: CGFloat = 16
+    /// Radians per second of playback. Unequal, so the bars never fall into step.
+    private static let rates: [Double] = [6.2, 8.3, 7.1]
+
+    /// The height of every bar at a point of the playback, the resting shape when there is
+    /// none. At phase 0 each bar is at its resting height.
+    static func heights(phase: Double?) -> [CGFloat] {
+        guard let phase else { return self.restingHeights }
+        return self.restingHeights.indices.map { index in
+            let range = self.highest - self.lowest
+            let start = Double((self.restingHeights[index] - self.lowest) / range) * 2 - 1
+            let value = sin(self.rates[index] * phase + asin(min(1, max(-1, start))))
+            return self.lowest + range * CGFloat(value + 1) * 0.5
+        }
+    }
+
     weak var playback: AorusProfileMusicPlayback?
-    private let bars = (0..<5).map { _ in CALayer() }
+    private let bars = (0..<3).map { _ in CALayer() }
     var color: UIColor = .white { didSet { self.bars.forEach { $0.backgroundColor = self.color.cgColor } } }
     private var phase: Double?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.isUserInteractionEnabled = false
-        self.bars.forEach { $0.cornerRadius = 1; self.layer.addSublayer($0) }
+        self.bars.forEach { $0.cornerRadius = Self.barWidth * 0.5; self.layer.addSublayer($0) }
     }
     required init?(coder: NSCoder) { fatalError("Created in code") }
     override func didMoveToWindow() { super.didMoveToWindow(); self.playback?.updateVisibility() }
     override func layoutSubviews() { super.layoutSubviews(); self.draw(phase: self.phase) }
 
     func draw(phase: Double?) {
+        // Stopping settles the bars back to rest instead of snapping them there. Starting needs
+        // no animation: phase 0 is the resting shape.
+        let settles = phase == nil && self.phase != nil && self.window != nil
         self.phase = phase
-        let heights: [CGFloat] = [16, 11, 5, 0, 0]
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        for index in self.bars.indices {
-            let height: CGFloat
-            if let phase { height = 3 + 11 * CGFloat((sin(phase * 5 + Double(index) * 1.7) + 1) * 0.5) }
-            else { height = heights[index] }
-            self.bars[index].isHidden = phase == nil && index >= 3
-            self.bars[index].cornerRadius = phase == nil ? 1.5 : 1
-            self.bars[index].frame = CGRect(x: CGFloat(index) * (phase == nil ? 5.5 : 3), y: (self.bounds.height - height) * 0.5, width: phase == nil ? 3 : 2, height: height)
+        let heights = Self.heights(phase: phase)
+        CATransaction.begin()
+        if settles {
+            CATransaction.setAnimationDuration(0.22)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        } else {
+            CATransaction.setDisableActions(true)
+        }
+        for (index, bar) in self.bars.enumerated() {
+            bar.frame = CGRect(x: CGFloat(index) * Self.barPitch, y: (self.bounds.height - heights[index]) * 0.5, width: Self.barWidth, height: heights[index])
         }
         CATransaction.commit()
     }

@@ -131,6 +131,25 @@ public struct AorusPluginMarketStats: Equatable {
               let ok = json["ok"] as? NSNumber, String(cString: ok.objCType) == "c", ok.boolValue else { return nil }
         return Self(json: json)
     }
+
+    /// The totals once this device's vote moves from one choice to another, as the server
+    /// counts it: one vote per device, so a new choice takes the old one's place. What a
+    /// plugin's page shows the moment a vote is cast, before the Market confirms it.
+    public func moving(vote old: AorusPluginMarketVote, to new: AorusPluginMarketVote) -> AorusPluginMarketStats {
+        guard old != new else { return self }
+        var likes = self.likes, dislikes = self.dislikes
+        switch old {
+        case .like: likes -= 1
+        case .dislike: dislikes -= 1
+        case .none: break
+        }
+        switch new {
+        case .like: likes += 1
+        case .dislike: dislikes += 1
+        case .none: break
+        }
+        return AorusPluginMarketStats(likes: likes, dislikes: dislikes, downloads: self.downloads)
+    }
 }
 
 public enum AorusPluginMarketSort: String, CaseIterable {

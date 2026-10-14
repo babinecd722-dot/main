@@ -24,6 +24,7 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
     static let lock = NSLock()
     static var requests: [URLRequest] = []
     static var vote = "none", downloaded = false, nextStatus = 200, wrongVote = false
+    static var nextDetail: String?
     static var active = 0, maximumActive = 0
     static var holdNextRead = false
     static var heldRead: (() -> Void)?
@@ -56,6 +57,7 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
         Self.requests.append(received)
         Self.active += 1; Self.maximumActive = max(Self.active, Self.maximumActive)
         let status = Self.nextStatus; Self.nextStatus = 200
+        let detail = Self.nextDetail; Self.nextDetail = nil
         var json: [String: Any] = ["ok": true]
         if status == 200 {
             if request.url!.path.hasSuffix("/vote") {
@@ -66,7 +68,7 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
             json["likes"] = Self.vote == "like" ? 1 : 0
             json["dislikes"] = Self.vote == "dislike" ? 1 : 0
             json["downloads"] = Self.downloaded ? 1 : 0
-        } else { json = ["ok": false, "detail": status == 503 ? "license_unavailable" : "authorization_failed"] }
+        } else { json = ["ok": false, "detail": detail ?? (status == 503 ? "license_unavailable" : "authorization_failed")] }
         if request.httpMethod == "GET" {
             var row = json
             row["id"] = "aa"; row["version"] = "1.0.0"; row["name"] = "Aorus"; row["status"] = "approved"
@@ -96,7 +98,7 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
         .init(id: id, version: "1.0.0", name: name, description: "", authorId: nil, permissions: [], status: .approved, updatedAt: Date(timeIntervalSince1970: 100), hasIcon: false, stats: stats)
     }
     static func main() {
-        defer { for key in [".downloads", ".vote.aa"] { UserDefaults.standard.removeObject(forKey: "aorusgram.market.stats." + DeviceFingerprint.deviceHash() + key) } }
+        defer { for key in [".downloads", ".reported", ".vote.aa", ".vote.bb", ".vote.cc"] { UserDefaults.standard.removeObject(forKey: "aorusgram.market.stats." + DeviceFingerprint.deviceHash() + key) } }
         for size in [0, 1, 4095, 4096, 4097, 16_384] {
             let bytes = Data((0..<size).map { UInt8($0 % 251) })
             var request = URLRequest(url: URL(string: "https://plugins.aorusgram.com/v1/plugins/aa/vote")!)
@@ -132,6 +134,12 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
         expect(AorusPluginMarketSort.popularity.apply(to: cards, query: "").first?.id == "aa", "popularity uses net votes")
         for sort in AorusPluginMarketSort.allCases { expect(sort.apply(to: cards, query: " ALP ").map(\.id) == ["aa"], "name query before sorting") }
         expect(AorusPluginMarketVote.like.toggling(.like) == .none && AorusPluginMarketVote.like.toggling(.dislike) == .dislike, "switch or remove a vote")
+        let shown = AorusPluginMarketStats(likes: 3, dislikes: 2, downloads: 10)
+        expect(shown.moving(vote: .none, to: .like) == .init(likes: 4, dislikes: 2, downloads: 10), "a new like is counted the moment it is cast")
+        expect(shown.moving(vote: .like, to: .dislike) == .init(likes: 2, dislikes: 3, downloads: 10), "a changed vote takes the old one's place")
+        expect(shown.moving(vote: .dislike, to: .none) == .init(likes: 3, dislikes: 1, downloads: 10), "a withdrawn vote leaves the totals")
+        expect(shown.moving(vote: .like, to: .like) == shown, "the same vote again changes nothing")
+        expect(AorusPluginMarketStats().moving(vote: .like, to: .none) == .init(), "a projection never goes below zero")
         let client = AorusPluginMarketClient.shared
         func vote(_ value: AorusPluginMarketVote, expected: AorusPluginMarketStats) {
             var completed = false
@@ -198,6 +206,32 @@ final class MarketTestProtocol: URLProtocol, @unchecked Sendable {
         expect(UserDefaults.standard.stringArray(forKey: pendingKey)?.contains("aa") == true, "unreported installation is retained across restarts")
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
         wait { UserDefaults.standard.stringArray(forKey: pendingKey)?.isEmpty == true }
+        // Counted once per device whatever the version: installing an update sends nothing.
+        let counted = MarketTestProtocol.requests.count
+        client.recordInstalledDownload(id: "aa")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        expect(MarketTestProtocol.requests.count == counted && UserDefaults.standard.stringArray(forKey: pendingKey)?.isEmpty == true, "a plugin already counted on this device is not reported again")
+        // An id the Market does not publish is dropped; a refused licence waits for later.
+        MarketTestProtocol.nextStatus = 404; MarketTestProtocol.nextDetail = "not_found"
+        client.recordInstalledDownload(id: "bb")
+        var barrier = false
+        client.vote(id: "bb", vote: .none) { _ in barrier = true }
+        wait { barrier }
+        expect(UserDefaults.standard.stringArray(forKey: pendingKey)?.contains("bb") == false, "an unpublished plugin is not retried forever")
+        MarketTestProtocol.nextStatus = 403; MarketTestProtocol.nextDetail = "bad_user_agent"
+        client.recordInstalledDownload(id: "cc")
+        barrier = false
+        client.vote(id: "cc", vote: .none) { _ in barrier = true }
+        wait { barrier }
+        expect(UserDefaults.standard.stringArray(forKey: pendingKey)?.contains("cc") == true, "a refused licence keeps the event for a later attempt")
+        MarketTestProtocol.nextStatus = 403; MarketTestProtocol.nextDetail = "bad_body_hash"
+        done = false
+        client.vote(id: "aa", vote: .like) { result in expect(result == .failure(.unauthorized), "a refused signature is a licence error, not a server outage"); done = true }
+        wait { done }
+        MarketTestProtocol.nextStatus = 503; MarketTestProtocol.nextDetail = "license_control_unconfigured"
+        done = false
+        client.vote(id: "aa", vote: .like) { result in expect(result == .failure(.server(503)), "an unconfigured licence check is a server outage"); done = true }
+        wait { done }
         AorusLicenseAccess.isAllowed = false
         let count = MarketTestProtocol.requests.count
         done = false

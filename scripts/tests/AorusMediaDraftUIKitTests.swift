@@ -108,30 +108,66 @@ import UIKit
     let renderer = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 1))
     let red = renderer.image { context in UIColor.red.setFill(); context.fill(CGRect(x: 0, y: 0, width: 16, height: 1)) }
     let blue = renderer.image { context in UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 16, height: 1)) }
+    let green = renderer.image { context in UIColor.green.setFill(); context.fill(CGRect(x: 0, y: 0, width: 16, height: 1)) }
     UIView.setAnimationsEnabled(false)
-    defer { UIView.setAnimationsEnabled(true); AorusGlassProfileTint.slide = nil }
+    defer { UIView.setAnimationsEnabled(true); AorusGlassProfileTint.slide = nil; AorusGlassProfileTint.page = nil }
+    func post(switched: Bool = false) {
+        NotificationCenter.default.post(name: AorusGlassProfileTint.pageBlendNotification, object: nil, userInfo: ["peerId": NSNumber(value: 55), "duration": NSNumber(value: 0), "switched": NSNumber(value: switched)])
+    }
     for width: CGFloat in [120, 230, 390, 768] {
         let page = AorusProfilePageImageView(peerId: 55)
         page.frame = CGRect(x: 0, y: 0, width: width, height: 120)
         page.image = red
         window.rootViewController!.view.addSubview(page)
         page.layoutIfNeeded()
-        let base = page.subviews[0] as! UIImageView, incoming = page.subviews[1] as! UIImageView
+        let base = page.subviews[0] as! UIImageView, incoming = page.subviews[1] as! UIImageView, trailing = page.subviews[2] as! UIImageView
         for fraction: CGFloat in [-0.01, -0.25, -0.75, -1, 0.01, 0.25, 0.75, 1] {
-            AorusGlassProfileTint.slide = (red, blue, fraction)
-            NotificationCenter.default.post(name: AorusGlassProfileTint.pageBlendNotification, object: nil, userInfo: ["peerId": NSNumber(value: 55), "duration": NSNumber(value: 0)])
+            AorusGlassProfileTint.slide = (red, blue, fraction, fraction < 0 ? 1 : -1, nil)
+            post()
             expect(base.image === red && incoming.image === blue, "both photos retain their own background row")
             expect(base.alpha == 1 && incoming.alpha == 1, "horizontal paging never uniformly crossfades the rows")
             expect(abs(base.frame.minX - fraction * width) < 0.001, "background tracks the native signed avatar offset")
             expect(abs(incoming.frame.minX - (fraction * width + (fraction < 0 ? width : -width))) < 0.001, "adjacent rows meet without a gap")
-            expect(!base.isHidden && page.clipsToBounds, "moving tiles cover the page without escaping the viewport")
+            expect(!base.isHidden && trailing.isHidden && page.clipsToBounds, "moving tiles cover the page without escaping the viewport")
         }
+        // A flick that turns back against the drag: the photo it lands on comes in from the other
+        // side while the one the drag had brought in leaves the way it came.
+        for fraction: CGFloat in [-0.3, 0.3] {
+            let direction: CGFloat = fraction < 0 ? -1 : 1
+            AorusGlassProfileTint.slide = (red, green, fraction, direction, blue)
+            post()
+            expect(abs(base.frame.minX - fraction * width) < 0.001, "turning back keeps the page where the drag left it")
+            expect(abs(incoming.frame.minX - (fraction + direction) * width) < 0.001 && incoming.image === green, "the landing photo's row comes in on the side it is paged from")
+            expect(!trailing.isHidden && trailing.image === blue && abs(trailing.frame.minX - (fraction - direction) * width) < 0.001, "the abandoned neighbour stays beside the page as it leaves")
+        }
+        AorusGlassProfileTint.slide = (red, blue, -0.4, 1, nil)
+        post()
         let before = incoming.frame
         page.image = blue
         expect(incoming.frame == before && base.image === red, "publishing the new index does not restart the slide")
         AorusGlassProfileTint.slide = nil
-        NotificationCenter.default.post(name: AorusGlassProfileTint.pageBlendNotification, object: nil, userInfo: ["peerId": NSNumber(value: 55), "duration": NSNumber(value: 0)])
-        expect(base.isHidden && incoming.alpha == 0 && page.image === blue, "settling removes temporary tiles and keeps the new background")
+        post()
+        expect(base.isHidden && trailing.isHidden && incoming.alpha == 0 && page.image === blue, "settling removes temporary tiles and keeps the new background")
+        // A tap to another photo: its page in the same frame, with no fade and no tiles left over.
+        AorusGlassProfileTint.slide = (blue, red, -0.5, 1, nil)
+        post()
+        AorusGlassProfileTint.slide = nil
+        AorusGlassProfileTint.page = green
+        post()
+        post(switched: true)
+        expect(page.image === green && base.isHidden && trailing.isHidden && incoming.alpha == 0 && incoming.image == nil, "a page turned without a drag changes with the photo")
+        post(switched: true)
+        expect(page.image === green, "the same page published again changes nothing")
+        AorusGlassProfileTint.slide = (green, red, -1, 1, nil)
+        post()
+        let settling = incoming.frame
+        AorusGlassProfileTint.page = red
+        post(switched: true)
+        expect(incoming.frame == settling && !base.isHidden && page.image === red, "the photo landed on publishes its page under the settling tiles without moving them")
+        AorusGlassProfileTint.slide = nil
+        post()
+        expect(base.isHidden && page.image === red, "the settle ends on the landed photo's page")
+        AorusGlassProfileTint.page = nil
         page.removeFromSuperview()
     }
     let icon = AorusProfileMusicEqualizerView(frame: CGRect(x: 0, y: 0, width: 14, height: 18))
@@ -140,12 +176,25 @@ import UIKit
     expect(bars.filter { !$0.isHidden }.count == 3, "idle music icon has three bars")
     expect(Array(bars.prefix(3)).map { $0.frame.height } == [16, 11, 5], "idle bars match the supplied descending design")
     expect(Array(bars.prefix(3)).allSatisfy { abs($0.frame.midY - 9) < 0.001 && $0.cornerRadius == 1.5 }, "rounded bars share one centre")
+    let idle = bars.map(\.frame)
+    func same(_ lhs: [CGRect], _ rhs: [CGRect]) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { abs($0.minX - $1.minX) < 0.001 && abs($0.minY - $1.minY) < 0.001 && abs($0.width - $1.width) < 0.001 && abs($0.height - $1.height) < 0.001 }
+    }
+    icon.draw(phase: 0)
+    expect(same(bars.map(\.frame), idle), "playback starts from the idle shape without a jump")
+    for phase in stride(from: 0.0, through: 12.0, by: 0.05) {
+        icon.draw(phase: phase)
+        expect(bars.count == 3 && bars.allSatisfy { !$0.isHidden && $0.frame.width == 3 && $0.cornerRadius == 1.5 && abs($0.frame.midY - 9) < 0.001 }, "playing keeps the idle style: three rounded bars on one centre")
+        expect(bars.enumerated().allSatisfy { abs($0.element.frame.minX - CGFloat($0.offset) * 5.5) < 0.001 }, "playing keeps the idle spacing")
+        expect(bars.allSatisfy { $0.frame.height >= 4 - 0.001 && $0.frame.height <= 16 + 0.001 }, "animated heights stay inside the idle icon")
+    }
     icon.draw(phase: 2)
     let frozen = bars.map(\.frame)
+    expect(!same(frozen, idle), "playing moves the bars")
     icon.layoutSubviews()
-    expect(bars.map(\.frame) == frozen && bars.allSatisfy { !$0.isHidden }, "a paused shape survives layout with all animated bars")
+    expect(bars.map(\.frame) == frozen, "a paused shape survives layout")
     icon.draw(phase: nil)
-    expect(bars.filter { !$0.isHidden }.count == 3, "closing playback restores the idle icon")
+    expect(same(bars.map(\.frame), idle), "closing playback restores the idle icon")
     for background in [UIColor(red: 0.15, green: 0.35, blue: 0.6, alpha: 1), UIColor(red: 0.7, green: 0.4, blue: 0.2, alpha: 1), .black, .white] {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         background.getRed(&r, green: &g, blue: &b, alpha: &a)

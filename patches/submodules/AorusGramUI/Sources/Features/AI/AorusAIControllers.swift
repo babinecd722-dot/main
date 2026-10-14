@@ -1405,6 +1405,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// A turn whose socket died while the app was away, waiting to be re-attached.
     private var pendingResumeRecovery = false
     private var resumeAttempts = 0
+    /// A turn whose socket died while the device had no route at all, waiting for one: the
+    /// next attempt is made when the network is back, and none is spent before that.
+    private var awaitingConnectivity = false
+    /// The replay being read is of a turn the server has already finished.
+    private var resumedTerminalTurn = false
     /// Whether the app is in the foreground, tracked rather than asked.
     ///
     /// Asking `UIApplication.shared.applicationState` at the moment a socket dies reads the
@@ -1667,6 +1672,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // deferred to a foreground transition that had already happened.
         NotificationCenter.default.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(connectivityRestored), name: AorusAIConnectivity.restoredNotification, object: nil)
+        // Started with the chat, so the route is known by the time a socket is lost.
+        _ = AorusAIConnectivity.shared
         if let initialPrompt, !initialPrompt.isEmpty { composer.text = initialPrompt }
         scheduleQuotaResetIfNeeded()
         updateComposer()
@@ -1773,7 +1781,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     fileprivate func abortHeldTurn() {
         isDiscarded = true
         deferredUserPrompt = nil
-        endBackgroundGrace(cancelTurn: false)
+        endBackgroundGrace(expired: false)
         stopGeneration()
     }
 
@@ -1785,7 +1793,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// happens while the user is elsewhere cannot leave the stream unowned.
     private func updateBackgroundPresence() {
         guard isTurnLive else {
-            endBackgroundGrace(cancelTurn: false)
+            endBackgroundGrace(expired: false)
             // The hold may be the last reference to this controller, so it is dropped one
             // runloop later: releasing it here would deallocate `self` mid-method.
             let key = activeTurnKey
@@ -1899,8 +1907,22 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         reopenTurnLostToTheSocket()
     }
 
+    /// The device has a route again. A turn that lost its socket while there was none is
+    /// re-attached now, with its whole allowance: none of it was spent on a connection that
+    /// could have worked.
+    @objc private func connectivityRestored() {
+        guard awaitingConnectivity else { return }
+        awaitingConnectivity = false
+        resumeAttempts = 0
+        guard isForeground else {
+            pendingResumeRecovery = true
+            return
+        }
+        resumeTurnIfNeeded()
+    }
+
     @objc private func appWillEnterForeground() {
-        endBackgroundGrace(cancelTurn: false)
+        endBackgroundGrace(expired: false)
         // The socket does not survive being suspended, so a turn that was live when the app
         // went away is re-attached here rather than left to look broken. `resumeTurnIfNeeded`
         // does nothing when a stream is already running.
@@ -1922,20 +1944,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             // The expiration handler can run on any thread, and everything it touches is
             // main-thread state.
             DispatchQueue.main.async {
-                self?.endBackgroundGrace(cancelTurn: true)
+                self?.endBackgroundGrace(expired: true)
             }
         }
     }
 
-    /// Gives the background allowance back. `cancelTurn` is true only when the OS is about
-    /// to take it away regardless — then the turn is closed with everything that already
-    /// arrived preserved, never wiped.
-    private func endBackgroundGrace(cancelTurn: Bool) {
-        if cancelTurn, isTurnLive {
-            if let turnId {
-                AorusAIClient.shared.cancelTurn(turnId) { _ in }
-            }
-            finishStreaming(error: .offline, preserveText: true)
+    /// Gives the background allowance back. `expired` is true when the OS is about to
+    /// suspend the app regardless.
+    ///
+    /// The socket cannot live through that; the turn does. "Фон приложения ≠ cancel": the
+    /// server goes on running it and keeps its journal. This used to cancel the turn on the
+    /// server and mark the answer "Нет соединения" — the most common way an answer was lost,
+    /// half a minute after the reader switched apps or locked the phone — and the return to
+    /// the app then tried to resume the very turn that had just been cancelled. Now only this
+    /// socket is let go: the answer is saved as still working and re-attached the moment the
+    /// app is back, or from the saved chat after a restart. A turn waiting on a tool or a
+    /// permission holds no socket and is left exactly as it is.
+    private func endBackgroundGrace(expired: Bool) {
+        if expired, let handle = streamHandle {
+            // Its callbacks belong to this stream; once it is let go they must not act.
+            streamGeneration += 1
+            streamHandle = nil
+            handle.cancelTransport()
+            pendingResumeRecovery = true
+            persist(force: true)
         }
         guard backgroundTaskId != .invalid else { return }
         UIApplication.shared.endBackgroundTask(backgroundTaskId)
@@ -2401,6 +2433,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // The server answered, so whatever dropped the last socket is behind us.
         resumeAttempts = 0
         pendingResumeRecovery = false
+        resumedTerminalTurn = info.isTerminal
         turnCursor.apply(info, deviceNowMs: Int64(Date().timeIntervalSince1970 * 1000.0))
         turnId = info.turnId
         conversation.messages[index].rawText = ""
@@ -2477,6 +2510,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         activeAssistantId = assistantId
         turnState = .streaming
         isPreparingRequest = true
+        awaitingConnectivity = false
+        resumedTerminalTurn = false
         updateComposer()
         streamGeneration += 1
         turnCursor.beginStream()
@@ -2489,17 +2524,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             self.isPreparingRequest = false
             switch result {
             case .success:
-                // The replay ended without a terminal event: the turn is still running on
-                // the server and the socket simply closed. Re-attach rather than call it
-                // finished — "disconnect ≠ done ≠ Stop" — bounded by the same allowance,
-                // so a turn that never terminates still settles instead of spinning.
-                if self.streamHandle != nil { self.recoverOrFail(error: .serverUnavailable) }
+                guard self.streamHandle != nil else { break }
+                if self.resumedTerminalTurn {
+                    // The server said the turn is over and replayed it, and the socket closed
+                    // before the closing `done`. The answer on screen is the whole answer:
+                    // finish it — and acknowledge it — instead of asking again for a turn
+                    // that will never run, which left the chat working for ever.
+                    self.completeStreaming(cancelled: false)
+                } else {
+                    // The replay ended without a terminal event: the turn is still running on
+                    // the server and the socket simply closed. Re-attach rather than call it
+                    // finished — "disconnect ≠ done ≠ Stop" — bounded by the same allowance,
+                    // so a turn that never terminates still settles instead of spinning.
+                    self.recoverOrFail(error: .serverUnavailable)
+                }
             case let .failure(error):
                 switch error {
                 case .resumeNotFound, .resumeUnavailable:
                     self.settleUnresumedTurn()
                 case .cancelled:
-                    break
+                    // Cancelled by this client, which let the handle go first: nothing to do.
+                    // Cancelled with the handle still held is the system's doing — a refused
+                    // certificate is one — and left alone it froze the chat, every later
+                    // resume stopping at the handle that was never cleared.
+                    if self.streamHandle != nil { self.recoverOrFail(error: .serverUnavailable) }
                 default:
                     self.recoverOrFail(error: error)
                 }
@@ -2534,6 +2582,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             pendingResumeRecovery = true
             return
         }
+        // No route at all: a try now fails on the spot. The turn waits for the network,
+        // still working, and the return of a route starts the next attempt.
+        guard AorusAIConnectivity.shared.isReachable else {
+            awaitingConnectivity = true
+            return
+        }
         guard resumeAttempts < Self.maximumResumeAttempts else {
             settleUnresumedTurn()
             return
@@ -2541,7 +2595,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         resumeAttempts += 1
         // Spaced out so a server that is genuinely down is not hammered, and so a
         // momentary drop has time to clear before the next try.
-        let delay = 1.2 * Double(resumeAttempts)
+        let delay = Self.resumeDelays[min(resumeAttempts, Self.resumeDelays.count) - 1]
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             // Checked again here, not only when the failure arrived. The wait is over a
@@ -2552,9 +2606,16 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 self.pendingResumeRecovery = true
                 return
             }
+            guard AorusAIConnectivity.shared.isReachable else {
+                self.awaitingConnectivity = true
+                return
+            }
             self.resumeTurnIfNeeded()
         }
     }
+
+    /// Seconds before each re-attach: quick for a blip, then wider, about half a minute in all.
+    private static let resumeDelays: [Double] = [1.0, 2.0, 4.0, 8.0, 15.0]
 
     /// The error codes that mean "this socket went away", as opposed to "the server said no".
     ///
@@ -2587,9 +2648,13 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         guard streamHandle == nil, !isPreparingRequest, !isDiscarded else { return }
         guard let index = conversation.messages.lastIndex(where: { $0.role == .assistant }) else { return }
         let message = conversation.messages[index]
+        // Measured from when the socket went, not from when the question was asked: a long
+        // turn lost after twenty minutes of work is as recoverable as a short one. The moment
+        // the work stopped is recorded when the turn was given up on.
+        let lostAt = max(message.createdAt, message.workFinishedAt ?? message.createdAt)
         guard message.state == .failed,
               let code = message.errorCode, Self.socketErrorCodes.contains(code),
-              Date().timeIntervalSince(message.createdAt) < Self.reopenWindow else {
+              Date().timeIntervalSince(lostAt) < Self.reopenWindow else {
             return
         }
         conversation.messages[index].state = .streaming
@@ -2600,8 +2665,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     /// How many times a dropped turn is re-attached before the client accepts that it
-    /// is gone. Bounded so a server that is truly unreachable cannot loop for ever.
-    private static let maximumResumeAttempts = 3
+    /// is gone. Bounded so a server that is truly unreachable cannot loop for ever; attempts
+    /// are only spent while the device has a route, so a phone that is simply offline keeps
+    /// the turn instead of losing it.
+    private static let maximumResumeAttempts = 5
 
     /// Closes out a turn that cannot be resumed, without inventing an error.
     ///

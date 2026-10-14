@@ -195,7 +195,7 @@ public enum AorusGlassProfileTint {
         // has since been given a different picture to hold.
         AorusGlassProfileTint.currentKeys[peerId] = key
         if let existing = AorusGlassProfileTint.sampledColors[key] {
-            AorusGlassProfileTint.adopt(existing, for: peerId, onUpdate: onUpdate)
+            AorusGlassProfileTint.adopt(existing, for: peerId, key: key, onUpdate: onUpdate)
             // What this peer has already sampled to is the page immediately, but it is only the last
             // word once the picture behind it has stopped changing -- see `sampleAndSettle` for what
             // reading it once and never again did to the join.
@@ -255,7 +255,7 @@ public enum AorusGlassProfileTint {
                 AorusGlassProfileTint.settledKeys.insert(key)
                 AorusGlassProfileTint.pendingKeys.remove(key)
                 if AorusGlassProfileTint.currentKeys[peerId] == key {
-                    AorusGlassProfileTint.adopt(sample, for: peerId, onUpdate: onUpdate)
+                    AorusGlassProfileTint.adopt(sample, for: peerId, key: key, onUpdate: onUpdate)
                 }
             }
         }
@@ -305,10 +305,14 @@ public enum AorusGlassProfileTint {
     /// without bound. A dropped entry only costs one reading.
     private static func record(_ sample: Sample, for key: PhotoKey) {
         if AorusGlassProfileTint.sampledColors[key] == nil, AorusGlassProfileTint.sampledColors.count > 96 {
-            AorusGlassProfileTint.sampledColors.removeAll()
-            AorusGlassProfileTint.contentSignatures.removeAll()
-            AorusGlassProfileTint.settledKeys.removeAll()
-            AorusGlassProfileTint.finalKeys.removeAll()
+            // Other profiles' photos go; this profile's stay. Its pages were read from the files
+            // once, as the photos arrived, and dropping them would leave the swipe through them
+            // with nothing to slide until each was read again off the screen.
+            let peerId = key.peerId
+            AorusGlassProfileTint.sampledColors = AorusGlassProfileTint.sampledColors.filter { $0.key.peerId == peerId }
+            AorusGlassProfileTint.contentSignatures = AorusGlassProfileTint.contentSignatures.filter { $0.key.peerId == peerId }
+            AorusGlassProfileTint.settledKeys = AorusGlassProfileTint.settledKeys.filter { $0.peerId == peerId }
+            AorusGlassProfileTint.finalKeys = AorusGlassProfileTint.finalKeys.filter { $0.peerId == peerId }
         }
         AorusGlassProfileTint.sampledColors[key] = sample
     }
@@ -327,54 +331,121 @@ public enum AorusGlassProfileTint {
     /// the full photo arriving over its placeholder.
     public static let refreshDuration: Double = 0.25
 
+    /// The page while the photos move: the page of the photo going, the page of the one coming in
+    /// beside it, and how far the pair has travelled -- the pager's own signed offset, so the two
+    /// rows stand exactly where the two photos above them do.
     private struct Blend {
         let base: UIImage
         let image: UIImage
+        /// Where the photo coming in stands beside the one going: 1 to its right (the next photo),
+        /// -1 to its left (the previous one).
+        let direction: CGFloat
         let fraction: CGFloat
+        /// The neighbour on the other side, still partly on the screen when a flick turned back
+        /// against the drag that had brought it in; it leaves the way it came.
+        let trailing: UIImage?
+        /// The photo the pager settles on once let go, nil while it is still held.
+        let landing: Int?
     }
     private static var blends: [Int64: Blend] = [:]
     private static var blendGeneration: [Int64: Int] = [:]
     private static var nextBlendGeneration = 0
+    /// Photos a drag has already tried to read off the screen, so a photo whose node has nothing
+    /// drawn yet costs one snapshot per drag rather than one every frame of it.
+    private static var dragReads = Set<PhotoKey>()
 
     /// Both rows use the avatar pager's signed horizontal offset, not a uniform crossfade.
-    public static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat)? {
-        blends[peerId].map { ($0.base, $0.image, $0.fraction) }
+    public static func pageSlide(for peerId: Int64) -> (base: UIImage, image: UIImage, fraction: CGFloat, direction: CGFloat, trailing: UIImage?)? {
+        blends[peerId].map { ($0.base, $0.image, $0.fraction, $0.direction, $0.trailing) }
     }
 
-    public static func followPage(for peerId: Int64, photo: Int?, photoCount: Int, progress: CGFloat, fallbackView: UIView? = nil, mirroredTail: CGFloat = 98) {
+    /// The page of one of a peer's photos: read already, or read now off its node when the drag
+    /// reaches a photo that has not been read yet. Nil for none, or nothing drawn yet.
+    private static func page(peerId: Int64, photo: Int, photoCount: Int, view: UIView?, tail: CGFloat) -> UIImage? {
+        let key = PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)
+        if let image = sampledColors[key]?.image {
+            return image
+        }
+        guard let view, !dragReads.contains(key) else {
+            return nil
+        }
+        dragReads.insert(key)
+        guard let sample = bottomBandSample(of: view, tail: tail), sample.image != nil else {
+            return nil
+        }
+        record(sample, for: key)
+        return sample.image
+    }
+
+    /// The pager has been dragged `progress` of a page from photo `from` towards photo `photo`.
+    public static func followPage(for peerId: Int64, from: Int? = nil, photo: Int?, photoCount: Int, progress: CGFloat, fallbackView: UIView? = nil, mirroredTail: CGFloat = 98) {
         guard Thread.isMainThread, AorusInterfaceV2.isEnabled else { return }
         nextBlendGeneration &+= 1
         blendGeneration[peerId] = nextBlendGeneration
-        if let photo, let view = fallbackView {
-            let key = PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)
-            if sampledColors[key] == nil, let sample = bottomBandSample(of: view, tail: mirroredTail) { record(sample, for: key) }
+        let base = from.flatMap { page(peerId: peerId, photo: $0, photoCount: photoCount, view: nil, tail: mirroredTail) } ?? pageImages[peerId]
+        if let photo, progress != 0, let base,
+           let image = page(peerId: peerId, photo: photo, photoCount: photoCount, view: fallbackView, tail: mirroredTail) {
+            blends[peerId] = Blend(base: base, image: image, direction: progress < 0 ? 1 : -1, fraction: max(-1, min(1, progress)), trailing: nil, landing: nil)
+        } else {
+            blends[peerId] = nil
+            blendGeneration[peerId] = nil
         }
-        if let photo, progress != 0,
-           let base = pageImages[peerId],
-           let image = sampledColors[PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)]?.image {
-            blends[peerId] = Blend(base: base, image: image, fraction: max(-1, min(1, progress)))
-        } else { blends[peerId] = nil; blendGeneration[peerId] = nil }
         postBlend(for: peerId, duration: 0)
     }
 
-    public static func releasePage(for peerId: Int64, changed: Bool) {
-        guard Thread.isMainThread, AorusInterfaceV2.isEnabled, let blend = blends[peerId] else { return }
-        let generation = blendGeneration[peerId, default: 0]
-        blends[peerId] = Blend(base: blend.base, image: blend.image, fraction: changed ? (blend.fraction < 0 ? -1 : 1) : 0)
+    /// The drag let go, from photo `from` onto photo `to`: the page settles with the pager, over
+    /// the same time and curve, onto the photo the pager settles on -- also when that is not the
+    /// photo the drag was showing (a flick back the other way), and also when the drag never
+    /// moved before it was let go (a flick too quick to report a frame of it).
+    public static func releasePage(for peerId: Int64, from: Int, to: Int, photoCount: Int, landingView: UIView? = nil, mirroredTail: CGFloat = 98) {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else { return }
+        dragReads = dragReads.filter { $0.peerId != peerId }
+        let held = blends[peerId]
+        let settled: Blend?
+        if from == to {
+            settled = held.map { Blend(base: $0.base, image: $0.image, direction: $0.direction, fraction: 0, trailing: nil, landing: to) }
+        } else {
+            let direction: CGFloat = to > from ? 1 : -1
+            let fraction = held?.fraction ?? 0
+            let base = held?.base ?? page(peerId: peerId, photo: from, photoCount: photoCount, view: nil, tail: mirroredTail) ?? pageImages[peerId]
+            if let base, let image = page(peerId: peerId, photo: to, photoCount: photoCount, view: landingView, tail: mirroredTail) {
+                // A flick that turned back leaves the neighbour it had brought in on the other side.
+                let trailing = held.flatMap { $0.direction != direction && $0.fraction != 0 ? $0.image : nil }
+                if held == nil || trailing != nil {
+                    // Start the settle from where the photos stand now, without a frame of the
+                    // new arrangement drawn at its end.
+                    blends[peerId] = Blend(base: base, image: image, direction: direction, fraction: fraction, trailing: trailing, landing: nil)
+                    postBlend(for: peerId, duration: 0)
+                }
+                settled = Blend(base: base, image: image, direction: direction, fraction: -direction, trailing: trailing, landing: to)
+            } else {
+                settled = nil
+            }
+        }
+        nextBlendGeneration &+= 1
+        let generation = nextBlendGeneration
+        guard let settled else {
+            blends[peerId] = nil
+            blendGeneration[peerId] = nil
+            postBlend(for: peerId, duration: 0)
+            return
+        }
+        blendGeneration[peerId] = generation
+        blends[peerId] = settled
         postBlend(for: peerId, duration: settleDuration)
         DispatchQueue.main.asyncAfter(deadline: .now() + settleDuration) {
-            guard blendGeneration[peerId, default: 0] == generation else { return }
+            guard blendGeneration[peerId] == generation else { return }
             blends[peerId] = nil
             blendGeneration[peerId] = nil
             postBlend(for: peerId, duration: 0)
         }
     }
 
-    private static func postBlend(for peerId: Int64, duration: Double) {
+    private static func postBlend(for peerId: Int64, duration: Double, switched: Bool = false) {
         NotificationCenter.default.post(
             name: AorusGlassProfileTint.pageBlendNotification,
             object: nil,
-            userInfo: ["peerId": NSNumber(value: peerId), "duration": NSNumber(value: duration)]
+            userInfo: ["peerId": NSNumber(value: peerId), "duration": NSNumber(value: duration), "switched": NSNumber(value: switched)]
         )
     }
 
@@ -390,10 +461,23 @@ public enum AorusGlassProfileTint {
     /// `requestUpdateLayout`, which lays the screen out synchronously and publishes the new page
     /// colour on the way through; a pane woken any earlier would derive its rows' ink from the
     /// previous photo's page and read white-on-white under a pale avatar.
-    private static func adopt(_ sample: Sample, for peerId: Int64, onUpdate: @escaping () -> Void) {
+    private static func adopt(_ sample: Sample, for peerId: Int64, key: PhotoKey? = nil, onUpdate: @escaping () -> Void) {
+        // A different photo of the same peer -- paged to, not the same photo arriving in full
+        // over its placeholder. That page is drawn in the same frame as the photo, never faded in
+        // after it.
+        let switched = key != nil && AorusGlassProfileTint.shownKeys[peerId] != nil && AorusGlassProfileTint.shownKeys[peerId] != key
+        if let key {
+            if AorusGlassProfileTint.shownKeys.count > 64 {
+                AorusGlassProfileTint.shownKeys = AorusGlassProfileTint.shownKeys.filter { $0.key == peerId }
+            }
+            AorusGlassProfileTint.shownKeys[peerId] = key
+        }
         let sameColor = AorusGlassProfileTint.pageColors[peerId] == sample.color
         let sameImage = AorusGlassProfileTint.pageImages[peerId] === sample.image
         guard !sameColor || !sameImage else {
+            if switched {
+                AorusGlassProfileTint.endBlend(for: peerId, unlessLandingOn: key?.photo)
+            }
             return
         }
         // Capped so a session spent opening profiles cannot grow this without bound; a dropped
@@ -408,10 +492,36 @@ public enum AorusGlassProfileTint {
         } else {
             AorusGlassProfileTint.pageImages.removeValue(forKey: peerId)
         }
+        if switched {
+            // Every page of this peer takes the new row now, in this pass, as the photo does; the
+            // layout below then only finds them already right. A settle that is carrying the
+            // pages onto this photo keeps going: its tiles already show it.
+            AorusGlassProfileTint.endBlend(for: peerId, unlessLandingOn: key?.photo)
+            AorusGlassProfileTint.postBlend(for: peerId, duration: 0, switched: true)
+        }
         DispatchQueue.main.async {
             onUpdate()
             NotificationCenter.default.post(name: AorusGlassProfileTint.pageDidChangeNotification, object: nil)
         }
+    }
+
+    /// The photo each peer's page was last given, to tell a page turned to another photo from the
+    /// same photo arriving in full.
+    private static var shownKeys: [Int64: PhotoKey] = [:]
+
+    /// Drop the moving tiles of a peer whose photo changed without the drag that was moving them
+    /// -- a tap to the next photo while the last swipe was still settling -- unless they are
+    /// settling onto that very photo.
+    private static func endBlend(for peerId: Int64, unlessLandingOn photo: Int?) {
+        guard let blend = AorusGlassProfileTint.blends[peerId] else {
+            return
+        }
+        if let landing = blend.landing, landing == photo {
+            return
+        }
+        AorusGlassProfileTint.blends[peerId] = nil
+        AorusGlassProfileTint.blendGeneration[peerId] = nil
+        AorusGlassProfileTint.postBlend(for: peerId, duration: 0)
     }
 
     /// Claim the page slot for a colour, and with it the ink everything drawn over the page uses.
@@ -647,7 +757,7 @@ public enum AorusGlassProfileTint {
         let unchanged = previous?.color == sample.color && (previous?.image != nil) == (sample.image != nil)
         if !unchanged {
             AorusGlassProfileTint.record(sample, for: key)
-            AorusGlassProfileTint.adopt(sample, for: key.peerId, onUpdate: onUpdate)
+            AorusGlassProfileTint.adopt(sample, for: key.peerId, key: key, onUpdate: onUpdate)
         }
         AorusGlassProfileTint.scheduleRead(key: key, view: view, tail: tail, read: read, onUpdate: onUpdate)
     }
@@ -1219,14 +1329,17 @@ public final class AorusProfileHeaderFadeView: UIView {
 ///
 /// During a drag, two background rows slide at the avatar pager's signed offset. Publishing
 /// the destination index keeps those rows in place until the shared settle animation finishes.
-/// A full-size image replacing its placeholder without a drag uses the ordinary crossfade.
+/// A page turned to another photo without a drag -- a tap -- changes in the same frame as the
+/// photo; only the same photo arriving in full over its placeholder crossfades.
 public final class AorusProfilePageImageView: UIImageView {
     public let peerId: Int64
     private let overlay = UIImageView()
     private let slidingBase = UIImageView()
+    private let trailing = UIImageView()
     private var slideDirection: CGFloat = 1
     private var slideFraction: CGFloat = 0
     private var sliding = false
+    private var switchesAtOnce = false
     private var observer: NSObjectProtocol?
 
     public init(peerId: Int64) {
@@ -1245,10 +1358,21 @@ public final class AorusProfilePageImageView: UIImageView {
         self.slidingBase.layer.magnificationFilter = .linear
         self.slidingBase.isUserInteractionEnabled = false
         self.slidingBase.isHidden = true
+        self.trailing.contentMode = .scaleToFill
+        self.trailing.layer.magnificationFilter = .linear
+        self.trailing.isUserInteractionEnabled = false
+        self.trailing.isHidden = true
         self.addSubview(self.slidingBase)
         self.addSubview(self.overlay)
+        self.addSubview(self.trailing)
         self.observer = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageBlendNotification, object: nil, queue: .main) { [weak self] notification in
             guard let self, (notification.userInfo?["peerId"] as? NSNumber)?.int64Value == self.peerId else {
+                return
+            }
+            // A turned page only changes the row under any tiles; a settle carrying the tiles onto
+            // that photo goes on moving, and tiles that had to go were ended by a post of their own.
+            if (notification.userInfo?["switched"] as? NSNumber)?.boolValue == true {
+                self.switchPage()
                 return
             }
             self.applyBlend(duration: (notification.userInfo?["duration"] as? NSNumber)?.doubleValue ?? 0.0)
@@ -1276,6 +1400,17 @@ public final class AorusProfilePageImageView: UIImageView {
         let offset = self.slideFraction * self.bounds.width
         self.slidingBase.frame = self.bounds.offsetBy(dx: offset, dy: 0)
         self.overlay.frame = self.bounds.offsetBy(dx: offset + self.slideDirection * self.bounds.width, dy: 0)
+        self.trailing.frame = self.bounds.offsetBy(dx: offset - self.slideDirection * self.bounds.width, dy: 0)
+    }
+
+    /// Another photo of the peer is on the screen: its page is shown now, the frame the photo is.
+    private func switchPage() {
+        guard let image = AorusGlassProfileTint.pageBackgroundImage(for: self.peerId), image !== self.image else {
+            return
+        }
+        self.switchesAtOnce = true
+        self.image = image
+        self.switchesAtOnce = false
     }
 
     public override var image: UIImage? {
@@ -1287,7 +1422,7 @@ public final class AorusProfilePageImageView: UIImageView {
             // their movement or swap the old tile while the avatar is settling.
             if AorusGlassProfileTint.pageSlide(for: self.peerId) != nil { return }
             self.overlay.layer.removeAllAnimations()
-            guard let previous = oldValue, self.image != nil else {
+            guard let previous = oldValue, self.image != nil, !self.switchesAtOnce else {
                 // The first page, or none: there is nothing on the screen to carry on from.
                 self.overlay.image = nil
                 self.overlay.alpha = 0.0
@@ -1308,13 +1443,16 @@ public final class AorusProfilePageImageView: UIImageView {
             self.slidingBase.isHidden = false
             self.overlay.image = slide.image
             self.overlay.alpha = 1
+            self.trailing.image = slide.trailing
+            self.trailing.isHidden = slide.trailing == nil
             self.sliding = true
-            if slide.fraction != 0 { self.slideDirection = slide.fraction < 0 ? 1 : -1 }
+            self.slideDirection = slide.direction
             self.slideFraction = slide.fraction
             if duration > 0 { Self.animate(duration: duration) { self.layoutSlide() } }
             else {
                 self.slidingBase.layer.removeAllAnimations()
                 self.overlay.layer.removeAllAnimations()
+                self.trailing.layer.removeAllAnimations()
                 self.layoutSlide()
             }
         } else {
@@ -1322,6 +1460,9 @@ public final class AorusProfilePageImageView: UIImageView {
             self.slidingBase.layer.removeAllAnimations()
             self.slidingBase.isHidden = true
             self.slidingBase.image = nil
+            self.trailing.layer.removeAllAnimations()
+            self.trailing.isHidden = true
+            self.trailing.image = nil
             self.overlay.layer.removeAllAnimations()
             self.overlay.image = nil
             self.overlay.alpha = 0
