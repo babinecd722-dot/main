@@ -48,11 +48,19 @@ extension ChatControllerImpl {
             // Read off the main thread and applied when ready; the editor, the send and every
             // save of this picker wait for it.
             controller.aorusRestoreAttachmentDraft(draft) { [weak self, weak controller] restored in
-                guard controller != nil, !restored else { return }
-                self?.aorusShowAttachmentDraftError()
+                guard let self, controller != nil, !restored else { return }
+                // Only about the draft still in the chat: one changed while it was read -- an
+                // attachment removed from the strip -- fails to restore for that reason alone.
+                guard self.presentationInterfaceState.interfaceState.attachmentDraft?.revision == draft.revision else { return }
+                self.aorusShowAttachmentDraftError()
             }
         }
         controller.mediaPickerContext?.setCaption(self.presentationInterfaceState.interfaceState.composeInputState.inputText)
+        if self.presentationInterfaceState.interfaceState.attachmentDraft == nil {
+            // No draft is saved, and the empty picker says exactly that: closing it without a
+            // pick writes nothing, and the chat's text draft keeps its date in the chat list.
+            controller.aorusCommittedAttachmentState = controller.aorusAttachmentDraftState()
+        }
         controller.aorusPersistAttachmentDraft = { [weak self, weak controller] completion in
             guard let controller else { completion(false); return }
             // Never before the draft being restored is in the picker: saved earlier, an empty
@@ -115,8 +123,10 @@ extension ChatControllerImpl {
                                 AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: replaced)
                             }
                             DispatchQueue.main.async {
-                                // What was just saved is what the picker held when the save began.
-                                controller.aorusCommittedAttachmentState = savedState
+                                // What was just saved is what the picker held when the save began
+                                // -- unless an edit was saved from its quick preview, in which case
+                                // the next save has to run again for the full picture.
+                                controller.aorusCommittedAttachmentState = capture.isComplete ? savedState : nil
                                 completion(true)
                             }
                         })
@@ -162,7 +172,9 @@ extension ChatControllerImpl {
             self.aorusAttachmentPreviewPicker = controller
             controller.aorusWhenAttachmentDraftRestored { [weak self, weak controller] restored in
                 guard let self, let controller, self.aorusAttachmentPreviewPicker === controller else { return }
-                guard restored else {
+                // Not into an editor for a draft that changed while it was read: its save would
+                // bring back what was removed from the strip in the meantime.
+                guard restored, self.presentationInterfaceState.interfaceState.attachmentDraft?.revision == draft.revision else {
                     self.aorusAttachmentPreviewPicker = nil
                     return
                 }
@@ -241,7 +253,9 @@ extension ChatControllerImpl {
             self.aorusAttachmentDraftConverting = true
             controller.aorusWhenAttachmentDraftRestored { [weak self, weak controller] restored in
                 guard let self, let controller, self.aorusAttachmentDraftPicker === controller else { return }
-                guard restored else {
+                // The draft as it was when send was pressed, or nothing: an attachment removed
+                // from the strip while it was read is not sent.
+                guard restored, self.presentationInterfaceState.interfaceState.attachmentDraft?.revision == draft.revision else {
                     self.aorusCancelAttachmentDraftSend(keepSelection: false)
                     return
                 }
@@ -334,6 +348,9 @@ extension ChatControllerImpl {
 
     func aorusTrackNativeAttachmentSelection(_ controller: MediaPickerScreenImpl) {
         guard self.aorusCanUseAttachmentDraft() else { return }
+        // Only a picker that holds the draft sends it. One whose restore failed, or has not
+        // finished, sends what was picked in it, and the draft stays in the chat.
+        guard !controller.aorusAttachmentRestorePending, !controller.aorusAttachmentRestoreFailed else { return }
         guard self.aorusSendingAttachmentDraft == nil, let draft = self.presentationInterfaceState.interfaceState.attachmentDraft else { return }
         self.aorusSendingAttachmentDraft = draft
         self.aorusAttachmentExpectedCount = Int(controller.aorusDraftSelection?.count() ?? 0)

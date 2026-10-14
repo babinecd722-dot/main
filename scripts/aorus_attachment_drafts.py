@@ -92,11 +92,14 @@ def patch_attachment_drafts(tg):
 
 
 RESTORED_EDIT = '''
-- (void)aorusRestoreDraftEdit:(UIImage *)image thumbnail:(UIImage *)thumbnail forItem:(id<TGMediaEditableItem>)item
+- (void)aorusRestoreDraftEdit:(UIImage *)image imageData:(NSData *)imageData thumbnail:(UIImage *)thumbnail thumbnailData:(NSData *)thumbnailData forItem:(id<TGMediaEditableItem>)item
 {
     NSString *itemId = [self _contextualIdForItemId:item.uniqueIdentifier];
     if (itemId == nil || image == nil)
         return;
+    // The memory caches first, for the readers that look there. A full photo is usually
+    // larger than its cache keeps, and a reader that misses it reads the disk cache on this
+    // context's queue, after the write queued below.
     [_imageCache setImage:image forKey:itemId attributes:NULL];
     if (thumbnail != nil)
         [_thumbnailImageCache setImage:thumbnail forKey:itemId attributes:NULL];
@@ -106,13 +109,15 @@ RESTORED_EDIT = '''
     [_queue dispatch:^
     {
         [_temporaryRepCache removeObjectForKey:itemId];
-        NSData *imageData = UIImageJPEGRepresentation(image, 0.95f);
-        [_diskCache setValue:imageData forKey:[imageUri dataUsingEncoding:NSUTF8StringEncoding]];
+        // The draft's own files as they are: the cache decodes whatever it is handed, so only
+        // a picture that came without its bytes is encoded here.
+        NSData *data = imageData.length != 0 ? imageData : UIImageJPEGRepresentation(image, 0.95f);
+        [_diskCache setValue:data forKey:[imageUri dataUsingEncoding:NSUTF8StringEncoding]];
         _representationPipe.sink([TGMediaImageUpdate imageUpdateWithItem:item representation:image]);
         if (thumbnail != nil)
         {
-            NSData *thumbnailData = UIImageJPEGRepresentation(thumbnail, 0.87f);
-            [_diskCache setValue:thumbnailData forKey:[thumbnailImageUri dataUsingEncoding:NSUTF8StringEncoding]];
+            NSData *thumbnailBytes = thumbnailData.length != 0 ? thumbnailData : UIImageJPEGRepresentation(thumbnail, 0.87f);
+            [_diskCache setValue:thumbnailBytes forKey:[thumbnailImageUri dataUsingEncoding:NSUTF8StringEncoding]];
         }
         NSData *fullSizeData = UIImageJPEGRepresentation(image, 0.7f);
         if ([fullSizeData writeToURL:fullSizeUrl options:NSDataWritingAtomic error:nil])
@@ -138,7 +143,7 @@ FOUNDATION_EXPORT NSObject<TGMediaEditAdjustments> *AorusMediaDraftReadAdjustmen
     # until they are written, which on the main thread froze the chat for every edited photo of
     # a draft being opened.
     anchor = '- (void)setFullSizeImage:(UIImage *)image forItem:(id<TGMediaEditableItem>)item;\n'
-    s = edit(s, anchor, anchor + '- (void)aorusRestoreDraftEdit:(UIImage *)image thumbnail:(UIImage *)thumbnail forItem:(id<TGMediaEditableItem>)item NS_SWIFT_NAME(aorusRestoreDraftEdit(_:thumbnail:for:));\n', 'restored edit declaration')
+    s = edit(s, anchor, anchor + '- (void)aorusRestoreDraftEdit:(UIImage *)image imageData:(NSData *)imageData thumbnail:(UIImage *)thumbnail thumbnailData:(NSData *)thumbnailData forItem:(id<TGMediaEditableItem>)item NS_SWIFT_NAME(aorusRestoreDraftEdit(_:imageData:thumbnail:thumbnailData:for:));\n', 'restored edit declaration')
     path.write_text(s)
     path = tg / 'submodules/LegacyComponents/Sources/TGMediaEditingContext.m'
     s = path.read_text()
@@ -185,7 +190,7 @@ def patch_picker(tg):
     private var aorusWarmDirty = false
     private var aorusPersistenceWaiters: [() -> Void] = []
     private var aorusPersistenceFailureWaiters: [() -> Void] = []
-    private var aorusAttachmentPersistenceStarted = false
+    var aorusAttachmentPersistenceStarted = false
     private var aorusAttachmentPersistenceFinished = false
     public var aorusDraftSelection: TGMediaSelectionContext? { self.interaction?.selectionState }
     public var aorusDraftEditing: TGMediaEditingContext? { self.interaction?.editingState }
@@ -533,7 +538,8 @@ def patch_controller(tg):
     s = path.read_text()
     anchor = '                attachmentController.didDismiss = { [weak self] in\n'
     s = edit(s, anchor, '''                attachmentController.aorusPrepareDismissal = { completion in
-                    if let picker = currentMediaController.with({ $0 }) { picker.aorusRequestAttachmentPersistence(completion: completion) }
+                    // A failed save has already said so; the sheet still closes rather than hang.
+                    if let picker = currentMediaController.with({ $0 }) { picker.aorusRequestAttachmentPersistence(completion: completion, failed: completion) }
                     else { completion() }
                 }
                 attachmentController.willDismiss = {

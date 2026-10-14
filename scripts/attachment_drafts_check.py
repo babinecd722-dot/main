@@ -96,6 +96,8 @@ final class TelegramMediaPaidContent { let extendedMedia: [TelegramExtendedMedia
 struct ChatTextInputState { let inputText: NSAttributedString }
 final class MediaPickerScreenImpl {
     var aorusAttachmentStableIds: [String: String] = [:]
+    var aorusAttachmentRestorePending = false
+    var aorusAttachmentRestoreFailed = false
     struct Selection { func count() -> Int { 2 } }
     var aorusDraftSelection: Selection? = Selection()
     var aorusDraftCurrentCaption: NSAttributedString?
@@ -211,6 +213,13 @@ expect(!controller.aorusCanUseAttachmentDraft(), "an active recording does not r
 controller.presentationInterfaceState.inputTextPanelState.mediaRecordingState = nil
 expect(controller.aorusCanUseAttachmentDraft(), "leaving an editor or recording restores the preserved attachment draft")
 controller.presentationInterfaceState.interfaceState.attachmentDraft = draft
+for (pending, failed) in [(true, false), (false, true)] {
+    let other = MediaPickerScreenImpl()
+    other.aorusAttachmentRestorePending = pending
+    other.aorusAttachmentRestoreFailed = failed
+    controller.aorusTrackNativeAttachmentSelection(other)
+    expect(controller.aorusSendingAttachmentDraft == nil && controller.aorusAttachmentDraftPicker == nil, "a gallery send from a picker that does not hold the draft never consumes it")
+}
 let picker = MediaPickerScreenImpl()
 picker.aorusDraftCurrentCaption = NSAttributedString(string: "Caption changed in the gallery")
 controller.aorusTrackNativeAttachmentSelection(picker)
@@ -509,7 +518,7 @@ def check_draft_sdk(tg, swiftc):
         signals = tg / 'submodules/SSignalKit/SSignalKit/Source/SSignalKit'
         (includes / 'LegacyComponents').symlink_to(legacy.resolve(), target_is_directory=True)
         (includes / 'SSignalKit').symlink_to(signals.resolve(), target_is_directory=True)
-        headers = ['TGMediaEditingContext.h', 'TGMediaSelectionContext.h', 'TGMediaAsset.h', 'TGMediaAsset+TGMediaEditableItem.h', 'TGCameraCapturedPhoto.h', 'TGCameraCapturedVideo.h', 'TGPaintingData.h', 'PGPhotoEditorValues.h', 'TGVideoEditAdjustments.h']
+        headers = ['TGMediaEditingContext.h', 'TGMediaSelectionContext.h', 'TGMediaAsset.h', 'TGMediaAsset+TGMediaEditableItem.h', 'TGCameraCapturedPhoto.h', 'TGCameraCapturedVideo.h', 'TGPaintingData.h', 'PGPhotoEditorValues.h', 'TGVideoEditAdjustments.h', 'UIImage+TG.h']
         headers = [name for name in headers if (legacy / name).exists()]
         module = 'module SSignalKit { header "' + str(signals / 'SSignalKit.h') + '" export * }\n'
         module += 'module LegacyComponents {\n' + '\n'.join('header "' + str(legacy / name) + '"' for name in headers) + '\nexport *\n}\n'
@@ -528,6 +537,8 @@ final class MediaPickerScreenImpl {
     var aorusAttachmentRestorePending = false
     var aorusAttachmentRestoreWaiters: [(Bool) -> Void] = []
     var aorusCommittedAttachmentState: AorusAttachmentDraftState?
+    var aorusAttachmentPersistenceStarted = false
+    let view = UIView()
 }
 ''' + (tg / 'submodules/MediaPickerUI/Sources/AorusAttachmentDraftPicker.swift').read_text().replace('import TelegramCore\n', ''))
         subprocess.run([swiftc, '-typecheck', '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), '-sdk', sdk, '-target', 'arm64-apple-ios15.0', '-I', str(includes), str(tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift'), str(adapter)], check=True)

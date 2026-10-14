@@ -9,6 +9,9 @@ import TelegramCore
 public struct AorusAttachmentDraftCapture {
     public let draft: AorusAttachmentDraft?
     public let caption: NSAttributedString?
+    /// False when an edited photo was saved from the editor's quick preview because its full
+    /// render had not arrived: such a save is not the selection as the reader left it.
+    public let isComplete: Bool
 }
 
 private enum AorusAttachmentDraftError: Error { case unavailable, writeFailed }
@@ -44,7 +47,7 @@ extension MediaPickerScreenImpl {
         }
         let caption = editing.caption(for: items.first)
         if items.isEmpty {
-            completion(.success(AorusAttachmentDraftCapture(draft: nil, caption: caption)))
+            completion(.success(AorusAttachmentDraftCapture(draft: nil, caption: caption, isComplete: true)))
             return
         }
         let keys: [String] = items.compactMap { $0.uniqueIdentifier }
@@ -97,12 +100,24 @@ extension MediaPickerScreenImpl {
                 }, error: { _ in request.finish() }, completed: { request.finish() }) { subscriptions.append(disposable) }
                 else { request.finish() }
             }
-            if !item.isVideo, snapshots[index] != nil, let signal = editing.imageSignal(for: item, withUpdates: false) {
+            if !item.isVideo, snapshots[index] != nil, let signal = editing.imageSignal(for: item, withUpdates: true) {
+                // The editor hands back a quick preview first and renders the full picture
+                // about half a second later. The save waits for that render, and takes the
+                // preview only if the render has not come within a few seconds.
                 let request = AorusDraftImageRequest(group)
                 requests.append(request)
-                if let disposable = signal.take(1).deliver(on: SQueue.main()).start(next: { value in
+                if let disposable = signal.deliver(on: SQueue.main()).start(next: { value in
                     guard !request.finished else { return }
-                    images[index].edited = value as? UIImage
+                    guard let image = value as? UIImage else {
+                        request.finish()
+                        return
+                    }
+                    images[index].edited = image
+                    if !image.degraded() {
+                        request.finish()
+                    } else {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { request.finish() }
+                    }
                 }, error: { _ in request.finish() }, completed: { request.finish() }) { subscriptions.append(disposable) }
                 else { request.finish() }
             }
@@ -190,8 +205,9 @@ extension MediaPickerScreenImpl {
                         entries.append(AorusAttachmentDraft.Item(id: id, source: source, assetIdentifier: assetIdentifier, isVideo: item.isVideo, duration: duration, thumbnail: thumbnail, adjustments: adjustments, timer: timers[index], spoiler: spoilers[index], price: prices[index], livePhotoMode: liveModes[index], isAnimation: (item as? TGCameraCapturedVideo)?.isAnimation ?? false, coverPosition: coverPositions[index]))
                     }
                     let captured = AorusAttachmentDraft(directory: directory, timestamp: draft.timestamp, items: entries, grouping: draft.grouping, captionAbove: draft.captionAbove, highQuality: draft.highQuality, forceLivePhoto: draft.forceLivePhoto)
+                    let complete = !images.contains { $0.edited?.degraded() == true }
                     DispatchQueue.main.async {
-                        withExtendedLifetime(retainedPicker) { completion(.success(AorusAttachmentDraftCapture(draft: captured, caption: caption))) }
+                        withExtendedLifetime(retainedPicker) { completion(.success(AorusAttachmentDraftCapture(draft: captured, caption: caption, isComplete: complete))) }
                     }
                 } catch {
                     try? FileManager.default.removeItem(at: root)
@@ -213,6 +229,9 @@ extension MediaPickerScreenImpl {
             return
         }
         self.aorusAttachmentRestorePending = true
+        // Nothing is picked, deselected or sent from a selection the restore is about to
+        // replace: a pick would be cleared by it, and a send would take the draft with it.
+        self.view.isUserInteractionEnabled = false
         let basePath = self.aorusDraftAccountPath
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let entries = aorusReadAttachmentDraft(draft, accountBasePath: basePath)
@@ -221,6 +240,8 @@ extension MediaPickerScreenImpl {
                 let restored = entries.map { self.aorusApplyAttachmentDraft(draft, entries: $0) } ?? false
                 self.aorusAttachmentRestorePending = false
                 self.aorusAttachmentRestoreFailed = !restored
+                // A save already waiting on the restore keeps the picker locked for itself.
+                if !self.aorusAttachmentPersistenceStarted { self.view.isUserInteractionEnabled = true }
                 completion(restored)
                 let waiters = self.aorusAttachmentRestoreWaiters
                 self.aorusAttachmentRestoreWaiters.removeAll()
@@ -274,9 +295,9 @@ extension MediaPickerScreenImpl {
             self.aorusAttachmentStableIds[item.uniqueIdentifier] = entry.id
             if let adjustments = restored.adjustments { editing.setAdjustments(adjustments, for: item) }
             if let edited = restored.edited {
-                // In memory at once, so every reader finds the edit; the copies the context
-                // keeps on disk are encoded on its own queue rather than on this thread.
-                editing.aorusRestoreDraftEdit(edited, thumbnail: restored.preview, for: item)
+                // Handed over with the bytes it was saved as: the context keeps those on disk
+                // on its own queue, and nothing is encoded on this thread.
+                editing.aorusRestoreDraftEdit(edited.image, imageData: edited.data, thumbnail: restored.preview?.image, thumbnailData: restored.preview?.data, for: item)
             }
             if let cover = restored.cover {
                 editing.setCover(cover, position: entry.coverPosition.map { NSNumber(value: $0) }, for: item)
@@ -313,9 +334,24 @@ private struct AorusDraftRestoreEntry {
     let item: TGMediaAsset
     let entry: AorusAttachmentDraft.Item
     let adjustments: TGMediaEditAdjustments?
-    let edited: UIImage?
-    let preview: UIImage?
+    let edited: AorusDraftPicture?
+    let preview: AorusDraftPicture?
     let cover: UIImage?
+}
+
+/// A picture of a draft and the bytes it was read from, which the editing context keeps on
+/// disk as they are instead of encoding the picture again.
+private struct AorusDraftPicture {
+    let image: UIImage
+    let data: Data
+
+    init?(contentsOf url: URL) {
+        // Mapped rather than read: a draft of many edited photos would otherwise hold every one
+        // of their files in memory at once.
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), let image = UIImage(data: data) else { return nil }
+        self.image = image
+        self.data = data
+    }
 }
 
 /// Everything a restore reads from disk, off the main thread. Nil when any attachment cannot
@@ -356,14 +392,14 @@ private func aorusReadAttachmentDraft(_ draft: AorusAttachmentDraft, accountBase
             guard let values = AorusMediaDraftReadAdjustments(data, edits.path, &error), error == nil else { return nil }
             adjustments = values
         }
-        let edited = UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path)
+        let edited = AorusDraftPicture(contentsOf: folder.appendingPathComponent("edited.png"))
         if !item.isVideo, let adjustments, !adjustments.isDefaultValues(forAvatar: false), edited == nil { return nil }
         entries.append(AorusDraftRestoreEntry(
             item: item,
             entry: entry,
             adjustments: adjustments,
             edited: edited,
-            preview: edited == nil ? nil : UIImage(contentsOfFile: folder.appendingPathComponent("preview.jpg").path),
+            preview: edited == nil ? nil : AorusDraftPicture(contentsOf: folder.appendingPathComponent("preview.jpg")),
             cover: UIImage(contentsOfFile: folder.appendingPathComponent("cover.png").path)
         ))
     }
