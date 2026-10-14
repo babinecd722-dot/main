@@ -45,56 +45,67 @@ extension ChatControllerImpl {
         let threadId = self.chatLocation.threadId
         let captureKey = "\(peerId.toInt64()):\(threadId ?? 0)"
         if let draft = self.presentationInterfaceState.interfaceState.attachmentDraft {
-            if !controller.aorusRestoreAttachmentDraft(draft) {
-                controller.aorusAttachmentRestoreFailed = true
-                self.aorusShowAttachmentDraftError()
-            } else if let id = self.aorusAttachmentPreviewId, let index = draft.items.firstIndex(where: { $0.id == id }) {
-                controller.aorusAttachmentPreviewIndex = index
-                self.aorusAttachmentPreviewId = nil
+            // Read off the main thread and applied when ready; the editor, the send and every
+            // save of this picker wait for it.
+            controller.aorusRestoreAttachmentDraft(draft) { [weak self, weak controller] restored in
+                guard controller != nil, !restored else { return }
+                self?.aorusShowAttachmentDraftError()
             }
         }
         controller.mediaPickerContext?.setCaption(self.presentationInterfaceState.interfaceState.composeInputState.inputText)
         controller.aorusPersistAttachmentDraft = { [weak self, weak controller] completion in
             guard let controller else { completion(false); return }
-            if controller.aorusAttachmentRestoreFailed, controller.aorusDraftSelection?.count() == 0 {
-                if let caption = controller.aorusDraftCurrentCaption {
-                    let update: (ChatInterfaceState) -> ChatInterfaceState = { $0.aorusWithAttachmentCaption(caption) }
-                    if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
-                        self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: true, { $0.updatedInterfaceState(update) })
-                    } else {
-                        let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, update).startStandalone()
+            // Never before the draft being restored is in the picker: saved earlier, an empty
+            // selection would replace it.
+            controller.aorusWhenAttachmentDraftRestored { [weak self, weak controller] _ in
+                guard let controller else { completion(false); return }
+                if controller.aorusAttachmentRestoreFailed, controller.aorusDraftSelection?.count() == 0 {
+                    if let caption = controller.aorusDraftCurrentCaption {
+                        let update: (ChatInterfaceState) -> ChatInterfaceState = { $0.aorusWithAttachmentCaption(caption) }
+                        if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
+                            self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: true, { $0.updatedInterfaceState(update) })
+                        } else {
+                            let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, update).startStandalone()
+                        }
                     }
+                    completion(true)
+                    return
                 }
-                completion(true)
-                return
-            }
-            let token = UUID()
-            self?.aorusAttachmentCaptureTokens[captureKey] = token
-            controller.aorusCaptureAttachmentDraft { [weak self] result in
-                switch result {
-                case let .success(capture):
-                    if controller.aorusHasSentAttachmentSelection {
-                        if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
-                        completion(true)
-                        return
-                    }
-                    if let self, self.aorusAttachmentCaptureTokens[captureKey] != token {
-                        if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
-                        completion(true)
-                        return
-                    }
-                    let retainedDirectory = self?.aorusSendingAttachmentDraft?.directory
-                    var replaced: AorusAttachmentDraft?
-                    if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
-                        self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: false, { state in
-                            state.updatedInterfaceState { previous in
-                                var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
-                                if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
-                                return updated
-                            }
-                        })
-                    }
-                    let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, { previous in
+                // Nothing has changed since the draft was last saved -- restored into this picker
+                // or written by its previous save -- so there is nothing to write: the files, the
+                // revision and the composer's previews stay as they are, and closing is immediate.
+                let savedState = controller.aorusAttachmentDraftState()
+                if let savedState, savedState == controller.aorusCommittedAttachmentState {
+                    completion(true)
+                    return
+                }
+                let token = UUID()
+                self?.aorusAttachmentCaptureTokens[captureKey] = token
+                controller.aorusCaptureAttachmentDraft { [weak self] result in
+                    switch result {
+                    case let .success(capture):
+                        if controller.aorusHasSentAttachmentSelection {
+                            if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
+                            completion(true)
+                            return
+                        }
+                        if let self, self.aorusAttachmentCaptureTokens[captureKey] != token {
+                            if let draft = capture.draft { AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: draft) }
+                            completion(true)
+                            return
+                        }
+                        let retainedDirectory = self?.aorusSendingAttachmentDraft?.directory
+                        var replaced: AorusAttachmentDraft?
+                        if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
+                            self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: false, { state in
+                                state.updatedInterfaceState { previous in
+                                    var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
+                                    if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
+                                    return updated
+                                }
+                            })
+                        }
+                        let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, { previous in
                             replaced = previous.attachmentDraft
                             var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
                             if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
@@ -103,11 +114,16 @@ extension ChatControllerImpl {
                             if let replaced, replaced.directory != capture.draft?.directory, replaced.directory != retainedDirectory {
                                 AorusAttachmentDraftCleanup.discard(accountBasePath: context.account.basePath, draft: replaced)
                             }
-                            DispatchQueue.main.async { completion(true) }
+                            DispatchQueue.main.async {
+                                // What was just saved is what the picker held when the save began.
+                                controller.aorusCommittedAttachmentState = savedState
+                                completion(true)
+                            }
                         })
-                case .failure:
-                    if !controller.aorusIsPreparingAttachmentDraft { self?.aorusShowAttachmentDraftError() }
-                    completion(false)
+                    case .failure:
+                        if !controller.aorusIsPreparingAttachmentDraft { self?.aorusShowAttachmentDraftError() }
+                        completion(false)
+                    }
                 }
             }
         }
@@ -141,31 +157,43 @@ extension ChatControllerImpl {
               let index = draft.items.firstIndex(where: { $0.id == id }),
               let layout = self.chatDisplayNode.validLayout?.0 else { return }
         self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, present: { [weak self] controller, _ in
-            guard let self, !controller.aorusAttachmentRestoreFailed else { return }
+            guard let self else { return }
+            // Held while the draft is read in, so a second tap cannot open a second editor.
             self.aorusAttachmentPreviewPicker = controller
-            let selected = controller.aorusDraftSelection?.selectedItems() ?? []
-            var identifiers: [String: String] = [:]
-            for (index, item) in selected.enumerated() where draft.items.indices.contains(index) {
-                if let item = item as? TGMediaSelectableItem { identifiers[item.uniqueIdentifier] = draft.items[index].id }
+            controller.aorusWhenAttachmentDraftRestored { [weak self, weak controller] restored in
+                guard let self, let controller, self.aorusAttachmentPreviewPicker === controller else { return }
+                guard restored else {
+                    self.aorusAttachmentPreviewPicker = nil
+                    return
+                }
+                self.aorusPresentAttachmentDraftPreview(controller, draft: draft, index: index, layout: layout)
             }
-            controller.aorusDraftTransitionView = { [weak self] identifier in
-                guard let id = identifiers[identifier] else { return nil }
-                return AorusAttachmentDraftStrip.activeTransitionView(id: id) ?? self?.chatDisplayNode.textInputPanelNode?.aorusDraftTransitionView(id: id)
-            }
-            controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self] editor, arguments in
-                self?.present(editor, in: .window(.root), with: arguments)
-            }, closed: { [weak self, weak controller] in
-                guard let controller else { return }
-                controller.aorusRequestAttachmentPersistence(completion: { [weak self, controller] in
-                    if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
-                }, failed: { [weak self, controller] in
-                    // The edit could not be kept; the editor is gone either way, and the composer
-                    // must not go on waiting for it, refusing every send and every preview.
-                    if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
-                })
-            })
         }, updateMediaPickerContext: { _ in }, completion: { [weak self] fromGallery, signals, silently, time, parameters, _, completion in
             self?.enqueueMediaMessages(fromGallery: fromGallery, signals: signals, silentPosting: silently, scheduleTime: time, parameters: parameters, completion: completion)
+        })
+    }
+
+    private func aorusPresentAttachmentDraftPreview(_ controller: MediaPickerScreenImpl, draft: AorusAttachmentDraft, index: Int, layout: ContainerViewLayout) {
+        let selected = controller.aorusDraftSelection?.selectedItems() ?? []
+        var identifiers: [String: String] = [:]
+        for (index, item) in selected.enumerated() where draft.items.indices.contains(index) {
+            if let item = item as? TGMediaSelectableItem { identifiers[item.uniqueIdentifier] = draft.items[index].id }
+        }
+        controller.aorusDraftTransitionView = { [weak self] identifier in
+            guard let id = identifiers[identifier] else { return nil }
+            return AorusAttachmentDraftStrip.activeTransitionView(id: id) ?? self?.chatDisplayNode.textInputPanelNode?.aorusDraftTransitionView(id: id)
+        }
+        controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self] editor, arguments in
+            self?.present(editor, in: .window(.root), with: arguments)
+        }, closed: { [weak self, weak controller] in
+            guard let controller else { return }
+            controller.aorusRequestAttachmentPersistence(completion: { [weak self, controller] in
+                if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
+            }, failed: { [weak self, controller] in
+                // The edit could not be kept; the editor is gone either way, and the composer
+                // must not go on waiting for it, refusing every send and every preview.
+                if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
+            })
         })
     }
 
@@ -206,17 +234,31 @@ extension ChatControllerImpl {
         }
         self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: bannedPhotos, bannedSendVideos: bannedVideos, enableMultiselection: true, present: { [weak self] controller, context in
             guard let self else { return }
-            guard !controller.aorusAttachmentRestoreFailed else { return }
-            if Int(controller.aorusDraftSelection?.count() ?? 0) != draft.items.count { self.aorusShowAttachmentDraftError(); return }
+            // The send is this one from here on, while the draft is read in as well: a second
+            // press waits for it, as it does for the conversion that follows.
             self.aorusSendingAttachmentDraft = draft
-            self.aorusAttachmentExpectedCount = draft.items.count
-            self.aorusAttachmentSendPeer = self.chatLocation.peerId
-            self.aorusAttachmentSendThread = self.chatLocation.threadId
-            self.aorusAttachmentSendCaption = caption
             self.aorusAttachmentDraftPicker = controller
-            self.aorusAttachmentSendTextSeparately = true
-            context?.setCaption(caption)
-            controller.aorusSendAttachmentDraft(silently: silentPosting, scheduleTime: scheduleTime, parameters: parameters)
+            self.aorusAttachmentDraftConverting = true
+            controller.aorusWhenAttachmentDraftRestored { [weak self, weak controller] restored in
+                guard let self, let controller, self.aorusAttachmentDraftPicker === controller else { return }
+                guard restored else {
+                    self.aorusCancelAttachmentDraftSend(keepSelection: false)
+                    return
+                }
+                guard Int(controller.aorusDraftSelection?.count() ?? 0) == draft.items.count else {
+                    self.aorusCancelAttachmentDraftSend(keepSelection: false)
+                    self.aorusShowAttachmentDraftError()
+                    return
+                }
+                self.aorusAttachmentDraftConverting = false
+                self.aorusAttachmentExpectedCount = draft.items.count
+                self.aorusAttachmentSendPeer = self.chatLocation.peerId
+                self.aorusAttachmentSendThread = self.chatLocation.threadId
+                self.aorusAttachmentSendCaption = caption
+                self.aorusAttachmentSendTextSeparately = true
+                context?.setCaption(caption)
+                controller.aorusSendAttachmentDraft(silently: silentPosting, scheduleTime: scheduleTime, parameters: parameters)
+            }
         }, updateMediaPickerContext: { _ in }, completion: { [weak self] fromGallery, signals, silently, time, parameters, _, completion in
             guard let self else { return }
             self.enqueueMediaMessages(fromGallery: fromGallery, signals: signals, silentPosting: silently, scheduleTime: time, parameters: parameters, completion: completion)

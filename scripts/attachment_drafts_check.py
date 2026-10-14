@@ -291,6 +291,40 @@ print("Media draft native composer geometry passed: \\(checks) assertions")
 '''
 
 
+def state_fixture_source(tg):
+    """The picker's saved-state comparison, which decides that closing a picker writes nothing."""
+    picker = (tg / 'submodules/MediaPickerUI/Sources/AorusAttachmentDraftPicker.swift').read_text()
+    return 'import Foundation\n' + block(picker, 'public struct AorusAttachmentDraftState:') + STATE_TESTS
+
+
+STATE_TESTS = r'''
+var checks = 0
+func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
+final class Edit: NSObject { let crop: Int; init(crop: Int) { self.crop = crop } }
+let first = Edit(crop: 1)
+let caption = NSAttributedString(string: "Caption")
+func state(_ edit: Edit?, caption: NSAttributedString = caption, timer: NSNumber? = nil, grouping: Bool = true) -> AorusAttachmentDraftState {
+    AorusAttachmentDraftState(values: [grouping, AnyHashable(caption), AnyHashable("asset"), AnyHashable(timer)], objects: [edit, nil])
+}
+expect(state(first) == state(first), "the same edits and values are one saved state")
+expect(state(first) != state(Edit(crop: 1)), "a new edit is a change even when it reads the same")
+expect(state(first) != state(nil), "removing an edit is a change")
+expect(state(first) != state(first, caption: NSAttributedString(string: "Other")), "a new caption is a change")
+expect(state(first) == state(first, caption: NSAttributedString(string: "Caption")), "an equal caption is not")
+expect(state(first) != state(first, timer: NSNumber(value: 5)), "a timer is a change")
+expect(state(first) != state(first, grouping: false), "grouping is a change")
+expect(AorusAttachmentDraftState(values: [], objects: [first]) != AorusAttachmentDraftState(values: [], objects: [first, first]), "a different selection length is a change")
+var held: AorusAttachmentDraftState?
+do {
+    let transient = Edit(crop: 2)
+    held = state(transient)
+}
+let reused = Edit(crop: 2)
+expect(held != state(reused), "a held state keeps its edit alive, so a later edit cannot take its address")
+print("Media draft saved-state comparison passed: \(checks) assertions")
+'''
+
+
 def check_bindings(tg):
     source = (tg / 'submodules/ChatInterfaceState/Sources/ChatInterfaceState.swift').read_text()
     code = source[source.index('public final class ChatInterfaceState:'):]
@@ -342,6 +376,12 @@ def check_drafts(tg, swiftc):
         source.write_text(geometry_fixture_source(tg))
         subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(source), '-o', str(work / 'geometry')], check=True)
         subprocess.run([str(work / 'geometry')], check=True)
+    with tempfile.TemporaryDirectory(prefix='aorus-media-state-tests-') as directory:
+        work = Path(directory)
+        source = work / 'State.swift'
+        source.write_text(state_fixture_source(tg))
+        subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(source), '-o', str(work / 'state')], check=True)
+        subprocess.run([str(work / 'state')], check=True)
     check_controller_bindings(tg, swiftc)
     check_draft_sdk(tg, swiftc)
 
@@ -484,6 +524,10 @@ final class MediaPickerScreenImpl {
     var aorusDraftSelection: TGMediaSelectionContext?
     var aorusDraftEditing: TGMediaEditingContext?
     var aorusDraftAccountPath = "/account"
+    var aorusAttachmentRestoreFailed = false
+    var aorusAttachmentRestorePending = false
+    var aorusAttachmentRestoreWaiters: [(Bool) -> Void] = []
+    var aorusCommittedAttachmentState: AorusAttachmentDraftState?
 }
 ''' + (tg / 'submodules/MediaPickerUI/Sources/AorusAttachmentDraftPicker.swift').read_text().replace('import TelegramCore\n', ''))
         subprocess.run([swiftc, '-typecheck', '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), '-sdk', sdk, '-target', 'arm64-apple-ios15.0', '-I', str(includes), str(tg / 'submodules/TelegramCore/Sources/AorusAttachmentDraft.swift'), str(adapter)], check=True)

@@ -91,6 +91,37 @@ def patch_attachment_drafts(tg):
     patch_controller(tg)
 
 
+RESTORED_EDIT = '''
+- (void)aorusRestoreDraftEdit:(UIImage *)image thumbnail:(UIImage *)thumbnail forItem:(id<TGMediaEditableItem>)item
+{
+    NSString *itemId = [self _contextualIdForItemId:item.uniqueIdentifier];
+    if (itemId == nil || image == nil)
+        return;
+    [_imageCache setImage:image forKey:itemId attributes:NULL];
+    if (thumbnail != nil)
+        [_thumbnailImageCache setImage:thumbnail forKey:itemId attributes:NULL];
+    NSString *imageUri = [[self class] _imageUriForItemId:itemId];
+    NSString *thumbnailImageUri = [[self class] _thumbnailImageUriForItemId:itemId];
+    NSURL *fullSizeUrl = [_fullSizeResultsUrl URLByAppendingPathComponent:[NSString stringWithFormat:@"%@.jpg", [TGStringUtils md5:itemId]]];
+    [_queue dispatch:^
+    {
+        [_temporaryRepCache removeObjectForKey:itemId];
+        NSData *imageData = UIImageJPEGRepresentation(image, 0.95f);
+        [_diskCache setValue:imageData forKey:[imageUri dataUsingEncoding:NSUTF8StringEncoding]];
+        _representationPipe.sink([TGMediaImageUpdate imageUpdateWithItem:item representation:image]);
+        if (thumbnail != nil)
+        {
+            NSData *thumbnailData = UIImageJPEGRepresentation(thumbnail, 0.87f);
+            [_diskCache setValue:thumbnailData forKey:[thumbnailImageUri dataUsingEncoding:NSUTF8StringEncoding]];
+        }
+        NSData *fullSizeData = UIImageJPEGRepresentation(image, 0.7f);
+        if ([fullSizeData writeToURL:fullSizeUrl options:NSDataWritingAtomic error:nil])
+            _fullSizePipe.sink(itemId);
+    }];
+}
+'''
+
+
 def patch_editing(tg):
     path = tg / 'submodules/LegacyComponents/PublicHeaders/LegacyComponents/TGMediaEditingContext.h'
     s = path.read_text()
@@ -101,6 +132,18 @@ FOUNDATION_EXPORT NSObject<TGMediaEditAdjustments> *AorusMediaDraftReadAdjustmen
 '''
     if declaration not in s:
         s += declaration
+    # A restored edit goes into the editing context's memory caches at once, so every reader
+    # finds it, synchronous ones included; the three JPEG copies the context keeps on disk are
+    # encoded on its own queue. The stock setters encode them on the caller's thread or block it
+    # until they are written, which on the main thread froze the chat for every edited photo of
+    # a draft being opened.
+    anchor = '- (void)setFullSizeImage:(UIImage *)image forItem:(id<TGMediaEditableItem>)item;\n'
+    s = edit(s, anchor, anchor + '- (void)aorusRestoreDraftEdit:(UIImage *)image thumbnail:(UIImage *)thumbnail forItem:(id<TGMediaEditableItem>)item NS_SWIFT_NAME(aorusRestoreDraftEdit(_:thumbnail:for:));\n', 'restored edit declaration')
+    path.write_text(s)
+    path = tg / 'submodules/LegacyComponents/Sources/TGMediaEditingContext.m'
+    s = path.read_text()
+    anchor = '@implementation TGMediaEditingContext\n'
+    s = edit(s, anchor, anchor + RESTORED_EDIT, 'restored edit implementation')
     path.write_text(s)
     for name, method in (
         ('TGVideoEditAdjustments', '- (void)aorusRestoreDraftPaintingData:(TGPaintingData *)painting { _paintingData = painting; }'),
@@ -128,6 +171,9 @@ def patch_picker(tg):
     public var aorusPersistAttachmentDraft: ((@escaping (Bool) -> Void) -> Void)?
     public var aorusAttachmentPreviewIndex: Int?
     public var aorusAttachmentRestoreFailed = false
+    public var aorusAttachmentRestorePending = false
+    var aorusAttachmentRestoreWaiters: [(Bool) -> Void] = []
+    public var aorusCommittedAttachmentState: AorusAttachmentDraftState?
     public var aorusAttachmentStableIds: [String: String] = [:]
     public var aorusHasSentAttachmentSelection = false
     public var aorusPresentDraftGallery: ((ViewController, Any?) -> Void)?
@@ -406,7 +452,6 @@ def patch_controller(tg):
     var aorusAttachmentPreparedResources: [MediaResource] = []
     var aorusAttachmentSendPeer: PeerId?
     var aorusAttachmentSendThread: Int64?
-    var aorusAttachmentPreviewId: String?
     var aorusAttachmentDraftConverting = false
     var aorusAttachmentSendTextSeparately = false
     var aorusAttachmentCaptureTokens: [String: UUID] = [:]

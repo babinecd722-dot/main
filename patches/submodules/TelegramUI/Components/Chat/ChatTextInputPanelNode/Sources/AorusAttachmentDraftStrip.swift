@@ -169,7 +169,7 @@ private final class AorusAttachmentDraftTile: UIView {
             if !sameItem { self.imageView.image = item.thumbnail.flatMap { UIImage(data: $0) } }
             if let path = previewURL?.path {
                 DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    let image = UIImage(contentsOfFile: path)
+                    let image = aorusDecodedDraftPreview(path: path)
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.itemId == item.id, self.previewPath == path, let image else { return }
                         self.imageView.image = image
@@ -202,4 +202,17 @@ private final class AorusAttachmentDraftTile: UIView {
         self.removeIcon.frame = self.removeBackground.frame
         self.duration.frame = CGRect(x: 8, y: self.bounds.height - 23, width: max(0, self.bounds.width - 16), height: 16)
     }
+}
+
+/// A preview read and decoded off the main thread, so a strip of them appearing or being
+/// replaced costs the main thread nothing but handing the pictures over.
+private func aorusDecodedDraftPreview(path: String) -> UIImage? {
+    guard let image = UIImage(contentsOfFile: path) else { return nil }
+    if #available(iOS 15.0, *) {
+        return image.preparingForDisplay() ?? image
+    }
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = image.scale
+    format.opaque = true
+    return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in image.draw(at: .zero) }
 }

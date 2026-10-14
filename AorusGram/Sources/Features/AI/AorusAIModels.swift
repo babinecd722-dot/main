@@ -232,6 +232,9 @@ public struct AorusAIConversation: Codable, Equatable, Identifiable {
     /// the chat is created and never changed afterwards: changing it would strand the
     /// file the next "исправь заголовок" is meant to edit.
     public var threadId: String
+    /// What the running turn's next continuation sends, while one is running. See
+    /// `AorusAIPendingTurn`.
+    public var pendingTurn: AorusAIPendingTurn?
 
     public init(id: UUID = UUID(), title: String = "", createdAt: Date = Date(), updatedAt: Date = Date(), messages: [AorusAIMessage] = [], draft: String = "", quotaResetAt: Date? = nil, pinned: Bool = false, threadId: String = AorusAIThreadID.generate()) {
         self.id = id
@@ -246,7 +249,7 @@ public struct AorusAIConversation: Codable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, createdAt, updatedAt, messages, draft, quotaResetAt, pinned, threadId
+        case id, title, createdAt, updatedAt, messages, draft, quotaResetAt, pinned, threadId, pendingTurn
     }
 
     /// Hand-written because the history file has to survive gaining a field.
@@ -274,6 +277,36 @@ public struct AorusAIConversation: Codable, Equatable, Identifiable {
             try container.decodeIfPresent(String.self, forKey: .threadId),
             fallback: self.id.uuidString
         )
+        // Never a reason to lose the chat: a turn that cannot be read back is one that cannot
+        // be continued, and the resume settles it as it would any other.
+        self.pendingTurn = try? container.decodeIfPresent(AorusAIPendingTurn.self, forKey: .pendingTurn)
+    }
+}
+
+/// What a running turn needs to send its next continuation, kept with the chat.
+///
+/// A turn the backend stops so the device can run a tool, or ask the reader for permission,
+/// goes on by posting the same request again with the accumulated results (§6, §14). Held
+/// only in memory, that request was gone after a restart: the resumed turn replayed up to its
+/// request, the tool ran, and the continuation had nothing to send, so a turn the server was
+/// still waiting on ended as "AorusAI временно недоступен". Written when the turn starts and
+/// with every result, and dropped when the turn ends.
+public struct AorusAIPendingTurn: Codable, Equatable {
+    /// The assistant message the turn is writing; a pending turn of another message is stale.
+    public var assistantId: UUID
+    /// The exact request text, which can differ from the bubble the reader sees.
+    public var transportText: String
+    /// How many of the chat's messages before this turn were its replayed context.
+    public var historyCount: Int
+    public var toolResults: [AorusAIToolResult]
+    public var continuationCount: Int
+
+    public init(assistantId: UUID, transportText: String, historyCount: Int, toolResults: [AorusAIToolResult], continuationCount: Int) {
+        self.assistantId = assistantId
+        self.transportText = transportText
+        self.historyCount = historyCount
+        self.toolResults = toolResults
+        self.continuationCount = continuationCount
     }
 }
 
@@ -283,7 +316,7 @@ public struct AorusAIConversation: Codable, Equatable, Identifiable {
 /// model as data, so there is no fixed schema to satisfy — but there is also no
 /// place for `Any`: every value that leaves the device is built explicitly here, so
 /// the HMAC can be taken over exact bytes and the payload stays reviewable.
-public indirect enum AorusAIJSONValue: Equatable, Encodable {
+public indirect enum AorusAIJSONValue: Equatable, Codable {
     case string(String)
     case int(Int)
     case int64(Int64)
@@ -343,6 +376,48 @@ public indirect enum AorusAIJSONValue: Equatable, Encodable {
             try container.encode(value)
         case let .object(value):
             try container.encode(value)
+        }
+    }
+
+    /// A whole number is one value whichever case holds it: `int` and `int64` encode to the
+    /// same bytes, and a value read back from disk is always `int64`.
+    public static func == (lhs: AorusAIJSONValue, rhs: AorusAIJSONValue) -> Bool {
+        switch (lhs, rhs) {
+        case let (.string(a), .string(b)): return a == b
+        case let (.double(a), .double(b)): return a == b
+        case let (.bool(a), .bool(b)): return a == b
+        case let (.array(a), .array(b)): return a == b
+        case let (.object(a), .object(b)): return a == b
+        default:
+            guard let a = lhs.wholeNumber, let b = rhs.wholeNumber else { return false }
+            return a == b
+        }
+    }
+
+    private var wholeNumber: Int64? {
+        switch self {
+        case let .int(value): return Int64(value)
+        case let .int64(value): return value
+        default: return nil
+        }
+    }
+
+    /// Read back from a running turn kept with its chat (`AorusAIPendingTurn`). Whole numbers
+    /// come back as `int64`, which encodes to the same bytes as the `int` they may have been.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int64.self) {
+            self = .int64(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .double(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([AorusAIJSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: AorusAIJSONValue].self))
         }
     }
 
@@ -512,8 +587,8 @@ public struct AorusAIPermissionRequest: Equatable {
 }
 
 /// One element of `aorus_tool_results`, exactly as the backend reads it.
-public struct AorusAIToolResult: Equatable, Encodable {
-    public struct Arguments: Equatable, Encodable {
+public struct AorusAIToolResult: Equatable, Codable {
+    public struct Arguments: Equatable, Codable {
         public var username: String?
         public var limit: Int?
         public var fromDate: Int64?
@@ -539,6 +614,14 @@ public struct AorusAIToolResult: Equatable, Encodable {
             try container.encodeIfPresent(limit, forKey: .limit)
             try container.encodeIfPresent(fromDate, forKey: .fromDate)
             try container.encodeIfPresent(toDate, forKey: .toDate)
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.username = try container.decodeIfPresent(String.self, forKey: .username)
+            self.limit = try container.decodeIfPresent(Int.self, forKey: .limit)
+            self.fromDate = try container.decodeIfPresent(Int64.self, forKey: .fromDate)
+            self.toDate = try container.decodeIfPresent(Int64.self, forKey: .toDate)
         }
     }
 
@@ -575,6 +658,16 @@ public struct AorusAIToolResult: Equatable, Encodable {
         try container.encode(denied, forKey: .denied)
         try container.encode(arguments, forKey: .arguments)
         try container.encodeIfPresent(result, forKey: .result)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.tool = try container.decode(String.self, forKey: .tool)
+        self.requestId = try container.decodeIfPresent(String.self, forKey: .requestId)
+        self.ok = try container.decode(Bool.self, forKey: .ok)
+        self.denied = try container.decode(Bool.self, forKey: .denied)
+        self.arguments = try container.decode(Arguments.self, forKey: .arguments)
+        self.result = try container.decodeIfPresent(AorusAIJSONValue.self, forKey: .result)
     }
 
     /// The user refused: a real, expected answer, never an error.

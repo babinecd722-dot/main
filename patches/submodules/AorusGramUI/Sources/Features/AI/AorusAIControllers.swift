@@ -2128,7 +2128,38 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // continuation of this logical request sends the identical conversation (§6).
         turnHistory = Array(conversation.messages.dropLast(2))
         turnTransportText = text
+        // On disk as well: a turn stopped for a tool or a permission is continued with this
+        // same request, and after a restart memory has none of it.
+        rememberPendingTurn()
+        persist(force: true)
         dispatchTransport()
+    }
+
+    /// Writes down what the running turn's next continuation sends (§6, §14), so a turn the
+    /// server is waiting on can still be continued after the app was closed.
+    private func rememberPendingTurn() {
+        guard let id = activeAssistantId, let text = turnTransportText else {
+            conversation.pendingTurn = nil
+            return
+        }
+        conversation.pendingTurn = AorusAIPendingTurn(
+            assistantId: id,
+            transportText: text,
+            historyCount: turnHistory.count,
+            toolResults: turnToolResults,
+            continuationCount: turnContinuationCount
+        )
+    }
+
+    /// Takes back what a turn started before a restart is continued with. Only for the
+    /// message being resumed, and the context never reaches past the turn's own prompt.
+    private func restorePendingTurn(assistantIndex index: Int) {
+        guard let pending = conversation.pendingTurn,
+              pending.assistantId == conversation.messages[index].id else { return }
+        turnTransportText = pending.transportText
+        turnHistory = Array(conversation.messages.prefix(min(max(0, pending.historyCount), max(0, index - 1))))
+        turnToolResults = pending.toolResults
+        turnContinuationCount = pending.continuationCount
     }
 
     /// Sends the turn — the first request and every continuation go through here, so the
@@ -2508,6 +2539,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
               conversation.messages[index].state == .streaming else { return }
         let assistantId = conversation.messages[index].id
         activeAssistantId = assistantId
+        restorePendingTurn(assistantIndex: index)
         turnState = .streaming
         isPreparingRequest = true
         awaitingConnectivity = false
@@ -2728,6 +2760,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     private func completeStreaming(cancelled: Bool) {
+        // The turn is over: nothing is continued any more.
+        conversation.pendingTurn = nil
         // A question belongs to the turn that raised it. Left behind, it was presented on
         // the next appearance for a turn that no longer exists — a sheet whose every button
         // does nothing, because `submit` refuses without an active assistant message.
@@ -2782,6 +2816,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     private func finishStreaming(error: AorusAIClientError, preserveText: Bool) {
+        // The turn is over: nothing is continued any more.
+        conversation.pendingTurn = nil
         // A question belongs to the turn that raised it. Left behind, it was presented on
         // the next appearance for a turn that no longer exists — a sheet whose every button
         // does nothing, because `submit` refuses without an active assistant message.
@@ -3235,6 +3271,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             )
             return
         }
+        // Every result so far goes to disk before it goes to the server, so a restart in the
+        // middle of the round trip still has all of them for the next continuation.
+        rememberPendingTurn()
+        persist(force: true)
         // Nothing is announced between tool rounds either: "Думаю…" says less than the
         // phase the agent is about to announce for itself, and it overwrote it.
         dispatchTransport()
@@ -3243,6 +3283,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// Ends the turn with a specific explanation instead of the generic unavailable card
     /// (§22). Anything the assistant already wrote is kept as a finished answer.
     private func failTurn(text: String, code: String) {
+        // The turn is over: nothing is continued any more.
+        conversation.pendingTurn = nil
         // A question belongs to the turn that raised it. Left behind, it was presented on
         // the next appearance for a turn that no longer exists — a sheet whose every button
         // does nothing, because `submit` refuses without an active assistant message.

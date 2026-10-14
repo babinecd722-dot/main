@@ -26,8 +26,14 @@ def check_refinements(tg, swiftc='swiftc'):
     node = (tg / 'submodules/TelegramUI/Sources/ChatControllerNode.swift').read_text()
     composer = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift').read_text()
     picker = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift').read_text()
-    gallery = block(controller, '    func aorusOpenAttachmentDraft(')
+    gallery = block(controller, '    func aorusOpenAttachmentDraft(') + block(controller, '    private func aorusPresentAttachmentDraftPreview(')
     assert 'presentAttachmentMenu' not in gallery and 'aorusOpenAttachmentDraftPreview' in gallery
+    # The editor, the send and every save wait for the draft read off the main thread.
+    assert 'aorusWhenAttachmentDraftRestored' in block(controller, '    func aorusOpenAttachmentDraft(')
+    assert 'aorusWhenAttachmentDraftRestored' in block(controller, '    func aorusSendAttachmentDraft(')
+    configure = block(controller, '    func aorusConfigureAttachmentDraftPicker(')
+    assert configure.index('aorusWhenAttachmentDraftRestored') < configure.index('aorusCaptureAttachmentDraft'), 'a save never runs before the restore'
+    assert configure.index('aorusCommittedAttachmentState') < configure.index('aorusCaptureAttachmentDraft'), 'an unchanged selection is not written again'
     send_callback = block(node, '        self.textInputPanelNode?.sendMessage = ')
     assert send_callback.index('aorusSendAttachmentDraft') < send_callback.index('presentPaidMessageAlertIfNeeded')
     start = node.index('    func sendCurrentMessage(')
@@ -37,6 +43,11 @@ def check_refinements(tg, swiftc='swiftc'):
     assert 'let isTallPanel = textFieldHeight >= 70.0' in composer
     assert 'aorusPresentDraftGallery { present(c, a) }' in block(picker, '        fileprivate func openSelectedMedia(')
     assert 'attachmentDraftPreview:' in block(node, '    func openExpandedInput()')
+    avatars = (tg / 'submodules/PeerInfoAvatarListNode/Sources/PeerInfoAvatarListNode.swift').read_text()
+    highlight_layout = block(avatars, '    public func update(size: CGSize, peer: EnginePeer?, customNode:')
+    assert highlight_layout.index('self.rightHighlightNode.frame = ') < highlight_layout.index('self.aorusFadeSideHighlights(size: size)'), 'held edge fade follows the highlight frames'
+    fade = block(avatars, '    private func aorusFadeSideHighlights(size: CGSize)')
+    assert 'self.bottomShadowNode.frame' in fade and 'layer.mask = nil' in fade, 'held edge fade ends with the page block and leaves stock untouched'
     gate = '''import Foundation
 final class GateView { var isUserInteractionEnabled = true }
 final class NativeDraftGate {

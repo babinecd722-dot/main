@@ -201,67 +201,85 @@ extension MediaPickerScreenImpl {
         }
     }
 
-    /// Restores the complete selection or reports failure; never sends a partial selection.
-    public func aorusRestoreAttachmentDraft(_ draft: AorusAttachmentDraft) -> Bool {
-        guard let selection = self.aorusDraftSelection, let editing = self.aorusDraftEditing else { return false }
-        var restored: [(NSObject & TGMediaEditableItem & TGMediaSelectableItem, AorusAttachmentDraft.Item, URL)] = []
-        var restoredAdjustments: [String: TGMediaEditAdjustments] = [:]
-        // The drawings the editor reads back from a path stay with this picker: they are read
-        // from a copy of their own, not from the draft's folder, which the next save of the
-        // selection replaces and deletes while this picker may still be about to send.
-        let working = aorusDraftWorkingDirectory()
-        let identifiers = draft.items.compactMap(\.assetIdentifier)
-        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
-        var assets: [String: PHAsset] = [:]
-        fetched.enumerateObjects { asset, _, _ in assets[asset.localIdentifier] = asset }
-        for entry in draft.items {
-            guard let folder = draft.itemDirectoryURL(accountBasePath: self.aorusDraftAccountPath, id: entry.id) else { return false }
-            let item: NSObject & TGMediaEditableItem & TGMediaSelectableItem
-            switch entry.source {
-            case .library:
-                guard let identifier = entry.assetIdentifier,
-                      let asset = assets[identifier],
-                      let wrapped = TGMediaAsset(phAsset: asset) else { return false }
-                item = wrapped
-            case .photo, .video:
-                // Kept by an earlier version from a pasted picture or video. The gallery picker
-                // this restores into sends library assets only, and handed one of these it
-                // stopped on an object that is not one. The draft stays in the chat, as one whose
-                // source is unavailable does, and its previews can still be removed.
-                return false
-            }
-            if let data = entry.adjustments {
-                let edits = working.appendingPathComponent(entry.id, isDirectory: true)
-                do {
-                    try FileManager.default.createDirectory(at: edits, withIntermediateDirectories: true)
-                    for name in ["painting.png", "painting-still.png", "drawing.bin"] {
-                        let source = folder.appendingPathComponent(name)
-                        guard FileManager.default.fileExists(atPath: source.path) else { continue }
-                        try FileManager.default.copyItem(at: source, to: edits.appendingPathComponent(name))
-                    }
-                } catch { return false }
-                var error: NSError?
-                guard let values = AorusMediaDraftReadAdjustments(data, edits.path, &error), error == nil else { return false }
-                if !item.isVideo, !values.isDefaultValues(forAvatar: false), UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path) == nil { return false }
-                restoredAdjustments[entry.id] = values
-            }
-            restored.append((item, entry, folder))
+    /// Restores `draft` into this picker and says whether the whole selection came back; a
+    /// partial one is never kept. Everything read from disk -- the library assets, the edits
+    /// and their drawings, the pictures the editor is handed -- is read off the main thread, so
+    /// opening a draft never stalls the composer; the selection itself is set on it. Whoever
+    /// needs the selection before acting waits with `aorusWhenAttachmentDraftRestored`.
+    public func aorusRestoreAttachmentDraft(_ draft: AorusAttachmentDraft, completion: @escaping (Bool) -> Void) {
+        guard self.aorusDraftSelection != nil, self.aorusDraftEditing != nil else {
+            self.aorusAttachmentRestoreFailed = true
+            completion(false)
+            return
         }
+        self.aorusAttachmentRestorePending = true
+        let basePath = self.aorusDraftAccountPath
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let entries = aorusReadAttachmentDraft(draft, accountBasePath: basePath)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let restored = entries.map { self.aorusApplyAttachmentDraft(draft, entries: $0) } ?? false
+                self.aorusAttachmentRestorePending = false
+                self.aorusAttachmentRestoreFailed = !restored
+                completion(restored)
+                let waiters = self.aorusAttachmentRestoreWaiters
+                self.aorusAttachmentRestoreWaiters.removeAll()
+                waiters.forEach { $0(restored) }
+            }
+        }
+    }
+
+    /// Runs `body` with the outcome of the restore in flight once it has finished, and at once,
+    /// with whether the last one succeeded, when none is running.
+    public func aorusWhenAttachmentDraftRestored(_ body: @escaping (Bool) -> Void) {
+        if self.aorusAttachmentRestorePending {
+            self.aorusAttachmentRestoreWaiters.append(body)
+        } else {
+            body(!self.aorusAttachmentRestoreFailed)
+        }
+    }
+
+    /// What a save of this picker would record, or nil when the selection holds something that
+    /// cannot be saved. Two equal states save the same draft.
+    public func aorusAttachmentDraftState() -> AorusAttachmentDraftState? {
+        guard let selection = self.aorusDraftSelection, let editing = self.aorusDraftEditing else { return nil }
+        let selected = selection.selectedItems() ?? []
+        let items = selected.compactMap { $0 as? (NSObject & TGMediaEditableItem & TGMediaSelectableItem) }
+        guard items.count == selected.count else { return nil }
+        var values: [AnyHashable] = [selection.grouping, editing.isCaptionAbove(), editing.isHighQualityPhoto(), editing.isForceLivePhotoEnabled(), AnyHashable(editing.caption(for: items.first))]
+        var objects: [AnyObject?] = []
+        for item in items {
+            values.append(AnyHashable(item.uniqueIdentifier))
+            values.append(AnyHashable(editing.timer(for: item)))
+            values.append(editing.spoiler(for: item))
+            values.append(AnyHashable(editing.price(for: item)))
+            values.append(AnyHashable(editing.livePhotoMode(for: item)))
+            values.append(AnyHashable(editing.coverPosition(for: item)))
+            objects.append(editing.adjustments(for: item).map { $0 as AnyObject })
+            objects.append(editing.coverImage(for: item))
+        }
+        return AorusAttachmentDraftState(values: values, objects: objects)
+    }
+
+    private func aorusApplyAttachmentDraft(_ draft: AorusAttachmentDraft, entries: [AorusDraftRestoreEntry]) -> Bool {
+        guard let selection = self.aorusDraftSelection, let editing = self.aorusDraftEditing else { return false }
         selection.clear()
         selection.grouping = draft.grouping
         editing.setCaptionAbove(draft.captionAbove)
         editing.setHighQualityPhoto(draft.highQuality)
         editing.setForceLivePhotoEnabled(draft.forceLivePhoto)
-        for (item, entry, folder) in restored {
+        for restored in entries {
+            let item = restored.item
+            let entry = restored.entry
             self.aorusAttachmentStableIds[item.uniqueIdentifier] = entry.id
-            if let adjustments = restoredAdjustments[entry.id] { editing.setAdjustments(adjustments, for: item) }
-            if let image = UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path) {
-                let thumbnail = UIImage(contentsOfFile: folder.appendingPathComponent("preview.jpg").path)
-                editing.setImage(image, thumbnailImage: thumbnail, for: item, synchronous: true)
-                editing.setFullSizeImage(image, for: item)
+            if let adjustments = restored.adjustments { editing.setAdjustments(adjustments, for: item) }
+            if let edited = restored.edited {
+                // In memory at once, so every reader finds the edit; the copies the context
+                // keeps on disk are encoded on its own queue rather than on this thread.
+                editing.aorusRestoreDraftEdit(edited, thumbnail: restored.preview, for: item)
             }
-            if let image = UIImage(contentsOfFile: folder.appendingPathComponent("cover.png").path) {
-                editing.setCover(image, position: entry.coverPosition.map { NSNumber(value: $0) }, for: item)
+            if let cover = restored.cover {
+                editing.setCover(cover, position: entry.coverPosition.map { NSNumber(value: $0) }, for: item)
             }
             editing.setTimer(entry.timer.map { NSNumber(value: $0) }, for: item)
             editing.setSpoiler(entry.spoiler, for: item)
@@ -271,8 +289,85 @@ extension MediaPickerScreenImpl {
             }
             if !selection.setItem(item, selected: true) { selection.clear(); return false }
         }
+        // The selection now is exactly the saved draft: closing the picker without a change
+        // has nothing to write.
+        self.aorusCommittedAttachmentState = self.aorusAttachmentDraftState()
         return true
     }
+}
+
+/// What a saved draft records of a picker. The edits and the cover are compared by identity --
+/// the editing context replaces them rather than changing them -- and held, so a new edit can
+/// never pass for an old one that happened to sit at the same address.
+public struct AorusAttachmentDraftState: Equatable {
+    fileprivate let values: [AnyHashable]
+    fileprivate let objects: [AnyObject?]
+
+    public static func == (lhs: AorusAttachmentDraftState, rhs: AorusAttachmentDraftState) -> Bool {
+        return lhs.values == rhs.values && lhs.objects.count == rhs.objects.count && zip(lhs.objects, rhs.objects).allSatisfy { $0 === $1 }
+    }
+}
+
+/// One attachment of a draft, read back from disk and ready to hand to the editing context.
+private struct AorusDraftRestoreEntry {
+    let item: TGMediaAsset
+    let entry: AorusAttachmentDraft.Item
+    let adjustments: TGMediaEditAdjustments?
+    let edited: UIImage?
+    let preview: UIImage?
+    let cover: UIImage?
+}
+
+/// Everything a restore reads from disk, off the main thread. Nil when any attachment cannot
+/// come back.
+///
+/// The drawings the editor reads back from a path are copied to a folder of this restore's own
+/// rather than read from the draft's folder, which the next save of the selection replaces and
+/// deletes while this picker may still be about to send.
+private func aorusReadAttachmentDraft(_ draft: AorusAttachmentDraft, accountBasePath: String) -> [AorusDraftRestoreEntry]? {
+    let working = aorusDraftWorkingDirectory()
+    let identifiers = draft.items.compactMap(\.assetIdentifier)
+    let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+    var assets: [String: PHAsset] = [:]
+    fetched.enumerateObjects { asset, _, _ in assets[asset.localIdentifier] = asset }
+    var entries: [AorusDraftRestoreEntry] = []
+    for entry in draft.items {
+        guard let folder = draft.itemDirectoryURL(accountBasePath: accountBasePath, id: entry.id) else { return nil }
+        // A pasted picture or video, kept by an earlier version: the gallery picker this restores
+        // into sends library assets only, and handed one of these it stopped on an object that is
+        // not one. The draft stays in the chat, as one whose source is unavailable does, and its
+        // previews can still be removed.
+        guard entry.source == .library,
+              let identifier = entry.assetIdentifier,
+              let asset = assets[identifier],
+              let item = TGMediaAsset(phAsset: asset) else { return nil }
+        var adjustments: TGMediaEditAdjustments?
+        if let data = entry.adjustments {
+            let edits = working.appendingPathComponent(entry.id, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: edits, withIntermediateDirectories: true)
+                for name in ["painting.png", "painting-still.png", "drawing.bin"] {
+                    let source = folder.appendingPathComponent(name)
+                    guard FileManager.default.fileExists(atPath: source.path) else { continue }
+                    try FileManager.default.copyItem(at: source, to: edits.appendingPathComponent(name))
+                }
+            } catch { return nil }
+            var error: NSError?
+            guard let values = AorusMediaDraftReadAdjustments(data, edits.path, &error), error == nil else { return nil }
+            adjustments = values
+        }
+        let edited = UIImage(contentsOfFile: folder.appendingPathComponent("edited.png").path)
+        if !item.isVideo, let adjustments, !adjustments.isDefaultValues(forAvatar: false), edited == nil { return nil }
+        entries.append(AorusDraftRestoreEntry(
+            item: item,
+            entry: entry,
+            adjustments: adjustments,
+            edited: edited,
+            preview: edited == nil ? nil : UIImage(contentsOfFile: folder.appendingPathComponent("preview.jpg").path),
+            cover: UIImage(contentsOfFile: folder.appendingPathComponent("cover.png").path)
+        ))
+    }
+    return entries
 }
 
 /// A fresh folder for the drawings one restore hands its editor. Folders a day old or more

@@ -4,6 +4,56 @@ import shutil
 from aorus_attachment_drafts import edit
 
 
+# Holding an edge of the profile photo darkens that edge, to say a tap there turns the page.
+# Stock darkens the list's whole height and stops at its bottom edge, which is harmless where the
+# list ends on the theme. Under Interface 2.0 the page below continues the photo's last row, so a
+# band that stops there draws the very join the page exists to hide. The band keeps its strength
+# over the photo and fades out over the blur block the page fades in over.
+SIDE_HIGHLIGHT_FADE = '''    // AorusGram: under Interface 2.0 the darkened edge ends where the page takes over from the
+    // photo, by fading out over the same blur block the page fades in over, instead of stopping
+    // at the list's bottom edge in a line drawn across the profile.
+    private func aorusFadeSideHighlights(size: CGSize) {
+        let highlights = [self.leftHighlightNode, self.rightHighlightNode]
+        guard UserDefaults.standard.bool(forKey: "aorusgram_interface_v2"), !AorusOldInterface.isEnabled, size.height > 0.0 else {
+            highlights.forEach { $0.layer.mask = nil }
+            return
+        }
+        // The block's top in this list's coordinates, which are the highlights' own while the
+        // photo is expanded -- the only time they show. Before the header has placed the block,
+        // the bottom of the square picture.
+        let block = self.bottomShadowNode.frame
+        let fadeStart = block.height > 0.0 ? block.minY : min(size.width, size.height)
+        let start = max(0.0, min(1.0, fadeStart / size.height))
+        let steps = 8
+        var colors: [CGColor] = [UIColor.black.cgColor]
+        var locations: [NSNumber] = [0.0]
+        for step in 0 ... steps {
+            let t = CGFloat(step) / CGFloat(steps)
+            colors.append(UIColor(white: 0.0, alpha: 1.0 - t * t * (3.0 - 2.0 * t)).cgColor)
+            locations.append(NSNumber(value: Double(start + (1.0 - start) * t)))
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for node in highlights {
+            let mask: CAGradientLayer
+            if let current = node.layer.mask as? CAGradientLayer {
+                mask = current
+            } else {
+                mask = CAGradientLayer()
+                mask.startPoint = CGPoint(x: 0.5, y: 0.0)
+                mask.endPoint = CGPoint(x: 0.5, y: 1.0)
+                node.layer.mask = mask
+            }
+            mask.colors = colors
+            mask.locations = locations
+            mask.frame = CGRect(origin: CGPoint(), size: node.bounds.size)
+        }
+        CATransaction.commit()
+    }
+
+'''
+
+
 def patch_composer_profile_refinements(tg):
     root = Path(__file__).resolve().parents[1]
     rel = 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusProfileMusicPlayback.swift'
@@ -48,6 +98,10 @@ def patch_composer_profile_refinements(tg):
                 let aorusSettleTransition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: UserDefaults.standard.bool(forKey: "aorusgram_interface_v2") && !AorusOldInterface.isEnabled ? .easeInOut : .spring)
                 self.updateItems(size: size, transition: aorusSettleTransition, stripTransition: aorusSettleTransition)
 ''', 'avatar and page settle with the same curve')
+    anchor = '        self.rightHighlightNode.frame = CGRect(origin: CGPoint(x: size.width - fadeWidth, y: 0.0), size: CGSize(width: fadeWidth, height: size.height))\n'
+    s = edit(s, anchor, anchor + '        self.aorusFadeSideHighlights(size: size)\n', 'held edge highlight fades into the page')
+    anchor = '    private var additionalEntryProgress: Signal<'
+    s = edit(s, anchor, SIDE_HIGHLIGHT_FADE + anchor, 'held edge highlight fade')
     path.write_text(s)
 
     path = tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift'

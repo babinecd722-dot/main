@@ -382,6 +382,66 @@ private func persistsAcrossARestart() {
     require(restoredArtifacts[0].downloadExpiresAt == artifact.downloadExpiresAt, "downloadExpiresAt persisted")
 }
 
+/// A turn the server stopped so the device could answer a tool is continued with the same
+/// request plus every result so far. That request is kept with the chat, so a restart in the
+/// middle of the round trip can still send the continuation, byte for byte the same.
+private func continuesATurnAfterARestart() {
+    let stamp = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 * 1000).rounded(.down) / 1000)
+    let assistant = AorusAIMessage(role: .assistant, rawText: "", createdAt: stamp, state: .streaming)
+    let results: [AorusAIToolResult] = [
+        .failure(tool: AorusAITool.profileGet, requestId: "r1", username: "durov", reason: "not_found"),
+        .history(requestId: "r2", username: "team", limit: 50, fromDate: 1_700_000_000, messages: [
+            (sender: "Анна", text: "Привет", caption: nil),
+            (sender: "Борис", text: "", caption: "голосовое 0:12")
+        ]),
+        .denied(tool: AorusAITool.chatHistory, requestId: "r3", username: nil),
+        AorusAIToolResult(tool: "plugin.tool", requestId: nil, ok: true, denied: false, arguments: .init(), result: .object([
+            "count": .int64(3), "ratio": .double(0.25), "flag": .bool(true), "items": .array([.string("a"), .int(7)])
+        ]))
+    ]
+    var conversation = AorusAIConversation(
+        title: "Анализ",
+        createdAt: stamp,
+        updatedAt: stamp,
+        messages: [
+            AorusAIMessage(role: .user, rawText: "Раньше", createdAt: stamp),
+            AorusAIMessage(role: .assistant, rawText: "Ответ", createdAt: stamp),
+            AorusAIMessage(role: .user, rawText: "Проанализируй чат", createdAt: stamp),
+            assistant
+        ]
+    )
+    conversation.pendingTurn = AorusAIPendingTurn(assistantId: assistant.id, transportText: "Проанализируй чат\n\nПереписка: …", historyCount: 2, toolResults: results, continuationCount: 2)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .millisecondsSince1970
+    encoder.outputFormatting = [.sortedKeys]
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .millisecondsSince1970
+    guard let data = try? encoder.encode([conversation]),
+          let restored = try? decoder.decode([AorusAIConversation].self, from: data),
+          let pending = restored.first?.pendingTurn else {
+        fputs("AorusAIArtifactFlow test failed: the running turn did not survive a restart\n", stderr)
+        exit(1)
+    }
+    require(restored == [conversation], "the chat and its running turn survive a restart")
+    require(pending.assistantId == assistant.id && pending.historyCount == 2 && pending.continuationCount == 2, "the turn's identity, context and round count survive")
+    require(pending.transportText == conversation.pendingTurn?.transportText, "the exact request text survives")
+    let original = try? encoder.encode(AorusAIAgentPayload(history: Array(conversation.messages.prefix(2)), text: "x", toolResults: results, threadId: conversation.threadId))
+    let continued = try? encoder.encode(AorusAIAgentPayload(history: Array(restored[0].messages.prefix(pending.historyCount)), text: "x", toolResults: pending.toolResults, threadId: restored[0].threadId))
+    require(original != nil && original == continued, "the continuation after a restart is the same request, byte for byte")
+    // A chat saved before the field existed, and one whose running turn cannot be read back,
+    // both still open: the turn is simply not continued.
+    let legacy = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"pendingTurn\"", with: "\"pendingTurnFromTheFuture\"")
+    let broken = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"continuationCount\":2", with: "\"continuationCount\":\"two\"")
+    for (label, json) in [("legacy", legacy), ("broken", broken)] {
+        guard let chats = try? decoder.decode([AorusAIConversation].self, from: Data(json.utf8)), chats.count == 1 else {
+            fputs("AorusAIArtifactFlow test failed: a \(label) store lost the chat\n", stderr)
+            exit(1)
+        }
+        require(chats[0].pendingTurn == nil && chats[0].messages.count == 4, "a \(label) running turn leaves the chat intact")
+    }
+    require(AorusAIJSONValue.int(7) == .int64(7) && AorusAIJSONValue.int(7) != .double(7.5) && AorusAIJSONValue.int64(1) != .bool(true), "whole numbers compare by value whichever case holds them")
+}
+
 private func rendersTheExpiredStates() {
     let past = Int64(Date().timeIntervalSince1970 - 3600) * 1000
     let future = Int64(Date().timeIntervalSince1970 + 3600) * 1000
@@ -543,6 +603,7 @@ private enum AorusAIArtifactFlowTests {
         buildsTheURLOnlyFromTheTrustedBase()
         downloadIsABodylessRequest()
         persistsAcrossARestart()
+        continuesATurnAfterARestart()
         rendersTheExpiredStates()
         buildsTheProfileTransportBlock()
         describesTheCard()

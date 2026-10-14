@@ -208,7 +208,10 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
             view.onOpenMine = { [weak self] owned in self?.openMine(owned) }
             view.onError = { [weak self] message in self?.showError(AorusPluginRequestError(message)) }
             view.isHidden = true
-            displayNode.view.addSubview(view)
+            // Level with the plugins list rather than on top of everything: under the navigation
+            // bar, so the bar's edge fades over the Market as it does over the plugins, and
+            // under the add button, which belongs to the plugins.
+            displayNode.view.insertSubview(view, aboveSubview: tableView)
             marketView = view
             if let currentLayout { containerLayoutUpdated(currentLayout, transition: .immediate) }
         }

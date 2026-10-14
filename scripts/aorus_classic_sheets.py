@@ -124,8 +124,6 @@ def _theme(tg: Path) -> None:
         if key == "theme_load":
             anchor = "        self.aorusClassicNode!.passthroughHitTestImpl"
             body = body.replace(anchor, "        self.aorusClassicNode = self.displayNode as? AorusClassicChatThemeScreenNode\n" + anchor)
-        if key == "theme_dismiss":
-            body = body.replace("                completion?()\n", "")
         text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {" + body + "\n            return\n        }\n", key)
     path.write_text(text)
 

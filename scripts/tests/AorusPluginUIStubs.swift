@@ -233,6 +233,7 @@ public final class PresentationThemeList {
     public let itemBlocksBackgroundColor = UIColor.white
     public let itemPrimaryTextColor = UIColor.black
     public let itemSecondaryTextColor = UIColor.gray
+    public let itemPlaceholderTextColor = UIColor.lightGray
     public let itemAccentColor = UIColor.blue
     public let itemDestructiveColor = UIColor.red
     public let itemBlocksSeparatorColor = UIColor.lightGray

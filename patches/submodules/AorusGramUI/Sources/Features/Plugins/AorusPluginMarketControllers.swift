@@ -922,9 +922,78 @@ private extension AorusPluginMarketSort {
 
 // MARK: - The catalog
 
+/// The search line over the catalog: a capsule in the rows' own block colour with a leading
+/// magnifier, the height of the order button beside it.
+///
+/// Not a `UISearchBar`. The system lays its field out itself and has changed the shape between
+/// releases: built against iOS 26 the field is taller than the bar it is given and spills out of
+/// it, under the navigation bar at the top and over the first row at the bottom. Every frame
+/// here is this view's own, so the line is the same on every system.
+final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
+    static let height: CGFloat = 40
+
+    let textField = UITextField()
+    var onChange: ((String) -> Void)?
+
+    var text: String { textField.text ?? "" }
+
+    init(theme: PresentationTheme, placeholder: String) {
+        super.init(frame: .zero)
+        backgroundColor = theme.list.itemBlocksBackgroundColor
+        layer.cornerRadius = Self.height / 2
+        layer.cornerCurve = .continuous
+        // The magnifier is the field's own leading view, so a touch on it, as anywhere on the
+        // capsule, is a touch on the field.
+        let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)))
+        iconView.tintColor = theme.list.itemSecondaryTextColor
+        iconView.contentMode = .center
+        iconView.frame = CGRect(x: 10, y: 0, width: 24, height: Self.height)
+        let leading = UIView(frame: CGRect(x: 0, y: 0, width: 38, height: Self.height))
+        leading.isUserInteractionEnabled = false
+        leading.addSubview(iconView)
+        textField.leftView = leading
+        textField.leftViewMode = .always
+        textField.font = aorusUIFont(17)
+        textField.textColor = theme.list.itemPrimaryTextColor
+        textField.tintColor = theme.list.itemAccentColor
+        textField.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
+        textField.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [
+            .foregroundColor: theme.list.itemPlaceholderTextColor,
+            .font: aorusUIFont(17),
+        ])
+        textField.returnKeyType = .search
+        textField.clearButtonMode = .whileEditing
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.delegate = self
+        textField.addTarget(self, action: #selector(changed), for: .editingChanged)
+        addSubview(textField)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        textField.frame = CGRect(x: 0, y: 0, width: max(0, bounds.width - 6), height: bounds.height)
+    }
+
+    @objc private func changed() { onChange?(text) }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        textField.resignFirstResponder()
+        return false
+    }
+
+    // The clear button empties the field without an editing-changed event of its own.
+    func textFieldShouldClear(_ textField: UITextField) -> Bool {
+        DispatchQueue.main.async { [weak self] in self?.changed() }
+        return true
+    }
+}
+
 /// The Market tab: the author's own plugins when there are any, then every approved plugin,
 /// each with its icon, its name and a button that says what installing it would do.
-final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate {
+final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDelegate {
     private enum Phase {
         case loading
         case failed(String)
@@ -943,9 +1012,10 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private var visibleCards: [AorusPluginMarketCard] = []
     private static let sortKey = "aorusgram.market.sort"
     private var sort = AorusPluginMarketSort(rawValue: UserDefaults.standard.string(forKey: AorusPluginMarketView.sortKey) ?? "") ?? .newest
-    private let searchBar = UISearchBar()
+    private let searchField: AorusPluginMarketSearchField
     private let filterButton = UIButton(type: .system)
     private let filterHeader = UIView()
+    private var filterHeaderMargin: CGFloat = -1
     private let noResults = UILabel()
     private var statsObserver: NSObjectProtocol?
     private var reloadGeneration = 0
@@ -962,6 +1032,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 
     init(theme: PresentationTheme) {
         self.theme = theme
+        self.searchField = AorusPluginMarketSearchField(theme: theme, placeholder: aorusL("Название плагина", "Plugin name"))
         super.init(frame: .zero)
         backgroundColor = theme.list.blocksBackgroundColor
         tableView.backgroundColor = theme.list.blocksBackgroundColor
@@ -971,22 +1042,21 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         tableView.register(AorusPluginMarketCell.self, forCellReuseIdentifier: "card")
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 84
+        // The gaps between the search line and the sections are this list's own, not the
+        // grouped style's defaults, which differ between releases.
+        tableView.estimatedSectionHeaderHeight = 0
+        tableView.estimatedSectionFooterHeight = 0
+        if #available(iOS 15.0, *) { tableView.sectionHeaderTopPadding = 0 }
         refresh.addTarget(self, action: #selector(reload), for: .valueChanged)
         tableView.refreshControl = refresh
         addSubview(tableView)
         // One line over the list: the search field, and beside it the order the plugins are
         // listed in, a round glyph that fills while the order is not the usual one.
-        searchBar.searchBarStyle = .minimal
-        searchBar.placeholder = aorusL("Название плагина", "Plugin name")
-        searchBar.delegate = self
-        searchBar.tintColor = theme.list.itemAccentColor
-        searchBar.searchTextField.textColor = theme.list.itemPrimaryTextColor
-        searchBar.searchTextField.backgroundColor = theme.list.itemBlocksBackgroundColor
-        searchBar.searchTextField.font = aorusUIFont(17)
-        filterButton.tintColor = theme.list.itemAccentColor
+        searchField.onChange = { [weak self] _ in self?.applyFilters() }
+        filterButton.layer.cornerRadius = AorusPluginMarketSearchField.height / 2
         filterButton.accessibilityLabel = aorusL("Фильтры", "Filters")
         if #available(iOS 14.0, *) { filterButton.showsMenuAsPrimaryAction = true }
-        filterHeader.addSubview(searchBar)
+        filterHeader.addSubview(searchField)
         filterHeader.addSubview(filterButton)
         noResults.text = aorusL("Ничего не найдено", "Nothing found")
         noResults.font = aorusUIFont(16)
@@ -1081,11 +1151,17 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     override func layoutSubviews() {
         super.layoutSubviews()
         tableView.frame = bounds
-        if filterHeader.frame.width != bounds.width || tableView.tableHeaderView == nil {
-            let side = max(tableView.layoutMargins.left, 16) - 8
-            filterHeader.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 60)
-            filterButton.frame = CGRect(x: bounds.width - side - 44, y: 8, width: 44, height: 44)
-            searchBar.frame = CGRect(x: side, y: 2, width: filterButton.frame.minX - side + 4, height: 56)
+        // The search line lines up with the cards under it, and starts clear of the band the
+        // navigation bar's edge fades over: that band covers the top of this list, so a field
+        // placed at the very top showed only its lower part.
+        let margin = max(tableView.layoutMargins.left, 16)
+        if filterHeader.frame.width != bounds.width || filterHeaderMargin != margin || tableView.tableHeaderView == nil {
+            filterHeaderMargin = margin
+            let side = AorusPluginMarketSearchField.height
+            let top = Self.searchTopInset
+            filterHeader.frame = CGRect(x: 0, y: 0, width: bounds.width, height: top + side + Self.searchBottomInset)
+            filterButton.frame = CGRect(x: bounds.width - margin - side, y: top, width: side, height: side)
+            searchField.frame = CGRect(x: margin, y: top, width: max(0, filterButton.frame.minX - 8 - margin), height: side)
             tableView.tableHeaderView = filterHeader
         }
         noResults.frame = CGRect(x: 24, y: filterHeader.frame.maxY + 36, width: max(0, bounds.width - 48), height: 24)
@@ -1136,7 +1212,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 
     private func render() {
-        visibleCards = sort.apply(to: cards, query: searchBar.text ?? "")
+        visibleCards = sort.apply(to: cards, query: searchField.text)
         updateNoResults()
         switch phase {
         case .loading:
@@ -1203,28 +1279,51 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
             onOpenMine?(owned)
             return
         }
-        searchBar.resignFirstResponder()
+        searchField.textField.resignFirstResponder()
         onOpen?(visibleCards[indexPath.row])
     }
 
-    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { applyFilters() }
-    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+    // Section gaps of this list's own: the first card sits the search line's own spacing
+    // under it, and the catalog the standard grouped gap under the author's row.
+    private static let searchTopInset: CGFloat = 24
+    private static let searchBottomInset: CGFloat = 16
+    private static let sectionGap: CGFloat = 28
+
+    func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return section == 0 ? .leastNormalMagnitude : Self.sectionGap
+    }
+
+    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? { nil }
+
+    func tableView(_ tableView: UITableView, heightForFooterInSection section: Int) -> CGFloat {
+        return section == numberOfSections(in: tableView) - 1 ? 20 : .leastNormalMagnitude
+    }
+
+    func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? { nil }
 
     private func applyFilters() {
-        visibleCards = sort.apply(to: cards, query: searchBar.text ?? "")
+        visibleCards = sort.apply(to: cards, query: searchField.text)
         updateNoResults()
         tableView.reloadData()
     }
 
     /// Shown only when a search leaves nothing of a catalog that has plugins in it.
     private func updateNoResults() {
-        let searching = !(searchBar.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let searching = !searchField.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         noResults.isHidden = !(searching && visibleCards.isEmpty && !cards.isEmpty)
     }
 
+    /// The order button: a round block beside the field, filled with the accent while the order
+    /// is not the usual one, so a list in another order never passes for the usual one.
     private func updateFilters() {
-        let symbol = sort == .newest ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill"
-        filterButton.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)), for: .normal)
+        let changed = sort != .newest
+        // Its iOS 13 name too: the current one only exists from iOS 15.
+        let glyph = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        filterButton.setImage(UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: glyph) ?? UIImage(systemName: "line.horizontal.3.decrease", withConfiguration: glyph), for: .normal)
+        UIView.animate(withDuration: window == nil ? 0 : 0.2) {
+            self.filterButton.backgroundColor = changed ? self.theme.list.itemAccentColor : self.theme.list.itemBlocksBackgroundColor
+            self.filterButton.tintColor = changed ? .white : self.theme.list.itemAccentColor
+        }
         filterButton.accessibilityValue = sort.title
         guard #available(iOS 14.0, *) else { return }
         filterButton.menu = UIMenu(title: aorusL("Порядок плагинов", "Sort plugins"), children: AorusPluginMarketSort.allCases.map { choice in
