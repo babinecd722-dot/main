@@ -536,7 +536,7 @@ def check_draft_sdk(tg, swiftc):
         signals = tg / 'submodules/SSignalKit/SSignalKit/Source/SSignalKit'
         (includes / 'LegacyComponents').symlink_to(legacy.resolve(), target_is_directory=True)
         (includes / 'SSignalKit').symlink_to(signals.resolve(), target_is_directory=True)
-        headers = ['TGMediaEditingContext.h', 'TGMediaSelectionContext.h', 'TGMediaAsset.h', 'TGMediaAsset+TGMediaEditableItem.h', 'TGCameraCapturedPhoto.h', 'TGCameraCapturedVideo.h', 'TGPaintingData.h', 'PGPhotoEditorValues.h', 'TGVideoEditAdjustments.h', 'UIImage+TG.h']
+        headers = ['TGMediaEditingContext.h', 'TGMediaSelectionContext.h', 'TGMediaAsset.h', 'TGMediaAsset+TGMediaEditableItem.h', 'TGCameraCapturedPhoto.h', 'TGCameraCapturedVideo.h', 'TGPaintingData.h', 'PGPhotoEditorValues.h', 'TGVideoEditAdjustments.h', 'UIImage+TG.h', 'TGPhotoEditorUtils.h']
         headers = [name for name in headers if (legacy / name).exists()]
         module = 'module SSignalKit { header "' + str(signals / 'SSignalKit.h') + '" export * }\n'
         module += 'module LegacyComponents {\n' + '\n'.join('header "' + str(legacy / name) + '"' for name in headers) + '\nexport *\n}\n'

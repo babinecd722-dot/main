@@ -178,14 +178,19 @@ private final class AorusAttachmentDraftTile: UIView {
                     let image = aorusDecodedDraftPreview(path: path)
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.itemId == item.id, self.previewPath == path, let image else { return }
-                        if sameItem && self.window != nil {
+                        let previous = self.imageView.layer.contents
+                        self.imageView.image = image
+                        if sameItem && self.window != nil, let previous, let next = image.cgImage {
                             // A new picture of the same attachment -- an edit, or the part a
-                            // round video keeps -- dissolves in rather than jumping.
-                            UIView.transition(with: self.imageView, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
-                                self.imageView.image = image
-                            })
-                        } else {
-                            self.imageView.image = image
+                            // round video keeps -- dissolves in rather than jumping. The layer's
+                            // own contents fade, so the picture stays inside the shape even while
+                            // the shape is still turning into a circle.
+                            let fade = CABasicAnimation(keyPath: "contents")
+                            fade.fromValue = previous
+                            fade.toValue = next
+                            fade.duration = 0.22
+                            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                            self.imageView.layer.add(fade, forKey: "aorusPreviewFade")
                         }
                     }
                 }
@@ -196,12 +201,14 @@ private final class AorusAttachmentDraftTile: UIView {
         self.removeButton.accessibilityLabel = strings.Common_Delete
         self.openButton.accessibilityLabel = item.isVideo ? strings.Message_Video : strings.Message_Photo
         self.removeIcon.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
-        self.removeIcon.tintColor = AorusOldInterface.isEnabled ? .black : (theme.overallDarkAppearance ? .white : .black)
+        // The cross on a round video sits on its dark corner, so it is drawn for a dark surface.
+        let darkSurface = theme.overallDarkAppearance || item.isRound
+        self.removeIcon.tintColor = AorusOldInterface.isEnabled ? .black : (darkSurface ? .white : .black)
         self.removeBackground.isHidden = AorusOldInterface.isEnabled
         self.removeIcon.backgroundColor = AorusOldInterface.isEnabled ? UIColor.white.withAlphaComponent(0.94) : .clear
         self.removeIcon.layer.cornerRadius = 14
         self.removeIcon.clipsToBounds = true
-        self.removeBackground.update(size: CGSize(width: 28, height: 28), cornerRadius: 14, isDark: theme.overallDarkAppearance, tintColor: .init(kind: .clear), isInteractive: false, transition: .immediate)
+        self.removeBackground.update(size: CGSize(width: 28, height: 28), cornerRadius: 14, isDark: darkSurface, tintColor: .init(kind: .clear), isInteractive: false, transition: .immediate)
         self.duration.isHidden = !item.isVideo
         let seconds = Int(min(24 * 3600, max(0, item.duration)))
         self.duration.text = item.isVideo ? String(format: "%d:%02d", seconds / 60, seconds % 60) : nil

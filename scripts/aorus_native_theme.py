@@ -53,6 +53,17 @@ def patch_native_theme(tg: Path) -> None:
         ("            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }", "            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n            self.aorusApplyNativeViewStyle(style)"),
         ("        self.view = self.displayNode.view\n", "        self.view = self.displayNode.view\n        // AorusGram: apply presentation traits to the custom display-node root.\n        if #available(iOS 13.0, *) { self.aorusApplyNativeViewStyle(self.overrideUserInterfaceStyle) }\n"),
     ])
+    # A UIKit controller presented from a Display controller -- an alert, a share sheet, a
+    # document or photo picker -- is presented by the window's root, which now carries the
+    # phone's appearance. It takes the presenting screen's theme instead, unless it chose one.
+    edit(tg, controller, "AorusGram: a presented UIKit controller takes this screen's theme", [
+        ("        self.view.window?.rootViewController?.present(viewControllerToPresent, animated: flag, completion: completion)\n",
+         "        // AorusGram: a presented UIKit controller takes this screen's theme.\n"
+         "        if #available(iOS 13.0, *), viewControllerToPresent.overrideUserInterfaceStyle == .unspecified, self.overrideUserInterfaceStyle != .unspecified {\n"
+         "            viewControllerToPresent.overrideUserInterfaceStyle = self.overrideUserInterfaceStyle\n"
+         "        }\n"
+         "        self.view.window?.rootViewController?.present(viewControllerToPresent, animated: flag, completion: completion)\n"),
+    ])
 
 
 def verify_native_theme(tg: Path) -> list[str]:
@@ -68,6 +79,8 @@ def verify_native_theme(tg: Path) -> list[str]:
         errors.append("NativeTheme: controllers must apply traits at creation and theme updates")
     if controller.count("self.aorusApplyNativeViewStyle(") != 2:
         errors.append("NativeTheme: loaded and newly created display-node roots must receive presentation traits")
+    if "viewControllerToPresent.overrideUserInterfaceStyle = self.overrideUserInterfaceStyle" not in controller:
+        errors.append("NativeTheme: UIKit controllers presented from a screen must take its theme, not the phone's")
     return errors
 
 

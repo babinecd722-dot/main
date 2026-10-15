@@ -128,7 +128,10 @@ extension MediaPickerScreenImpl {
                 options.isNetworkAccessAllowed = false
                 options.deliveryMode = .opportunistic
                 options.resizeMode = .exact
-                let requestId = PHImageManager.default().requestImage(for: asset.backingAsset, targetSize: CGSize(width: 384, height: 384), contentMode: .aspectFill, options: options) { image, info in
+                // A cropped or round video shows only part of the frame, so the frame is asked
+                // for as much larger as the crop is smaller, keeping its preview as sharp.
+                let zoom = videoValues[index].map(aorusDraftCropZoom) ?? 1.0
+                let requestId = PHImageManager.default().requestImage(for: asset.backingAsset, targetSize: CGSize(width: 384.0 * zoom, height: 384.0 * zoom), contentMode: .aspectFill, options: options) { image, info in
                     DispatchQueue.main.async {
                         guard !request.finished else { return }
                         if let image { images[index].original = image }
@@ -438,8 +441,25 @@ private func aorusDraftCroppedVideoFrame(_ frame: UIImage, _ values: TGVideoEdit
           originalSize.width > 0, originalSize.height > 0,
           values.cropRect.width > 0, values.cropRect.height > 0,
           frame.size.width > 0, frame.size.height > 0 else { return nil }
-    let cropped: UIImage? = TGPhotoEditorVideoCrop(frame, nil, values.cropOrientation, values.cropRotation, values.cropRect, values.cropMirrored, CGSize(width: 384, height: 384), originalSize, true, true)
+    // The crop is measured in the frame's points and drawn at one pixel a point, so a
+    // screen-scale thumbnail is handed over at its real pixel size.
+    let pixels = frame.cgImage.map { UIImage(cgImage: $0, scale: 1.0, orientation: frame.imageOrientation) } ?? frame
+    // The crop is a proportion of the whole frame: a picture of some other shape is not it.
+    guard abs(pixels.size.width / pixels.size.height - originalSize.width / originalSize.height) <= 0.02 * originalSize.width / originalSize.height else { return nil }
+    // A round video is converted without the free rotation angle, so its preview is too.
+    let rotation = values.aorusRoundVideo ? 0.0 : values.cropRotation
+    let cropped: UIImage? = TGPhotoEditorVideoCrop(pixels, nil, values.cropOrientation, rotation, values.cropRect, values.cropMirrored, CGSize(width: 384, height: 384), originalSize, true, true)
     return cropped
+}
+
+/// How many times smaller than the whole frame the part a video's crop keeps is, along its
+/// short side: the factor a 384-point frame must grow by for that part to fill 384 points.
+private func aorusDraftCropZoom(_ values: TGVideoEditAdjustments) -> CGFloat {
+    let originalSize = values.originalSize
+    let crop = values.cropRect
+    guard values.aorusRoundVideo || values.cropApplied(forAvatar: false),
+          originalSize.width > 0, originalSize.height > 0, crop.width > 0, crop.height > 0 else { return 1.0 }
+    return min(4.0, max(1.0, min(originalSize.width, originalSize.height) / min(crop.width, crop.height)))
 }
 
 private func aorusDraftThumbnail(_ image: UIImage, side: CGFloat) -> UIImage? {
