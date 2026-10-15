@@ -8207,6 +8207,18 @@ public func aorusApplyAccentTheme(_ theme: PresentationTheme) -> PresentationThe
         )
         rootController = base.rootController.withUpdated(tabBar: tabBar, navigationSearchBar: navigationSearchBar)
     } else {
+        // The glass tab bar tints its icons with the tab text colours, and Classic's are
+        // near-black. The tabs follow the dark side's rule instead: the selected one in the
+        // accent, the others in Classic's own icon grey -- the grey the tabs drawn from
+        // `iconColor` already use, so every tab matches.
+        let tabGrey = base.rootController.tabBar.iconColor
+        let tabBar = base.rootController.tabBar.withUpdated(
+            iconColor: tabGrey,
+            selectedIconColor: accent,
+            textColor: tabGrey,
+            selectedTextColor: accent
+        )
+        rootController = base.rootController.withUpdated(tabBar: tabBar)
         // The welcome screen keeps its own text colours; only its start button, which Classic
         // paints Telegram's blue, turns violet.
         intro = theme.intro.withUpdated(startButtonColor: accent)

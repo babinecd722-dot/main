@@ -6,10 +6,34 @@ public struct AorusAttachmentDraft: Codable, Equatable {
         public let id: String
         public let isVideo: Bool
         public let thumbnail: Data?
-        public init(id: String, isVideo: Bool, thumbnail: Data?) {
+        /// A video that goes as a round video message, shown as the circle it will be.
+        public let isRound: Bool
+        public init(id: String, isVideo: Bool, thumbnail: Data?, isRound: Bool = false) {
             self.id = id
             self.isVideo = isVideo
             self.thumbnail = thumbnail
+            self.isRound = isRound
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, isVideo, thumbnail, isRound
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.id = try container.decode(String.self, forKey: .id)
+            self.isVideo = try container.decode(Bool.self, forKey: .isVideo)
+            self.thumbnail = try container.decodeIfPresent(Data.self, forKey: .thumbnail)
+            // Absent in everything an earlier build kept: those are ordinary videos.
+            self.isRound = try container.decodeIfPresent(Bool.self, forKey: .isRound) ?? false
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.id, forKey: .id)
+            try container.encode(self.isVideo, forKey: .isVideo)
+            try container.encodeIfPresent(self.thumbnail, forKey: .thumbnail)
+            if self.isRound { try container.encode(true, forKey: .isRound) }
         }
     }
 
@@ -28,10 +52,14 @@ public struct AorusAttachmentDraft: Codable, Equatable {
         public let livePhotoMode: Int32?
         public let isAnimation: Bool?
         public let coverPosition: Double?
+        /// The video is sent as a round video message. A mirror of the flag inside
+        /// `adjustments`, which only LegacyComponents can read, so the strip and the chat
+        /// list can draw the circle without it.
+        public let isRound: Bool
 
-        public var preview: Preview { return Preview(id: self.id, isVideo: self.isVideo, thumbnail: self.thumbnail) }
+        public var preview: Preview { return Preview(id: self.id, isVideo: self.isVideo, thumbnail: self.thumbnail, isRound: self.isRound) }
 
-        public init(id: String = UUID().uuidString, source: Source, assetIdentifier: String?, isVideo: Bool, duration: Double, thumbnail: Data?, adjustments: Data?, timer: Int32?, spoiler: Bool, price: Int64?, livePhotoMode: Int32?, isAnimation: Bool = false, coverPosition: Double? = nil) {
+        public init(id: String = UUID().uuidString, source: Source, assetIdentifier: String?, isVideo: Bool, duration: Double, thumbnail: Data?, adjustments: Data?, timer: Int32?, spoiler: Bool, price: Int64?, livePhotoMode: Int32?, isAnimation: Bool = false, coverPosition: Double? = nil, isRound: Bool = false) {
             self.id = id
             self.source = source
             self.assetIdentifier = assetIdentifier
@@ -45,11 +73,12 @@ public struct AorusAttachmentDraft: Codable, Equatable {
             self.livePhotoMode = livePhotoMode
             self.isAnimation = isAnimation
             self.coverPosition = coverPosition
+            self.isRound = isVideo && isRound
         }
 
         private enum CodingKeys: String, CodingKey {
             case id, source, assetIdentifier, isVideo, duration, thumbnail, adjustments
-            case timer, spoiler, price, livePhotoMode, isAnimation, coverPosition
+            case timer, spoiler, price, livePhotoMode, isAnimation, coverPosition, isRound
         }
 
         public init(from decoder: Decoder) throws {
@@ -72,6 +101,8 @@ public struct AorusAttachmentDraft: Codable, Equatable {
             self.livePhotoMode = try container.decodeIfPresent(Int32.self, forKey: .livePhotoMode)
             self.isAnimation = try container.decodeIfPresent(Bool.self, forKey: .isAnimation)
             self.coverPosition = try container.decodeIfPresent(Double.self, forKey: .coverPosition)
+            let isRound = try container.decodeIfPresent(Bool.self, forKey: .isRound) ?? false
+            self.isRound = self.isVideo && isRound
         }
 
         public func encode(to encoder: Encoder) throws {
@@ -90,6 +121,7 @@ public struct AorusAttachmentDraft: Codable, Equatable {
             try container.encodeIfPresent(self.livePhotoMode, forKey: .livePhotoMode)
             try container.encodeIfPresent(self.isAnimation, forKey: .isAnimation)
             try container.encodeIfPresent(self.coverPosition, forKey: .coverPosition)
+            if self.isRound { try container.encode(true, forKey: .isRound) }
         }
     }
 

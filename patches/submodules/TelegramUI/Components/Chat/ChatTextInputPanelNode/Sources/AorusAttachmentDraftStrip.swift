@@ -128,6 +128,10 @@ private final class AorusAttachmentDraftTile: UIView {
     private let duration = UILabel()
     private var itemId: String?
     private var previewPath: String?
+    /// Drawn as the round video message it will be sent as: the frame in a circle, dark
+    /// around it, the way the editor shows a video switched to round.
+    private var isRound = false
+    private var panelColor: UIColor?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -160,6 +164,8 @@ private final class AorusAttachmentDraftTile: UIView {
     @objc private func removed() { self.remove() }
 
     func update(item: AorusAttachmentDraft.Item, previewURL: URL?, theme: PresentationTheme, strings: PresentationStrings) {
+        // The shape changes in place when the same attachment is switched to round or back.
+        let reshaped = self.itemId == item.id && self.isRound != item.isRound
         if self.itemId != item.id || self.previewPath != previewURL?.path {
             // The same attachment saved into a new folder keeps its picture until the new one is
             // read, instead of dropping to the small thumbnail for a frame.
@@ -172,12 +178,21 @@ private final class AorusAttachmentDraftTile: UIView {
                     let image = aorusDecodedDraftPreview(path: path)
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.itemId == item.id, self.previewPath == path, let image else { return }
-                        self.imageView.image = image
+                        if sameItem && self.window != nil {
+                            // A new picture of the same attachment -- an edit, or the part a
+                            // round video keeps -- dissolves in rather than jumping.
+                            UIView.transition(with: self.imageView, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                                self.imageView.image = image
+                            })
+                        } else {
+                            self.imageView.image = image
+                        }
                     }
                 }
             }
         }
-        self.backgroundColor = theme.chat.inputPanel.inputBackgroundColor
+        self.panelColor = theme.chat.inputPanel.inputBackgroundColor
+        self.setRound(item.isRound, animated: reshaped && self.window != nil)
         self.removeButton.accessibilityLabel = strings.Common_Delete
         self.openButton.accessibilityLabel = item.isVideo ? strings.Message_Video : strings.Message_Photo
         self.removeIcon.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
@@ -193,9 +208,34 @@ private final class AorusAttachmentDraftTile: UIView {
         self.setNeedsLayout()
     }
 
+    private func setRound(_ isRound: Bool, animated: Bool) {
+        self.isRound = isRound
+        let background = isRound ? UIColor(white: 0.06, alpha: 1.0) : (self.panelColor ?? .clear)
+        let radius = isRound ? self.bounds.width * 0.5 : 0.0
+        guard animated, self.bounds.width > 0 else {
+            self.backgroundColor = background
+            self.imageView.layer.cornerRadius = radius
+            return
+        }
+        let from = self.imageView.layer.presentation()?.cornerRadius ?? self.imageView.layer.cornerRadius
+        self.imageView.layer.cornerRadius = radius
+        let morph = CASpringAnimation(keyPath: "cornerRadius")
+        morph.fromValue = from
+        morph.toValue = radius
+        morph.damping = 26.0
+        morph.stiffness = 260.0
+        morph.mass = 1.0
+        morph.duration = morph.settlingDuration
+        self.imageView.layer.add(morph, forKey: "aorusRoundMorph")
+        UIView.animate(withDuration: 0.3, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+            self.backgroundColor = background
+        })
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         self.imageView.frame = self.bounds
+        self.imageView.layer.cornerRadius = self.isRound ? self.bounds.width * 0.5 : 0.0
         self.openButton.frame = self.bounds
         self.removeButton.frame = CGRect(x: max(0, self.bounds.width - 44), y: 0, width: 44, height: 44)
         self.removeBackground.frame = CGRect(x: max(0, self.bounds.width - 36), y: 8, width: 28, height: 28)

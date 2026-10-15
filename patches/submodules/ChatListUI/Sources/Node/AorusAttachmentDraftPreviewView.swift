@@ -26,6 +26,8 @@ final class AorusAttachmentDraftPreviewView: UIView {
         }
         for (index, view) in self.imageViews.enumerated() {
             view.frame = CGRect(x: CGFloat(index) * (side + 2), y: 0, width: side, height: side)
+            // A video going as a round video message is shown as the circle it will be.
+            view.layer.cornerRadius = self.previews[index].isRound ? side * 0.5 : 2
         }
     }
 }

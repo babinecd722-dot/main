@@ -1,20 +1,33 @@
-"""Keep UIKit traits in sync with the presentation theme without changing system traits."""
+"""Keep UIKit traits in sync with the presentation theme without changing system traits.
+
+Every Display controller takes the theme's light or dark style, so the system controls
+and colours inside it -- forms, switches, tables in AorusGram's screens -- follow the app's
+theme. The window does not: Telegram reads the phone's appearance from the window's root
+controller (NativeWindowHostView feeds `systemUserInterfaceStyle` from its trait changes),
+and Night Mode "System" switches the theme from that. An override on the window -- which
+Telegram ships with commented out in SharedAccountContext, in two places -- would replace
+the phone's appearance with the app's own, and the theme would stop following the phone
+until the next launch. Those two blocks stay as Telegram ships them.
+"""
 from pathlib import Path
 import re
 
 from aorus_local_profile import edit
 
 
+_WINDOW_STYLE_HOOK = re.compile(
+    r"^[ \t]*/\*if #available\(iOS 13\.0, \*\) \{\n.*?eventView\.overrideUserInterfaceStyle = userInterfaceStyle\n.*?\n\s*\}\*/",
+    re.S | re.M,
+)
+
+
 def patch_native_theme(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Sources/SharedAccountContext.swift"
     source = path.read_text()
-    marker = "// AorusGram: native controls follow the resolved presentation theme."
-    if marker not in source:
-        pattern = r"^([ \t]*)/\*(if #available\(iOS 13\.0, \*\) \{\n.*?eventView\.overrideUserInterfaceStyle = userInterfaceStyle\n.*?\n\s*\})\*/"
-        source, count = re.subn(pattern, lambda match: match.group(1) + marker + "\n" + match.group(1) + match.group(2), source, flags=re.S | re.M)
-        if count != 2:
-            raise RuntimeError(f"NativeTheme: expected two dormant UIKit style hooks, got {count}")
-        path.write_text(source)
+    # Telegram's own window-level style hooks stay commented out: with them the window
+    # reports the app's style instead of the phone's, and "System" cannot follow it.
+    if len(_WINDOW_STYLE_HOOK.findall(source)) != 2 or "AorusGram: native controls follow the resolved presentation theme." in source:
+        raise RuntimeError("NativeTheme: Telegram's window style hooks are not the two dormant blocks it ships")
 
     controller = "submodules/Display/Source/ViewController.swift"
     edit(tg, controller, "private func aorusUpdatePresentationStyle", [
@@ -45,10 +58,9 @@ def patch_native_theme(tg: Path) -> None:
 def verify_native_theme(tg: Path) -> list[str]:
     errors = []
     shared = (tg / "submodules/TelegramUI/Sources/SharedAccountContext.swift").read_text()
-    if shared.count("// AorusGram: native controls follow the resolved presentation theme.") != 2:
-        errors.append("NativeTheme: initial and live UIKit style hooks are required")
-    if "/*if #available(iOS 13.0, *)" in shared:
-        errors.append("NativeTheme: presentation style hook remains disabled")
+    # The window keeps the phone's appearance, or Night Mode "System" cannot follow it.
+    if len(_WINDOW_STYLE_HOOK.findall(shared)) != 2 or re.search(r"^\s*if let eventView = .*\n\s*eventView\.overrideUserInterfaceStyle", shared, re.M):
+        errors.append("NativeTheme: the window's style is overridden, so the theme cannot follow the phone's appearance")
     controller = (tg / "submodules/Display/Source/ViewController.swift").read_text()
     if controller.count("self.aorusUpdatePresentationStyle(") != 2:
         errors.append("NativeTheme: controllers must apply traits at creation and theme updates")

@@ -408,22 +408,34 @@ public extension PresentationTheme {
     /// opened from a profile it continues that profile's page instead of arriving as a
     /// flat near-black rectangle in the middle of a tinted one.
     ///
-    /// Only the page is touched. The ink, the separators and the block marker are
-    /// whatever the caller already derived, so a screen that has been through
-    /// `aorusGlassTheme` keeps its glass and its readable labels.
+    /// The rows keep the ink, separators and block marker the caller already derived, so
+    /// a screen that has been through `aorusGlassTheme` keeps its glass and its readable
+    /// labels. The bar over the page takes the same ink: the title, the back button and the
+    /// status bar are drawn on the page too, and from the app theme they would be white on
+    /// a light page under a dark theme, or black on a dark one under a light theme.
     func aorusWithPageBackground(_ color: UIColor) -> PresentationTheme {
         let list = self.list.withUpdated(blocksBackgroundColor: color)
+        let lightPage = AorusGlassPane.isLight(color)
+        let ink = self.list.itemPrimaryTextColor
+        let rootController = self.rootController.withUpdated(
+            statusBarStyle: lightPage ? PresentationThemeStatusBarStyle.black : PresentationThemeStatusBarStyle.white,
+            navigationBar: self.rootController.navigationBar.withUpdated(buttonColor: ink, primaryTextColor: ink)
+        )
+        // The glass bar draws its buttons in the input panel's control colour.
+        let chat = self.chat.withUpdated(inputPanel: self.chat.inputPanel.withUpdated(panelControlColor: ink))
         let derived = PresentationTheme(
             name: self.name,
             index: self.index,
             referenceTheme: self.referenceTheme,
-            overallDarkAppearance: self.overallDarkAppearance,
+            // Glass panes, the bar's buttons and the system controls on this one screen
+            // take the page's lightness, not the app's.
+            overallDarkAppearance: !lightPage,
             intro: self.intro,
             passcode: self.passcode,
-            rootController: self.rootController,
+            rootController: rootController,
             list: list,
             chatList: self.chatList,
-            chat: self.chat,
+            chat: chat,
             actionSheet: self.actionSheet,
             contextMenu: self.contextMenu,
             inAppNotification: self.inAppNotification,

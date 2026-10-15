@@ -189,8 +189,14 @@ extension MediaPickerScreenImpl {
                         if let values = videoValues[index], values.trimApplied(), values.trimEndValue > values.trimStartValue {
                             duration = values.trimEndValue - values.trimStartValue
                         }
-                        guard let image = images[index].edited ?? images[index].thumbnail ?? images[index].original,
-                              let preview = aorusDraftThumbnail(image, side: 384)?.jpegData(compressionQuality: 0.9),
+                        let isAnimation = (item as? TGCameraCapturedVideo)?.isAnimation ?? false
+                        let isRound = item.isVideo && !isAnimation && videoValues[index]?.aorusRoundVideo == true
+                        guard let frame = images[index].edited ?? images[index].thumbnail ?? images[index].original else { throw AorusAttachmentDraftError.unavailable }
+                        // A video's preview is what it sends: the part its crop keeps -- for a
+                        // round video, the square that becomes the circle -- not the middle of
+                        // the whole frame.
+                        let image = (item.isVideo ? videoValues[index].flatMap { aorusDraftCroppedVideoFrame(frame, $0) } : nil) ?? frame
+                        guard let preview = aorusDraftThumbnail(image, side: 384)?.jpegData(compressionQuality: 0.9),
                               let thumbnail = aorusDraftThumbnail(image, side: 72)?.jpegData(compressionQuality: 0.85) else { throw AorusAttachmentDraftError.unavailable }
                         try preview.write(to: folder.appendingPathComponent("preview.jpg"), options: .atomic)
                         if let edited = images[index].edited, let data = edited.pngData() {
@@ -202,7 +208,7 @@ extension MediaPickerScreenImpl {
                         var error: NSError?
                         let adjustments = AorusMediaDraftWriteAdjustments(snapshots[index], folder.path, &error)
                         if snapshots[index] != nil && adjustments == nil { throw error ?? AorusAttachmentDraftError.writeFailed as NSError }
-                        entries.append(AorusAttachmentDraft.Item(id: id, source: source, assetIdentifier: assetIdentifier, isVideo: item.isVideo, duration: duration, thumbnail: thumbnail, adjustments: adjustments, timer: timers[index], spoiler: spoilers[index], price: prices[index], livePhotoMode: liveModes[index], isAnimation: (item as? TGCameraCapturedVideo)?.isAnimation ?? false, coverPosition: coverPositions[index]))
+                        entries.append(AorusAttachmentDraft.Item(id: id, source: source, assetIdentifier: assetIdentifier, isVideo: item.isVideo, duration: duration, thumbnail: thumbnail, adjustments: adjustments, timer: timers[index], spoiler: spoilers[index], price: prices[index], livePhotoMode: liveModes[index], isAnimation: isAnimation, coverPosition: coverPositions[index], isRound: isRound))
                     }
                     let captured = AorusAttachmentDraft(directory: directory, timestamp: draft.timestamp, items: entries, grouping: draft.grouping, captionAbove: draft.captionAbove, highQuality: draft.highQuality, forceLivePhoto: draft.forceLivePhoto)
                     let complete = !images.contains { $0.edited?.degraded() == true }
@@ -420,6 +426,20 @@ private func aorusDraftWorkingDirectory() -> URL {
         }
     }
     return root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+}
+
+/// The part of a video frame its crop keeps, turned and mirrored as the video will be, through
+/// Telegram's own crop -- the one its attachment previews use. `frame` is the whole frame, at any
+/// size in proportion to the video, as the editor's thumbnail and the library's image both are.
+/// Nil for a video that keeps its whole frame.
+private func aorusDraftCroppedVideoFrame(_ frame: UIImage, _ values: TGVideoEditAdjustments) -> UIImage? {
+    let originalSize = values.originalSize
+    guard values.aorusRoundVideo || values.cropApplied(forAvatar: false),
+          originalSize.width > 0, originalSize.height > 0,
+          values.cropRect.width > 0, values.cropRect.height > 0,
+          frame.size.width > 0, frame.size.height > 0 else { return nil }
+    let cropped: UIImage? = TGPhotoEditorVideoCrop(frame, nil, values.cropOrientation, values.cropRotation, values.cropRect, values.cropMirrored, CGSize(width: 384, height: 384), originalSize, true, true)
+    return cropped
 }
 
 private func aorusDraftThumbnail(_ image: UIImage, side: CGFloat) -> UIImage? {

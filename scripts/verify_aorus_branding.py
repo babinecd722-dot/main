@@ -4250,6 +4250,18 @@ def main() -> None:
             err.append(f"AccentTheme: PresentationData.swift lost {label}")
     if "effectiveColors = PresentationThemeAccentColor(baseColor: .blue)" in presentation_text:
         err.append("AccentTheme: Night without an accent is still drawn in Telegram's blue")
+    # The glass tab bar tints its icons with the tab text colours: on the light side those
+    # must be the grey and the accent too, or the unselected icons come out near-black.
+    if "            textColor: tabGrey,\n            selectedTextColor: accent\n" not in presentation_text:
+        err.append("AccentTheme: the light tab bar leaves its unselected icons in Classic's near-black")
+    # "Подробнее" continues a profile's page: its bar takes the page's ink, not the app's.
+    theme_text = (tg / "submodules/TelegramPresentationData/Sources/PresentationTheme.swift").read_text(encoding="utf-8")
+    if "statusBarStyle: lightPage ? PresentationThemeStatusBarStyle.black : PresentationThemeStatusBarStyle.white," not in theme_text or "navigationBar: self.rootController.navigationBar.withUpdated(buttonColor: ink, primaryTextColor: ink)" not in theme_text:
+        err.append("AccentTheme: the details page draws its title in the app theme's colour over its own page")
+    # A video sent as a round video message is drawn as one in the draft strip.
+    strip_text = (tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusAttachmentDraftStrip.swift").read_text(encoding="utf-8")
+    if "self.setRound(item.isRound, animated: reshaped && self.window != nil)" not in strip_text:
+        err.append("MediaDrafts: a round video draft is not drawn as a circle in the strip")
     theme_settings_text = (tg / "submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift").read_text(encoding="utf-8")
     if "trigger: .explicitNone" in theme_settings_text or theme_settings_text.count("AutomaticThemeSwitchSetting(force: false, trigger: .system, theme: .builtin(.night))") < 2:
         err.append("AccentTheme: Night Mode no longer defaults to System")

@@ -73,6 +73,24 @@ let invalid = AorusAttachmentDraft(directory: "../../elsewhere", items: [entry],
 expect(invalid.directoryURL(accountBasePath: "/account") == nil, "invalid namespaces are rejected")
 let nan = AorusAttachmentDraft.Item(source: .library, assetIdentifier: "video", isVideo: true, duration: .nan, thumbnail: nil, adjustments: nil, timer: nil, spoiler: false, price: nil, livePhotoMode: nil)
 expect(nan.duration == 0, "invalid video durations never reach UI integer conversion")
+// A video going as a round video message is drawn as a circle in the strip and the chat list.
+let round = AorusAttachmentDraft.Item(source: .library, assetIdentifier: "round", isVideo: true, duration: 12, thumbnail: Data([7]), adjustments: Data([1]), timer: nil, spoiler: false, price: nil, livePhotoMode: nil, isRound: true)
+let roundDraft = AorusAttachmentDraft(items: [round, item(1)], grouping: false, captionAbove: false, highQuality: false, forceLivePhoto: false)
+let roundRestored = try decoder.decode(AorusAttachmentDraft.self, from: encoder.encode(roundDraft))
+expect(roundRestored.items[0].isRound && !roundRestored.items[1].isRound, "the round flag survives persistence per item")
+expect(roundRestored.items[0].preview.isRound && !roundRestored.items[1].preview.isRound, "the chat list preview knows which video is round")
+let roundMedia = MediaDraftState(contentType: .attachments, timestamp: 1, attachmentPreviews: roundDraft.items.map(\.preview))
+expect(try decoder.decode(MediaDraftState.self, from: encoder.encode(roundMedia)).attachmentPreviews.map(\.isRound) == [true, false], "round previews survive the chat list state")
+let plainJSON = String(data: try encoder.encode(item(1)), encoding: .utf8) ?? ""
+expect(!plainJSON.contains("isRound"), "an ordinary attachment is stored exactly as before")
+let earlier = try JSONSerialization.jsonObject(with: encoder.encode(round)) as! [String: Any]
+var stripped = earlier; stripped.removeValue(forKey: "isRound")
+let fromEarlierBuild = try decoder.decode(AorusAttachmentDraft.Item.self, from: JSONSerialization.data(withJSONObject: stripped))
+expect(!fromEarlierBuild.isRound, "drafts kept by an earlier build are ordinary videos")
+let previewFromEarlierBuild = try decoder.decode(AorusAttachmentDraft.Preview.self, from: Data("{\"id\":\"a\",\"isVideo\":true}".utf8))
+expect(!previewFromEarlierBuild.isRound && previewFromEarlierBuild.thumbnail == nil, "chat list previews from an earlier build still decode")
+let photo = AorusAttachmentDraft.Item(source: .library, assetIdentifier: "photo", isVideo: false, duration: 0, thumbnail: nil, adjustments: nil, timer: nil, spoiler: false, price: nil, livePhotoMode: nil, isRound: true)
+expect(!photo.isRound, "only a video can be round")
 print("Media draft persistence passed: \(checks) assertions")
 '''
 
