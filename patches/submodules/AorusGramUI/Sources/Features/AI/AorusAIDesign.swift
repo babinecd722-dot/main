@@ -330,7 +330,10 @@ public final class AorusAIWorkTrailView: UIView {
             color: isFinished ? palette.tertiary : palette.secondary,
             accent: palette.accent,
             active: active,
-            highlightColor: palette.label
+            // A glint, on either page: white letters in a violet glow over a dark one. On a
+            // light page white would blank the letters and black inside that glow reads as
+            // a smudge, so the letters there take the accent itself and glow in it.
+            highlightColor: palette.isDark ? palette.label : palette.accent
         )
     }
 
@@ -413,8 +416,8 @@ public final class AorusAIWorkTrailView: UIView {
             base.text = text
             base.textColor = color
             highlight.text = text
-            // The gleam is the page's full-strength ink: white over grey on a dark page,
-            // black over grey on a light one -- white there would blank the text it crosses.
+            // The gleam is light crossing the line: the brightest colour the page can show
+            // the text in, with the accent's glow around it (see the caller).
             highlight.textColor = highlightColor
             highlight.layer.shadowColor = accent.cgColor
             highlight.layer.shadowOpacity = active ? 0.55 : 0.0
