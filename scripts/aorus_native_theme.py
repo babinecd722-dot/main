@@ -59,7 +59,9 @@ def verify_native_theme(tg: Path) -> list[str]:
     errors = []
     shared = (tg / "submodules/TelegramUI/Sources/SharedAccountContext.swift").read_text()
     # The window keeps the phone's appearance, or Night Mode "System" cannot follow it.
-    if len(_WINDOW_STYLE_HOOK.findall(shared)) != 2 or re.search(r"^\s*if let eventView = .*\n\s*eventView\.overrideUserInterfaceStyle", shared, re.M):
+    # Each assignment to the window's style must be inside one of the two blocks Telegram
+    # ships commented out; one outside them would be live code.
+    if len(_WINDOW_STYLE_HOOK.findall(shared)) != 2 or shared.count("eventView.overrideUserInterfaceStyle = userInterfaceStyle") != 2:
         errors.append("NativeTheme: the window's style is overridden, so the theme cannot follow the phone's appearance")
     controller = (tg / "submodules/Display/Source/ViewController.swift").read_text()
     if controller.count("self.aorusUpdatePresentationStyle(") != 2:
