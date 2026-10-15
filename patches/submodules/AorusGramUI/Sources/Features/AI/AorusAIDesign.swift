@@ -329,7 +329,8 @@ public final class AorusAIWorkTrailView: UIView {
             // cross; a stopped turn recedes to tertiary, which is where it was before.
             color: isFinished ? palette.tertiary : palette.secondary,
             accent: palette.accent,
-            active: active
+            active: active,
+            highlightColor: palette.label
         )
     }
 
@@ -407,12 +408,14 @@ public final class AorusAIWorkTrailView: UIView {
             return base.intrinsicContentSize
         }
 
-        func configure(text: String, color: UIColor, accent: UIColor, active: Bool) {
+        func configure(text: String, color: UIColor, accent: UIColor, active: Bool, highlightColor: UIColor = .white) {
             self.active = active
             base.text = text
             base.textColor = color
             highlight.text = text
-            highlight.textColor = .white
+            // The gleam is the page's full-strength ink: white over grey on a dark page,
+            // black over grey on a light one -- white there would blank the text it crosses.
+            highlight.textColor = highlightColor
             highlight.layer.shadowColor = accent.cgColor
             highlight.layer.shadowOpacity = active ? 0.55 : 0.0
             highlight.layer.shadowRadius = 4.0

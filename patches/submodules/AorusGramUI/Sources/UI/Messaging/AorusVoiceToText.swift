@@ -41,11 +41,15 @@ public enum AorusVoiceToText {
 public final class AorusVoiceOnboardingController: UIViewController {
     private let isRu: Bool
     private let accent: UIColor
+    private let isDark: Bool
     private let onContinue: () -> Void
 
-    public init(isRu: Bool, accent: UIColor, onContinue: @escaping () -> Void) {
+    /// `isDark` follows the chat's theme: the sheet is the dark design over a dark chat and its
+    /// light counterpart over a light one.
+    public init(isRu: Bool, accent: UIColor, isDark: Bool = true, onContinue: @escaping () -> Void) {
         self.isRu = isRu
         self.accent = accent
+        self.isDark = isDark
         self.onContinue = onContinue
         super.init(nibName: nil, bundle: nil)
         self.modalPresentationStyle = .pageSheet
@@ -79,7 +83,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = title
         titleLabel.font = aorusUIFont(15.0, .semibold)
-        titleLabel.textColor = .white
+        titleLabel.textColor = self.isDark ? .white : .black
         titleLabel.numberOfLines = 0
         row.addSubview(titleLabel)
 
@@ -87,7 +91,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.text = subtitle
         subtitleLabel.font = aorusUIFont(14.0, .regular)
-        subtitleLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
+        subtitleLabel.textColor = self.isDark ? UIColor(white: 1.0, alpha: 0.55) : UIColor(white: 0.0, alpha: 0.5)
         subtitleLabel.numberOfLines = 0
         row.addSubview(subtitleLabel)
 
@@ -114,8 +118,8 @@ public final class AorusVoiceOnboardingController: UIViewController {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
-        self.overrideUserInterfaceStyle = .dark
-        self.view.backgroundColor = UIColor(white: 0.09, alpha: 1.0)
+        self.overrideUserInterfaceStyle = self.isDark ? .dark : .light
+        self.view.backgroundColor = self.isDark ? UIColor(white: 0.09, alpha: 1.0) : .white
 
         // Hero: waveform in a soft accent gradient circle.
         let heroContainer = UIView()
@@ -145,7 +149,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         title.translatesAutoresizingMaskIntoConstraints = false
         title.text = aorusL("Голос в текст", "Voice to Text")
         title.font = aorusUIFont(24.0, .bold)
-        title.textColor = .white
+        title.textColor = self.isDark ? .white : .black
         title.textAlignment = .center
         self.view.addSubview(title)
 
@@ -220,6 +224,7 @@ public final class AorusVoiceSession {
     private weak var anchorView: UIView?
     private let accent: UIColor
     private let isRu: Bool
+    private let isDark: Bool
     private let localeIdentifier: String
 
     private var audioEngine: AVAudioEngine?
@@ -231,11 +236,12 @@ public final class AorusVoiceSession {
     private var isCancelled = false
     private var isFinished = false
 
-    public init(hostView: UIView, anchorView: UIView, accent: UIColor, isRu: Bool) {
+    public init(hostView: UIView, anchorView: UIView, accent: UIColor, isRu: Bool, isDark: Bool = true) {
         self.hostView = hostView
         self.anchorView = anchorView
         self.accent = accent
         self.isRu = isRu
+        self.isDark = isDark
         self.localeIdentifier = AorusVoiceToText.resolveLocaleIdentifier(isRu: isRu)
     }
 
@@ -249,7 +255,7 @@ public final class AorusVoiceSession {
             anchorMinY = mountView.bounds.height - mountView.safeAreaInsets.bottom - 56.0
         }
         let bottomInset = max(8.0, mountView.bounds.height - anchorMinY + 8.0)
-        let overlay = AorusVoiceOverlayView(accent: self.accent, isRu: self.isRu, bottomInset: bottomInset)
+        let overlay = AorusVoiceOverlayView(accent: self.accent, isRu: self.isRu, isDark: self.isDark, bottomInset: bottomInset)
         overlay.frame = mountView.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mountView.addSubview(overlay)
@@ -409,18 +415,25 @@ final class AorusVoiceOverlayView: UIView {
     private let accent: UIColor
     private let isRu: Bool
     private let bottomInset: CGFloat
-
-    private let card = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialDark))
+    // The card is the chat's own material: dark glass over a dark chat, light over a light one.
+    private let card: UIVisualEffectView
+    private let primaryText: UIColor
+    private let placeholderText: UIColor
+    private let hintText: UIColor
     private let backdrop: AorusAnimatedVoiceBackdropView
     private let waveform = AorusWaveformView()
     private let transcriptLabel = UILabel()
     private let hintIcon = UIImageView()
     private let hintLabel = UILabel()
 
-    init(accent: UIColor, isRu: Bool, bottomInset: CGFloat) {
+    init(accent: UIColor, isRu: Bool, isDark: Bool, bottomInset: CGFloat) {
         self.accent = accent
         self.isRu = isRu
         self.bottomInset = bottomInset
+        self.card = UIVisualEffectView(effect: UIBlurEffect(style: isDark ? .systemChromeMaterialDark : .systemChromeMaterialLight))
+        self.primaryText = isDark ? .white : .black
+        self.placeholderText = isDark ? UIColor(white: 1.0, alpha: 0.46) : UIColor(white: 0.0, alpha: 0.4)
+        self.hintText = isDark ? UIColor(white: 1.0, alpha: 0.55) : UIColor(white: 0.0, alpha: 0.5)
         self.backdrop = AorusAnimatedVoiceBackdropView(accent: accent)
         super.init(frame: .zero)
         self.setup()
@@ -449,7 +462,7 @@ final class AorusVoiceOverlayView: UIView {
 
         self.transcriptLabel.translatesAutoresizingMaskIntoConstraints = false
         self.transcriptLabel.font = aorusUIFont(15.0, .semibold)
-        self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.46)
+        self.transcriptLabel.textColor = self.placeholderText
         self.transcriptLabel.numberOfLines = 2
         self.transcriptLabel.lineBreakMode = .byTruncatingHead
         self.transcriptLabel.textAlignment = .left
@@ -464,7 +477,7 @@ final class AorusVoiceOverlayView: UIView {
 
         self.hintLabel.translatesAutoresizingMaskIntoConstraints = false
         self.hintLabel.font = aorusUIFont(12.0, .medium)
-        self.hintLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
+        self.hintLabel.textColor = self.hintText
         self.hintLabel.textAlignment = .left
         self.hintLabel.text = aorusL("Отпустите, чтобы вставить", "Release to insert")
         content.addSubview(self.hintLabel)
@@ -526,10 +539,10 @@ final class AorusVoiceOverlayView: UIView {
     func updateTranscript(_ text: String) {
         if text.isEmpty {
             self.transcriptLabel.text = aorusL("Говорите…", "Speak…")
-            self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.4)
+            self.transcriptLabel.textColor = self.placeholderText
         } else {
             self.transcriptLabel.text = text
-            self.transcriptLabel.textColor = .white
+            self.transcriptLabel.textColor = self.primaryText
         }
     }
 
@@ -555,7 +568,7 @@ final class AorusVoiceOverlayView: UIView {
         self.hintLabel.text = highlighted
             ? (aorusL("Отпустите, чтобы отменить", "Release to cancel"))
             : (aorusL("Отпустите, чтобы вставить", "Release to insert"))
-        self.hintLabel.textColor = highlighted ? red : UIColor(white: 1.0, alpha: 0.55)
+        self.hintLabel.textColor = highlighted ? red : self.hintText
     }
 }
 

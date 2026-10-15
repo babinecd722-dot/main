@@ -926,6 +926,9 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.widthSlider.addTarget(self, action: #selector(self.widthChanged), for: .valueChanged)
         self.toolsView.addSubview(self.widthSlider)
         self.widthPreview.backgroundColor = .white
+        // The brush starts white: on a light card its preview needs an edge to be seen.
+        self.widthPreview.layer.borderWidth = 1.0
+        self.widthPreview.layer.borderColor = self.aorusSwatchBorderColor.cgColor
         self.widthPreview.isUserInteractionEnabled = false
         self.widthPreview.clipsToBounds = true
         self.toolsView.addSubview(self.widthPreview)
@@ -949,7 +952,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             button.backgroundColor = color
             button.layer.cornerRadius = 15.0
             button.layer.borderWidth = index == 0 ? 3.0 : 1.0
-            button.layer.borderColor = index == 0 ? self.presentationData.theme.list.itemAccentColor.cgColor : UIColor.white.withAlphaComponent(0.22).cgColor
+            button.layer.borderColor = index == 0 ? self.presentationData.theme.list.itemAccentColor.cgColor : self.aorusSwatchBorderColor.cgColor
             button.tag = index
             button.addTarget(self, action: #selector(self.colorPressed(_:)), for: .touchUpInside)
             button.widthAnchor.constraint(equalToConstant: 30.0).isActive = true
@@ -1125,6 +1128,12 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.widthPreview.center = CGPoint(x: 26.0, y: 80.0)
     }
 
+    /// The edge of a colour swatch on the tools card: light on a dark card, dark on a light one,
+    /// so the white and the black swatch both stay visible.
+    private var aorusSwatchBorderColor: UIColor {
+        return self.presentationData.theme.overallDarkAppearance ? UIColor.white.withAlphaComponent(0.22) : UIColor.black.withAlphaComponent(0.18)
+    }
+
     @objc private func colorPressed(_ sender: UIButton) {
         guard sender.tag >= 0, sender.tag < self.colorButtons.count, let color = sender.backgroundColor else { return }
         self.canvas.brushColor = color
@@ -1132,7 +1141,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.widthPreview.backgroundColor = color
         for button in self.colorButtons {
             button.layer.borderWidth = button === sender ? 3.0 : 1.0
-            button.layer.borderColor = button === sender ? self.presentationData.theme.list.itemAccentColor.cgColor : UIColor.white.withAlphaComponent(0.22).cgColor
+            button.layer.borderColor = button === sender ? self.presentationData.theme.list.itemAccentColor.cgColor : self.aorusSwatchBorderColor.cgColor
         }
         UISelectionFeedbackGenerator().selectionChanged()
     }

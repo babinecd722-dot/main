@@ -105,7 +105,10 @@ extension ChatControllerImpl {
                         let retainedDirectory = self?.aorusSendingAttachmentDraft?.directory
                         var replaced: AorusAttachmentDraft?
                         if let self, self.chatLocation.peerId == peerId, self.chatLocation.threadId == threadId {
-                            self.updateChatPresentationInterfaceState(animated: false, interactive: false, saveInterfaceState: false, { state in
+                            // Animated when the strip gains or loses an attachment -- a gallery
+                            // closed after deselecting some -- and still when only a picture changed.
+                            let changesStrip = self.presentationInterfaceState.interfaceState.attachmentDraft?.items.map(\.id) != capture.draft?.items.map(\.id)
+                            self.updateChatPresentationInterfaceState(animated: changesStrip, interactive: false, saveInterfaceState: false, { state in
                                 state.updatedInterfaceState { previous in
                                     var updated = previous.withUpdatedAttachmentDraft(capture.draft).withUpdatedTimestamp(Int32(Date().timeIntervalSince1970))
                                     if let caption = capture.caption { updated = updated.aorusWithAttachmentCaption(caption) }
@@ -166,6 +169,9 @@ extension ChatControllerImpl {
               let draft = self.presentationInterfaceState.interfaceState.attachmentDraft,
               let index = draft.items.firstIndex(where: { $0.id == id }),
               let layout = self.chatDisplayNode.validLayout?.0 else { return }
+        // The editor covers the chat, so the keyboard goes first, the way opening a photo in the
+        // chat dismisses it -- whichever input holds it, the composer's or the expanded editor's.
+        self.chatDisplayNode.dismissInput()
         self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, present: { [weak self] controller, _ in
             guard let self else { return }
             // Held while the draft is read in, so a second tap cannot open a second editor.
@@ -199,14 +205,42 @@ extension ChatControllerImpl {
             self?.present(editor, in: .window(.root), with: arguments)
         }, closed: { [weak self, weak controller] in
             guard let controller else { return }
+            let shown = self?.aorusRemoveDeselectedAttachments(from: controller, draft: draft)
             controller.aorusRequestAttachmentPersistence(completion: { [weak self, controller] in
                 if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
             }, failed: { [weak self, controller] in
                 // The edit could not be kept; the editor is gone either way, and the composer
                 // must not go on waiting for it, refusing every send and every preview.
                 if self?.aorusAttachmentPreviewPicker === controller { self?.aorusAttachmentPreviewPicker = nil }
+                // Nor kept is a removal made in the editor: the strip shows the draft again.
+                if let self, let shown, self.presentationInterfaceState.interfaceState.attachmentDraft?.revision == shown {
+                    self.updateChatPresentationInterfaceState(animated: true, interactive: false, saveInterfaceState: false, { state in
+                        state.updatedInterfaceState { $0.withUpdatedAttachmentDraft(draft) }
+                    })
+                }
             })
         })
+    }
+
+    /// Takes the attachments deselected in the editor out of the strip the moment it is back,
+    /// with the same animation the cross gives, instead of all at once when the save lands.
+    /// The save that follows writes the same selection, so the strip does not change again.
+    /// Returns the revision shown -- nil inside when nothing is left -- so a failed save can
+    /// put the draft back, and nil when nothing was deselected.
+    private func aorusRemoveDeselectedAttachments(from controller: MediaPickerScreenImpl, draft: AorusAttachmentDraft) -> String?? {
+        guard let current = self.presentationInterfaceState.interfaceState.attachmentDraft, current.revision == draft.revision else { return nil }
+        let selected = Set((controller.aorusDraftSelection?.selectedItems() ?? []).compactMap { item -> String? in
+            guard let item = item as? TGMediaSelectableItem else { return nil }
+            return controller.aorusAttachmentStableIds[item.uniqueIdentifier]
+        })
+        let removed = current.items.filter { !selected.contains($0.id) }
+        guard !removed.isEmpty else { return nil }
+        var shown: AorusAttachmentDraft? = current
+        for item in removed { shown = shown?.removing(item.id) }
+        self.updateChatPresentationInterfaceState(animated: true, interactive: true, saveInterfaceState: false, { state in
+            state.updatedInterfaceState { $0.withUpdatedAttachmentDraft(shown) }
+        })
+        return .some(shown?.revision)
     }
 
     @discardableResult

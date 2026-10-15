@@ -92,13 +92,68 @@ private enum ATunnelDuckAsset {
     static let b64 = "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"
 }
 
+// MARK: - Palette
+
+/// The page's colours. Dark is the page as it was designed, over black; light takes the same
+/// roles from the light theme's grouped lists, so in a light app the page is a light page.
+private struct ATunnelPalette {
+    let isDark: Bool
+    let background: UIColor
+    let card: UIColor
+    let primaryText: UIColor
+    let subtitleText: UIColor
+    let detailText: UIColor
+    let sectionText: UIColor
+    let footerText: UIColor
+    let inactive: UIColor
+    let separator: UIColor
+    let grid: UIColor
+
+    init(theme: PresentationTheme) {
+        let list = theme.list
+        self.isDark = theme.overallDarkAppearance
+        if self.isDark {
+            self.background = .black
+            self.card = UIColor(white: 0.10, alpha: 1.0)
+            self.primaryText = .white
+            self.subtitleText = UIColor(white: 0.6, alpha: 1)
+            self.detailText = UIColor(white: 0.55, alpha: 1)
+            self.sectionText = UIColor(white: 0.45, alpha: 1)
+            self.footerText = UIColor(white: 0.4, alpha: 1)
+            self.inactive = UIColor(white: 0.35, alpha: 1)
+            self.separator = UIColor(white: 0.18, alpha: 1)
+            self.grid = UIColor.white.withAlphaComponent(0.045)
+        } else {
+            self.background = list.blocksBackgroundColor
+            self.card = list.itemBlocksBackgroundColor
+            self.primaryText = list.itemPrimaryTextColor
+            self.subtitleText = list.itemSecondaryTextColor
+            self.detailText = list.itemSecondaryTextColor
+            self.sectionText = list.sectionHeaderTextColor
+            self.footerText = list.freeTextColor
+            self.inactive = list.disclosureArrowColor
+            self.separator = list.itemBlocksSeparatorColor
+            self.grid = UIColor.black.withAlphaComponent(0.05)
+        }
+    }
+
+    var interfaceStyle: UIUserInterfaceStyle {
+        return self.isDark ? .dark : .light
+    }
+}
+
 // MARK: - Flag view (drawn stripes, no emoji)
 
 private final class FlagView: UIView {
-    init(regionCode: String) {
+    init(regionCode: String, outline: UIColor? = nil) {
         super.init(frame: .zero)
         layer.cornerRadius = 3
         layer.masksToBounds = true
+        if let outline {
+            // A white flag on a white card needs its edge drawn.
+            layer.borderWidth = 1.0 / UIScreen.main.scale
+            layer.borderColor = outline.cgColor
+        }
         setupStripes(for: regionCode.uppercased())
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -182,7 +237,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     private var animatedWidth: CGFloat = 0
     private var isCompleted = false
 
-    init(title: String) {
+    init(title: String, palette: ATunnelPalette) {
         super.init(frame: .zero)
 
         layer.masksToBounds = true
@@ -190,7 +245,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         // The opaque base must be identical to the diagnostics screen. All visual
         // depth comes from transparent overlays, so the banner never reads as an
         // embedded bitmap with a slightly different black level.
-        backgroundGradient.colors = [UIColor.black.cgColor, UIColor.black.cgColor]
+        backgroundGradient.colors = [palette.background.cgColor, palette.background.cgColor]
         backgroundGradient.startPoint = CGPoint(x: 0, y: 0.5)
         backgroundGradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer.addSublayer(backgroundGradient)
@@ -203,7 +258,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         layer.addSublayer(accentGlow)
 
         gridLayer.fillColor = UIColor.clear.cgColor
-        gridLayer.strokeColor = UIColor.white.withAlphaComponent(0.045).cgColor
+        gridLayer.strokeColor = palette.grid.cgColor
         gridLayer.lineWidth = 0.5
         layer.addSublayer(gridLayer)
 
@@ -229,7 +284,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         } else {
             titleLabel.font = baseTitleFont
         }
-        titleLabel.textColor = .white
+        titleLabel.textColor = palette.primaryText
         titleLabel.numberOfLines = 1
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.76
@@ -389,11 +444,16 @@ private final class ATunnelFlowView: UIView {
     private let arrowRight = CAShapeLayer()
     private let downIndicator = UIView()
     private let downIndicatorIcon = UIImageView()
+    private let palette: ATunnelPalette
 
     var state: ATunnelFlowState = .unknown { didSet { applyState() } }
 
-    override init(frame: CGRect) { super.init(frame: frame); setup() }
-    required init?(coder: NSCoder) { super.init(coder: coder); setup() }
+    init(palette: ATunnelPalette) {
+        self.palette = palette
+        super.init(frame: .zero)
+        setup()
+    }
+    required init?(coder: NSCoder) { fatalError() }
 
     private func setup() {
         backgroundColor = .clear
@@ -418,7 +478,7 @@ private final class ATunnelFlowView: UIView {
         downIndicator.backgroundColor = .systemRed
         downIndicator.layer.cornerRadius = 9
         downIndicator.layer.borderWidth = 2
-        downIndicator.layer.borderColor = UIColor(white: 0.10, alpha: 1.0).cgColor
+        downIndicator.layer.borderColor = palette.card.cgColor
         downIndicator.isHidden = true
         let downConfig = UIImage.SymbolConfiguration(pointSize: 8, weight: .bold)
         downIndicatorIcon.image = UIImage(systemName: "exclamationmark", withConfiguration: downConfig)
@@ -503,19 +563,20 @@ private final class ATunnelFlowView: UIView {
             let c = red.withAlphaComponent(0.82).cgColor
             [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
             [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
-            leftIcon.tintColor = UIColor(white: 0.46, alpha: 1)
-            centerBadge.backgroundColor = UIColor(white: 0.20, alpha: 1)
-            centerLabel.textColor = UIColor(white: 0.82, alpha: 1)
-            rightIcon.tintColor = UIColor(white: 0.46, alpha: 1)
+            let icon = palette.isDark ? UIColor(white: 0.46, alpha: 1) : palette.subtitleText
+            leftIcon.tintColor = icon
+            centerBadge.backgroundColor = palette.isDark ? UIColor(white: 0.20, alpha: 1) : UIColor(rgb: 0xe5e5ea)
+            centerLabel.textColor = palette.isDark ? UIColor(white: 0.82, alpha: 1) : palette.subtitleText
+            rightIcon.tintColor = icon
             downIndicator.isHidden = false
         case .unknown:
-            let c = UIColor(white: 0.35, alpha: 1).cgColor
+            let c = palette.inactive.cgColor
             [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
             [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
-            leftIcon.tintColor = UIColor(white: 0.35, alpha: 1)
-            centerBadge.backgroundColor = UIColor(white: 0.25, alpha: 1)
-            centerLabel.textColor = UIColor(white: 0.65, alpha: 1)
-            rightIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            leftIcon.tintColor = palette.inactive
+            centerBadge.backgroundColor = palette.isDark ? UIColor(white: 0.25, alpha: 1) : UIColor(rgb: 0xebebf0)
+            centerLabel.textColor = palette.isDark ? UIColor(white: 0.65, alpha: 1) : palette.inactive
+            rightIcon.tintColor = palette.inactive
             downIndicator.isHidden = true
         }
     }
@@ -585,9 +646,9 @@ private final class ATunnelFlowView: UIView {
 final class ATunnelStatusViewController: UIViewController {
 
     private let theme: PresentationTheme
+    private let palette: ATunnelPalette
     private let isRu: Bool
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
-    private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
     private let scrollView  = UIScrollView()
     private let contentView = UIView()
@@ -615,6 +676,7 @@ final class ATunnelStatusViewController: UIViewController {
 
     init(theme: PresentationTheme, isRu: Bool) {
         self.theme = theme
+        self.palette = ATunnelPalette(theme: theme)
         self.isRu  = isRu
         super.init(nibName: nil, bundle: nil)
         title = "ATunnel"
@@ -625,8 +687,10 @@ final class ATunnelStatusViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        overrideUserInterfaceStyle = .dark
-        view.backgroundColor = .black
+        overrideUserInterfaceStyle = palette.interfaceStyle
+        // The navigation controller around the page draws the bar and the status bar.
+        navigationController?.overrideUserInterfaceStyle = palette.interfaceStyle
+        view.backgroundColor = palette.background
         setupNavigationBar()
         setupScrollView()
         setupHeader()
@@ -698,7 +762,7 @@ final class ATunnelStatusViewController: UIViewController {
             barButtonSystemItem: .close, target: self, action: #selector(closePage))
         let appearance = UINavigationBarAppearance()
         appearance.configureWithTransparentBackground()
-        appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        appearance.titleTextAttributes = [.foregroundColor: palette.primaryText]
         navigationItem.standardAppearance = appearance
         navigationItem.scrollEdgeAppearance = appearance
         navigationController?.navigationBar.tintColor = purple
@@ -738,7 +802,7 @@ final class ATunnelStatusViewController: UIViewController {
         // Title
         titleLabel.text = "ATunnel"
         titleLabel.font = Font.bold(26.0)
-        titleLabel.textColor = .white
+        titleLabel.textColor = palette.primaryText
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(titleLabel)
@@ -746,7 +810,7 @@ final class ATunnelStatusViewController: UIViewController {
         // Subtitle
         subtitleLabel.text = aorusL("Скоростная безопасная маршрутизация", "Fast secure routing")
         subtitleLabel.font = Font.regular(15.0)
-        subtitleLabel.textColor = UIColor(white: 0.6, alpha: 1)
+        subtitleLabel.textColor = palette.subtitleText
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -771,7 +835,7 @@ final class ATunnelStatusViewController: UIViewController {
     private func setupServerSection() {
         serversSectionLabel.text = aorusL("СЕРВЕРЫ", "SERVERS")
         serversSectionLabel.font = Font.semibold(12.0)
-        serversSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
+        serversSectionLabel.textColor = palette.sectionText
         serversSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(serversSectionLabel)
 
@@ -794,11 +858,11 @@ final class ATunnelStatusViewController: UIViewController {
     private func setupCallSection() {
         callsSectionLabel.text = aorusL("ЗВОНКИ", "CALLS")
         callsSectionLabel.font = Font.semibold(12.0)
-        callsSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
+        callsSectionLabel.textColor = palette.sectionText
         callsSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(callsSectionLabel)
 
-        callCard.backgroundColor = cardBg
+        callCard.backgroundColor = palette.card
         callCard.layer.cornerRadius = 14
         callCard.layer.cornerCurve = .continuous
         callCard.translatesAutoresizingMaskIntoConstraints = false
@@ -813,7 +877,7 @@ final class ATunnelStatusViewController: UIViewController {
 
         callTitleLabel.text = aorusL("Маршрутизация звонков", "Call routing")
         callTitleLabel.font = Font.medium(15.0)
-        callTitleLabel.textColor = .white
+        callTitleLabel.textColor = palette.primaryText
         callTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         callCard.addSubview(callTitleLabel)
 
@@ -852,7 +916,7 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func setupFooter() {
         updatedLabel.font = Font.regular(13.0)
-        updatedLabel.textColor = UIColor(white: 0.4, alpha: 1)
+        updatedLabel.textColor = palette.footerText
         updatedLabel.textAlignment = .center
         updatedLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(updatedLabel)
@@ -913,9 +977,9 @@ final class ATunnelStatusViewController: UIViewController {
             callStatusIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfg)
             callStatusIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
         } else {
-            callPhoneIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            callPhoneIcon.tintColor = palette.inactive
             callStatusIcon.image = UIImage(systemName: "minus.circle", withConfiguration: cfg)
-            callStatusIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            callStatusIcon.tintColor = palette.inactive
         }
     }
 
@@ -943,19 +1007,19 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func makeServerCard(for server: ATunnelServerEntry) -> UIView {
         let card = UIView()
-        card.backgroundColor = cardBg
+        card.backgroundColor = palette.card
         card.layer.cornerRadius = 16
         card.layer.cornerCurve = .continuous
 
         // Flag
-        let flag = FlagView(regionCode: server.country ?? server.region)
+        let flag = FlagView(regionCode: server.country ?? server.region, outline: palette.isDark ? nil : palette.separator)
         flag.translatesAutoresizingMaskIntoConstraints = false
 
         // Region full name
         let regionLabel = UILabel()
         regionLabel.text = localizedServerName(server)
         regionLabel.font = Font.semibold(16.0)
-        regionLabel.textColor = .white
+        regionLabel.textColor = palette.primaryText
         regionLabel.translatesAutoresizingMaskIntoConstraints = false
 
         // Status badge
@@ -963,7 +1027,7 @@ final class ATunnelStatusViewController: UIViewController {
         badge.translatesAutoresizingMaskIntoConstraints = false
 
         // Flow
-        let flow = ATunnelFlowView()
+        let flow = ATunnelFlowView(palette: palette)
         flow.state = server.available ? .active : .down
         flow.translatesAutoresizingMaskIntoConstraints = false
 
@@ -979,12 +1043,12 @@ final class ATunnelStatusViewController: UIViewController {
             return Date().timeIntervalSince1970 - measuredAt <= aorusLatencyTTL
         }()
         if server.available, let lat = server.latencyMs, let jit = server.jitterMs, latencyIsFresh {
-            detail.textColor = UIColor(white: 0.55, alpha: 1)
+            detail.textColor = palette.detailText
             let ms  = aorusL("мс", "ms")
             let jw  = aorusL("джиттер", "jitter")
             detail.text = "⚡ \(Int(lat)) \(ms) · \(jw) \(Int(jit)) \(ms)"
         } else if server.available {
-            detail.textColor = UIColor(white: 0.55, alpha: 1)
+            detail.textColor = palette.detailText
             detail.text = aorusL("Проверка…", "Checking…")
         } else {
             detail.textColor = .systemRed
@@ -1134,12 +1198,13 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     var onDismiss: (() -> Void)?
 
     private let theme: PresentationTheme
+    private let palette: ATunnelPalette
     private let isRu:  Bool
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
-    private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
-    private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
-        title: aorusL("Диагностика", "Diagnostics")
+    private lazy var diagnosticsBanner = ATunnelDiagnosticsBannerView(
+        title: aorusL("Диагностика", "Diagnostics"),
+        palette: palette
     )
     private let subtitleLabel = UILabel()
     private let stepsStack   = UIStackView()
@@ -1164,7 +1229,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     private let kStepApply   = 3
 
     init(theme: PresentationTheme, isRu: Bool) {
-        self.theme = theme; self.isRu = isRu
+        self.theme = theme; self.palette = ATunnelPalette(theme: theme); self.isRu = isRu
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
     }
@@ -1177,15 +1242,15 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); pollTimer?.invalidate() }
 
     private func setupUI() {
-        view.backgroundColor = .black
-        overrideUserInterfaceStyle = .dark
+        view.backgroundColor = palette.background
+        overrideUserInterfaceStyle = palette.interfaceStyle
 
         diagnosticsBanner.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(diagnosticsBanner)
 
         subtitleLabel.text = aorusL("Проверка и восстановление ATunnel", "Checking and restoring ATunnel")
         subtitleLabel.font = Font.regular(14.0)
-        subtitleLabel.textColor = UIColor(white: 0.55, alpha: 1)
+        subtitleLabel.textColor = palette.detailText
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1202,11 +1267,11 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
             (aorusL("Применение настроек", "Applying configuration"),    "checkmark.shield"),
         ]
         for d in defs {
-            let row = DiagStepRow(title: d.0, sfSymbol: d.1, accentColor: purple)
+            let row = DiagStepRow(title: d.0, sfSymbol: d.1, accentColor: purple, palette: palette)
             stepRows.append(row); stepsStack.addArrangedSubview(row)
         }
 
-        resultCard.backgroundColor = cardBg
+        resultCard.backgroundColor = palette.card
         resultCard.layer.cornerRadius = 16; resultCard.layer.cornerCurve = .continuous
         resultCard.alpha = 0
         resultCard.translatesAutoresizingMaskIntoConstraints = false
@@ -1217,12 +1282,12 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         resultCard.addSubview(resultIcon)
 
         resultTitle.font = Font.semibold(16.0)
-        resultTitle.textColor = .white; resultTitle.numberOfLines = 2
+        resultTitle.textColor = palette.primaryText; resultTitle.numberOfLines = 2
         resultTitle.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultTitle)
 
         resultBody.font = Font.regular(13.0)
-        resultBody.textColor = UIColor(white: 0.55, alpha: 1); resultBody.numberOfLines = 3
+        resultBody.textColor = palette.detailText; resultBody.numberOfLines = 3
         resultBody.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultBody)
 
@@ -1411,7 +1476,7 @@ private final class DiagStepRow: UIView {
     private let indicator = UIActivityIndicatorView(style: .medium)
     private let stateIcon = UIImageView()
 
-    init(title: String, sfSymbol: String, accentColor: UIColor) {
+    init(title: String, sfSymbol: String, accentColor: UIColor, palette: ATunnelPalette) {
         super.init(frame: .zero)
 
         iconBg.backgroundColor = accentColor.withAlphaComponent(0.15)
@@ -1428,7 +1493,7 @@ private final class DiagStepRow: UIView {
 
         titleLbl.text = title
         titleLbl.font = Font.medium(15.0)
-        titleLbl.textColor = .white
+        titleLbl.textColor = palette.primaryText
         titleLbl.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLbl)
 
@@ -1443,7 +1508,7 @@ private final class DiagStepRow: UIView {
         addSubview(stateIcon)
 
         let sep = UIView()
-        sep.backgroundColor = UIColor(white: 0.18, alpha: 1)
+        sep.backgroundColor = palette.separator
         sep.translatesAutoresizingMaskIntoConstraints = false
         addSubview(sep)
 

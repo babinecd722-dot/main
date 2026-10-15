@@ -197,7 +197,9 @@ public enum AorusGifWallpaperConverter {
 
 public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     private let russian: Bool
-    private let accent = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)
+    // The accent theme's violet (0x9b4dff), light and dark alike; the page itself is drawn in
+    // system colours, so it follows the phone's appearance as the theme does.
+    private let accent = UIColor(red: 155.0 / 255.0, green: 77.0 / 255.0, blue: 1.0, alpha: 1.0)
 
     private let imageManager = PHCachingImageManager()
     private var collectionView: UICollectionView!

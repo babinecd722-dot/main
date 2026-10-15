@@ -327,7 +327,7 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
         textField.textColor = item.theme.list.itemPrimaryTextColor
         textField.tintColor = item.theme.list.itemAccentColor
         textField.font = Font.regular(17.0)
-        textField.attributedPlaceholder = NSAttributedString(string: item.placeholder, attributes: [.foregroundColor: UIColor.white])
+        textField.attributedPlaceholder = NSAttributedString(string: item.placeholder, attributes: [.foregroundColor: item.theme.list.itemPlaceholderTextColor])
     }
 
     private func layoutTextField() {

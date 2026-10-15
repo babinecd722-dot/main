@@ -4234,6 +4234,45 @@ def main() -> None:
                 cursor += 1
             index = cursor + 1
 
+    # The accent theme: Classic and Night are drawn in AorusGram's violet, light and dark, and
+    # Telegram's own Night Mode switches between them -- System by default, so the app follows
+    # the phone. Night must not fall back to Telegram's blue for "no accent", and a build
+    # that pinned Night Mode off again would leave the app in one appearance.
+    presentation_text = (tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift").read_text(encoding="utf-8")
+    for marker, label in (
+        ("public func aorusApplyAccentTheme(_ theme: PresentationTheme) -> PresentationTheme {", "the accent theme"),
+        ("        aorusCarryOverAppearance(transaction: transaction)\n", "carrying over settings of earlier builds"),
+        ("            theme = aorusApplyAccentTheme(theme)\n", "the first frame"),
+        ("                            themeValue = aorusApplyAccentTheme(themeValue)\n", "the running theme"),
+        ("theme: aorusDefaultAccentTheme, autoNightModeTriggered: false", "the default presentation data"),
+    ):
+        if presentation_text.count(marker) != 1:
+            err.append(f"AccentTheme: PresentationData.swift lost {label}")
+    if "effectiveColors = PresentationThemeAccentColor(baseColor: .blue)" in presentation_text:
+        err.append("AccentTheme: Night without an accent is still drawn in Telegram's blue")
+    theme_settings_text = (tg / "submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift").read_text(encoding="utf-8")
+    if "trigger: .explicitNone" in theme_settings_text or theme_settings_text.count("AutomaticThemeSwitchSetting(force: false, trigger: .system, theme: .builtin(.night))") < 2:
+        err.append("AccentTheme: Night Mode no longer defaults to System")
+    for rel, marker in (
+        ("submodules/TelegramUI/Sources/ChatController.swift", "darkTheme = aorusAccentTheme("),
+        ("submodules/TelegramUI/Sources/ChatController.swift", "lightTheme = aorusAccentTheme("),
+        ("submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryItem.swift", "darkTheme = aorusAccentTheme("),
+        ("submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen/Sources/WallpaperGalleryItem.swift", "lightTheme = aorusAccentTheme("),
+        ("submodules/SettingsUI/Sources/ThemePickerController.swift", "let darkTheme = aorusAccentTheme("),
+    ):
+        if marker not in (tg / rel).read_text(encoding="utf-8"):
+            err.append(f"AccentTheme: the light/dark preview in {Path(rel).name} shows a theme the app never does")
+    launch_xib = (tg / "Telegram/Telegram-iOS/Base.lproj/LaunchScreen.xib").read_text(encoding="utf-8")
+    if '<color key="backgroundColor" systemColor="systemBackgroundColor"/>' not in launch_xib:
+        err.append("AccentTheme: the launch screen does not follow the phone's appearance")
+    # The welcome screen: our logo, cut out with no background, in place of Telegram's GL
+    # scene -- not over it -- and nothing redrawn sixty times a second behind it.
+    intro_text = (tg / "submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m").read_text(encoding="utf-8")
+    if "AorusGram: brand logo in the logo slot" not in intro_text or "        _glkView.delegate = nil;\n" not in intro_text:
+        err.append("IntroLogo: the welcome screen does not show the AorusGram logo in the logo slot")
+    if "        [self setupGL];\n" in intro_text or "@selector(updateAndRender)" in intro_text:
+        err.append("IntroLogo: Telegram's GL scene is still set up or rendered behind the logo")
+
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"
     bgtask_val = "com.aorusgram.dmc.sync"

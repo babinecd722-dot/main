@@ -310,7 +310,8 @@ def main():
             branding.patch_launch_screen(work)
             root = ET.parse(launch).getroot()
             value = root.find("./objects/view/color").attrib
-            assert value["red"] == value["green"] == value["blue"] == "0" and value["alpha"] == "1"
+            assert value == {"key": "backgroundColor", "systemColor": "systemBackgroundColor"}, value
+            assert root.find("./resources/systemColor[@name='systemBackgroundColor']") is not None
             first = launch.read_bytes(); branding.patch_launch_screen(work); assert launch.read_bytes() == first
         delegate = work / "submodules/TelegramUI/Sources/AppDelegate.swift"
         delegate.parent.mkdir(parents=True)
@@ -325,7 +326,8 @@ def main():
 ''')
         branding.patch_app_delegate_launch_fixes(work)
         value = delegate.read_text()
-        assert "window.backgroundColor = .black" in value and "hostView.containerView.backgroundColor = .black" in value
+        assert "UIColor { $0.userInterfaceStyle == .dark ? .black : .white }" in value
+        assert "window.backgroundColor = aorusLaunchColor" in value and "hostView.containerView.backgroundColor = aorusLaunchColor" in value
         assert "UIColor.white" not in value and "self.window?.makeKeyAndVisible()" in value
         assert "presentationData.theme.chatList.backgroundColor" in value
         branding.patch_app_delegate_launch_fixes(work); assert delegate.read_text() == value
