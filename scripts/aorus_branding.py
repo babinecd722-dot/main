@@ -30403,6 +30403,8 @@ def main() -> None:
     # Telegram as 12.0 drew it, behind AorusGram -> Interface -> Old Interface.
     from aorus_old_interface import patch_old_interface
     patch_old_interface(tg)
+    from aorus_interface_consistency import patch_interface_consistency
+    patch_interface_consistency(tg)
     from aorus_attachment_drafts import patch_attachment_drafts
     patch_attachment_drafts(tg)
     from aorus_composer_profile_refinements import patch_composer_profile_refinements

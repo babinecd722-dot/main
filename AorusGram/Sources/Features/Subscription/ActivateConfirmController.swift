@@ -140,14 +140,9 @@ final class ActivateConfirmController: SubscriptionBaseController {
         caption.textColor = SubscriptionStyle.secondaryText
         caption.textAlignment = .center
 
-        let value = UILabel()
-        value.text = key
-        value.font = Font.semiboldMonospace(17)
-        value.textColor = SubscriptionStyle.primaryText
-        value.textAlignment = .center
-        value.adjustsFontSizeToFitWidth = true
-        value.minimumScaleFactor = 0.6
-        value.numberOfLines = 1
+        let value = ConcealedKeyView(key: key, font: Font.semiboldMonospace(17),
+                                     textColor: SubscriptionStyle.primaryText, tintColor: SubscriptionStyle.accent,
+                                     showTitle: SubL10n.showKey, hideTitle: SubL10n.hideKey)
 
         let stack = UIStackView(arrangedSubviews: [caption, value])
         stack.axis = .vertical

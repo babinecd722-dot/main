@@ -306,7 +306,7 @@ private class AorusClassicRecentSessionScreenNode: ViewControllerTracingNode, AS
                     deviceString = session.deviceModel
                 }
                 title = deviceString
-                device = "\(session.appName) \(appVersion)"
+                device = "\(aorusSessionApplicationName(session.appName)) \(appVersion)"
                 location = session.country
                 ip = session.ip
 

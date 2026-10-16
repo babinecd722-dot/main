@@ -312,6 +312,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Show key": "Mostra chiave",
+        "Hide key": "Nascondi chiave",
         "Welcome to AorusGram": "Benvenuto in AorusGram",
         "You have a 3-day free trial.": "Hai un periodo di prova di 3 giorni.",
         "After it ends you’ll need a subscription key.": "Al termine ti servirà una chiave di abbonamento.",
@@ -390,6 +392,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Show key": "Pokaż klucz",
+        "Hide key": "Ukryj klucz",
         "Welcome to AorusGram": "Witamy w AorusGram",
         "You have a 3-day free trial.": "Masz 3-dniowy okres próbny.",
         "After it ends you’ll need a subscription key.": "Po jego zakończeniu potrzebny będzie klucz subskrypcji.",
@@ -468,6 +472,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Show key": "Sleutel tonen",
+        "Hide key": "Sleutel verbergen",
         "Welcome to AorusGram": "Welkom bij AorusGram",
         "You have a 3-day free trial.": "Je hebt een proefperiode van 3 dagen.",
         "After it ends you’ll need a subscription key.": "Daarna heb je een abonnementssleutel nodig.",
@@ -546,6 +552,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Show key": "Mostra la clau",
+        "Hide key": "Amaga la clau",
         "Welcome to AorusGram": "Us donem la benvinguda a AorusGram",
         "You have a 3-day free trial.": "Tens un període de prova de 3 dies.",
         "After it ends you’ll need a subscription key.": "Quan s'acabi et caldrà una clau de subscripció.",
@@ -624,6 +632,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Show key": "Tampilkan kunci",
+        "Hide key": "Sembunyikan kunci",
         "Welcome to AorusGram": "Selamat datang di AorusGram",
         "You have a 3-day free trial.": "Kamu punya masa uji coba 3 hari.",
         "After it ends you’ll need a subscription key.": "Setelah berakhir, kamu perlu kunci langganan.",
@@ -702,6 +712,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Show key": "Tunjukkan kunci",
+        "Hide key": "Sembunyikan kunci",
         "Welcome to AorusGram": "Selamat datang ke AorusGram",
         "You have a 3-day free trial.": "Anda mempunyai tempoh percubaan 3 hari.",
         "After it ends you’ll need a subscription key.": "Selepas tamat, anda memerlukan kunci langganan.",
@@ -780,6 +792,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Show key": "Паказаць ключ",
+        "Hide key": "Схаваць ключ",
         "Welcome to AorusGram": "Сардэчна запрашаем у AorusGram",
         "You have a 3-day free trial.": "Вам даступны пробны перыяд на 3 дні.",
         "After it ends you’ll need a subscription key.": "Пасля заканчэння спатрэбіцца ключ падпіскі.",
@@ -858,6 +872,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Show key": "Kalitni ko‘rsatish",
+        "Hide key": "Kalitni yashirish",
         "Welcome to AorusGram": "AorusGram’ga xush kelibsiz",
         "You have a 3-day free trial.": "Sizda 3 kunlik sinov muddati bor.",
         "After it ends you’ll need a subscription key.": "U tugagach obuna kaliti kerak bo‘ladi.",
@@ -936,6 +952,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Show key": "키 표시",
+        "Hide key": "키 숨기기",
         "Welcome to AorusGram": "AorusGram에 오신 것을 환영합니다",
         "You have a 3-day free trial.": "3일 무료 체험을 이용할 수 있습니다.",
         "After it ends you’ll need a subscription key.": "체험이 끝나면 구독 키가 필요합니다.",
@@ -1014,6 +1032,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Show key": "إظهار المفتاح",
+        "Hide key": "إخفاء المفتاح",
         "Welcome to AorusGram": "مرحبًا بك في AorusGram",
         "You have a 3-day free trial.": "لديك فترة تجريبية مدتها 3 أيام.",
         "After it ends you’ll need a subscription key.": "بعد انتهائها ستحتاج إلى مفتاح اشتراك.",
@@ -1092,6 +1112,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Show key": "نمایش کلید",
+        "Hide key": "پنهان کردن کلید",
         "Welcome to AorusGram": "به AorusGram خوش آمدید",
         "You have a 3-day free trial.": "شما ۳ روز دورهٔ آزمایشی دارید.",
         "After it ends you’ll need a subscription key.": "پس از پایان آن به کلید اشتراک نیاز خواهید داشت.",
@@ -1170,6 +1192,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Show key": "Кілтті көрсету",
+        "Hide key": "Кілтті жасыру",
         "Welcome to AorusGram": "AorusGram-ға қош келдіңіз",
         "You have a 3-day free trial.": "Сізде 3 күндік сынақ мерзімі бар.",
         "After it ends you’ll need a subscription key.": "Ол аяқталған соң жазылым кілті керек болады.",
@@ -1248,6 +1272,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Show key": "显示密钥",
+        "Hide key": "隐藏密钥",
         "Welcome to AorusGram": "欢迎使用 AorusGram",
         "You have a 3-day free trial.": "您有 3 天免费试用。",
         "After it ends you’ll need a subscription key.": "试用结束后需要订阅密钥。",
@@ -1326,6 +1352,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let zhHant: [String: String] = [
+        "Show key": "顯示金鑰",
+        "Hide key": "隱藏金鑰",
         "Welcome to AorusGram": "歡迎使用 AorusGram",
         "You have a 3-day free trial.": "您有 3 天免費試用。",
         "After it ends you’ll need a subscription key.": "試用結束後需要訂閱金鑰。",
@@ -1404,6 +1432,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Show key": "キーを表示",
+        "Hide key": "キーを隠す",
         "Welcome to AorusGram": "AorusGram へようこそ",
         "You have a 3-day free trial.": "3 日間の無料トライアルをご利用いただけます。",
         "After it ends you’ll need a subscription key.": "期間が終わるとサブスクリプションキーが必要になります。",
@@ -1482,6 +1512,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Show key": "Näytä avain",
+        "Hide key": "Piilota avain",
         "Welcome to AorusGram": "Tervetuloa AorusGramiin",
         "You have a 3-day free trial.": "Sinulla on 3 päivän ilmainen kokeilujakso.",
         "After it ends you’ll need a subscription key.": "Sen päätyttyä tarvitset tilausavaimen.",
@@ -1560,6 +1592,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Show key": "הצגת המפתח",
+        "Hide key": "הסתרת המפתח",
         "Welcome to AorusGram": "ברוכים הבאים ל-AorusGram",
         "You have a 3-day free trial.": "יש לכם תקופת ניסיון חינם של 3 ימים.",
         "After it ends you’ll need a subscription key.": "בסיומה יידרש מפתח מנוי.",
@@ -1638,6 +1672,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Show key": "Prikaži ključ",
+        "Hide key": "Sakrij ključ",
         "Welcome to AorusGram": "Dobro došli u AorusGram",
         "You have a 3-day free trial.": "Imate 3 dana besplatnog probnog razdoblja.",
         "After it ends you’ll need a subscription key.": "Kada istekne, trebat će vam pretplatnički ključ.",
@@ -1716,6 +1752,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Show key": "Прикажи кључ",
+        "Hide key": "Сакриј кључ",
         "Welcome to AorusGram": "Добро дошли у AorusGram",
         "You have a 3-day free trial.": "Имате 3 дана бесплатног пробног периода.",
         "After it ends you’ll need a subscription key.": "Када истекне, требаће вам претплатнички кључ.",
@@ -1794,6 +1832,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Show key": "Zobrazit klíč",
+        "Hide key": "Skrýt klíč",
         "Welcome to AorusGram": "Vítejte v AorusGramu",
         "You have a 3-day free trial.": "Máte 3denní bezplatnou zkušební verzi.",
         "After it ends you’ll need a subscription key.": "Až skončí, budete potřebovat klíč k předplatnému.",
@@ -1872,6 +1912,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Show key": "Zobraziť kľúč",
+        "Hide key": "Skryť kľúč",
         "Welcome to AorusGram": "Vitajte v AorusGrame",
         "You have a 3-day free trial.": "Máte 3-dňovú bezplatnú skúšobnú verziu.",
         "After it ends you’ll need a subscription key.": "Keď sa skončí, budete potrebovať kľúč k predplatnému.",
@@ -1950,6 +1992,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Show key": "Arată cheia",
+        "Hide key": "Ascunde cheia",
         "Welcome to AorusGram": "Bine ai venit în AorusGram",
         "You have a 3-day free trial.": "Ai 3 zile de probă gratuită.",
         "After it ends you’ll need a subscription key.": "După ce se termină, vei avea nevoie de o cheie de abonament.",
@@ -2028,6 +2072,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Show key": "Kulcs megjelenítése",
+        "Hide key": "Kulcs elrejtése",
         "Welcome to AorusGram": "Üdvözlünk az AorusGramban",
         "You have a 3-day free trial.": "3 napos ingyenes próbaidőszakod van.",
         "After it ends you’ll need a subscription key.": "Ha letelik, előfizetői kulcsra lesz szükséged.",
@@ -2106,6 +2152,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Show key": "Vis nøkkel",
+        "Hide key": "Skjul nøkkel",
         "Welcome to AorusGram": "Velkommen til AorusGram",
         "You have a 3-day free trial.": "Du har 3 dagers gratis prøveperiode.",
         "After it ends you’ll need a subscription key.": "Når den er over, trenger du en abonnementsnøkkel.",
@@ -2184,6 +2232,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Show key": "Visa nyckel",
+        "Hide key": "Dölj nyckel",
         "Welcome to AorusGram": "Välkommen till AorusGram",
         "You have a 3-day free trial.": "Du har 3 dagars gratis provperiod.",
         "After it ends you’ll need a subscription key.": "När den tar slut behöver du en prenumerationsnyckel.",
@@ -2262,6 +2312,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Show key": "Hiện khóa",
+        "Hide key": "Ẩn khóa",
         "Welcome to AorusGram": "Chào mừng bạn đến với AorusGram",
         "You have a 3-day free trial.": "Bạn có 3 ngày dùng thử miễn phí.",
         "After it ends you’ll need a subscription key.": "Khi hết hạn, bạn sẽ cần khóa đăng ký.",
@@ -2340,6 +2392,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Show key": "Показати ключ",
+        "Hide key": "Приховати ключ",
         "Welcome to AorusGram": "Ласкаво просимо до AorusGram",
         "You have a 3-day free trial.": "Вам доступний пробний період на 3 дні.",
         "After it ends you’ll need a subscription key.": "Після завершення знадобиться ключ підписки.",
@@ -2420,6 +2474,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Show key": "Mostrar clave",
+        "Hide key": "Ocultar clave",
         "Welcome to AorusGram": "Te damos la bienvenida a AorusGram",
         "You have a 3-day free trial.": "Tienes una prueba gratuita de 3 días.",
         "After it ends you’ll need a subscription key.": "Cuando termine, necesitarás una clave de suscripción.",
@@ -2500,6 +2556,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Show key": "Mostrar chave",
+        "Hide key": "Ocultar chave",
         "Welcome to AorusGram": "Boas-vindas ao AorusGram",
         "You have a 3-day free trial.": "Você tem 3 dias de teste grátis.",
         "After it ends you’ll need a subscription key.": "Quando terminar, você vai precisar de uma chave de assinatura.",
@@ -2580,6 +2638,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Show key": "Schlüssel anzeigen",
+        "Hide key": "Schlüssel verbergen",
         "Welcome to AorusGram": "Willkommen bei AorusGram",
         "You have a 3-day free trial.": "Du hast 3 Tage kostenlos zum Testen.",
         "After it ends you’ll need a subscription key.": "Danach brauchst du einen Abo-Schlüssel.",
@@ -2660,6 +2720,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Show key": "Afficher la clé",
+        "Hide key": "Masquer la clé",
         "Welcome to AorusGram": "Bienvenue sur AorusGram",
         "You have a 3-day free trial.": "Vous disposez de 3 jours d’essai gratuit.",
         "After it ends you’ll need a subscription key.": "À la fin, il vous faudra une clé d’abonnement.",
@@ -2740,6 +2802,8 @@ enum SubscriptionL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Show key": "Anahtarı göster",
+        "Hide key": "Anahtarı gizle",
         "Welcome to AorusGram": "AorusGram’a hoş geldin",
         "You have a 3-day free trial.": "3 günlük ücretsiz denemen var.",
         "After it ends you’ll need a subscription key.": "Süre bitince abonelik anahtarı gerekecek.",

@@ -1053,6 +1053,7 @@ jobs:
           # Letters and glyphs on a fill a theme can move away from them (docs/appearance.md).
           cp $PATCHES/submodules/Display/Source/AorusLegibleInk.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusAppearanceRecord.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusSessionApplicationName.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRoundVideoCountdownView.swift $TG/submodules/Display/Source/

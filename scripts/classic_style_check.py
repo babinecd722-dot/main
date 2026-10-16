@@ -95,6 +95,70 @@ func expect(_ value: Bool, _ message: String) {
 """)
     if kinds != {"Bool", "GlassParams?", "UIView & AorusPluginGlassBackground"}:
         raise RuntimeError(f"Installed style coverage is incomplete: {kinds}")
+    # A stored style alone is insufficient: media pickers and attachment panels also
+    # construct controls from the incoming argument further down the initializer.
+    from aorus_old_interface import _LEGACY_STYLE_SITES, _LEGACY_SECTION_SITES
+    sites = [(rel, line) for rel, _, line, _ in _LEGACY_STYLE_SITES]
+    sites += [("submodules/TelegramUI/Components/ListSectionComponent/Sources/ListSectionComponent.swift", line) for _, line, _ in _LEGACY_SECTION_SITES]
+    seen = {}
+    for index, (rel, line) in enumerate(sites):
+        text = (tg / rel).read_text()
+        name = line.strip().split(" = ")[0].removeprefix("self.")
+        pattern = r"^\s*let style = [^\n]+ // AorusGram: classic components\n\s*self\." + name + r" = [^\n]+ // AorusGram: old interface"
+        matches = list(re.finditer(pattern, text, re.M))
+        key = (rel, name)
+        occurrence = seen.get(key, 0)
+        seen[key] = occurrence + 1
+        if len(matches) <= occurrence:
+            raise RuntimeError(f"Constructor children use an unresolved enum style: {rel}:{name}")
+        code = matches[occurrence][0]
+        section = "ListSectionComponent" in rel
+        fixture = f"InstalledClassicEnum{index}"
+        source.append(f"""struct {fixture} {{
+    enum Style {{ case legacy, glass, plain }}
+    let {name}: Style
+    let children: Style
+    init(style: Style) {{
+{code}
+        self.children = style
+    }}
+}}
+""")
+        tests.append(f"""for enabled in [false, true] {{
+    AorusOldInterface.isEnabled = enabled
+    for incoming: {fixture}.Style in [.legacy, .glass, .plain] {{
+        let value = {fixture}(style: incoming)
+        let expected: {fixture}.Style = enabled {'&& incoming == .glass' if section else ''} ? .legacy : incoming
+        expect(value.{name} == expected, "{fixture}: enum property")
+        expect(value.children == expected, "{fixture}: constructor children match the property")
+    }}
+}}
+""")
+    for index, filename in enumerate(("SearchBarNode.swift", "SearchBarPlaceholderNode.swift")):
+        text = (tg / "submodules/SearchBarNode/Sources" / filename).read_text()
+        match = re.search(r"^\s*let fieldStyle = [^\n]+ // AorusGram: classic components\n\s*self\.fieldStyle = [^\n]+ // AorusGram: old interface", text, re.M)
+        if not match:
+            raise RuntimeError(f"Search field children use an unresolved style: {filename}")
+        source.append(f"""struct InstalledSearchStyle{index} {{
+    enum Style {{ case legacy, modern, glass, inlineNavigation }}
+    let fieldStyle: Style
+    let childStyle: Style
+    init(fieldStyle: Style) {{
+{match[0]}
+        self.childStyle = fieldStyle
+    }}
+}}
+""")
+        tests.append(f"""for enabled in [false, true] {{
+    AorusOldInterface.isEnabled = enabled
+    for incoming: InstalledSearchStyle{index}.Style in [.legacy, .modern, .glass, .inlineNavigation] {{
+        let value = InstalledSearchStyle{index}(fieldStyle: incoming)
+        let expected: InstalledSearchStyle{index}.Style = enabled && (incoming == .glass || incoming == .inlineNavigation) ? .modern : incoming
+        expect(value.fieldStyle == expected, "search field resolves its renderer")
+        expect(value.childStyle == expected, "search children share the renderer")
+    }}
+}}
+""")
     source.extend(tests)
     source.append("class InstalledRecognizer { var isEnabled = true }\nclass InstalledGestureOwner {\n" + installed_classic_gesture(tg, "InstalledRecognizer") + "}\n")
     source.append("""for enabled in [false, true] {

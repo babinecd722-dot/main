@@ -141,6 +141,11 @@ final class ActivateKeyController: SubscriptionBaseController {
         }
     }
 
+    override func updateAppearance() {
+        super.updateAppearance()
+        fieldContainer.layer.borderColor = (field.isFirstResponder ? SubscriptionStyle.accent : SubscriptionStyle.hairline).cgColor
+    }
+
     private func setFieldFocused(_ focused: Bool) {
         UIView.animate(withDuration: 0.22) {
             self.fieldContainer.layer.borderColor = (focused ? SubscriptionStyle.accent

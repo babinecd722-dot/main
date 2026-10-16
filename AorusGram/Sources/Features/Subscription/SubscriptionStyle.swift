@@ -12,22 +12,24 @@ enum SubscriptionStyle {
     static var interfaceStyle: UIUserInterfaceStyle { isDark ? .dark : .light }
     static var statusBarStyle: UIStatusBarStyle { isDark ? .lightContent : .darkContent }
 
-    static var background: UIColor { look.page }
+    static var background: UIColor { UIColor { _ in look.page } }
     /// The theme's card, unless it is the page's own colour -- AMOLED's black on black -- where it
     /// is lifted off the page by a shade of the text, as a card has to be to read as one.
     static var card: UIColor {
-        let look = self.look
-        if distance(look.card, look.page) < 0.04 {
-            return mix(look.page, look.primaryText, 0.1)
+        return UIColor { _ in
+            let look = self.look
+            if distance(look.card, look.page) < 0.04 {
+                return mix(look.page, look.primaryText, 0.1)
+            }
+            return look.card
         }
-        return look.card
     }
-    static var cardElevated: UIColor { mix(card, primaryText, 0.06) }
-    static var primaryText: UIColor { look.primaryText }
-    static var secondaryText: UIColor { look.secondaryText }
+    static var cardElevated: UIColor { UIColor { _ in mix(card, primaryText, 0.06) } }
+    static var primaryText: UIColor { UIColor { _ in look.primaryText } }
+    static var secondaryText: UIColor { UIColor { _ in look.secondaryText } }
     /// The edge of a field at rest, and its placeholder.
-    static var hairline: UIColor { primaryText.withAlphaComponent(isDark ? 0.16 : 0.12) }
-    static var placeholder: UIColor { secondaryText.withAlphaComponent(0.7) }
+    static var hairline: UIColor { UIColor { _ in primaryText.withAlphaComponent(isDark ? 0.16 : 0.12) } }
+    static var placeholder: UIColor { UIColor { _ in secondaryText.withAlphaComponent(0.7) } }
     /// A spinner standing on the page rather than on a button.
     static var pageSpinner: UIColor { secondaryText }
 

@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Shared layout skeleton for subscription screens: a vertically-centred, scrollable
 // content area + a button stack pinned to the bottom safe area. Adapts cleanly from
@@ -7,13 +8,19 @@ class SubscriptionBaseController: UIViewController {
     let scrollView = UIScrollView()
     let contentStack = UIStackView()
     let buttonStack = UIStackView()
+    private var appearanceObserver: NSObjectProtocol?
+
+    deinit { if let appearanceObserver { NotificationCenter.default.removeObserver(appearanceObserver) } }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { SubscriptionStyle.statusBarStyle }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = SubscriptionStyle.background
-        overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
+        updateAppearance()
+        appearanceObserver = NotificationCenter.default.addObserver(forName: AorusAppearanceRecord.changedNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.updateAppearance()
+        }
 
         buttonStack.axis = .vertical
         buttonStack.spacing = 10
@@ -52,6 +59,12 @@ class SubscriptionBaseController: UIViewController {
             contentStack.leadingAnchor.constraint(equalTo: frame.leadingAnchor, constant: 28),
             contentStack.trailingAnchor.constraint(equalTo: frame.trailingAnchor, constant: -28),
         ])
+    }
+
+    func updateAppearance() {
+        overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
+        view.backgroundColor = SubscriptionStyle.background
+        setNeedsStatusBarAppearanceUpdate()
     }
 
     func addContent(_ subview: UIView) { contentStack.addArrangedSubview(subview) }

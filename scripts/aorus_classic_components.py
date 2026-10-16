@@ -215,12 +215,15 @@ def _normalize_styles(tg: Path) -> None:
         for match in reversed(list(pattern.finditer(text))):
             line = match[0]
             argument = "systemStyle" if "self.systemStyle" in line else "fieldStyle" if "self.fieldStyle" in line else "style"
-            value = ".modern" if argument == "fieldStyle" else ".legacy"
-            # Search fields and list sections keep non-glass special styles.
-            condition = "AorusOldInterface.isEnabled && " + argument + " == .glass" if "&&" in line else "AorusOldInterface.isEnabled"
-            alias = match[1] + "let " + argument + " = " + condition + " ? " + value + " : " + argument + " // " + MARK + "\n"
-            if not text[:match.start()].endswith(alias):
-                text = text[:match.start()] + alias + text[match.start():]
+            # Keep the complete stored expression: search fields also normalize
+            # inlineNavigation, whereas list sections preserve their plain style.
+            expression = line.strip().split(" = ", 1)[1].split(" //", 1)[0]
+            alias = match[1] + "let " + argument + " = " + expression + " // " + MARK + "\n"
+            prefix = text[:match.start()]
+            previous = re.search(r"^[ \t]*let " + argument + r" = [^\n]* // " + MARK + r"\n\Z", prefix, re.M)
+            if previous:
+                prefix = prefix[:previous.start()]
+            text = prefix + alias + text[match.start():]
         if path.name == "AttachmentPanel.swift":
             text = edit(text, "        self.panelStyle = style\n        self.size = size\n", "        let style = AorusOldInterface.isEnabled ? .legacy : style // " + MARK + "\n        self.panelStyle = style\n        self.size = size\n", "attachment button update style")
         if text != original:

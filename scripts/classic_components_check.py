@@ -132,6 +132,8 @@ def main() -> None:
     if changed:
         raise RuntimeError("Classic replay changed installed source:\n" + "\n".join(changed))
     check_classic_styles(args.telegram_source, args.swiftc)
+    from interface_consistency_check import check_interface_consistency
+    check_interface_consistency(args.telegram_source, args.swiftc)
     check_classic_browser(args.telegram_source, args.swiftc)
     check_classic_attachment(args.telegram_source, args.swiftc)
     from classic_glass_check import check_glass_allocations

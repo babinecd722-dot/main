@@ -3719,7 +3719,7 @@ def main() -> None:
         ("submodules/Display/Source/AorusAppearanceRecord.swift", ("public enum AorusAppearanceRecord",)),
         (
             "submodules/AorusGram/Sources/Features/Subscription/SubscriptionStyle.swift",
-            ("static var background: UIColor { look.page }",),
+            ("static var background: UIColor { UIColor { _ in look.page } }",),
         ),
         (
             "submodules/AorusGram/Sources/Features/Subscription/ActivateKeyController.swift",

@@ -104,7 +104,8 @@ def native_theme_test_source(tg: Path, repo: Path) -> str:
             raise RuntimeError("NativeTheme: navigation icon expression missing for " + name)
         expressions.append(found.group(1))
     fixture_expressions = [expression.replace('UIImage(bundleImageName: "Navigation/Share")', 'fixture').replace('UIImage(bundleImageName: "Chat/Context Menu/Delete")', 'fixture') for expression in expressions]
-    return """import UIKit
+    from subscription_appearance_fixtures import subscription_test_source
+    return subscription_test_source(repo) + """import UIKit
 private struct NavigationBarPresentationData {
     struct Theme { let overallDarkAppearance: Bool }
     let theme: Theme
@@ -185,6 +186,7 @@ private struct NavigationBarPresentationData {
         }
       }
     }
+    checks += await runSubscriptionAppearanceRegression(window: window)
     window.isHidden = true
     return checks
 }

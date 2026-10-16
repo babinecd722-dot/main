@@ -10,6 +10,7 @@ import UIKit
 /// the theme the app was last drawn in. Before any theme has ever been recorded the screen follows
 /// the system's appearance, which is what the app itself follows by default.
 public enum AorusAppearanceRecord {
+    public static let changedNotification = Notification.Name("AorusGramAppearanceRecordChanged")
     public struct Look: Equatable {
         public let isDark: Bool
         public let page: UIColor
@@ -47,13 +48,14 @@ public enum AorusAppearanceRecord {
     /// Records the theme in use. `card` may be translucent, as Interface 2.0 makes it: it is
     /// recorded as it shows over `page`.
     public static func record(isDark: Bool, page: UIColor, card: UIColor, primaryText: UIColor, secondaryText: UIColor) {
-        let opaquePage = AorusAppearanceRecord.composite(page, over: isDark ? .black : .white)
+        let traits = UITraitCollection(userInterfaceStyle: isDark ? .dark : .light)
+        let opaquePage = AorusAppearanceRecord.composite(page.resolvedColor(with: traits), over: isDark ? .black : .white)
         let look = Look(
             isDark: isDark,
             page: opaquePage,
-            card: AorusAppearanceRecord.composite(card, over: opaquePage),
-            primaryText: AorusAppearanceRecord.composite(primaryText, over: opaquePage),
-            secondaryText: AorusAppearanceRecord.composite(secondaryText, over: opaquePage)
+            card: AorusAppearanceRecord.composite(card.resolvedColor(with: traits), over: opaquePage),
+            primaryText: AorusAppearanceRecord.composite(primaryText.resolvedColor(with: traits), over: opaquePage),
+            secondaryText: AorusAppearanceRecord.composite(secondaryText.resolvedColor(with: traits), over: opaquePage)
         )
         AorusAppearanceRecord.lock.lock()
         AorusAppearanceRecord.didLoad = true
@@ -69,6 +71,9 @@ public enum AorusAppearanceRecord {
                 "text": AorusAppearanceRecord.argb(look.primaryText),
                 "secondaryText": AorusAppearanceRecord.argb(look.secondaryText)
             ] as [String: Any], forKey: AorusAppearanceRecord.key)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: AorusAppearanceRecord.changedNotification, object: nil)
+            }
         }
     }
 

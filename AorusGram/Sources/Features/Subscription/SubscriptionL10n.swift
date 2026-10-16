@@ -145,6 +145,8 @@ enum SubL10n {
     // MARK: Activation confirmation (deep link)
     static var confirmTitle: String { t("Подтверждение активации", "Activate subscription") }
     static var confirmBody: String { t("Активировать подписку этим ключом?", "Activate your subscription with this key?") }
+    static var showKey: String { t("Показать ключ", "Show key") }
+    static var hideKey: String { t("Скрыть ключ", "Hide key") }
     static var keyLabel: String { t("Ключ", "Key") }
     static var cancel: String { t("Отмена", "Cancel") }
     static var close: String { t("Закрыть", "Close") }
