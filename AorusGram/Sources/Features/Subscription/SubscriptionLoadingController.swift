@@ -1,17 +1,17 @@
 import UIKit
 
-// Minimal dark splash shown while the very first /license/check resolves, so a
+// Minimal splash, on the theme's page, shown while the very first /license/check resolves, so a
 // non-active user never sees the chat list before the verdict.
 final class SubscriptionLoadingController: UIViewController {
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    override var preferredStatusBarStyle: UIStatusBarStyle { SubscriptionStyle.statusBarStyle }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = SubscriptionStyle.background
-        overrideUserInterfaceStyle = .dark
+        overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
 
         let spinner = UIActivityIndicatorView(style: .large)
-        spinner.color = .white
+        spinner.color = SubscriptionStyle.pageSpinner
         spinner.translatesAutoresizingMaskIntoConstraints = false
         spinner.startAnimating()
         view.addSubview(spinner)

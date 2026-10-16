@@ -11,19 +11,15 @@ import TelegramPresentationData
 // page tinted from the avatar. Drawing a second username card on top, as an earlier version
 // did, only duplicated a row the screen was already showing.
 //
-// Two consumers sit at different distances. The peer-info screen is in a module that can
-// import this one, so it reads the colours directly. The tab bar cannot: ItemListUI depends
-// on it and AorusGramUI depends back on ItemListUI, so an import there closes a cycle in the
-// build graph and nothing links. Both therefore go through shared defaults, which costs one
-// key each and keeps the graph acyclic — the same trade the rest of the fork makes.
-//
-// scripts/profile_personalization_patch.py pins the tab key on the reading side against the
-// one here.
+// The page colour goes through shared defaults (`AorusGlassPane`, in TelegramPresentationData),
+// because the modules drawing over the page sit below this one and cannot import it. The ink
+// over the page is read back from there too, by whoever lays out on the page: the profile's
+// tab strip is handed that ink by the pane container rather than reading a slot of its own,
+// because the same tab strip draws the chat list's folders and every other bar of tabs.
 //
 // Main-thread only, like the layout passes that read and write these.
 
 public enum AorusGlassProfileTint {
-    public static let key = "aorusgram_profile_tab_accent"
     /// The same key the peer-info screen and the derived list themes read the page colour back
     /// from, taken from there rather than spelled out twice: the two sides cannot drift.
     public static let pageKey = AorusGlassPane.profilePageKey
@@ -47,15 +43,6 @@ public enum AorusGlassProfileTint {
     /// avatars changes none of them. That early return is why the members tab kept the previous
     /// photo's backdrop until the reader happened to scroll it, which is what was reported.
     public static let pageDidChangeNotification = Notification.Name("AorusGramProfilePageDidChange")
-
-    /// Colour for the selected tab's label, or nil to leave the tab bar as Telegram draws it.
-    public static var selectedTabColor: UIColor? {
-        return AorusGlassProfileTint.color(forKey: AorusGlassProfileTint.key)
-    }
-
-    public static func setSelectedTabColor(_ color: UIColor?) {
-        AorusGlassProfileTint.setColor(color, forKey: AorusGlassProfileTint.key)
-    }
 
     /// The page the whole profile sits on, so the list below the header continues the
     /// avatar's colours instead of meeting a flat theme background partway down.
@@ -259,6 +246,30 @@ public enum AorusGlassProfileTint {
                 }
             }
         }
+    }
+
+    /// The page a profile opens on, read here and now from a copy of the peer's photo already on
+    /// the disk -- the one its chat and the chat list draw -- for a peer with no page yet.
+    ///
+    /// Every other reading needs the full-width photo, which arrives with the gallery's own list of
+    /// photos, and on a first visit that list comes from the network: the profile pushed in on the
+    /// theme's page and took the photo's about a second later. Read in the layout pass that first
+    /// lays the profile out, the page is on the screen in the same frame as the photo. It is the
+    /// same picture at a smaller size, so the full photo's reading lands on the same colour and
+    /// replaces it unseen; nothing is recorded under a photo's key, so that reading is not skipped.
+    ///
+    /// Synchronous on purpose, and cheap: the small copy is a hundred and sixty pixels across.
+    /// Returns whether the page was set.
+    @discardableResult
+    public static func prepareOpeningPage(for peerId: Int64, path: String, side: CGFloat, mirroredTail: CGFloat, onUpdate: @escaping () -> Void) -> Bool {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled, side >= 8.0, AorusGlassProfileTint.pageColors[peerId] == nil else {
+            return false
+        }
+        guard let sample = AorusGlassProfileTint.fileSample(path: path, side: side, tail: mirroredTail), sample.image != nil else {
+            return false
+        }
+        AorusGlassProfileTint.adopt(sample, for: peerId, onUpdate: onUpdate)
+        return true
     }
 
     /// Readings made from photo files, one at a time and off the main thread. Everything they
@@ -540,7 +551,6 @@ public enum AorusGlassProfileTint {
     /// case that used to leave a previous profile's pale ink over a near-black page.
     public static func publishPageColor(_ color: UIColor) {
         AorusGlassProfileTint.setPageBackgroundColor(color)
-        AorusGlassProfileTint.setSelectedTabColor(AorusGlassPane.ink(over: color))
     }
 
     /// One of a peer's photos. The count rides along so that adding or removing a photo, which

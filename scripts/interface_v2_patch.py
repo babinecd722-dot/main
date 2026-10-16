@@ -1545,6 +1545,26 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
             "                sampledView = nil\n"
             "            }\n"
             "        }\n"
+            "        // The page a profile opens on. On a first visit nothing has been read off this\n"
+            "        // peer's photo, and the full-width photo the reading needs comes with the gallery's\n"
+            "        // list of photos, from the network: the profile pushed in on the theme's page and\n"
+            "        // took the photo's a second later. The peer's photo is on the disk already, the copy\n"
+            "        // its chat draws, so the first page is read from that file in this pass, and the\n"
+            "        // profile's first frame has the page and the photo together.\n"
+            "        let aorusPeerIdValue = peer.id.id._internalGetInt64Value()\n"
+            "        if !isFullPhoto, AorusGlassProfileTint.pageBackgroundColor(for: aorusPeerIdValue) == nil {\n"
+            "            let mediaBox = self.context.account.postbox.mediaBox\n"
+            "            for representation in [peer.smallProfileImage, peer.largeProfileImage] {\n"
+            "                guard let representation, let path = mediaBox.completedResourcePath(representation.resource) else {\n"
+            "                    continue\n"
+            "                }\n"
+            "                if AorusGlassProfileTint.prepareOpeningPage(for: aorusPeerIdValue, path: path, side: self.aorusPictureSide, mirroredTail: self.aorusMirroredTail, onUpdate: { [weak self] in\n"
+            "                    self?.requestUpdateLayout?(false)\n"
+            "                }) {\n"
+            "                    break\n"
+            "                }\n"
+            "            }\n"
+            "        }\n"
             "        // The page under the profile is Telegram's own bottom blur block carried the rest\n"
             "        // of the way down. One number places that block on the photo: the strip this header\n"
             "        // adds below the square picture and fills by mirroring it, which is what decides\n"
@@ -3284,6 +3304,25 @@ def _patch_nav_button_glass(tg: Path) -> None:
         "        } else if self.isOverColoredContents {\n",
         "navigation button glass tint",
     )
+    # The buttons a pane brings when it is pinned -- search in files and links, the members'
+    # search -- are drawn in the bar's control colour, which is black in the light theme, while
+    # every other button on the same dark glass over the photo or the page is white.
+    expanded_use = "spec.isForExpandedView ? expandedButtonContentsColor : normalButtonContentsColor"
+    if text.count(expanded_use) != 5:
+        raise RuntimeError("InterfaceV2: missing navigation button colour uses anchor")
+    text = text.replace(expanded_use, "spec.isForExpandedView ? self.aorusExpandedButtonContentsColor(expandedButtonContentsColor) : normalButtonContentsColor")
+    text = _replace_once(
+        text,
+        "    func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, isOverColoredContents: Bool, transition: ContainedViewLayoutTransition) {\n",
+        "    // AorusGram: under Interface 2.0 the glass behind every button is dark while the\n"
+        "    // buttons are over the photo or its page, so a pane's own buttons are white there too.\n"
+        "    private func aorusExpandedButtonContentsColor(_ color: UIColor) -> UIColor {\n"
+        "        return AorusInterfaceV2Run.isEnabled && self.isOverColoredContents ? .white : color\n"
+        "    }\n"
+        "    \n"
+        "    func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, isOverColoredContents: Bool, transition: ContainedViewLayoutTransition) {\n",
+        "pane button colour",
+    )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: untinted the navigation button glass")
 
@@ -3416,7 +3455,10 @@ def _patch_pane_container_glass(tg: Path) -> None:
 
     The tabs themselves are already real glass upstream, but asked for as `.panel`, which is the
     variant that brings a tint and a rim. Interface 2.0 asks for the plain material here for the
-    same reason it does behind the navigation buttons.
+    same reason it does behind the navigation buttons. The glass, the lens and the labels take the
+    page's side rather than the theme's, as everything else drawn on the page does: in the light
+    theme the strip was light glass with a darkening lens under white labels on a dark page, and
+    read as a black bar until it scrolled away from the photo.
 
     The wrapper also gets one line, for a fault that belongs to it rather than to any pane. A pane
     that draws the page inside itself lays that picture over the screen's backdrop rectangle
@@ -3479,9 +3521,102 @@ def _patch_pane_container_glass(tg: Path) -> None:
     )
     text = _replace_once(
         text,
+        "        self.tabsBackgroundContainer.update(size: tabContainerFrame.size, isDark: presentationData.theme.overallDarkAppearance, transition: ComponentTransition(transition))\n",
+        "        // AorusGram: the strip is glass on the page, so it takes the page's side, as the\n"
+        "        // labels on it do. From the theme, a light theme put light glass and a darkening\n"
+        "        // lens under white labels on a dark page, and the strip came out black.\n"
+        "        let aorusTabsDark = aorusPlainPanes ? AorusGlassPane.profilePageIsDark : presentationData.theme.overallDarkAppearance\n"
+        "        self.tabsBackgroundContainer.update(size: tabContainerFrame.size, isDark: aorusTabsDark, transition: ComponentTransition(transition))\n",
+        "tabs glass container side",
+    )
+    text = _replace_once(
+        text,
         "        self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: tabContainerFrame.height * 0.5, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .panel), transition: ComponentTransition(transition))\n",
-        "        self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: tabContainerFrame.height * 0.5, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: aorusPlainPanes ? .clear : .panel), transition: ComponentTransition(transition))\n",
+        "        self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: tabContainerFrame.height * 0.5, isDark: aorusTabsDark, tintColor: .init(kind: aorusPlainPanes ? .clear : .panel), transition: ComponentTransition(transition))\n",
         "tabs glass tint",
+    )
+    # The labels and the lens take the page through the component's own parameters; every other
+    # bar of tabs in the app leaves them nil and keeps Telegram's colours.
+    text = _replace_once(
+        text,
+        "                liftWhileSwitching: deviceMetrics.type != .tablet\n"
+        "            )),\n",
+        "                liftWhileSwitching: deviceMetrics.type != .tablet,\n"
+        "                aorusPageInk: aorusPlainPanes ? AorusGlassPane.profilePageInk : nil,\n"
+        "                aorusPageIsDark: aorusPlainPanes ? AorusGlassPane.profilePageIsDark : nil\n"
+        "            )),\n",
+        "tabs page ink",
+    )
+    # The gifts tab draws its own title, in the bar's control colour: black in the light theme
+    # whatever page it was on.
+    text = _replace_once(
+        text,
+        "    let theme: PresentationTheme\n"
+        "    \n"
+        "    init(\n"
+        "        context: AccountContext,\n"
+        "        icons: [ProfileGiftsContext.State.StarGift],\n"
+        "        title: String,\n"
+        "        theme: PresentationTheme\n"
+        "    ) {\n"
+        "        self.context = context\n"
+        "        self.icons = icons\n"
+        "        self.title = title\n"
+        "        self.theme = theme\n"
+        "    }\n",
+        "    let theme: PresentationTheme\n"
+        "    // AorusGram: the page's ink under Interface 2.0, as the titles beside it.\n"
+        "    let aorusInk: UIColor?\n"
+        "    \n"
+        "    init(\n"
+        "        context: AccountContext,\n"
+        "        icons: [ProfileGiftsContext.State.StarGift],\n"
+        "        title: String,\n"
+        "        theme: PresentationTheme,\n"
+        "        aorusInk: UIColor? = nil\n"
+        "    ) {\n"
+        "        self.context = context\n"
+        "        self.icons = icons\n"
+        "        self.title = title\n"
+        "        self.theme = theme\n"
+        "        self.aorusInk = aorusInk\n"
+        "    }\n",
+        "gifts tab ink field",
+    )
+    text = _replace_once(
+        text,
+        "        if lhs.theme !== rhs.theme {\n"
+        "            return false\n"
+        "        }\n"
+        "        return true\n"
+        "    }\n"
+        "    \n"
+        "    final class View: UIView {\n"
+        "        private let title = ComponentView<Empty>()\n",
+        "        if lhs.theme !== rhs.theme {\n"
+        "            return false\n"
+        "        }\n"
+        "        if lhs.aorusInk != rhs.aorusInk {\n"
+        "            return false\n"
+        "        }\n"
+        "        return true\n"
+        "    }\n"
+        "    \n"
+        "    final class View: UIView {\n"
+        "        private let title = ComponentView<Empty>()\n",
+        "gifts tab ink equality",
+    )
+    text = _replace_once(
+        text,
+        "            let normalColor = component.theme.chat.inputPanel.panelControlColor\n",
+        "            let normalColor = component.aorusInk ?? component.theme.chat.inputPanel.panelControlColor\n",
+        "gifts tab ink colour",
+    )
+    text = _replace_once(
+        text,
+        "GiftsTabItemComponent(context: self.context, icons: icons, title: presentationData.strings.PeerInfo_PaneGifts, theme: presentationData.theme)",
+        "GiftsTabItemComponent(context: self.context, icons: icons, title: presentationData.strings.PeerInfo_PaneGifts, theme: presentationData.theme, aorusInk: aorusPlainPanes ? AorusGlassPane.profilePageInk : nil)",
+        "gifts tab ink",
     )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: pane container continues the page")
@@ -5339,10 +5474,13 @@ def _patch_avatar_gallery_gesture(tg: Path) -> None:
     top, ran on into the pull and opened the photo nobody asked for. It is armed now only when the
     drag starts with the profile at rest at its top, which is the one place a pull can be meant.
 
-    Once it fires, Telegram puts the list back by animating the scroll view in a UIView block. That
-    moves the list over a tenth of a second but tells the header only the final offset, so the
-    photo jumped back while the list was still on its way and the page showed in the gap. The
-    list goes back as a scroll instead, and the header follows it frame by frame.
+    Once it fires, the list goes back to the top the way Telegram puts it back: the offset is set
+    to zero inside an animation block, so the header is laid out for zero in the same block and
+    its stretched photo shrinks back with the list. An earlier version scrolled back instead, and
+    an animated scroll can be cut short -- the profile is laid out again while the gallery is
+    presented -- which left the list resting a little below its top. A pull is only armed from
+    rest at the top, so that one cut-short scroll was enough to make the photo impossible to open
+    a second time without leaving the profile.
 
     The gallery hides the header's photo the moment it is presented, so that the photo seems to
     lift out of the page -- and for the length of the fade the page showed where it had been:
@@ -5354,6 +5492,15 @@ def _patch_avatar_gallery_gesture(tg: Path) -> None:
     shows only the first. The header photo is square here, every photo has its slot, and paging
     in the gallery now pages the header with it, so the gallery closes onto the very photo it
     shows, with square corners.
+
+    And it closed in two layers at once. Telegram flies a copy of the picture back inside the
+    header, where the profile's name and buttons are drawn over it, and fades the gallery's own
+    picture out on top of everything for the whole flight -- so the photo crossed over the name and
+    then dropped behind it as that fade ran out. And the copy was clipped to the photo's slot, so
+    only the gallery's picture could carry the part still below the slot. Closing onto a square
+    photo, the gallery's picture now dissolves with the gallery's black, in the same tenth of a
+    second, and the copy flies the rest of the way unclipped beneath the name and the buttons:
+    the photo is under them from the first frame the profile shows to the last.
     """
     screen = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     text = _read(screen, "PeerInfoScreen.swift")
@@ -5369,27 +5516,6 @@ def _patch_avatar_gallery_gesture(tg: Path) -> None:
         "        // that stops a flick bouncing at the top, is a scroll and opens nothing.\n"
         "        self.canOpenAvatarByDragging = self.headerNode.isAvatarExpanded && (!self.aorusKeepsAvatarExpandedNow || abs(scrollView.contentOffset.y) < 1.0)\n",
         "deliberate avatar pull",
-    )
-    text = _replace_once(
-        text,
-        "                        scrollView.panGestureRecognizer.isEnabled = true\n"
-        "                        scrollView.contentOffset = CGPoint(x: 0.0, y: contentOffset)\n"
-        "                        UIView.animate(withDuration: 0.1) {\n"
-        "                            scrollView.contentOffset = CGPoint()\n"
-        "                        }\n",
-        "                        scrollView.panGestureRecognizer.isEnabled = true\n"
-        "                        scrollView.contentOffset = CGPoint(x: 0.0, y: contentOffset)\n"
-        "                        if self.aorusKeepsAvatarExpandedNow {\n"
-        "                            // AorusGram: back to the top as a scroll, which reports every\n"
-        "                            // frame, so the photo shrinks back with the list instead of\n"
-        "                            // jumping there ahead of it and leaving the page in between.\n"
-        "                            scrollView.setContentOffset(CGPoint(), animated: true)\n"
-        "                        } else {\n"
-        "                            UIView.animate(withDuration: 0.1) {\n"
-        "                                scrollView.contentOffset = CGPoint()\n"
-        "                            }\n"
-        "                        }\n",
-        "avatar pull return",
     )
     text = _replace_once(
         text,
@@ -5450,7 +5576,67 @@ def _patch_avatar_gallery_gesture(tg: Path) -> None:
         "        }\n",
         "header follows avatar gallery",
     )
+    text = _replace_once(
+        text,
+        "    func addToAvatarTransitionSurface(view: UIView) {\n"
+        "        if self.isAvatarExpanded {\n"
+        "            self.avatarListNode.listContainerNode.view.addSubview(view)\n",
+        "    func addToAvatarTransitionSurface(view: UIView) {\n"
+        "        if self.isAvatarExpanded, AorusInterfaceV2Run.isEnabled {\n"
+        "            // AorusGram: the picture flying between the gallery and the full-width photo is\n"
+        "            // drawn where the photo is -- under the name, the buttons and the photo's own\n"
+        "            // controls -- but not clipped to the photo's slot, which it is still below for\n"
+        "            // most of the way. Inside the list it was cut off at the slot's bottom edge.\n"
+        "            self.regularContentNode.view.insertSubview(view, aboveSubview: self.avatarClippingNode.view)\n"
+        "        } else if self.isAvatarExpanded {\n"
+        "            self.avatarListNode.listContainerNode.view.addSubview(view)\n",
+        "unclipped avatar transition surface",
+    )
     header.write_text(text, encoding="utf-8")
+
+    gallery_item = tg / "submodules/PeerAvatarGalleryUI/Sources/PeerAvatarImageGalleryItem.swift"
+    text = _read(gallery_item, "PeerAvatarImageGalleryItem.swift")
+    # Only a square source adds the copy to the profile's surface; round ones keep Telegram's
+    # copy inside the gallery, so the block below runs for the square photo alone.
+    text = _replace_once(
+        text,
+        "        if let transformedSurfaceFrame = transformedSurfaceFrame, let transformedSurfaceCopyViewInitialFrame = transformedSurfaceCopyViewInitialFrame {\n"
+        "            surfaceCopyView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1 * durationFactor, removeOnCompletion: false)\n",
+        "        // AorusGram: closing onto a square photo, the copy in the profile carries the picture\n"
+        "        // all the way back, under the profile's name and buttons. It is whole from the first\n"
+        "        // frame: the gallery's black covers it until the gallery's own picture has gone.\n"
+        "        let aorusReturnsUnderProfile = transformedSurfaceFrame != nil && !sourceHasRoundCorners\n"
+        "        if let transformedSurfaceFrame = transformedSurfaceFrame, let transformedSurfaceCopyViewInitialFrame = transformedSurfaceCopyViewInitialFrame {\n"
+        "            if !aorusReturnsUnderProfile {\n"
+        "                surfaceCopyView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1 * durationFactor, removeOnCompletion: false)\n"
+        "            }\n",
+        "square close copy",
+    )
+    text = _replace_once(
+        text,
+        "        if let _ = self.videoNode {\n"
+        "            self.contentNode.view.superview?.bringSubviewToFront(self.contentNode.view)\n"
+        "        } else {\n"
+        "            self.contentNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.25 * durationFactor, removeOnCompletion: false)\n"
+        "        }\n"
+        "        \n"
+        "        self.contentNode.layer.animatePosition(from: self.contentNode.layer.position, to: CGPoint(x: transformedSuperFrame.midX, y: transformedSuperFrame.midY), duration: 0.25 * durationFactor,",
+        "        if aorusReturnsUnderProfile {\n"
+        "            // AorusGram: the gallery's picture is drawn over the whole profile, name and all.\n"
+        "            // Faded over the flight, it crossed the name and then dropped behind it; it goes\n"
+        "            // with the gallery's black instead, in the same tenth of a second, and a video\n"
+        "            // goes the same way, landing as the header's own photo.\n"
+        "            self.contentNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.1 * durationFactor, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)\n"
+        "        } else if let _ = self.videoNode {\n"
+        "            self.contentNode.view.superview?.bringSubviewToFront(self.contentNode.view)\n"
+        "        } else {\n"
+        "            self.contentNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.25 * durationFactor, removeOnCompletion: false)\n"
+        "        }\n"
+        "        \n"
+        "        self.contentNode.layer.animatePosition(from: self.contentNode.layer.position, to: CGPoint(x: transformedSuperFrame.midX, y: transformedSuperFrame.midY), duration: 0.25 * durationFactor,",
+        "square close dissolve",
+    )
+    gallery_item.write_text(text, encoding="utf-8")
 
     avatar_list = tg / "submodules/PeerInfoAvatarListNode/Sources/PeerInfoAvatarListNode.swift"
     text = _read(avatar_list, "PeerInfoAvatarListNode.swift")

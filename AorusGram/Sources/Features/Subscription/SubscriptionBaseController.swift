@@ -2,18 +2,18 @@ import UIKit
 
 // Shared layout skeleton for subscription screens: a vertically-centred, scrollable
 // content area + a button stack pinned to the bottom safe area. Adapts cleanly from
-// iPhone SE to Pro Max (content scrolls if it doesn't fit) and forces dark/AMOLED.
+// iPhone SE to Pro Max (content scrolls if it doesn't fit), in the app theme's look.
 class SubscriptionBaseController: UIViewController {
     let scrollView = UIScrollView()
     let contentStack = UIStackView()
     let buttonStack = UIStackView()
 
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    override var preferredStatusBarStyle: UIStatusBarStyle { SubscriptionStyle.statusBarStyle }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = SubscriptionStyle.background
-        overrideUserInterfaceStyle = .dark
+        overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
 
         buttonStack.axis = .vertical
         buttonStack.spacing = 10

@@ -414,7 +414,7 @@ final class LicenseGate {
         }
         window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
         window.backgroundColor = SubscriptionStyle.background
-        window.overrideUserInterfaceStyle = .dark
+        window.overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
         lockWindow = window
     }
 
@@ -541,12 +541,12 @@ final class LicenseGate {
 
     private func makeNav(_ root: UIViewController) -> UINavigationController {
         let nav = UINavigationController(rootViewController: root)
-        nav.overrideUserInterfaceStyle = .dark
+        nav.overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
         nav.navigationBar.tintColor = SubscriptionStyle.accent
         nav.navigationBar.setBackgroundImage(UIImage(), for: .default)
         nav.navigationBar.shadowImage = UIImage()
         nav.navigationBar.isTranslucent = true
-        nav.navigationBar.titleTextAttributes = [.foregroundColor: UIColor.white]
+        nav.navigationBar.titleTextAttributes = [.foregroundColor: SubscriptionStyle.primaryText]
         nav.view.backgroundColor = SubscriptionStyle.background
         return nav
     }
@@ -714,7 +714,7 @@ final class LicenseGate {
         }
         window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
         window.backgroundColor = SubscriptionStyle.background
-        window.overrideUserInterfaceStyle = .dark
+        window.overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
         modalWindow = window
     }
 

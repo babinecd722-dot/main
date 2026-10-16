@@ -59,7 +59,7 @@ final class ActivateKeyController: SubscriptionBaseController {
         fieldContainer.layer.cornerRadius = 14
         fieldContainer.layer.cornerCurve = .continuous
         fieldContainer.layer.borderWidth = 1.0
-        fieldContainer.layer.borderColor = UIColor(white: 0.22, alpha: 1.0).cgColor
+        fieldContainer.layer.borderColor = SubscriptionStyle.hairline.cgColor
         // Accent glow (off until focused).
         fieldContainer.layer.shadowColor = SubscriptionStyle.accent.cgColor
         fieldContainer.layer.shadowRadius = 10
@@ -69,7 +69,7 @@ final class ActivateKeyController: SubscriptionBaseController {
 
         field.attributedPlaceholder = NSAttributedString(
             string: "AORUS-XXXX-XXXX-XXXX",
-            attributes: [.foregroundColor: UIColor(white: 0.4, alpha: 1.0)])
+            attributes: [.foregroundColor: SubscriptionStyle.placeholder])
         field.font = Font.semiboldMonospace(18)
         field.textColor = SubscriptionStyle.primaryText
         field.tintColor = SubscriptionStyle.accent
@@ -107,10 +107,17 @@ final class ActivateKeyController: SubscriptionBaseController {
 
     // MARK: - Animations
 
+    // Everything that enters, in order: the content from the top, then the Activate button
+    // at the bottom, which lives in the button stack rather than in the content and so was
+    // left standing still while everything above it rose into place.
+    private var entranceViews: [UIView] {
+        return contentStack.arrangedSubviews + buttonStack.arrangedSubviews
+    }
+
     private func prepareEntranceState() {
         guard !didPrepareEntrance else { return }
         didPrepareEntrance = true
-        for (i, v) in contentStack.arrangedSubviews.enumerated() {
+        for (i, v) in entranceViews.enumerated() {
             v.alpha = 0
             // The duck (first item) pops in with a scale; everything else rises.
             v.transform = (i == 0)
@@ -122,7 +129,7 @@ final class ActivateKeyController: SubscriptionBaseController {
     private func animateEntrance() {
         guard didPrepareEntrance, !didAnimateEntrance else { return }
         didAnimateEntrance = true
-        for (i, v) in contentStack.arrangedSubviews.enumerated() {
+        for (i, v) in entranceViews.enumerated() {
             let delay = 0.07 * Double(i)
             let damping: CGFloat = (i == 0) ? 0.6 : 0.84   // bouncier pop for the duck
             UIView.animate(withDuration: 0.58, delay: delay,
@@ -137,7 +144,7 @@ final class ActivateKeyController: SubscriptionBaseController {
     private func setFieldFocused(_ focused: Bool) {
         UIView.animate(withDuration: 0.22) {
             self.fieldContainer.layer.borderColor = (focused ? SubscriptionStyle.accent
-                                                             : UIColor(white: 0.22, alpha: 1.0)).cgColor
+                                                             : SubscriptionStyle.hairline).cgColor
             self.fieldContainer.layer.shadowOpacity = focused ? 0.45 : 0
             self.fieldContainer.layer.borderWidth = focused ? 1.5 : 1.0
         }

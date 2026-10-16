@@ -22,8 +22,8 @@ drawn with, and this puts it back wherever the switch in AorusGram -> Interface 
     attach, microphone and expand buttons as plain icons on it; the field itself in the
     theme's input colour with 12.0's hairline round it.
   * Long-press menus: 12.0's rows, the title 16 points in and the icon on the right, a
-    hairline between rows, a 7-point band between groups, the pressed row lit in the theme's
-    colour, the menu in the theme's menu colour over a blur.
+    hairline between rows and the same hairline between groups, the pressed row lit in the
+    theme's colour, the menu in the theme's menu colour over a blur.
   * Tabs: folder and profile tabs with 12.0's accent line under the chosen one, the profile's
     strip full width with its line; the scroll-down buttons in a chat as 12.0's circles.
   * Searches inside a bar, the new alerts, toasts, the chat list's edit toolbar and the
@@ -1086,7 +1086,7 @@ def _patch_profile_tabs(tg: Path) -> None:
         "        let tabContainerFrame = CGRect(origin: CGPoint(x: tabContainerFrameOriginX, y: AorusOldInterface.isEnabled ? 0.0 : 10.0), size: tabsContainerEffectiveSize) // " + MARK + "\n",
         "profile tabs position",
     )
-    anchor = "        self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: tabContainerFrame.height * 0.5, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: aorusPlainPanes ? .clear : .panel), transition: ComponentTransition(transition))\n"
+    anchor = "        self.tabsBackgroundView.update(size: tabContainerFrame.size, cornerRadius: tabContainerFrame.height * 0.5, isDark: aorusTabsDark, tintColor: .init(kind: aorusPlainPanes ? .clear : .panel), transition: ComponentTransition(transition))\n"
     text = _edit(
         text,
         anchor,
@@ -1492,8 +1492,10 @@ def _patch_context_menus(tg: Path) -> None:
 
 
 _MENU_ITEM_SEPARATORS = '''            if AorusOldInterface.isEnabled {
-                // AorusGram: old interface: 12.0's hairline between the rows of a menu, left out
-                // above a gap between groups, under the last row and where a row asks for none.
+                // AorusGram: old interface: 12.0's hairline between the rows of a menu, and between
+                // its groups as well -- left out only under the last row and where a row asks for
+                // none. The boundary between two groups is a hairline like any other; the band
+                // Telegram draws there read as a hole in the menu.
                 while self.aorusItemSeparators.count < self.itemNodes.count {
                     let separatorNode = ASDisplayNode()
                     separatorNode.isUserInteractionEnabled = false
@@ -1507,9 +1509,11 @@ _MENU_ITEM_SEPARATORS = '''            if AorusOldInterface.isEnabled {
                         continue
                     }
                     let itemNode = self.itemNodes[i].node
-                    var separatorHidden = i == self.itemNodes.count - 1 || itemNode is ContextControllerActionsListSeparatorItemNode
-                    if !separatorHidden && self.itemNodes[i + 1].node is ContextControllerActionsListSeparatorItemNode {
-                        separatorHidden = true
+                    // A group boundary has no height of its own, so the row above it draws the
+                    // line; a row with nothing but boundaries below it is the last row.
+                    var separatorHidden = itemNode is ContextControllerActionsListSeparatorItemNode
+                    if !separatorHidden {
+                        separatorHidden = !self.itemNodes[(i + 1)...].contains(where: { !($0.node is ContextControllerActionsListSeparatorItemNode) })
                     }
                     if let customItemNode = itemNode as? ContextControllerActionsListCustomItemNode, let customNode = customItemNode.itemNode, !customNode.needsSeparator {
                         separatorHidden = true
@@ -1531,8 +1535,8 @@ _MENU_ITEM_SEPARATORS = '''            if AorusOldInterface.isEnabled {
 
 def _patch_context_menu_items(text: str) -> str:
     # A row of 12.0's long-press menu: its title 16 points in, its icon on the right 12 points
-    # from the edge, a hairline between rows, a 7-point band between groups and no padding
-    # above the first row or under the last.
+    # from the edge, a hairline between rows and between groups, and no padding above the first
+    # row or under the last.
     text = _edit(
         text,
         "        let sideInset: CGFloat = 18.0\n"
@@ -1587,10 +1591,12 @@ def _patch_context_menu_items(text: str) -> str:
         "        return (minSize: CGSize(width: 0.0, height: 20.0), apply: { size, transition in\n",
         "    func update(presentationData: PresentationData, constrainedSize: CGSize) -> (minSize: CGSize, apply: (_ size: CGSize, _ transition: ContainedViewLayoutTransition) -> Void) {\n"
         "        if AorusOldInterface.isEnabled {\n"
-        "            // " + MARK + ": 12.0's band between the groups of a menu.\n"
-        "            return (minSize: CGSize(width: 0.0, height: 7.0), apply: { _, _ in\n"
+        "            // " + MARK + ": the boundary between the groups of a menu takes no room: the\n"
+        "            // row above it draws the same hairline as between any two rows. Telegram's band\n"
+        "            // there, seven points of shade, read as a gap between two of the menu's rows.\n"
+        "            return (minSize: CGSize(width: 0.0, height: 0.0), apply: { _, _ in\n"
         "                self.separatorView.isHidden = true\n"
-        "                self.backgroundColor = presentationData.theme.contextMenu.sectionSeparatorColor\n"
+        "                self.backgroundColor = nil\n"
         "            })\n"
         "        }\n"
         "        return (minSize: CGSize(width: 0.0, height: 20.0), apply: { size, transition in\n",
@@ -3460,7 +3466,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5)",
             "let iconSideInset: CGFloat = AorusOldInterface.isEnabled ? 12.0 : 20.0",
             "private var aorusItemSeparators: [ASDisplayNode] = []",
-            "self.backgroundColor = presentationData.theme.contextMenu.sectionSeparatorColor",
+            "return (minSize: CGSize(width: 0.0, height: 0.0), apply: { _, _ in",
             "self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)",
         ],
         "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift": ["AorusOldInterface.menuColor(dark: isDark).map {"],

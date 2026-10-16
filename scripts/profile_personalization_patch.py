@@ -4,11 +4,6 @@ from pathlib import Path
 
 LICENSE_LOCK_KEY = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
 
-# Kept in step with AorusGlassProfileTint.key, which writes this value. The tab bar reads it
-# straight from defaults because it cannot import AorusGramUI without closing a cycle in the
-# build graph (ItemListUI -> HorizontalTabsComponent -> AorusGramUI -> ItemListUI).
-_PROFILE_TAB_ACCENT_KEY = "aorusgram_profile_tab_accent"
-
 
 def _replace_once(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
@@ -526,14 +521,22 @@ def _patch_call_type_sheet(tg: Path) -> None:
 
 
 def _patch_profile_tabs_tint(tg: Path) -> None:
-    """Let the profile tab bar paint its labels white while Interface 2.0 is on.
+    """Let the profile's tab bar take the page's ink and the page's darkness under Interface 2.0.
 
     Telegram's tab bar is already the glass capsule Interface 2.0 wants, so it is kept and
-    recoloured rather than replaced — substituting a simpler control would cost tab reordering,
+    recoloured rather than replaced -- substituting a simpler control would cost tab reordering,
     context menus, badges, gift icons and the dozen-odd pane kinds it knows how to title.
-    Both the regular and the selected copy of a tab are rendered from the same ItemComponent
-    with the same colour, the selection being drawn by a lens moving across them; this makes
-    the selected copy able to take a different one.
+    Both the regular and the selected copy of a tab are rendered from the same ItemComponent;
+    the selection is a lens moving across them, so the selected copy can take a fuller ink.
+
+    The ink and the darkness are handed in by the one caller that knows the page, the profile's
+    pane container, and are nil everywhere else. An earlier version read the ink out of a slot
+    that every profile writes, inside the component itself -- and the same component draws the
+    chat list's folders, the Stars and storage screens, the wallet and hashtag search. Each of
+    those took the last profile's ink: white folder names on the light chat list after a profile
+    with a dark photo. And the lens kept the app theme's darkness under that ink: in the light
+    theme it darkens what it sits on, so over a dark page the whole strip came out black while
+    the labels were white.
     """
     path = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift"
     if not path.is_file():
@@ -543,34 +546,58 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         print("GlassProfileTabs: HorizontalTabsComponent already patched")
         return
 
-    # Read from shared defaults rather than by importing AorusGramUI. ItemListUI depends on
-    # this module and AorusGramUI depends back on ItemListUI, so a module edge here closes a
-    # cycle in the build graph and nothing links at all. The key is pinned against
-    # AorusGlassProfileTint.key on the writing side.
     text = _replace_once(
         text,
-        "import MultilineTextWithEntitiesComponent\n",
-        "import MultilineTextWithEntitiesComponent\n"
-        "\n"
-        "// AorusGram: the accent Interface 2.0 gives the selected profile tab, or nil for stock.\n"
-        f"private let aorusProfileTabAccentKey = \"{_PROFILE_TAB_ACCENT_KEY}\"\n"
-        "\n"
-        "private func aorusProfileTabAccent() -> UIColor? {\n"
-        "    guard let value = UserDefaults.standard.object(forKey: aorusProfileTabAccentKey) as? Int else {\n"
-        "        return nil\n"
-        "    }\n"
-        "    return UIColor(\n"
-        "        red: CGFloat((value >> 16) & 0xff) / 255.0,\n"
-        "        green: CGFloat((value >> 8) & 0xff) / 255.0,\n"
-        "        blue: CGFloat(value & 0xff) / 255.0,\n"
-        "        alpha: 1.0\n"
-        "    )\n"
-        "}\n",
-        "tabs accent reader",
+        "    public let liftWhileSwitching: Bool\n"
+        "    \n"
+        "    public init(\n",
+        "    public let liftWhileSwitching: Bool\n"
+        "    /// AorusGram: the ink of the page this bar is drawn on, and whether that page is dark,\n"
+        "    /// for a bar whose page is not the theme's -- the profile under Interface 2.0. Nil keeps\n"
+        "    /// Telegram's colours and the theme's darkness, which every other bar does.\n"
+        "    public let aorusPageInk: UIColor?\n"
+        "    public let aorusPageIsDark: Bool?\n"
+        "    \n"
+        "    public init(\n",
+        "tabs page fields",
     )
-    # Captured at init rather than read at draw time so that the component compares unequal
-    # when the tint changes — otherwise ComponentFlow would reuse the view and the tab would
-    # keep the previous profile's colour.
+    text = _replace_once(
+        text,
+        "        layout: Layout = .fill,\n"
+        "        liftWhileSwitching: Bool = true\n"
+        "    ) {\n",
+        "        layout: Layout = .fill,\n"
+        "        liftWhileSwitching: Bool = true,\n"
+        "        aorusPageInk: UIColor? = nil,\n"
+        "        aorusPageIsDark: Bool? = nil\n"
+        "    ) {\n"
+        "        self.aorusPageInk = aorusPageInk\n"
+        "        self.aorusPageIsDark = aorusPageIsDark\n",
+        "tabs page init",
+    )
+    text = _replace_once(
+        text,
+        "        if lhs.liftWhileSwitching != rhs.liftWhileSwitching {\n"
+        "            return false\n"
+        "        }\n",
+        "        if lhs.liftWhileSwitching != rhs.liftWhileSwitching {\n"
+        "            return false\n"
+        "        }\n"
+        "        if lhs.aorusPageInk != rhs.aorusPageInk || lhs.aorusPageIsDark != rhs.aorusPageIsDark {\n"
+        "            return false\n"
+        "        }\n",
+        "tabs page equality",
+    )
+    # The lens tints what it sits on by its darkness: lighter for a dark theme, darker for a
+    # light one. Under the page's ink it has to take the page's side as well.
+    text = _replace_once(
+        text,
+        "inset: 0.0, liftedInset: 6.0, isDark: component.theme.overallDarkAppearance, isLifted: isLifted, transition: transition)\n",
+        "inset: 0.0, liftedInset: 6.0, isDark: component.aorusPageIsDark ?? component.theme.overallDarkAppearance, isLifted: isLifted, transition: transition)\n",
+        "tabs lens darkness",
+    )
+    # Passed in rather than read at draw time, so that the component compares unequal when the
+    # ink changes -- otherwise ComponentFlow would reuse the view with the previous profile's ink.
     text = _replace_once(
         text,
         "    let isSelected: Bool\n",
@@ -579,8 +606,14 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
     )
     text = _replace_once(
         text,
+        "    init(context: AccountContext?, theme: PresentationTheme, tab: HorizontalTabsComponent.Tab, isSelected: Bool, editing: Editing?) {\n",
+        "    init(context: AccountContext?, theme: PresentationTheme, tab: HorizontalTabsComponent.Tab, isSelected: Bool, editing: Editing?, aorusSelectedAccent: UIColor? = nil) {\n",
+        "tabs accent init",
+    )
+    text = _replace_once(
+        text,
         "        self.isSelected = isSelected\n",
-        "        self.isSelected = isSelected\n        self.aorusSelectedAccent = aorusProfileTabAccent()\n",
+        "        self.isSelected = isSelected\n        self.aorusSelectedAccent = aorusSelectedAccent\n",
         "tabs accent assignment",
     )
     text = _replace_once(
@@ -590,6 +623,18 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         "        if lhs.aorusSelectedAccent != rhs.aorusSelectedAccent {\n            return false\n        }\n",
         "tabs accent equality",
     )
+    item_editing = (
+        "                        editing: itemEditing\n"
+        "                    )),\n"
+    )
+    if text.count(item_editing) != 2:
+        raise RuntimeError("ProfilePersonalization: missing tab item copies anchor")
+    text = text.replace(
+        item_editing,
+        "                        editing: itemEditing,\n"
+        "                        aorusSelectedAccent: component.aorusPageInk\n"
+        "                    )),\n",
+    )
     text = _replace_once(
         text,
         "                    .foregroundColor: component.theme.chat.inputPanel.panelControlColor\n"
@@ -598,7 +643,7 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         "                    // colour whenever it is off. Ink rather than the avatar's colour on\n"
         "                    // purpose: the glass under these labels takes its look from the photo\n"
         "                    // already, and tinting the text as well is what made the first version\n"
-        "                    // read as a coloured skin instead of as glass. The writing side sends\n"
+        "                    // read as a coloured skin instead of as glass. The caller sends\n"
         "                    // white over a dark page and near-black over a pale one, so a profile\n"
         "                    // whose photo ends in white paper still has readable tabs.\n"
         "                    .foregroundColor: component.aorusSelectedAccent.flatMap { accent in\n"
@@ -607,8 +652,30 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         "                ], range: NSRange(location: 0, length: titleString.length))\n",
         "tabs accent colour",
     )
+    # A tab drawn by its pane (the gifts tab, with its gift icons) is the same component in both
+    # copies, so it cannot tell which one it is; it is drawn in full ink and dimmed here like the
+    # titles beside it.
+    text = _replace_once(
+        text,
+        "                customContentSize = customContent.update(\n"
+        "                    transition: transition,\n"
+        "                    component: custom,\n"
+        "                    environment: {},\n"
+        "                    containerSize: CGSize(width: 300.0, height: 100.0)\n"
+        "                )\n",
+        "                customContentSize = customContent.update(\n"
+        "                    transition: transition,\n"
+        "                    component: custom,\n"
+        "                    environment: {},\n"
+        "                    containerSize: CGSize(width: 300.0, height: 100.0)\n"
+        "                )\n"
+        "                if component.aorusSelectedAccent != nil {\n"
+        "                    customContent.view?.alpha = component.isSelected ? 1.0 : 0.5\n"
+        "                }\n",
+        "tabs custom content ink",
+    )
     path.write_text(text, encoding="utf-8")
-    # No BUILD dependency is added on purpose — see the reader comment above.
+    # No BUILD dependency is added: the ink arrives as a colour, not as a module.
     print("GlassProfileTabs: patched HorizontalTabsComponent")
 
 

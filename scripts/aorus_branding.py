@@ -17806,9 +17806,15 @@ _AORUS_AMOLED_HELPER = (
     "\n"
     "// AorusGram: Interface 2.0 — glass surfaces everywhere the theme reaches.\n"
     "// Applied after AMOLED so a true-black block still becomes translucent: the two\n"
-    "// settings compose rather than fight. Only the item fills are touched — the page\n"
+    "// settings compose rather than fight. The item fills go translucent, and the page\n"
     "// behind them stays opaque, which is what a pane of glass needs to read as glass\n"
     "// instead of as a washed-out card.\n"
+    "//\n"
+    "// The light page is the theme's plain white, the way the dark one is its plain black.\n"
+    "// A light theme's grouped page is a grey of its own, and under cards a shade darker\n"
+    "// than it every settings screen read as grey glass on grey, white switches and all.\n"
+    "// A modal sheet keeps its own page: Telegram gives a sheet the modal colours whenever\n"
+    "// the grouped page and the plain one are the same, as Night's always were.\n"
     "private func aorusInterfaceV2Enabled() -> Bool {\n"
     f"    return !UserDefaults.standard.bool(forKey: \"{_AG_LICENSE_LOCK_KEY}\") && AorusInterfaceV2Run.isEnabled\n"
     "}\n"
@@ -17818,7 +17824,8 @@ _AORUS_AMOLED_HELPER = (
     "    let dark = theme.overallDarkAppearance\n"
     "    let fill = UIColor(white: dark ? 1.0 : 0.0, alpha: dark ? 0.10 : 0.04)\n"
     "    let separator = UIColor(white: dark ? 1.0 : 0.0, alpha: dark ? 0.12 : 0.08)\n"
-    "    let list = theme.list.withUpdated(itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)\n"
+    "    let page: UIColor? = dark ? nil : theme.list.plainBackgroundColor\n"
+    "    let list = theme.list.withUpdated(blocksBackgroundColor: page, itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)\n"
     "    return PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: theme.rootController, list: list, chatList: theme.chatList, chat: theme.chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
     "}\n"
     "\n"
@@ -18254,6 +18261,8 @@ private func aorusRecordCurrentTheme(_ theme: PresentationTheme) -> Presentation
     aorusCurrentThemeLock.lock()
     aorusCurrentThemeValue = (theme.overallDarkAppearance, theme.list.itemAccentColor)
     aorusCurrentThemeLock.unlock()
+    // And for the licence screens, which stand over the app outside any theme (Display).
+    AorusAppearanceRecord.record(isDark: theme.overallDarkAppearance, page: theme.list.blocksBackgroundColor, card: theme.list.itemBlocksBackgroundColor, primaryText: theme.list.itemPrimaryTextColor, secondaryText: theme.list.itemSecondaryTextColor)
     return theme
 }
 

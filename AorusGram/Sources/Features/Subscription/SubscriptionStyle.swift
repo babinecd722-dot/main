@@ -1,13 +1,36 @@
 import UIKit
 import Display
 
-// Shared Telegram-style dark / AMOLED look for every subscription screen.
+// Every subscription screen in the theme the app is drawn in: its page, its cards and its
+// text, light or dark. The screens stand over the app outside any presentation theme, so the
+// theme's look is read from `AorusAppearanceRecord` (Display), which the theme writes and which
+// outlives a launch. The accent and the status colours are AorusGram's own in both.
 enum SubscriptionStyle {
-    static let background     = UIColor.black                          // AMOLED
-    static let card           = UIColor(white: 0.11, alpha: 1.0)       // ~#1C1C1E
-    static let cardElevated   = UIColor(white: 0.17, alpha: 1.0)
-    static let primaryText    = UIColor.white
-    static let secondaryText  = UIColor(white: 0.62, alpha: 1.0)
+    private static var look: AorusAppearanceRecord.Look { AorusAppearanceRecord.current }
+
+    static var isDark: Bool { look.isDark }
+    static var interfaceStyle: UIUserInterfaceStyle { isDark ? .dark : .light }
+    static var statusBarStyle: UIStatusBarStyle { isDark ? .lightContent : .darkContent }
+
+    static var background: UIColor { look.page }
+    /// The theme's card, unless it is the page's own colour -- AMOLED's black on black -- where it
+    /// is lifted off the page by a shade of the text, as a card has to be to read as one.
+    static var card: UIColor {
+        let look = self.look
+        if distance(look.card, look.page) < 0.04 {
+            return mix(look.page, look.primaryText, 0.1)
+        }
+        return look.card
+    }
+    static var cardElevated: UIColor { mix(card, primaryText, 0.06) }
+    static var primaryText: UIColor { look.primaryText }
+    static var secondaryText: UIColor { look.secondaryText }
+    /// The edge of a field at rest, and its placeholder.
+    static var hairline: UIColor { primaryText.withAlphaComponent(isDark ? 0.16 : 0.12) }
+    static var placeholder: UIColor { secondaryText.withAlphaComponent(0.7) }
+    /// A spinner standing on the page rather than on a button.
+    static var pageSpinner: UIColor { secondaryText }
+
     static let accent         = UIColor(red: 0x9B/255.0, green: 0x4D/255.0, blue: 0xFF/255.0, alpha: 1.0) // AorusGram neon violet
     static let success        = UIColor(red: 0x34/255.0, green: 0xC7/255.0, blue: 0x59/255.0, alpha: 1.0)
     static let destructive    = UIColor(red: 0xFF/255.0, green: 0x3B/255.0, blue: 0x30/255.0, alpha: 1.0)
@@ -90,6 +113,26 @@ enum SubscriptionStyle {
         row.alignment = .firstBaseline
         row.spacing = 10
         return row
+    }
+
+    private static func components(_ color: UIColor) -> (CGFloat, CGFloat, CGFloat) {
+        var r: CGFloat = 0.0, g: CGFloat = 0.0, b: CGFloat = 0.0, a: CGFloat = 0.0
+        guard color.getRed(&r, green: &g, blue: &b, alpha: &a) else {
+            return (0.0, 0.0, 0.0)
+        }
+        return (r, g, b)
+    }
+
+    private static func distance(_ lhs: UIColor, _ rhs: UIColor) -> CGFloat {
+        let (lr, lg, lb) = components(lhs)
+        let (rr, rg, rb) = components(rhs)
+        return max(abs(lr - rr), max(abs(lg - rg), abs(lb - rb)))
+    }
+
+    private static func mix(_ base: UIColor, _ other: UIColor, _ fraction: CGFloat) -> UIColor {
+        let (baseR, baseG, baseB) = components(base)
+        let (otherR, otherG, otherB) = components(other)
+        return UIColor(red: baseR + (otherR - baseR) * fraction, green: baseG + (otherG - baseG) * fraction, blue: baseB + (otherB - baseB) * fraction, alpha: 1.0)
     }
 
     // A rounded info / price card holding arbitrary content.

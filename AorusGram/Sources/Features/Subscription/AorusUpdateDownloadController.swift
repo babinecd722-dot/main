@@ -201,7 +201,7 @@ private final class RGBProgressView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        track.backgroundColor = UIColor(white: 1, alpha: 0.12).cgColor
+        track.backgroundColor = SubscriptionStyle.primaryText.withAlphaComponent(0.12).cgColor
         layer.addSublayer(track)
         gradient.colors = [
             UIColor.systemRed.cgColor, UIColor.systemPink.cgColor,

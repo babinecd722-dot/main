@@ -258,7 +258,9 @@ private final class PassthroughWindow: UIWindow {
 }
 
 private final class PassthroughRootController: UIViewController {
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    // The window covers the screen, so its style is the status bar's while a banner is up: the
+    // app's, rather than white over a light theme.
+    override var preferredStatusBarStyle: UIStatusBarStyle { SubscriptionStyle.statusBarStyle }
     override func loadView() { view = UIView() }
     override func viewDidLoad() {
         super.viewDidLoad()

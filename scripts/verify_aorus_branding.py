@@ -3647,9 +3647,8 @@ def main() -> None:
             (
                 # Whatever collapsed it, the photo is full width again on the next tall layout.
                 "layout.size.width <= layout.size.height, self.aorusKeepsAvatarExpandedNow",
-                # The pull is armed only from rest at the top, and puts the list back as a scroll.
+                # The pull is armed only from rest at the top.
                 "abs(scrollView.contentOffset.y) < 1.0",
-                "scrollView.setContentOffset(CGPoint(), animated: true)",
                 # The gallery opens and closes onto a square photo, which stays until it is covered.
                 "sourceCorners: aorusSquareSource ? .none : .round",
                 "aorusRevealUntil",
@@ -3664,10 +3663,68 @@ def main() -> None:
                 # to show the page above it.
                 "aorusStaticAvatar && contentOffset > 0.0 ? contentOffset : contentOffset / 2.0",
                 "if !isSettings, !isMediaOnly, forumTopicThreadId == nil, AorusInterfaceV2Run.isEnabled {",
+                # The picture flies back under the name and buttons, not clipped to the photo's slot.
+                "self.regularContentNode.view.insertSubview(view, aboveSubview: self.avatarClippingNode.view)",
+            ),
+        ),
+        (
+            "submodules/PeerAvatarGalleryUI/Sources/PeerAvatarImageGalleryItem.swift",
+            (
+                # Closing onto the square photo, the gallery's own picture goes with its black.
+                "let aorusReturnsUnderProfile = transformedSurfaceFrame != nil && !sourceHasRoundCorners",
+                "duration: 0.1 * durationFactor, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)",
             ),
         ),
         ("submodules/PeerInfoAvatarListNode/Sources/PeerInfoAvatarListNode.swift", ("public func aorusShowEntry(_ entry: AvatarGalleryEntry)",)),
+        # The profile's tab strip takes the page's ink and side, handed in by its pane container;
+        # every other bar of tabs keeps Telegram's.
+        (
+            "submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift",
+            (
+                "isDark: component.aorusPageIsDark ?? component.theme.overallDarkAppearance",
+                "aorusSelectedAccent: component.aorusPageInk",
+                "customContent.view?.alpha = component.isSelected ? 1.0 : 0.5",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift",
+            (
+                "aorusPageInk: aorusPlainPanes ? AorusGlassPane.profilePageInk : nil",
+                "aorusPageIsDark: aorusPlainPanes ? AorusGlassPane.profilePageIsDark : nil",
+                "self.tabsBackgroundContainer.update(size: tabContainerFrame.size, isDark: aorusTabsDark,",
+                "isDark: aorusTabsDark, tintColor: .init(kind: aorusPlainPanes ? .clear : .panel)",
+                "theme: presentationData.theme, aorusInk: aorusPlainPanes ? AorusGlassPane.profilePageInk : nil)",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButtonContainerNode.swift",
+            ("spec.isForExpandedView ? self.aorusExpandedButtonContentsColor(expandedButtonContentsColor) : normalButtonContentsColor",),
+        ),
         ("submodules/Display/Source/AorusLegibleInk.swift", ("func aorusLegible(over fill: UIColor?) -> UIColor",)),
+        # A profile's first frame has its page, read from the photo already on the disk.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
+            ("AorusGlassProfileTint.prepareOpeningPage(for: aorusPeerIdValue, path: path,",),
+        ),
+        ("submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift", ("public static func prepareOpeningPage(for peerId: Int64, path: String,",)),
+        # The light page is the theme's plain white, as the dark one is its black; the theme's look
+        # is recorded for the licence screens.
+        (
+            "submodules/TelegramPresentationData/Sources/PresentationData.swift",
+            (
+                "let page: UIColor? = dark ? nil : theme.list.plainBackgroundColor",
+                "AorusAppearanceRecord.record(isDark: theme.overallDarkAppearance, page: theme.list.blocksBackgroundColor,",
+            ),
+        ),
+        ("submodules/Display/Source/AorusAppearanceRecord.swift", ("public enum AorusAppearanceRecord",)),
+        (
+            "submodules/AorusGram/Sources/Features/Subscription/SubscriptionStyle.swift",
+            ("static var background: UIColor { look.page }",),
+        ),
+        (
+            "submodules/AorusGram/Sources/Features/Subscription/ActivateKeyController.swift",
+            ("return contentStack.arrangedSubviews + buttonStack.arrangedSubviews",),
+        ),
         (
             "submodules/ContactsPeerItem/Sources/ContactsPeerItem.swift",
             ("textColor: item.presentationData.theme.aorusBadgeForegroundColor(over: item.presentationData.theme.list.itemAccentColor), paragraphAlignment: .center)",),
@@ -3704,6 +3761,11 @@ def main() -> None:
         for marker in markers:
             if marker not in target_text:
                 err.append(f"InterfaceV2: {relative_path} is missing {marker}")
+    # The bar of tabs draws the chat list's folders as well; a profile's ink read inside it
+    # reached every one of them.
+    tabs_component = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift"
+    if tabs_component.is_file() and "UserDefaults" in tabs_component.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: HorizontalTabsComponent reads a profile's ink from shared defaults")
 
     # This checker's own consistency, which has now cost two builds.
     #
