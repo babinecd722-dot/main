@@ -14,7 +14,7 @@ SIDE_HIGHLIGHT_FADE = '''    // AorusGram: under Interface 2.0 the darkened edge
     // at the list's bottom edge in a line drawn across the profile.
     private func aorusFadeSideHighlights(size: CGSize) {
         let highlights = [self.leftHighlightNode, self.rightHighlightNode]
-        guard UserDefaults.standard.bool(forKey: "aorusgram_interface_v2"), !AorusOldInterface.isEnabled, size.height > 0.0 else {
+        guard AorusInterfaceV2Run.isEnabled, size.height > 0.0 else {
             highlights.forEach { $0.layer.mask = nil }
             return
         }
@@ -89,13 +89,13 @@ def patch_composer_profile_refinements(tg):
     anchor = '            self.aorusPageProgressUpdated?(self.currentIndex, transitionFraction)\n            if let size = self.validLayout {\n                self.updateItems(size: size, transition: .animated(duration: 0.3, curve: .spring), stripTransition: .animated(duration: 0.3, curve: .spring))\n'
     s = edit(s, anchor, '''            self.aorusPageProgressUpdated?(self.currentIndex, transitionFraction)
             if let size = self.validLayout {
-                let aorusDragTransition: ContainedViewLayoutTransition = UserDefaults.standard.bool(forKey: "aorusgram_interface_v2") && !AorusOldInterface.isEnabled ? .immediate : .animated(duration: 0.3, curve: .spring)
+                let aorusDragTransition: ContainedViewLayoutTransition = AorusInterfaceV2Run.isEnabled ? .immediate : .animated(duration: 0.3, curve: .spring)
                 self.updateItems(size: size, transition: aorusDragTransition, stripTransition: aorusDragTransition)
 ''', 'avatar and background track the same drag frame')
     anchor = '            self.transitionFraction = 0.0\n            if let size = self.validLayout {\n                self.updateItems(size: size, transition: .animated(duration: 0.3, curve: .spring), stripTransition: .animated(duration: 0.3, curve: .spring))\n'
     s = edit(s, anchor, '''            self.transitionFraction = 0.0
             if let size = self.validLayout {
-                let aorusSettleTransition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: UserDefaults.standard.bool(forKey: "aorusgram_interface_v2") && !AorusOldInterface.isEnabled ? .easeInOut : .spring)
+                let aorusSettleTransition: ContainedViewLayoutTransition = .animated(duration: 0.3, curve: AorusInterfaceV2Run.isEnabled ? .easeInOut : .spring)
                 self.updateItems(size: size, transition: aorusSettleTransition, stripTransition: aorusSettleTransition)
 ''', 'avatar and page settle with the same curve')
     anchor = '        self.rightHighlightNode.frame = CGRect(origin: CGPoint(x: size.width - fadeWidth, y: 0.0), size: CGSize(width: fadeWidth, height: size.height))\n'

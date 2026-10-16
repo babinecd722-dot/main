@@ -448,8 +448,8 @@ def _patch_bars(tg: Path) -> None:
     text = _read(path)
     text = _edit(
         text,
-        "        let aorusHidesTitleGlass = UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n",
-        "        let aorusHidesTitleGlass = UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\") || AorusOldInterface.isEnabled // " + MARK + "\n",
+        "        let aorusHidesTitleGlass = AorusInterfaceV2Run.isEnabled\n",
+        "        let aorusHidesTitleGlass = AorusInterfaceV2Run.isEnabled || AorusOldInterface.isEnabled // " + MARK + "\n",
         "chat title capsule",
     )
     path.write_text(text, encoding="utf-8")

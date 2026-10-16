@@ -1047,6 +1047,11 @@ jobs:
           #     aorus_branding.py; the glass module adds its own shapes to it.
           cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusOldInterface.swift $TG/submodules/Display/Source/
+          # Interface 2.0 as this run draws it, decided once at start beside the old interface;
+          # interface_v2_patch.py points every read of its switch here (docs/interface-v2.md).
+          cp $PATCHES/submodules/Display/Source/AorusInterfaceV2Run.swift $TG/submodules/Display/Source/
+          # Letters and glyphs on a fill a theme can move away from them (docs/appearance.md).
+          cp $PATCHES/submodules/Display/Source/AorusLegibleInk.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRoundVideoCountdownView.swift $TG/submodules/Display/Source/

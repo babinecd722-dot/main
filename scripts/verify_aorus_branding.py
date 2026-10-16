@@ -3620,6 +3620,91 @@ def main() -> None:
             if marker not in target_text:
                 err.append(f"InterfaceV2: {relative_path} is missing {marker}")
 
+    # One interface per run. Interface 2.0 is decided once at start, like the old interface, and
+    # every place that draws it asks that choice: a switch read live is how a glass profile came
+    # to be drawn over the old interface, and how an Interface 2.0 profile fell back to Telegram's
+    # small round photo. The pass that rewrites the reads refuses leftovers too; this repeats it
+    # on the finished tree, after every later pass has had its turn.
+    run_switch = tg / "submodules/Display/Source/AorusInterfaceV2Run.swift"
+    if not run_switch.is_file() or "public static let isEnabled: Bool" not in run_switch.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: the run's choice (AorusInterfaceV2Run) is missing")
+    run_switch_holders = (
+        "submodules/Display/Source/AorusInterfaceV2Run.swift",
+        "submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusInterfaceV2.swift",
+        "submodules/AorusGram/",
+    )
+    for source in sorted((tg / "submodules").rglob("*.swift")):
+        relative = source.relative_to(tg).as_posix()
+        if relative.startswith(run_switch_holders):
+            continue
+        if '"aorusgram_interface_v2"' in source.read_text(encoding="utf-8", errors="ignore"):
+            err.append(f"InterfaceV2: {relative} reads the switch live instead of the run's choice")
+
+    # The profile photo under Interface 2.0, and the pills whose letters follow their fill.
+    photo_and_contrast_expectations = (
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift",
+            (
+                # Whatever collapsed it, the photo is full width again on the next tall layout.
+                "layout.size.width <= layout.size.height, self.aorusKeepsAvatarExpandedNow",
+                # The pull is armed only from rest at the top, and puts the list back as a scroll.
+                "abs(scrollView.contentOffset.y) < 1.0",
+                "scrollView.setContentOffset(CGPoint(), animated: true)",
+                # The gallery opens and closes onto a square photo, which stays until it is covered.
+                "sourceCorners: aorusSquareSource ? .none : .round",
+                "aorusRevealUntil",
+                "aorusSquareSource ? Optional(shownEntry) : centralEntry",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
+            (
+                "self.avatarListNode.listContainerNode.aorusShowEntry(entry)",
+                # Pulled past the top the photo grows from the top of the screen, never sliding down
+                # to show the page above it.
+                "aorusStaticAvatar && contentOffset > 0.0 ? contentOffset : contentOffset / 2.0",
+                "if !isSettings, !isMediaOnly, forumTopicThreadId == nil, AorusInterfaceV2Run.isEnabled {",
+            ),
+        ),
+        ("submodules/PeerInfoAvatarListNode/Sources/PeerInfoAvatarListNode.swift", ("public func aorusShowEntry(_ entry: AvatarGalleryEntry)",)),
+        ("submodules/Display/Source/AorusLegibleInk.swift", ("func aorusLegible(over fill: UIColor?) -> UIColor",)),
+        (
+            "submodules/ContactsPeerItem/Sources/ContactsPeerItem.swift",
+            ("textColor: item.presentationData.theme.aorusBadgeForegroundColor(over: item.presentationData.theme.list.itemAccentColor), paragraphAlignment: .center)",),
+        ),
+        ("submodules/TelegramUI/Sources/HashtagChatInputPanelItem.swift", ("aorusBadgeForegroundColor(over: item.presentationData.theme.list.itemAccentColor).cgColor",)),
+        ("submodules/ListMessageItem/Sources/ListMessageFileItemNode.swift", ("aorusBadgeForegroundColor(over: item.presentationData.theme.theme.list.itemAccentColor)",)),
+        ("submodules/InviteLinksUI/Sources/AdditionalLinkItem.swift", ("aorusIconGlyphColor",)),
+        ("submodules/InviteLinksUI/Sources/ItemListInviteLinkItem.swift", ("aorusIconGlyphColor",)),
+        ("submodules/InviteLinksUI/Sources/ItemListFolderInviteLinkListItem.swift", ("aorusIconGlyphColor",)),
+        ("submodules/BotPaymentsUI/Sources/BotCheckoutControllerNode.swift", ("aorusBadgeForegroundColor(over:",)),
+        ("submodules/PremiumUI/Sources/PremiumOptionComponent.swift", ("UIColor.white.aorusLegible(over: component.accentColor)",)),
+        ("submodules/TelegramUI/Components/AlertComponent/Sources/AlertComponent.swift", ("aorusBadgeForegroundColor(over: environment.theme.actionSheet.controlAccentColor)",)),
+        ("submodules/TelegramPresentationData/Sources/ComponentsThemes.swift", ("contrastColor: presentationTheme.aorusBadgeForegroundColor(over: actionSheet.controlAccentColor)",)),
+        # A plugin theme that recolours a fill and not the text on it keeps that text readable.
+        ("submodules/TelegramPresentationData/Sources/PresentationData.swift", ("func on(_ fill: UIColor?, _ key: String, _ current: UIColor) -> UIColor? {",)),
+        # The light theme under Interface 2.0. The ghost beside a chat's avatar is drawn in the
+        # bar's ink rather than in white, a toast keeps a dark pane over a white screen, the share
+        # sheet is frosted where clear glass let the dim through, and the music capsule in a
+        # profile takes the page's side as the ink inside it does.
+        ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
+        ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("let aorusToastTint: GlassBackgroundView.TintColor",)),
+        ("submodules/ShareController/Sources/ShareControllerNode.swift", ("GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)",)),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: AorusGlassPane.profilePageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)",)),
+    )
+    ghost_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
+    if ghost_buttons.is_file() and "let ghostColor = UIColor.white" in ghost_buttons.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: the ghost badge is still drawn white, which the light theme shows as white on white")
+    for relative_path, markers in photo_and_contrast_expectations:
+        target = tg / relative_path
+        if not target.is_file():
+            err.append(f"InterfaceV2: {relative_path} is missing")
+            continue
+        target_text = target.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in target_text:
+                err.append(f"InterfaceV2: {relative_path} is missing {marker}")
+
     # This checker's own consistency, which has now cost two builds.
     #
     # Neither was a fault in the code. Both were two rules in this file disagreeing about one

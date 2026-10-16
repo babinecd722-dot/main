@@ -1428,8 +1428,9 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             // to work out how to meet it.
             if keyPath == \AorusState.interfaceV2 {
                 // Written here rather than with the block above, because saving it posts a
-                // change notice that rebuilds an open profile — every OTHER switch on this
-                // screen would otherwise do that too, for a value it did not touch.
+                // change notice, which every OTHER switch on this screen would otherwise post
+                // too, for a value it did not touch. The interface itself is drawn by the next
+                // start: this run keeps the one it started with (AorusInterfaceV2Run).
                 AorusInterfaceV2.setEnabled(s.interfaceV2)
                 // Interface 2.0 and the old interface are two whole interfaces: turning one on
                 // turns the other off, and the next start draws the one that is on.

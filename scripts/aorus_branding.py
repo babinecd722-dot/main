@@ -19,7 +19,7 @@ from aorus_call_proxy_udp import (
 )
 
 from profile_personalization_patch import patch_profile_personalization
-from interface_v2_patch import patch_interface_v2
+from interface_v2_patch import patch_interface_v2, patch_interface_v2_run_switch
 from glass_everywhere_patch import patch_glass_everywhere
 from deleted_buttons_patch import patch_deleted_side_buttons
 
@@ -16125,6 +16125,14 @@ func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
     return AorusPluginIconValues.own(aorusGhostIconDrawn(active: active, color: color), named: "AorusGram/Header/Ghost")
 }
 
+// The ink of the badge beside the chat's avatar. In a capsule it is a bar button and takes the
+// colour Telegram gives the glyphs of its glass bar buttons; under Interface 2.0 it has no capsule
+// and stands on the wallpaper beside the chat's name, so it takes the name's colour.
+func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {
+    let bar = theme.rootController.navigationBar
+    return AorusInterfaceV2Run.isEnabled ? bar.primaryTextColor : bar.glassBarButtonForegroundColor
+}
+
 private func aorusGhostIconDrawn(active: Bool, color: UIColor) -> UIImage? {
     let size = CGSize(width: 34.0, height: 34.0)
     return UIGraphicsImageRenderer(size: size).image { context in
@@ -16150,20 +16158,25 @@ private func aorusGhostIconDrawn(active: Bool, color: UIColor) -> UIImage? {
         }
         path.close()
 
-        let ghostColor = UIColor.white
+        // Drawn in the colour it is given -- the navigation bar's ink -- not in white: on the
+        // light theme the badge stands on a pale bar or, under Interface 2.0, straight on the
+        // wallpaper, and a white ghost there was white on white.
         if active {
-            ghostColor.setFill()
+            color.setFill()
             path.fill()
-            UIColor.black.setFill()
+            // The eyes are cut out of the filled ghost rather than painted black, so they show
+            // whatever is behind the badge in either theme.
+            ctx.setBlendMode(.clear)
         } else {
-            ghostColor.setStroke()
+            color.setStroke()
             path.stroke()
-            ghostColor.setFill()
+            color.setFill()
         }
 
         // Small eyes.
         ctx.fillEllipse(in: CGRect(x: 13.2, y: 11.8, width: 2.4, height: 2.8))
         ctx.fillEllipse(in: CGRect(x: 18.4, y: 11.8, width: 2.4, height: 2.8))
+        ctx.setBlendMode(.normal)
     }.withRenderingMode(.alwaysOriginal)
 }
 
@@ -16324,7 +16337,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         self.ghostVisible = isVisible
         self.ghostButtonNode.isHidden = !isVisible
         self.isDarkAppearance = theme.overallDarkAppearance
-        self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: theme.rootController.navigationBar.buttonColor), for: [])
+        self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: aorusGhostIconColor(theme)), for: [])
         self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
         self.invalidateCalculatedLayout()
         self.setNeedsLayout()
@@ -16363,7 +16376,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
             // its own on top of the navigation bar's right-hand pane, so hiding only that one would
             // leave this capsule behind them. The back button's pane is a different view and keeps
             // its own tablet.
-            let aorusHidesNavCapsule = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: "aorusgram_interface_v2")
+            let aorusHidesNavCapsule = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && AorusInterfaceV2Run.isEnabled
             glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule, transition: .immediate)
         }
         if self.ghostVisible {
@@ -16454,7 +16467,7 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
         }
         let updatedValue = aorusGhostIsActive(peerId: peerId)
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
-        if let image = aorusGhostIconImage(active: updatedValue, color: self.presentationInterfaceState.theme.rootController.navigationBar.buttonColor) {
+        if let image = aorusGhostIconImage(active: updatedValue, color: aorusGhostIconColor(self.presentationInterfaceState.theme)) {
             UIView.transition(with: buttonNode.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
                 buttonNode.setImage(image, for: [])
             })
@@ -17797,7 +17810,7 @@ _AORUS_AMOLED_HELPER = (
     "// behind them stays opaque, which is what a pane of glass needs to read as glass\n"
     "// instead of as a washed-out card.\n"
     "private func aorusInterfaceV2Enabled() -> Bool {\n"
-    f"    return !UserDefaults.standard.bool(forKey: \"{_AG_LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
+    f"    return !UserDefaults.standard.bool(forKey: \"{_AG_LICENSE_LOCK_KEY}\") && AorusInterfaceV2Run.isEnabled\n"
     "}\n"
     "\n"
     "func aorusApplyInterfaceV2Theme(_ theme: PresentationTheme) -> PresentationTheme {\n"
@@ -18268,12 +18281,22 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     func v(_ key: String) -> PresentationThemeVariableColor? {
         return c(key).map { PresentationThemeVariableColor(color: $0) }
     }
+    // A colour drawn on a fill the plugin changed, when the plugin left the colour itself alone.
+    // A theme that turns a pill, a badge or a page white on the dark side and stops there would
+    // otherwise keep the white letters Telegram put on it: the theme's own colour stays while it
+    // can still be read on the new fill, and turns black or white once it cannot.
+    func on(_ fill: UIColor?, _ key: String, _ current: UIColor) -> UIColor? {
+        return c(key) ?? fill.map { current.aorusLegible(over: $0) }
+    }
 
     let root = theme.rootController
-    let tabBar = root.tabBar.withUpdated(backgroundColor: c("tabBar.background"), separatorColor: c("tabBar.separator"), iconColor: c("tabBar.icon"), selectedIconColor: c("tabBar.selected"), textColor: c("tabBar.text"), selectedTextColor: c("tabBar.selectedText"), badgeBackgroundColor: c("tabBar.badge"), badgeTextColor: c("tabBar.badgeText"))
+    let tabBadge = c("tabBar.badge")
+    let tabBar = root.tabBar.withUpdated(backgroundColor: c("tabBar.background"), separatorColor: c("tabBar.separator"), iconColor: c("tabBar.icon"), selectedIconColor: c("tabBar.selected"), textColor: c("tabBar.text"), selectedTextColor: c("tabBar.selectedText"), badgeBackgroundColor: tabBadge, badgeTextColor: on(tabBadge, "tabBar.badgeText", root.tabBar.badgeTextColor))
     let headerBackground = c("header.background")
-    let navigationBar = root.navigationBar.withUpdated(buttonColor: c("header.buttons"), disabledButtonColor: c("header.disabled"), primaryTextColor: c("header.title"), secondaryTextColor: c("header.subtitle"), controlColor: c("header.controls"), accentTextColor: c("header.accent"), blurredBackgroundColor: headerBackground, opaqueBackgroundColor: headerBackground, separatorColor: c("header.separator"), badgeBackgroundColor: c("header.badge"), badgeTextColor: c("header.badgeText"), segmentedBackgroundColor: c("header.segment"), segmentedForegroundColor: c("header.segmentSelected"), segmentedTextColor: c("header.segmentText"), segmentedDividerColor: c("header.segmentDivider"))
-    let searchBar = root.navigationSearchBar.withUpdated(backgroundColor: c("search.background"), accentColor: c("search.accent"), inputFillColor: c("search.field"), inputTextColor: c("search.text"), inputPlaceholderTextColor: c("search.placeholder"), inputIconColor: c("search.icon"))
+    let headerBadge = c("header.badge")
+    let navigationBar = root.navigationBar.withUpdated(buttonColor: on(headerBackground, "header.buttons", root.navigationBar.buttonColor), disabledButtonColor: c("header.disabled"), primaryTextColor: on(headerBackground, "header.title", root.navigationBar.primaryTextColor), secondaryTextColor: on(headerBackground, "header.subtitle", root.navigationBar.secondaryTextColor), controlColor: c("header.controls"), accentTextColor: on(headerBackground, "header.accent", root.navigationBar.accentTextColor), blurredBackgroundColor: headerBackground, opaqueBackgroundColor: headerBackground, separatorColor: c("header.separator"), badgeBackgroundColor: headerBadge, badgeTextColor: on(headerBadge, "header.badgeText", root.navigationBar.badgeTextColor), segmentedBackgroundColor: c("header.segment"), segmentedForegroundColor: c("header.segmentSelected"), segmentedTextColor: c("header.segmentText"), segmentedDividerColor: c("header.segmentDivider"))
+    let searchField = c("search.field")
+    let searchBar = root.navigationSearchBar.withUpdated(backgroundColor: c("search.background"), accentColor: c("search.accent"), inputFillColor: searchField, inputTextColor: on(searchField, "search.text", root.navigationSearchBar.inputTextColor), inputPlaceholderTextColor: c("search.placeholder"), inputIconColor: c("search.icon"))
     let rootController = root.withUpdated(tabBar: tabBar, navigationBar: navigationBar, navigationSearchBar: searchBar)
 
     let listBackground = c("list.background")
@@ -18287,21 +18310,25 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let check = c("list.check")
     let buttonFill = c("button.fill")
     let buttonText = c("button.text")
-    let swipeText = c("swipe.text")
     func swipe(_ key: String, _ base: PresentationThemeFillForeground) -> PresentationThemeFillForeground {
-        return base.withUpdated(fillColor: c(key), foregroundColor: swipeText)
+        return base.withUpdated(fillColor: c(key), foregroundColor: on(c(key), "swipe.text", base.foregroundColor))
     }
     let actions = theme.list.itemDisclosureActions
     let disclosureActions = actions.withUpdated(neutral1: swipe("swipe.neutral", actions.neutral1), neutral2: swipe("swipe.neutralAlt", actions.neutral2), destructive: swipe("swipe.destructive", actions.destructive), constructive: swipe("swipe.constructive", actions.constructive), accent: swipe("swipe.accent", actions.accent), warning: swipe("swipe.warning", actions.warning), inactive: swipe("swipe.inactive", actions.inactive))
+    // The rows' text sits on the rows, and the section titles and footers on the page between
+    // them. A theme that recolours only the page leaves the rows of a grouped list on their own
+    // fill, where the theme's text is still legible, so the rows' text follows the rows alone.
+    let rowFill = listItem
+    let checkFill = buttonFill ?? check
     let list = theme.list.withUpdated(
         blocksBackgroundColor: listBackground,
         modalBlocksBackgroundColor: listBackground,
         plainBackgroundColor: listBackground,
         modalPlainBackgroundColor: listBackground,
-        itemPrimaryTextColor: c("list.text"),
-        itemSecondaryTextColor: c("list.secondaryText"),
+        itemPrimaryTextColor: on(rowFill, "list.text", theme.list.itemPrimaryTextColor),
+        itemSecondaryTextColor: on(rowFill, "list.secondaryText", theme.list.itemSecondaryTextColor),
         itemDisabledTextColor: c("list.disabledText"),
-        itemAccentColor: c("list.accent"),
+        itemAccentColor: on(rowFill, "list.accent", theme.list.itemAccentColor),
         itemDestructiveColor: c("list.destructive"),
         itemPlaceholderTextColor: c("list.placeholder"),
         itemBlocksBackgroundColor: listItem,
@@ -18310,13 +18337,13 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         itemBlocksSeparatorColor: listSeparator,
         itemPlainSeparatorColor: listSeparator,
         disclosureArrowColor: c("list.arrow"),
-        sectionHeaderTextColor: c("list.sectionHeader"),
-        freeTextColor: c("list.footer"),
+        sectionHeaderTextColor: on(listBackground, "list.sectionHeader", theme.list.sectionHeaderTextColor),
+        freeTextColor: on(listBackground, "list.footer", theme.list.freeTextColor),
         freeTextErrorColor: c("list.errorText"),
         freeTextSuccessColor: c("list.successText"),
         itemSwitchColors: (switchOn != nil || switchOff != nil || switchKnob != nil) ? theme.list.itemSwitchColors.withUpdated(frameColor: switchOff, handleColor: switchKnob, contentColor: switchOn) : nil,
         itemDisclosureActions: disclosureActions,
-        itemCheckColors: (check != nil || buttonFill != nil || buttonText != nil) ? theme.list.itemCheckColors.withUpdated(fillColor: buttonFill ?? check, strokeColor: check, foregroundColor: buttonText) : nil,
+        itemCheckColors: (checkFill != nil || buttonText != nil) ? theme.list.itemCheckColors.withUpdated(fillColor: checkFill, strokeColor: check, foregroundColor: on(checkFill, "button.text", theme.list.itemCheckColors.foregroundColor)) : nil,
         mediaPlaceholderColor: c("list.mediaPlaceholder"),
         scrollIndicatorColor: c("list.scrollIndicator"),
         pageIndicatorInactiveColor: c("list.pageIndicator"),
@@ -18332,6 +18359,9 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let chatListBackground = c("chatList.background")
     let chatListHighlight = c("chatList.highlight")
     let chatListSearchBar = c("chatList.searchBar")
+    let unreadBadge = c("badge.unread")
+    let mutedBadge = c("badge.muted")
+    let verifiedFill = c("chatList.verified")
     let chatList = theme.chatList.withUpdated(
         backgroundColor: chatListBackground,
         itemSeparatorColor: c("chatList.separator"),
@@ -18340,28 +18370,28 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         itemHighlightedBackgroundColor: chatListHighlight,
         pinnedItemHighlightedBackgroundColor: chatListHighlight,
         itemSelectedBackgroundColor: c("chatList.selected"),
-        titleColor: c("chatList.title"),
+        titleColor: on(chatListBackground, "chatList.title", theme.chatList.titleColor),
         secretTitleColor: c("chatList.secretTitle"),
-        dateTextColor: c("chatList.date"),
-        authorNameColor: c("chatList.author"),
-        messageTextColor: c("chatList.text"),
+        dateTextColor: on(chatListBackground, "chatList.date", theme.chatList.dateTextColor),
+        authorNameColor: on(chatListBackground, "chatList.author", theme.chatList.authorNameColor),
+        messageTextColor: on(chatListBackground, "chatList.text", theme.chatList.messageTextColor),
         messageDraftTextColor: c("chatList.draft"),
         checkmarkColor: c("chatList.checks"),
         pendingIndicatorColor: c("chatList.pending"),
         failedFillColor: c("chatList.failed"),
         muteIconColor: c("chatList.muteIcon"),
-        unreadBadgeActiveBackgroundColor: c("badge.unread"),
-        unreadBadgeActiveTextColor: c("badge.unreadText"),
-        unreadBadgeInactiveBackgroundColor: c("badge.muted"),
-        unreadBadgeInactiveTextColor: c("badge.mutedText"),
+        unreadBadgeActiveBackgroundColor: unreadBadge,
+        unreadBadgeActiveTextColor: on(unreadBadge, "badge.unreadText", theme.chatList.unreadBadgeActiveTextColor),
+        unreadBadgeInactiveBackgroundColor: mutedBadge,
+        unreadBadgeInactiveTextColor: on(mutedBadge, "badge.mutedText", theme.chatList.unreadBadgeInactiveTextColor),
         reactionBadgeActiveBackgroundColor: c("badge.reaction"),
         pinnedBadgeColor: c("badge.pinned"),
         pinnedSearchBarColor: chatListSearchBar,
         regularSearchBarColor: chatListSearchBar,
         sectionHeaderFillColor: c("chatList.sectionHeader"),
         sectionHeaderTextColor: c("chatList.sectionHeaderText"),
-        verifiedIconFillColor: c("chatList.verified"),
-        verifiedIconForegroundColor: c("chatList.verifiedCheck"),
+        verifiedIconFillColor: verifiedFill,
+        verifiedIconForegroundColor: on(verifiedFill, "chatList.verifiedCheck", theme.chatList.verifiedIconForegroundColor),
         secretIconColor: c("chatList.secretIcon"),
         onlineDotColor: c("chatList.online"),
         storyUnseenColors: ring("chatList.storyRing", theme.chatList.storyUnseenColors),
@@ -18425,6 +18455,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         message.freeform.withUpdated(withWallpaper: message.freeform.withWallpaper.withUpdated(fill: [color]), withoutWallpaper: message.freeform.withoutWallpaper.withUpdated(fill: [color]))
     }
     let selectCheck = c("bubble.selectCheck")
+    let mediaStatus = c("bubble.mediaStatus")
     let updatedMessage = message.withUpdated(
         incoming: parted("incoming", message.incoming),
         outgoing: parted("outgoing", message.outgoing),
@@ -18432,12 +18463,12 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         infoPrimaryTextColor: c("bubble.infoText"),
         infoLinkTextColor: c("bubble.infoLink"),
         outgoingCheckColor: c("bubble.checks"),
-        mediaDateAndStatusFillColor: c("bubble.mediaStatus"),
-        mediaDateAndStatusTextColor: c("bubble.mediaStatusText"),
+        mediaDateAndStatusFillColor: mediaStatus,
+        mediaDateAndStatusTextColor: on(mediaStatus, "bubble.mediaStatusText", message.mediaDateAndStatusTextColor),
         shareButtonFillColor: v("bubble.shareButton"),
         shareButtonForegroundColor: v("bubble.shareButtonIcon"),
         mediaOverlayControlColors: c("bubble.mediaOverlay").map { message.mediaOverlayControlColors.withUpdated(fillColor: $0) },
-        selectionControlColors: selectCheck.map { message.selectionControlColors.withUpdated(fillColor: $0, strokeColor: $0) },
+        selectionControlColors: selectCheck.map { message.selectionControlColors.withUpdated(fillColor: $0, strokeColor: $0, foregroundColor: message.selectionControlColors.foregroundColor.aorusLegible(over: $0)) },
         deliveryFailedColors: c("bubble.failed").map { message.deliveryFailedColors.withUpdated(fillColor: $0) }
     )
 
@@ -18448,10 +18479,13 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     func serviceComponents(_ source: PresentationThemeServiceMessageColorComponents) -> PresentationThemeServiceMessageColorComponents {
         return source.withUpdated(fill: serviceFill, primaryText: serviceText, dateFillStatic: dateFill, dateFillFloating: dateFill)
     }
-    let updatedService = service.withUpdated(components: service.components.withUpdated(withDefaultWallpaper: serviceComponents(service.components.withDefaultWallpaper), withCustomWallpaper: serviceComponents(service.components.withCustomWallpaper)), unreadBarFillColor: c("chat.unreadBar"), unreadBarTextColor: c("chat.unreadBarText"), dateTextColor: v("chat.dateText"))
+    let unreadBar = c("chat.unreadBar")
+    let updatedService = service.withUpdated(components: service.components.withUpdated(withDefaultWallpaper: serviceComponents(service.components.withDefaultWallpaper), withCustomWallpaper: serviceComponents(service.components.withCustomWallpaper)), unreadBarFillColor: unreadBar, unreadBarTextColor: on(unreadBar, "chat.unreadBarText", service.unreadBarTextColor), dateTextColor: v("chat.dateText"))
 
     let input = theme.chat.inputPanel
     let inputBackground = c("input.background")
+    let inputField = c("input.field")
+    let sendFill = c("input.send")
     let recording = c("input.recording")
     let inputPanel = input.withUpdated(
         panelBackgroundColor: inputBackground,
@@ -18461,29 +18495,40 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         panelControlColor: c("input.icons"),
         panelControlDisabledColor: c("input.disabled"),
         panelControlDestructiveColor: c("input.destructive"),
-        inputBackgroundColor: c("input.field"),
+        inputBackgroundColor: inputField,
         inputStrokeColor: c("input.fieldStroke"),
         inputPlaceholderColor: c("input.placeholder"),
-        inputTextColor: c("input.text"),
+        inputTextColor: on(inputField, "input.text", input.inputTextColor),
         inputControlColor: c("input.fieldIcons"),
-        actionControlFillColor: c("input.send"),
-        actionControlForegroundColor: c("input.sendIcon"),
+        actionControlFillColor: sendFill,
+        actionControlForegroundColor: on(sendFill, "input.sendIcon", input.actionControlForegroundColor),
         primaryTextColor: c("input.panelText"),
         mediaRecordingDotColor: recording,
         mediaRecordingControl: input.mediaRecordingControl.withUpdated(buttonColor: recording, activeIconColor: c("input.recordingIcon"))
     )
-    let keyboard = theme.chat.inputButtonPanel.withUpdated(panelBackgroundColor: c("keyboard.background"), buttonFillColor: c("keyboard.button"), buttonStrokeColor: c("keyboard.buttonStroke"), buttonHighlightedFillColor: c("keyboard.buttonPressed"), buttonTextColor: c("keyboard.buttonText"))
+    let keyboardButton = c("keyboard.button")
+    let keyboard = theme.chat.inputButtonPanel.withUpdated(panelBackgroundColor: c("keyboard.background"), buttonFillColor: keyboardButton, buttonStrokeColor: c("keyboard.buttonStroke"), buttonHighlightedFillColor: c("keyboard.buttonPressed"), buttonTextColor: on(keyboardButton, "keyboard.buttonText", theme.chat.inputButtonPanel.buttonTextColor))
     let emojiBackground = c("emojiPanel.background")
     let mediaPanel = theme.chat.inputMediaPanel.withUpdated(panelSeparatorColor: c("emojiPanel.separator"), panelIconColor: c("emojiPanel.icons"), panelHighlightedIconBackgroundColor: c("emojiPanel.selectedBackground"), panelHighlightedIconColor: c("emojiPanel.selectedIcon"), stickersBackgroundColor: emojiBackground, stickersSectionTextColor: c("emojiPanel.sectionText"), gifsBackgroundColor: emojiBackground, backgroundColor: emojiBackground)
-    let navigation = theme.chat.historyNavigation.withUpdated(fillColor: c("chat.scrollButton"), strokeColor: c("chat.scrollButtonStroke"), foregroundColor: c("chat.scrollButtonIcon"), badgeBackgroundColor: c("chat.scrollBadge"), badgeTextColor: c("chat.scrollBadgeText"))
+    let history = theme.chat.historyNavigation
+    let scrollButton = c("chat.scrollButton")
+    let scrollBadge = c("chat.scrollBadge")
+    let navigation = history.withUpdated(fillColor: scrollButton, strokeColor: c("chat.scrollButtonStroke"), foregroundColor: on(scrollButton, "chat.scrollButtonIcon", history.foregroundColor), badgeBackgroundColor: scrollBadge, badgeTextColor: on(scrollBadge, "chat.scrollBadgeText", history.badgeTextColor))
     let chat = theme.chat.withUpdated(message: updatedMessage, serviceMessage: updatedService, inputPanel: inputPanel, inputMediaPanel: mediaPanel, inputButtonPanel: keyboard, historyNavigation: navigation)
 
+    let sheet = theme.actionSheet
     let sheetBackground = c("sheet.background")
     let sheetPressed = c("sheet.pressed")
-    let actionSheet = theme.actionSheet.withUpdated(dimColor: c("sheet.dim"), opaqueItemBackgroundColor: sheetBackground, itemBackgroundColor: sheetBackground, opaqueItemHighlightedBackgroundColor: sheetPressed, itemHighlightedBackgroundColor: sheetPressed, opaqueItemSeparatorColor: c("sheet.separator"), standardActionTextColor: c("sheet.action"), destructiveActionTextColor: c("sheet.destructive"), disabledActionTextColor: c("sheet.disabled"), primaryTextColor: c("sheet.text"), secondaryTextColor: c("sheet.secondaryText"), controlAccentColor: c("sheet.accent"), inputBackgroundColor: c("sheet.input"), inputTextColor: c("sheet.inputText"), checkContentColor: c("sheet.check"))
+    let sheetAccent = c("sheet.accent")
+    let sheetInput = c("sheet.input")
+    let actionSheet = sheet.withUpdated(dimColor: c("sheet.dim"), opaqueItemBackgroundColor: sheetBackground, itemBackgroundColor: sheetBackground, opaqueItemHighlightedBackgroundColor: sheetPressed, itemHighlightedBackgroundColor: sheetPressed, opaqueItemSeparatorColor: c("sheet.separator"), standardActionTextColor: on(sheetBackground, "sheet.action", sheet.standardActionTextColor), destructiveActionTextColor: c("sheet.destructive"), disabledActionTextColor: c("sheet.disabled"), primaryTextColor: on(sheetBackground, "sheet.text", sheet.primaryTextColor), secondaryTextColor: on(sheetBackground, "sheet.secondaryText", sheet.secondaryTextColor), controlAccentColor: sheetAccent, inputBackgroundColor: sheetInput, inputTextColor: on(sheetInput, "sheet.inputText", sheet.inputTextColor), checkContentColor: on(sheetAccent, "sheet.check", sheet.checkContentColor))
     let menuSeparator = c("menu.separator")
-    let contextMenu = theme.contextMenu.withUpdated(dimColor: c("menu.dim"), backgroundColor: c("menu.background"), itemSeparatorColor: menuSeparator, sectionSeparatorColor: menuSeparator, itemBackgroundColor: c("menu.item"), itemHighlightedBackgroundColor: c("menu.pressed"), primaryColor: c("menu.text"), secondaryColor: c("menu.secondaryText"), destructiveColor: c("menu.destructive"))
-    let inAppNotification = theme.inAppNotification.withUpdated(fillColor: c("notification.background"), primaryTextColor: c("notification.text"))
+    // A menu's rows are drawn over its own fill, or over the menu's background where it has none.
+    let menuFill = c("menu.item") ?? c("menu.background")
+    let menu = theme.contextMenu
+    let contextMenu = menu.withUpdated(dimColor: c("menu.dim"), backgroundColor: c("menu.background"), itemSeparatorColor: menuSeparator, sectionSeparatorColor: menuSeparator, itemBackgroundColor: c("menu.item"), itemHighlightedBackgroundColor: c("menu.pressed"), primaryColor: on(menuFill, "menu.text", menu.primaryColor), secondaryColor: on(menuFill, "menu.secondaryText", menu.secondaryColor), destructiveColor: c("menu.destructive"))
+    let notificationFill = c("notification.background")
+    let inAppNotification = theme.inAppNotification.withUpdated(fillColor: notificationFill, primaryTextColor: on(notificationFill, "notification.text", theme.inAppNotification.primaryTextColor))
 
     let result = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: contextMenu, inAppNotification: inAppNotification, chart: theme.chart, preview: theme.preview)
     cache.lock.lock()
@@ -30394,6 +30439,10 @@ def main() -> None:
     patch_info_plist_face_id(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)
+
+    # After every pass that draws Interface 2.0: each asks the choice the run started with,
+    # and this gives those files their import and fails on any live read of the switch.
+    patch_interface_v2_run_switch(tg)
 
     # Last: discovers every file the patches above left calling aorusL() and gives its
     # package the AorusGramUI dep and the import.

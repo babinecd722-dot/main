@@ -16,20 +16,16 @@ import AorusGram
 public enum AorusInterfaceV2 {
     public static let key = "aorusgram_interface_v2"
 
-    /// Posted when the switch is flipped, so an open profile can rebuild itself instead of
-    /// waiting to be pushed again.
+    /// Posted when the switch is flipped. What this run draws does not change with it; the
+    /// next start does.
     public static let changedNotification = Notification.Name("AorusGramInterfaceV2Changed")
 
+    /// Whether this run draws Interface 2.0: the choice the app started with
+    /// (`AorusInterfaceV2Run` in Display), which the patched Telegram screens read too, so the
+    /// screens here and Telegram's own always draw the same interface. The old interface rules
+    /// it out there; the entitlement is asked here as well, as every feature asks it.
     public static var isEnabled: Bool {
-        if !AorusLicenseAccess.isAllowed {
-            return false
-        }
-        // The old interface is the other whole interface; a run started with it draws no
-        // Interface 2.0 at all.
-        if AorusOldInterface.isEnabled {
-            return false
-        }
-        return UserDefaults.standard.bool(forKey: AorusInterfaceV2.key)
+        return AorusLicenseAccess.isAllowed && AorusInterfaceV2Run.isEnabled
     }
 
     /// The choice the switch shows and the next start follows, whatever this run draws.

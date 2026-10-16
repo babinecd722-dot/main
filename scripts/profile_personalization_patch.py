@@ -225,8 +225,9 @@ def _patch_expanded_avatar_default(tg: Path) -> None:
         "        // AorusGram: Interface 2.0 opens the photo at full width straight away.\n"
         "        // Settings and media-only headers keep the stock behaviour: neither has a\n"
         "        // photo carousel to expand, so forcing the state there would only break\n"
-        "        // their layout.\n"
-        "        if !isSettings, !isMediaOnly, UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\") {\n"
+        "        // their layout. Nor does a forum topic, whose header is the topic's icon --\n"
+        "        // the same three the profile asks before it holds the photo open.\n"
+        "        if !isSettings, !isMediaOnly, forumTopicThreadId == nil, AorusInterfaceV2Run.isEnabled {\n"
         "            self.isAvatarExpanded = true\n"
         "        } else {\n"
         "            self.isAvatarExpanded = avatarInitiallyExpanded\n"
@@ -307,7 +308,7 @@ def _patch_round_action_buttons(tg: Path) -> None:
         "        var buttonRightOrigin = CGPoint(x: width - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
         "        // AorusGram: Interface 2.0 lays the row out as centred circles instead of\n"
         "        // rectangles stretched edge to edge.\n"
-        "        let aorusRoundButtons = !buttonKeys.isEmpty && UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
+        "        let aorusRoundButtons = !buttonKeys.isEmpty && AorusInterfaceV2Run.isEnabled\n"
         "        // 64pt is the design's diameter and the cap, not the answer: a profile with five\n"
         "        // buttons -- message, call, mute, search, more -- needs 352pt of row on a screen\n"
         "        // that may only have 288pt of it, and the fixed diameter is what made those\n"
@@ -403,7 +404,9 @@ def _patch_music_capsule(tg: Path) -> None:
         "                    self.aorusMusicCapsule.update(\n"
         "                        size: aorusCapsuleFrame.size,\n"
         "                        cornerRadius: aorusCapsuleFrame.height * 0.5,\n"
-        "                        isDark: true,\n"
+        "                        // The glass takes the page's side, as the ink inside it does: a\n"
+        "                        // dark pane under the near-black ink of a pale photo hid the track.\n"
+        "                        isDark: AorusGlassPane.profilePageIsDark,\n"
         "                        tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
         "                        isInteractive: false,\n"
         "                        isVisible: true,\n"
@@ -429,7 +432,7 @@ def _patch_music_capsule(tg: Path) -> None:
     text = _replace_once(
         text,
         "        if let currentSavedMusic {\n",
-        "        let aorusInterfaceV2Enabled = UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
+        "        let aorusInterfaceV2Enabled = AorusInterfaceV2Run.isEnabled\n"
         "        if let currentSavedMusic {\n",
         "music capsule flag",
     )
@@ -477,7 +480,7 @@ def _patch_call_type_sheet(tg: Path) -> None:
         "        // AorusGram: a long press still opens Telegram's own context menu, so the\n"
         "        // sheet is only for a plain tap.\n"
         "        if buttonNode.key == .call, gesture == nil, self.videoCallsEnabled,\n"
-        "           UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\"),\n"
+        "           AorusInterfaceV2Run.isEnabled,\n"
         "           self.aorusPresentCallTypeSheet() {\n"
         "            return\n"
         "        }\n"
