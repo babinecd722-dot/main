@@ -37,7 +37,7 @@ final class SubscriptionBanner: UIView {
         self.onTap = onTap
         translatesAutoresizingMaskIntoConstraints = false
 
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterialDark))
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
         blur.translatesAutoresizingMaskIntoConstraints = false
         blur.layer.cornerRadius = 16
         blur.layer.cornerCurve = .continuous
@@ -55,13 +55,13 @@ final class SubscriptionBanner: UIView {
         let titleLabel = UILabel()
         titleLabel.text = title
         titleLabel.font = Font.semibold(15)
-        titleLabel.textColor = .white
+        titleLabel.textColor = SubscriptionStyle.primaryText
         titleLabel.numberOfLines = 1
 
         let subtitleLabel = UILabel()
         subtitleLabel.text = subtitle
         subtitleLabel.font = Font.regular(13)
-        subtitleLabel.textColor = UIColor(white: 0.78, alpha: 1.0)
+        subtitleLabel.textColor = SubscriptionStyle.secondaryText
         subtitleLabel.numberOfLines = 1
 
         let textStack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
@@ -69,7 +69,7 @@ final class SubscriptionBanner: UIView {
         textStack.spacing = 2
 
         let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
-        chevron.tintColor = UIColor(white: 0.55, alpha: 1.0)
+        chevron.tintColor = SubscriptionStyle.secondaryText
         chevron.contentMode = .scaleAspectFit
         chevron.setContentHuggingPriority(.required, for: .horizontal)
 
@@ -192,7 +192,7 @@ final class SubscriptionBanner: UIView {
         container.translatesAutoresizingMaskIntoConstraints = false
         container.alpha = 0
 
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterialDark))
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
         blur.translatesAutoresizingMaskIntoConstraints = false
         blur.layer.cornerRadius = 18
         blur.layer.cornerCurve = .continuous
@@ -210,7 +210,7 @@ final class SubscriptionBanner: UIView {
         let label = UILabel()
         label.text = text
         label.font = Font.medium(15)
-        label.textColor = .white
+        label.textColor = SubscriptionStyle.primaryText
 
         let row = UIStackView(arrangedSubviews: [iconView, label])
         row.axis = .horizontal
@@ -258,6 +258,8 @@ private final class PassthroughWindow: UIWindow {
 }
 
 private final class PassthroughRootController: UIViewController {
+    private var appearanceObserver: NSObjectProtocol?
+    deinit { if let appearanceObserver { NotificationCenter.default.removeObserver(appearanceObserver) } }
     // The window covers the screen, so its style is the status bar's while a banner is up: the
     // app's, rather than white over a light theme.
     override var preferredStatusBarStyle: UIStatusBarStyle { SubscriptionStyle.statusBarStyle }
@@ -265,5 +267,14 @@ private final class PassthroughRootController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
+        updateAppearance()
+        appearanceObserver = NotificationCenter.default.addObserver(forName: AorusAppearanceRecord.changedNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.updateAppearance()
+        }
+    }
+
+    private func updateAppearance() {
+        overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
+        setNeedsStatusBarAppearanceUpdate()
     }
 }
