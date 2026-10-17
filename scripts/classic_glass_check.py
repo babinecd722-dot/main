@@ -146,7 +146,7 @@ def native_glass_source(tg):
     override init(frame: CGRect) { Self.creations += 1; super.init(frame: frame) }
     required init?(coder: NSCoder) { fatalError() }
 }
-@MainActor class AorusClassicSettingsProbe: UIView { var lumaMin: CGFloat = 0; var lumaMax: CGFloat = 1 }
+@MainActor class AorusClassicSettingsProbe: UIView { var lumaMin: Double = 0; var lumaMax: Double = 1 }
 @MainActor class AorusClassicClipProbe { init(view: UIView) {} }
 @MainActor class AorusClassicHighlightProbe: UIGestureRecognizer { weak var highlightContainerView: UIView? }
 @MainActor class AorusClassicImmediateTransition {
@@ -202,7 +202,7 @@ extension CALayer {
 @MainActor func runClassicGlassRegression() -> Int {
     var checks = 0
     func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
-    defer { AorusClassicControlledLook.enabled = false }
+    defer { AorusClassicControlledLook.enabled = false; AorusClassicControlledLook.interfaceV2 = false }
     for old in [false, true] { for custom in [false, true] {
         AorusClassicControlledLook.enabled = old
         AorusClassicBackgroundProbe.useCustomGlassImpl = custom
@@ -236,7 +236,15 @@ extension CALayer {
             expect(background.legacyView != nil && container.legacyView != nil, "current older iOS retains its original fallback")
         }
         container.frame = CGRect(x: 0, y: 0, width: 240, height: 60)
-        container.update(size: container.bounds.size, isDark: true, transition: AorusClassicImmediateTransition())
+        for v2 in [false, true] { for dark in [false, true] {
+            AorusClassicControlledLook.interfaceV2 = v2
+            container.update(size: container.bounds.size, isDark: dark, transition: AorusClassicImmediateTransition())
+            if let parameters = container.nativeParamsView {
+                let (minimum, maximum) = aorusGlassLuminance(isDark: dark, interfaceV2: v2)
+                expect(parameters.lumaMin == minimum && parameters.lumaMax == maximum, "live native glass receives the actual page luminance interval")
+                expect(container.nativeView?.overrideUserInterfaceStyle == (dark ? .dark : .light), "live native glass follows its page appearance")
+            }
+        } }
         container.layoutIfNeeded()
         container.contentView.layoutIfNeeded()
         let button = UIButton(frame: CGRect(x: 16, y: 8, width: 208, height: 44))
@@ -248,6 +256,7 @@ extension CALayer {
 }
 '''
     for before, after in (
+        ("AorusInterfaceV2Run.isEnabled", "AorusClassicControlledLook.interfaceV2"),
         ("GlassBackgroundView", "AorusClassicBackgroundProbe"),
         ("LegacyGlassView", "AorusClassicLegacyGlassProbe"),
         ("EffectSettingsContainerView", "AorusClassicSettingsProbe"),

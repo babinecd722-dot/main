@@ -21,7 +21,7 @@ def native_hit_test_source(tg: Path) -> str:
     method = method.replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     gesture = installed_classic_gesture(tg, "UIGestureRecognizer").replace("AorusOldInterface.isEnabled", "AorusClassicControlledLook.enabled")
     fixture = """import UIKit
-enum AorusClassicControlledLook { static var enabled = false }
+enum AorusClassicControlledLook { static var enabled = false; static var interfaceV2 = false }
 struct AorusClassicViewFixture { var view: UIView? }
 final class AorusClassicHitTestView: UIView {
     let backgroundView = UIView()
