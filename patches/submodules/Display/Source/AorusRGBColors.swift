@@ -42,6 +42,14 @@ public enum AorusRGBColors {
 
     public static func isAnimated(_ color: UIColor) -> Bool { metadata(color) != nil }
 
+    public static func sameSource(_ lhs: UIColor?, _ rhs: UIColor?) -> Bool {
+        switch (lhs, rhs) {
+        case let (lhs?, rhs?): return sameSource(lhs, rhs)
+        case (nil, nil): return true
+        default: return false
+        }
+    }
+
     public static func sameSource(_ lhs: UIColor, _ rhs: UIColor) -> Bool {
         return lhs.isEqual(rhs) && metadata(lhs)?.offset == metadata(rhs)?.offset && metadata(lhs)?.alpha == metadata(rhs)?.alpha
     }

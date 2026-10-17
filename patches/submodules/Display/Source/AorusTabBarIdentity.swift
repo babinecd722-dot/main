@@ -49,3 +49,8 @@ public enum AorusTabBarFeedback {
         }
     }
 }
+
+/// Intrinsically coloured plugin icons keep their colours until a custom ink is chosen.
+public func aorusTabBarImage(_ image: UIImage?, customInk: Bool) -> UIImage? {
+    return customInk ? image?.withRenderingMode(.alwaysTemplate) : image
+}

@@ -64,7 +64,9 @@ def patch_tab_settings(tg: Path) -> None:
     s = s.replace('hideTitle: component.hideTitles,', 'hideTitle: component.hideTitles || (AorusTabBarSettings.current.selectedTitleOnly && item.id != component.selectedId),')
     s = edit(s, 'if let badgeText = badgeValue, !badgeText.isEmpty {', 'if let badgeText = AorusTabBarSettings.current.badge(badgeValue), !badgeText.isEmpty {', 'native badge style')
     # A native still image is precoloured. Only a chosen colour makes it a template.
-    s = edit(s, 'tintColor: aorusStillImage != nil ? iconTintColor : nil,', 'tintColor: aorusStillImage != nil || (component.isSelected ? AorusTabBarSettings.current.appearance(dark: component.theme.overallDarkAppearance).active : AorusTabBarSettings.current.appearance(dark: component.theme.overallDarkAppearance).inactive) != nil ? iconTintColor : nil,', 'custom native still icon ink')
+    s = edit(s, '            let iconTintColor = (component.isSelected', '            let aorusAppearance = AorusTabBarSettings.current.appearance(dark: component.theme.overallDarkAppearance)\n            let aorusHasCustomInk = (component.isSelected ? aorusAppearance.active : aorusAppearance.inactive) != nil\n            let iconTintColor = (component.isSelected', 'chosen tab icon colour')
+    s = edit(s, 'image: aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image),', 'image: aorusTabBarImage(aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image), customInk: aorusHasCustomInk),', 'static tab icon template')
+    s = edit(s, 'tintColor: aorusStillImage != nil ? iconTintColor : nil,', 'tintColor: aorusStillImage != nil || aorusHasCustomInk ? iconTintColor : nil,', 'custom native still icon ink')
     path.write_text(s)
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
@@ -135,9 +137,10 @@ def patch_tab_settings(tg: Path) -> None:
 
     path = tg / 'submodules/ComponentFlow/Source/Components/Image.swift'
     s = path.read_text()
+    s = edit(s, '        if lhs.tintColor != rhs.tintColor {', '        if !AorusRGBColors.sameSource(lhs.tintColor, rhs.tintColor) {', 'native image RGB source equality')
     if 'AorusRGBColors.tintImage' not in s:
         s = s.replace('import UIKit\n', 'import UIKit\nimport Display\n')
-        s = edit(s, '            transition.setTintColor(view: self, color: component.tintColor ?? .white)', '''            transition.setTintColor(view: self, color: component.tintColor ?? .white)
+        s = edit(s, '            transition.setTintColor(view: self, color: component.tintColor ?? .white)', '''            if component.tintColor.map(AorusRGBColors.isAnimated) != true { transition.setTintColor(view: self, color: component.tintColor ?? .white) }
             if let color = component.tintColor {
                 if AorusRGBColors.isAnimated(color) { self.image = self.image?.withRenderingMode(.alwaysTemplate) }
                 AorusRGBColors.tintImage(self, color: color)
@@ -145,8 +148,11 @@ def patch_tab_settings(tg: Path) -> None:
     path.write_text(s)
     path = tg / 'submodules/TelegramUI/Components/LottieComponent/Sources/LottieComponent.swift'
     s = path.read_text()
-    s = edit(s, '            self.image = self.currentTemplateFrameImage\n', '            self.image = self.currentTemplateFrameImage\n            if let color = self.component?.color { AorusRGBColors.tintImage(self, color: color) }\n', 'animated lottie frame ink')
-    s = edit(s, '            if component.loop && !self.isPlaying {', '            if let color = component.color { AorusRGBColors.tintImage(self, color: color) }\n\n            if component.loop && !self.isPlaying {', 'animated lottie colour change')
+    s = edit(s, '            self.image = self.currentTemplateFrameImage\n', '            self.image = self.currentTemplateFrameImage\n            AorusRGBColors.tintImage(self, color: self.component?.color ?? .white)\n', 'animated lottie frame ink')
+    s = edit(s, '            if component.loop && !self.isPlaying {', '            AorusRGBColors.tintImage(self, color: component.color ?? .white)\n\n            if component.loop && !self.isPlaying {', 'animated lottie colour change')
+    s = edit(s, '        if lhs.color != rhs.color {', '        if !AorusRGBColors.sameSource(lhs.color, rhs.color) {', 'lottie RGB source equality')
+    s = edit(s, '            if let color = component.color, self.tintColor != color {', '            if let color = component.color, !AorusRGBColors.isAnimated(color), self.tintColor != color {', 'lottie uses one animated colour layer')
+    s = edit(s, '            var redrawImage = false\n', '            var redrawImage = !AorusRGBColors.sameSource(previousComponent?.color, component.color)\n', 'lottie colour reset restores original frame')
     path.write_text(s)
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
     s = path.read_text()

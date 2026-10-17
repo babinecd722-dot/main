@@ -67,6 +67,22 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     let saved = UserDefaults.standard.data(forKey: AorusTabBarSettings.key)
     defer { if let saved { UserDefaults.standard.set(saved, forKey: AorusTabBarSettings.key) } else { UserDefaults.standard.removeObject(forKey: AorusTabBarSettings.key) } }
     AorusTabBarSettings.update { $0 = AorusTabBarLayout() }
+    let glyph = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 24)).image { renderer in
+        UIColor.black.setFill()
+        renderer.fill(CGRect(x: 4, y: 4, width: 16, height: 16))
+    }.withRenderingMode(.alwaysOriginal)
+    expect(aorusTabBarImage(glyph, customInk: false) === glyph, "default keeps intrinsically coloured icons")
+    let coloured = aorusTabBarImage(glyph, customInk: true)
+    expect(coloured?.renderingMode == .alwaysTemplate && coloured?.size == glyph.size, "custom static tab ink uses the native icon mask")
+    expect(aorusTabBarImage(nil, customInk: true) == nil, "missing custom icon stays absent")
+    let imageView = UIImageView(image: coloured)
+    imageView.frame = CGRect(x: 0, y: 0, width: 24, height: 24)
+    let rgb = AorusRGBColors.color("RGB")!
+    AorusRGBColors.tintImage(imageView, color: rgb)
+    expect(!imageView.subviews.isEmpty, "RGB uses the same native tab icon mask")
+    imageView.image = aorusTabBarImage(glyph, customInk: false)
+    AorusRGBColors.tintImage(imageView, color: .white)
+    expect(imageView.subviews.isEmpty && imageView.image?.renderingMode == .alwaysOriginal, "reset removes RGB and restores the original icon")
     let owner = NSObject()
     let items = ["contacts", "chats", "settings"].map { id -> UITabBarItem in let item = UITabBarItem(title: id, image: nil, tag: 0); item.aorusTabIdentifier = id; return item }
     AorusTabBarCatalogue.publish(owner: owner, account: -12345, items: items)

@@ -36,6 +36,10 @@ import CoreText
     expect(AorusRGBColors.maskInk(AorusRGBColors.color("RGB:00")!).cgColor.alpha == 0.0, "a fully transparent mask remains transparent")
     expect(AorusRGBColors.maskInk(fixed).isEqual(fixed), "fixed bitmap colours keep their opacity")
     expect(AorusRGBColors.sameSource(rgb, AorusRGBColors.color("RGB")!), "identical RGB settings keep the native layout cache")
+    expect(AorusRGBColors.sameSource(nil, nil) && !AorusRGBColors.sameSource(rgb, nil), "optional animation colour has a distinct absent source")
+    let optionalRGB: UIColor? = rgb
+    let matchingFixed: UIColor? = UIColor(cgColor: rgb.cgColor)
+    expect(!AorusRGBColors.sameSource(optionalRGB, matchingFixed), "component caches distinguish RGB from a matching fixed tint")
     expect(!AorusRGBColors.sameSource(rgb, UIColor(cgColor: rgb.cgColor)), "an RGB source differs from a fixed colour matching its first frame")
     expect(AorusRGBColors.prepareText(NSAttributedString(string: "fixed", attributes: [.foregroundColor: fixed])).attribute(AorusRGBColors.textAttribute, at: 0, effectiveRange: nil) == nil, "fixed text receives no RGB attributes")
     expect(!AorusRGBColors.isAnimated(fixed), "ordinary colours retain native drawing")
