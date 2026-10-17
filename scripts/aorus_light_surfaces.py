@@ -29,22 +29,6 @@ INDENT}'''.replace('INDENT', indent)
 INDENTnativeParamsView.lumaMin = minimum
 INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
         source = edit(source, old, new, 'live glass luminance ' + str(len(indent)))
-    source = edit(source, '''                            case .clear:
-                                glassEffectValue = UIGlassEffect(style: .clear)
-                                if isDark {
-                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
-                                } else {
-                                    glassEffectValue.tintColor = nil
-                                }
-''', '''                            case .clear:
-                                let regularLight = aorusGlassUsesRegularLightMaterial(isDark: isDark, interfaceV2: AorusInterfaceV2Run.isEnabled)
-                                glassEffectValue = UIGlassEffect(style: regularLight ? .regular : .clear)
-                                if isDark {
-                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
-                                } else {
-                                    glassEffectValue.tintColor = regularLight ? UIColor(white: 1.0, alpha: 0.1) : nil
-                                }
-''', 'light glass material without adaptive dark scrim')
     path.write_text(source)
     path = tg / 'submodules/TelegramPresentationData/Sources/PresentationTheme.swift'
     source = path.read_text()
@@ -55,6 +39,18 @@ INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
             modalPlainBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
             itemPrimaryTextColor: ink,''', 'normalise light pages at the list theme boundary')
     source = edit(source, 'let list = self.list.withUpdated(blocksBackgroundColor: color)', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)', 'preserve explicit profile page colours through modal lists')
+    path.write_text(source)
+    path = tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift'
+    source = path.read_text()
+    source = edit(source, '    private func aorusUpdateListGlass() {\n', PAGE_BACKGROUND_SWIFT + '    private func aorusUpdateListGlass() {\n        self.aorusUpdatePageBackground()\n', 'transparent list compositor contract')
+    source = edit(source, '            container = ASDisplayNode()\n            container.isUserInteractionEnabled = false', '            container = ASDisplayNode()\n            container.isOpaque = false\n            container.isUserInteractionEnabled = false', 'transparent glass pane container')
+    source = edit(source, '            if let color = subnode.backgroundColor, AorusGlassPane.isBlockMarker(color) {\n', '            if let color = subnode.backgroundColor, AorusGlassPane.isBlockMarker(color) {\n                if subnode.isOpaque { subnode.isOpaque = false }\n', 'transparent marked card backgrounds')
+    source = edit(source, '        self.listNode.forEachItemNode { itemNode in\n', '        self.listNode.forEachItemNode { itemNode in\n            if itemNode.isOpaque { itemNode.isOpaque = false }\n', 'transparent glass list rows')
+    for kind in ('blocks', 'plain'):
+        anchor = '                            self.rightOverlayNode.backgroundColor = transition.theme.list.' + kind + 'BackgroundColor\n'
+        if source.count(anchor) != 2:
+            raise RuntimeError('Light surfaces: expected both ' + kind + ' page background updates')
+        source = source.replace(anchor, anchor + '                            self.aorusUpdatePageBackground()\n')
     path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift'
     source = edit(path.read_text(), 'return component.isSelected ? accent : accent.withAlphaComponent(0.5)', 'return accent', 'profile tab ink')
@@ -74,3 +70,31 @@ INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
     # Colored settings tiles carry their own ink. Do not let an inherited tint change them.
     source = edit(source, '    let image = make()\n    cache.lock.lock()', '    let image = make()?.withRenderingMode(.alwaysOriginal)\n    cache.lock.lock()', 'settings tile intrinsic colours')
     path.write_text(source)
+
+
+PAGE_BACKGROUND_SWIFT = '''    private func aorusUpdatePageBackground() {
+        guard AorusGlassPane.isEnabled, let theme = self.theme else { return }
+        let page: UIColor
+        let listFill: UIColor
+        switch self.listStyle {
+        case .blocks?:
+            page = theme.overallDarkAppearance ? theme.list.blocksBackgroundColor : theme.list.plainBackgroundColor
+            listFill = .clear
+        case .plain?:
+            page = theme.list.plainBackgroundColor
+            listFill = page
+        default:
+            return
+        }
+        // A transparent list must not advertise an opaque backing to Core Animation.
+        // Keep the page opaque underneath the glass; its scrolling content stays transparent.
+        if self.backgroundColor?.isEqual(page) != true { self.backgroundColor = page }
+        self.isOpaque = page.cgColor.alpha >= 1.0
+        self.listNodeContainer.isOpaque = false
+        if self.listNode.backgroundColor?.isEqual(listFill) != true { self.listNode.backgroundColor = listFill }
+        self.listNode.isOpaque = listFill.cgColor.alpha >= 1.0
+        if self.leftOverlayNode.backgroundColor?.isEqual(page) != true { self.leftOverlayNode.backgroundColor = page }
+        if self.rightOverlayNode.backgroundColor?.isEqual(page) != true { self.rightOverlayNode.backgroundColor = page }
+    }
+
+'''

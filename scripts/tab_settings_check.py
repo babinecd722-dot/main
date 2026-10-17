@@ -65,13 +65,16 @@ def main():
             return text
         root = require('TelegramUI/Sources/TelegramRootController.swift', 'AorusTabBarCatalogue.publish', 'AorusTabBarSettings.changedNotification', 'controllers = self.aorusOrderTabs(controllers)')
         assert root.count('controllers = self.aorusOrderTabs(controllers)') == 2
-        require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction')
+        require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction', 'self.node?.aorusPreviewSnapshotItem(at: index)')
         require('TabBarUI/Sources/TabBarContollerNode.swift', 'aorusTabBarTheme(theme)', 'self.aorusBaseTheme = theme', 'AorusTabBarSettings.changedNotification')
-        require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
-        require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk')
+        require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'aorusTabSnapshot(in: self.view', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
+        require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusTabSnapshot(in: self, bounds: bounds, contents: [content])')
         require('TelegramPresentationData/Sources/PresentationData.swift', 'modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page')
-        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'aorusGlassLuminance', 'glassEffectValue = UIGlassEffect(style: regularLight ? .regular : .clear)')
+        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'aorusGlassLuminance')
         assert glass.count('aorusGlassLuminance(') == 2
+        assert 'regularLight' not in glass
+        pages = require('ItemListUI/Sources/ItemListControllerNode.swift', 'self.listNodeContainer.isOpaque = false', 'self.listNode.isOpaque = listFill.cgColor.alpha >= 1.0', 'if subnode.isOpaque { subnode.isOpaque = false }', 'if itemNode.isOpaque { itemNode.isOpaque = false }', 'container.isOpaque = false')
+        assert pages.count('self.aorusUpdatePageBackground()') == 5
         require('TelegramPresentationData/Sources/PresentationTheme.swift', 'blocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)')
         require('GalleryUI/Sources/GalleryControllerNode.swift', 'public var aorusDismissWithCrossfade:', 'if let dismissWithCrossfade = self.aorusDismissWithCrossfade', 'self.pager.layer.transform = CATransform3DIdentity')
         profile = require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift', 'crossfadeContent: aorusSquareSource', 'if aorusSquareSource { return nil }')

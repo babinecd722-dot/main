@@ -77,7 +77,6 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         expect(layout.title("Chats", selected: true, hideAll: false) == "Chats", "selected title retained")
         expect(layout.title("Chats", selected: true, hideAll: true).isEmpty, "global hide title setting wins")
         for dark in [false, true] { for v2 in [false, true] {
-            expect(aorusGlassUsesRegularLightMaterial(isDark: dark, interfaceV2: v2) == (v2 && !dark), "only Interface 2.0 light glass removes adaptive dark scrim")
             let (min, max) = aorusGlassLuminance(isDark: dark, interfaceV2: v2)
             expect(min >= 0 && max <= 1 && min < max, "valid compositor luminance interval")
             expect(dark ? min == 0 && max == 0.15 : v2 ? min == 0 && max == 1 : min == 0.8 && max == 0.801, "light v2 preserves actual backdrop luminance")

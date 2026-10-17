@@ -37,6 +37,13 @@ def patch_tab_settings(tg: Path) -> None:
         self.aorusApplyPreviewVisibility()
     }
 
+    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
+        if let tabBar = self.aorusClassicTabBar {
+            return tabBar.aorusPreviewSnapshotItem(at: index)
+        }
+        return (self.tabBarView.view as? TabBarComponent.View)?.aorusPreviewSnapshotItem(at: index)
+    }
+
     private func aorusApplyPreviewVisibility() {
         guard self.aorusIsPreview else { return }
         self.aorusClassicTabBar?.aorusPreviewHideItem(at: self.aorusHiddenPreviewIndex)
@@ -52,7 +59,15 @@ def patch_tab_settings(tg: Path) -> None:
 
     path = tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift' 
     s = path.read_text()
-    s = edit(s, '        private var searchView: NavigationSearchView?', '''        public func aorusPreviewHideItem(at index: Int?) {
+    s = edit(s, '        private var searchView: NavigationSearchView?', '''        public func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
+            guard let component = self.component, component.items.indices.contains(index), let bounds = self.frameForItem(at: index) else { return nil }
+            let item = component.items[index]
+            let content = (item.id == component.selectedId ? self.selectedItemViews[item.id]?.view : self.itemViews[item.id]?.view) ?? self.itemViews[item.id]?.view
+            guard let content else { return nil }
+            return aorusTabSnapshot(in: self, bounds: bounds, contents: [content])
+        }
+
+        public func aorusPreviewHideItem(at index: Int?) {
             guard let component = self.component else { return }
             for (i, item) in component.items.enumerated() {
                 self.itemViews[item.id]?.view?.alpha = i == index ? 0.0 : 1.0
@@ -71,7 +86,13 @@ def patch_tab_settings(tg: Path) -> None:
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
     s = path.read_text()
-    s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', '''    func aorusPreviewHideItem(at index: Int?) {
+    s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', '''    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
+        guard self.tabBarNodeContainers.indices.contains(index), let bounds = self.frameForControllerTab(at: index) else { return nil }
+        let container = self.tabBarNodeContainers[index]
+        return aorusTabSnapshot(in: self.view, bounds: bounds, contents: [container.imageNode.view, container.badgeContainerNode.view])
+    }
+
+    func aorusPreviewHideItem(at index: Int?) {
         for (i, container) in self.tabBarNodeContainers.enumerated() {
             container.imageNode.alpha = i == index ? 0.0 : 1.0
             container.badgeContainerNode.alpha = i == index ? 0.0 : 1.0

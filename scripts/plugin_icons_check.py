@@ -179,8 +179,8 @@ def main():
             avatar_dismiss = work / "NativeAvatarDismiss.swift"
             avatar_dismiss.write_text(avatar_dismiss_test_source(args.telegram_source))
             from light_surface_fixtures import light_surface_test_source
-            light_material = work / "NativeLightMaterial.swift"
-            light_material.write_text(light_surface_test_source(args.telegram_source))
+            light_page = work / "NativeLightPage.swift"
+            light_page.write_text(light_surface_test_source(args.telegram_source))
             tab_model = args.repo / "patches/submodules/Display/Source/AorusTabBarLayout.swift"
             tab_identity = args.repo / "patches/submodules/Display/Source/AorusTabBarIdentity.swift"
             light_surface = args.repo / "patches/submodules/Display/Source/AorusLightSurface.swift"
@@ -213,7 +213,7 @@ def main():
             available = [dict(device, aorusRuntime=runtime) for runtime, items in devices.items() if ".iOS-" in runtime for device in items if device.get("isAvailable") and device["name"].startswith("iPhone")]
             if not available:
                 raise RuntimeError("An available iOS simulator is required for the UIKit icon tests")
-            # The live material regressions need the newest installed runtime, rather than
+            # The native compositor regressions use the newest installed runtime, rather than
             # silently running only the fallback renderer on an already booted older phone.
             runtime_version = lambda item: tuple(int(value) for value in re.findall(r"\d+", item["aorusRuntime"]))
             newest = max(runtime_version(item) for item in available)
@@ -242,7 +242,7 @@ def main():
                 toolbar.write_text(toolbar_source)
                 editor_object = work / "NativeRoundEditor.o"
                 subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(native_editor), "-o", str(editor_object)], check=True)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(light_material), str(tab_model), str(tab_identity), str(light_surface), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(light_page), str(tab_model), str(tab_identity), str(light_surface), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 data_container = subprocess.run(["xcrun", "simctl", "get_app_container", device["udid"], bundle_id, "data"], capture_output=True, text=True, check=True).stdout.strip()

@@ -47,6 +47,14 @@ final class TabPreviewTabBarControllerNodeFixture {
     func updateSelectedIndex(index: Int) {}
     func aorusPreviewLayout(_ layout: TabPreviewContainerViewLayoutFixture, transition: TabPreviewContainedViewLayoutTransitionFixture) {}
     func aorusPreviewHideItem(at index: Int?) {}
+    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
+        guard let bounds = frameForControllerTab(at: index) else { return nil }
+        let icon = UIView(frame: CGRect(x: bounds.midX - 8, y: bounds.midY - 10, width: 16, height: 20))
+        icon.backgroundColor = .black
+        view.addSubview(icon)
+        defer { icon.removeFromSuperview() }
+        return aorusTabSnapshot(in: view, bounds: bounds, contents: [icon])
+    }
     func frameForControllerTab(at index: Int) -> CGRect? {
         guard items.indices.contains(index), !items.isEmpty else { return nil }
         let width = view.bounds.width / CGFloat(items.count)
@@ -96,6 +104,20 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     let hold = TabPreviewHoldFixture()
     func phase(_ state: UIGestureRecognizer.State, x: CGFloat) { hold.phase = state; hold.point = CGPoint(x: x, y: 65); let _ = preview.perform(NSSelectorFromString("hold:"), with: hold) }
     phase(.began, x: 60)
+    let lifted = preview.subviews.compactMap { $0 as? UIImageView }.first
+    expect(lifted != nil && lifted?.isOpaque == false, "drag owns a transparent image of the tab content")
+    if let image = lifted?.image?.cgImage {
+        let w = image.width, h = image.height
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        pixels.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)!
+            context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        }
+        expect([0, w - 1, (h - 1) * w, h * w - 1].allSatisfy { pixels[$0 * 4 + 3] == 0 }, "all four lifted corners are transparent, with no captured panel background")
+        expect(pixels[((h / 2) * w + w / 2) * 4 + 3] > 0, "the tab's actual content survives the transparent capture")
+    } else {
+        expect(false, "the drag must capture the real tab content")
+    }
     phase(.changed, x: 300)
     expect(AorusTabBarSettings.current.order.isEmpty, "drag has no per-frame preference writes")
     phase(.ended, x: 300)

@@ -92,7 +92,7 @@ public final class AorusTabBarPreviewView: UIView {
         let point = gesture.location(in: self)
         switch gesture.state {
         case .began:
-            guard !self.ending, let index = self.index(at: point), let frame = self.node?.frameForControllerTab(at: index), let snapshot = self.node?.view.resizableSnapshotView(from: frame, afterScreenUpdates: false, withCapInsets: .zero) else { return }
+            guard !self.ending, let index = self.index(at: point), let frame = self.node?.frameForControllerTab(at: index), let snapshot = self.node?.aorusPreviewSnapshotItem(at: index) else { return }
             self.original = self.items
             self.dragged = self.items[index].aorusTabIdentifier
             self.dragOffset = point.x - frame.midX
