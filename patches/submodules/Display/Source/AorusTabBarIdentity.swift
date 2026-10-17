@@ -66,7 +66,7 @@ public func aorusTabSnapshot(in host: UIView, bounds: CGRect, contents: [UIView]
         let context = renderer.cgContext
         context.clear(CGRect(origin: .zero, size: bounds.size))
         for view in contents where !view.isHidden && view.alpha > 0 {
-            let origin = view.convert(.zero, to: host)
+            let origin = view.convert(CGPoint.zero, to: host)
             let x = view.convert(CGPoint(x: 1, y: 0), to: host)
             let y = view.convert(CGPoint(x: 0, y: 1), to: host)
             context.saveGState()
@@ -76,7 +76,7 @@ public func aorusTabSnapshot(in host: UIView, bounds: CGRect, contents: [UIView]
         }
     }
     let result = UIImageView(image: image)
-    result.backgroundColor = .clear
+    result.backgroundColor = UIColor.clear
     result.isOpaque = false
     return result
 }
