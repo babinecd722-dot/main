@@ -29,6 +29,32 @@ INDENT}'''.replace('INDENT', indent)
 INDENTnativeParamsView.lumaMin = minimum
 INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
         source = edit(source, old, new, 'live glass luminance ' + str(len(indent)))
+    source = edit(source, '''                            case .clear:
+                                glassEffectValue = UIGlassEffect(style: .clear)
+                                if isDark {
+                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
+                                } else {
+                                    glassEffectValue.tintColor = nil
+                                }
+''', '''                            case .clear:
+                                let regularLight = aorusGlassUsesRegularLightMaterial(isDark: isDark, interfaceV2: AorusInterfaceV2Run.isEnabled)
+                                glassEffectValue = UIGlassEffect(style: regularLight ? .regular : .clear)
+                                if isDark {
+                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
+                                } else {
+                                    glassEffectValue.tintColor = regularLight ? UIColor(white: 1.0, alpha: 0.1) : nil
+                                }
+''', 'light glass material without adaptive dark scrim')
+    path.write_text(source)
+    path = tg / 'submodules/TelegramPresentationData/Sources/PresentationTheme.swift'
+    source = path.read_text()
+    source = edit(source, '''        let list = theme.list.withUpdated(
+            itemPrimaryTextColor: ink,''', '''        let list = theme.list.withUpdated(
+            blocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
+            modalBlocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
+            modalPlainBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
+            itemPrimaryTextColor: ink,''', 'normalise light pages at the list theme boundary')
+    source = edit(source, 'let list = self.list.withUpdated(blocksBackgroundColor: color)', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)', 'preserve explicit profile page colours through modal lists')
     path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift'
     source = edit(path.read_text(), 'return component.isSelected ? accent : accent.withAlphaComponent(0.5)', 'return accent', 'profile tab ink')

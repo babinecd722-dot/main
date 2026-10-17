@@ -40,7 +40,7 @@ def main():
         options = Path(temp) / 'main.swift'
         options.write_text(segment_options_test_source(repo))
         options_binary = temp + '/segments'
-        subprocess.run([args.swiftc, '-warnings-as-errors', '-O', str(options), '-o', options_binary], check=True)
+        subprocess.run([args.swiftc, '-warnings-as-errors', '-O', '-module-cache-path', temp + '/cache', str(options), '-o', options_binary], check=True)
         subprocess.run([options_binary], check=True)
         binary = str(Path(temp) / 'tabs')
         source = tg / 'submodules/Display/Source' if tg else repo / 'patches/submodules/Display/Source'
@@ -50,6 +50,14 @@ def main():
     assert 'InvisibleInkDustNode(textNode: nil' in key and 'revealAtLocation' in key
     assert 'UIButton' not in key and 'UIBlurEffect' not in key and 'UIVisualEffectView' not in key
     assert 'InvisibleInkDustNode:InvisibleInkDustNode' in (repo / 'patches/submodules/AorusGram/BUILD').read_text()
+    tabs = (repo / 'patches/submodules/TelegramUI/Sources/AorusTabSettings.swift').read_text()
+    assert 'resetOrder' not in tabs and tabs.count('row(3, .reset,') == 1
+    assert 'ActionSheetController(presentationData: data)' in tabs and 'sheet.setItemGroups' in tabs
+    confirm = tabs.index('ActionSheetButtonItem(title: aorusL("Сбросить всё"')
+    assert tabs.index('AorusTabBarSettings.update { $0 = AorusTabBarLayout() }') > confirm
+    assert 'Common_Cancel' in tabs[confirm:]
+    assert 'Зажмите вкладку и переместите ее влево или вправо.' in tabs
+    assert 'Colors are saved separately' not in tabs and '$0.colors.' in tabs
     if tg:
         def require(rel, *needles):
             text = (tg / 'submodules' / rel).read_text()
@@ -62,8 +70,10 @@ def main():
         require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk')
         require('TelegramPresentationData/Sources/PresentationData.swift', 'modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page')
-        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'aorusGlassLuminance')
+        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'aorusGlassLuminance', 'glassEffectValue = UIGlassEffect(style: regularLight ? .regular : .clear)')
         assert glass.count('aorusGlassLuminance(') == 2
+        require('TelegramPresentationData/Sources/PresentationTheme.swift', 'blocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)')
+        require('GalleryUI/Sources/GalleryControllerNode.swift', 'public var aorusDismissWithCrossfade:', 'if let dismissWithCrossfade = self.aorusDismissWithCrossfade', 'self.pager.layer.transform = CATransform3DIdentity')
         profile = require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift', 'crossfadeContent: aorusSquareSource', 'if aorusSquareSource { return nil }')
         assert 'aorusRevealUntil' not in profile
         require('TelegramUI/Components/LottieComponent/Sources/LottieComponent.swift', 'AorusRGBColors.sameSource(lhs.color, rhs.color)', 'AorusRGBColors.tintImage(self, color: component.color ?? .white)')

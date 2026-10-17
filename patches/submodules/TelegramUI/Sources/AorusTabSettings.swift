@@ -55,12 +55,12 @@ private final class AorusTabPreviewNode: ListViewItemNode {
 private final class AorusTabArguments {
     let color: (Bool, String?) -> Void
     let custom: (Bool) -> Void
-    let reset: (Bool) -> Void
-    init(color: @escaping (Bool, String?) -> Void, custom: @escaping (Bool) -> Void, reset: @escaping (Bool) -> Void) { self.color = color; self.custom = custom; self.reset = reset }
+    let reset: () -> Void
+    init(color: @escaping (Bool, String?) -> Void, custom: @escaping (Bool) -> Void, reset: @escaping () -> Void) { self.color = color; self.custom = custom; self.reset = reset }
 }
 
 private struct AorusTabEntry: ItemListNodeEntry, Equatable {
-    enum Kind { case preview, hint, header, active, inactive, selectedTitle, badges, haptic, resetOrder, reset }
+    enum Kind { case preview, hint, header, active, inactive, selectedTitle, badges, haptic, reset }
     let stableId: Int32
     let section: ItemListSectionId
     let kind: Kind
@@ -97,9 +97,9 @@ private struct AorusTabEntry: ItemListNodeEntry, Equatable {
                 AorusTabBarSettings.update { $0.haptic = AorusTabBarLayout.Haptic.allCases[index] }
                 AorusTabBarFeedback.selection()
             })
-        case .resetOrder, .reset:
-            return ItemListActionItem(presentationData: presentationData, title: self.title, kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
-                args.reset(self.kind == .resetOrder)
+        case .reset:
+            return ItemListActionItem(presentationData: presentationData, title: self.title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+                args.reset()
             })
         }
     }
@@ -109,15 +109,13 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
     weak var weakController: ItemListController?
     let screen = AorusLookScreenContext()
     let colorThrottle = AorusLookThrottle(interval: 0.08)
-    func setColor(_ active: Bool, _ value: String?, dark: Bool) {
+    func setColor(_ active: Bool, _ value: String?) {
         AorusTabBarSettings.update {
-            var appearance = $0.appearance(dark: dark)
-            if active { appearance.active = value } else { appearance.inactive = value }
-            if dark { $0.dark = appearance } else { $0.light = appearance }
+            if active { $0.colors.active = value } else { $0.colors.inactive = value }
         }
     }
     let args = AorusTabArguments(color: { active, value in
-        setColor(active, value, dark: screen.theme?.overallDarkAppearance ?? false)
+        setColor(active, value)
     }, custom: { active in
         guard let controller = weakController else { return }
         let data = context.sharedContext.currentPresentationData.with { $0 }
@@ -131,7 +129,7 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
             picker.supportsAlpha = true
             picker.selectedColor = current
             let delegate = AorusLookColorPickerDelegate { color in
-                colorThrottle.run(active ? "active" : "inactive") { setColor(active, aorusLookHex(color), dark: dark) }
+                colorThrottle.run(active ? "active" : "inactive") { setColor(active, aorusLookHex(color)) }
             }
             screen.pickerDelegate = delegate
             picker.delegate = delegate
@@ -143,13 +141,29 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
             alert.addAction(UIAlertAction(title: data.strings.Common_Cancel, style: .cancel))
             alert.addAction(UIAlertAction(title: data.strings.Common_Done, style: .default) { [weak alert] _ in
                 let value = (alert?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "").uppercased()
-                if aorusLookColor(value) != nil { setColor(active, value, dark: dark) }
+                if aorusLookColor(value) != nil { setColor(active, value) }
             })
             controller.present(alert, animated: true)
         }
-    }, reset: { orderOnly in
-        colorThrottle.cancelAll()
-        AorusTabBarSettings.update { if orderOnly { $0.order = [] } else { $0 = AorusTabBarLayout() } }
+    }, reset: {
+        guard let controller = weakController else { return }
+        let data = context.sharedContext.currentPresentationData.with { $0 }
+        let sheet = ActionSheetController(presentationData: data)
+        sheet.setItemGroups([
+            ActionSheetItemGroup(items: [
+                ActionSheetButtonItem(title: aorusL("Сбросить всё", "Reset All"), color: .destructive, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
+                    colorThrottle.cancelAll()
+                    AorusTabBarSettings.update { $0 = AorusTabBarLayout() }
+                })
+            ]),
+            ActionSheetItemGroup(items: [
+                ActionSheetButtonItem(title: data.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
+                })
+            ])
+        ])
+        controller.present(sheet, in: .window(.root))
     })
     let revision = Signal<Int, NoError> { subscriber in
         var revision = 0
@@ -169,7 +183,7 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
             entries.append(AorusTabEntry(stableId: Int32(entries.count), section: section, kind: kind, title: title, theme: data.theme, strings: data.strings, settings: settings, revision: revision, items: items, selectedIdentifier: AorusTabBarCatalogue.selectedIdentifier(account: context.account.peerId.toInt64())))
         }
         row(0, .preview)
-        row(0, .hint, aorusL("Зажмите вкладку и переместите её влево или вправо. Изменения сразу видны в нижней панели. Цвета сохраняются отдельно для светлой и тёмной темы.", "Hold a tab and move it left or right. Changes appear immediately in the bottom bar. Colors are saved separately for light and dark themes."))
+        row(0, .hint, aorusL("Зажмите вкладку и переместите ее влево или вправо.", "Hold a tab and move it left or right."))
         row(1, .header, aorusL("Цвета", "Colors"))
         row(1, .active, aorusL("Цвет активной вкладки", "Active Tab Color"))
         row(1, .inactive, aorusL("Цвет неактивной вкладки", "Inactive Tab Color"))
@@ -177,8 +191,7 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
         row(2, .selectedTitle, aorusL("Название только у выбранной вкладки", "Title Only on Selected Tab"))
         row(2, .badges, aorusL("Счётчики вкладок", "Tab Badges"))
         row(2, .haptic, aorusL("Отклик при выборе вкладки", "Tab Selection Haptics"))
-        row(3, .resetOrder, aorusL("Сбросить порядок вкладок", "Reset Tab Order"))
-        row(3, .reset, aorusL("Сбросить настройки вкладок", "Reset Tab Settings"))
+        row(3, .reset, aorusL("Сбросить всё", "Reset All"))
         return (ItemListControllerState(presentationData: ItemListPresentationData(data), title: .text(aorusL("Настройка вкладок", "Tab Settings")), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: data.strings.Common_Back)), (ItemListNodeState(presentationData: ItemListPresentationData(data), entries: entries, style: .blocks), args))
     }
     let controller = ItemListController(context: context, state: signal)

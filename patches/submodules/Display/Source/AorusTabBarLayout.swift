@@ -1,6 +1,6 @@
 import Foundation
 
-/// The order is shared between appearances. Colours belong to the light or dark appearance.
+/// Tab choices apply to both appearances; unset colours follow the current theme.
 public struct AorusTabBarLayout: Codable, Equatable {
     public struct Appearance: Codable, Equatable {
         public var active: String?
@@ -20,27 +20,39 @@ public struct AorusTabBarLayout: Codable, Equatable {
     public enum Badges: String, Codable, CaseIterable { case number, dot, hidden }
     public enum Haptic: String, Codable, CaseIterable { case off, soft, light, rigid }
     public var order: [String] = []
-    public var light = Appearance()
-    public var dark = Appearance()
+    public var colors = Appearance()
     public var selectedTitleOnly = false
     public var badges: Badges = .number
     public var haptic: Haptic = .off
     public init() {}
-    private enum CodingKeys: String, CodingKey { case order, light, dark, selectedTitleOnly, badges, haptic }
+    private enum CodingKeys: String, CodingKey { case order, colors, light, dark, selectedTitleOnly, badges, haptic }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.order = (try? values.decode([String].self, forKey: .order)) ?? []
-        self.light = (try? values.decode(Appearance.self, forKey: .light)) ?? Appearance()
-        self.dark = (try? values.decode(Appearance.self, forKey: .dark)) ?? Appearance()
+        if let colors = try? values.decode(Appearance.self, forKey: .colors) {
+            self.colors = colors
+        } else {
+            let light = (try? values.decode(Appearance.self, forKey: .light)) ?? Appearance()
+            let dark = (try? values.decode(Appearance.self, forKey: .dark)) ?? Appearance()
+            self.colors = Appearance(active: light.active ?? dark.active, inactive: light.inactive ?? dark.inactive)
+        }
         self.selectedTitleOnly = (try? values.decode(Bool.self, forKey: .selectedTitleOnly)) ?? false
         self.badges = (try? values.decode(Badges.self, forKey: .badges)) ?? .number
         self.haptic = (try? values.decode(Haptic.self, forKey: .haptic)) ?? .off
+    }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(self.order, forKey: .order)
+        try values.encode(self.colors, forKey: .colors)
+        try values.encode(self.selectedTitleOnly, forKey: .selectedTitleOnly)
+        try values.encode(self.badges, forKey: .badges)
+        try values.encode(self.haptic, forKey: .haptic)
     }
     public static func pluginIdentifier(_ plugin: String, tab: String) -> String {
         "plugin:\(plugin.utf8.count):\(plugin)\(tab)"
     }
 
-    public func appearance(dark: Bool) -> Appearance { dark ? self.dark : self.light }
+    public func appearance(dark: Bool) -> Appearance { self.colors }
     public func sorted(_ visible: [String]) -> [String] {
         var seen = Set<String>()
         let unique = visible.filter { !$0.isEmpty && seen.insert($0).inserted }
@@ -64,8 +76,7 @@ public struct AorusTabBarLayout: Codable, Equatable {
         var result = self
         var seen = Set<String>()
         result.order = Array(self.order.filter { !$0.isEmpty && $0.utf8.count <= 512 && seen.insert($0).inserted }.prefix(256))
-        result.light = Appearance(active: self.light.active, inactive: self.light.inactive)
-        result.dark = Appearance(active: self.dark.active, inactive: self.dark.inactive)
+        result.colors = Appearance(active: self.colors.active, inactive: self.colors.inactive)
         return result
     }
     public func badge(_ value: String?) -> String? {
