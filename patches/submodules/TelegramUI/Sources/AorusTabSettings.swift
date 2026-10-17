@@ -87,12 +87,12 @@ private struct AorusTabEntry: ItemListNodeEntry, Equatable {
         case .selectedTitle:
             return ItemListSwitchItem(presentationData: presentationData, title: self.title, value: self.settings.selectedTitleOnly, sectionId: self.section, style: .blocks, updated: { value in AorusTabBarSettings.update { $0.selectedTitleOnly = value } })
         case .badges:
-            return AorusLookSegmentItem(presentationData: presentationData, title: self.title, options: [aorusL("Число", "Number"), aorusL("Точка", "Dot"), aorusL("Скрыть", "Hide")], selected: AorusTabBarLayout.Badges.allCases.firstIndex(of: self.settings.badges) ?? 0, sectionId: self.section, changed: { index in
+            return AorusLookSegmentItem(presentationData: presentationData, title: self.title, options: [aorusL("Число", "Number"), aorusL("Точка", "Dot"), aorusL("Скрыть", "Hide")].map { AorusLookSegmentOption(text: $0, font: Font.medium(15.0)) }, selected: AorusTabBarLayout.Badges.allCases.firstIndex(of: self.settings.badges) ?? 0, sectionId: self.section, changed: { index in
                 guard AorusTabBarLayout.Badges.allCases.indices.contains(index) else { return }
                 AorusTabBarSettings.update { $0.badges = AorusTabBarLayout.Badges.allCases[index] }
             })
         case .haptic:
-            return AorusLookSegmentItem(presentationData: presentationData, title: self.title, options: [aorusL("Нет", "Off"), aorusL("Мягкий", "Soft"), aorusL("Лёгкий", "Light"), aorusL("Чёткий", "Rigid")], selected: AorusTabBarLayout.Haptic.allCases.firstIndex(of: self.settings.haptic) ?? 0, sectionId: self.section, changed: { index in
+            return AorusLookSegmentItem(presentationData: presentationData, title: self.title, options: [aorusL("Нет", "Off"), aorusL("Мягкий", "Soft"), aorusL("Лёгкий", "Light"), aorusL("Чёткий", "Rigid")].map { AorusLookSegmentOption(text: $0, font: Font.medium(15.0)) }, selected: AorusTabBarLayout.Haptic.allCases.firstIndex(of: self.settings.haptic) ?? 0, sectionId: self.section, changed: { index in
                 guard AorusTabBarLayout.Haptic.allCases.indices.contains(index) else { return }
                 AorusTabBarSettings.update { $0.haptic = AorusTabBarLayout.Haptic.allCases[index] }
                 AorusTabBarFeedback.selection()

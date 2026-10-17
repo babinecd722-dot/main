@@ -2,8 +2,30 @@
 """Exercise the installed tab preference model and verify the native renderer integration."""
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import tempfile
+
+
+def segment_options_test_source(repo: Path) -> str:
+    """Type-check the installed segment options against the shared row's real value type."""
+    shared = (repo / 'patches/submodules/TelegramUI/Sources/AorusMessageSettings.swift').read_text()
+    screen = (repo / 'patches/submodules/TelegramUI/Sources/AorusTabSettings.swift').read_text()
+    declaration = re.search(r'struct AorusLookSegmentOption \{[^}]+\}', shared)
+    if declaration is None:
+        raise RuntimeError('Shared segment option type is missing')
+    source = '''struct UIFont { let pointSize: Double }
+enum Font { static func medium(_ size: Double) -> UIFont { UIFont(pointSize: size) } }
+func aorusL(_ russian: String, _ english: String) -> String { russian }
+''' + declaration.group(0) + '\n'
+    for kind, count in [('badges', 3), ('haptic', 4)]:
+        case = screen.split('case .' + kind + ':', 1)[1].split('\n        case ', 1)[0]
+        options = case.split(', options: ', 1)[1].split(', selected: ', 1)[0]
+        source += f'''let {kind}: [AorusLookSegmentOption] = {options}
+precondition({kind}.count == {count})
+precondition({kind}.allSatisfy {{ !$0.text.isEmpty && $0.font.pointSize == 15.0 }})
+'''
+    return source + 'print("Tab segment option compatibility: 7 native choices passed")\n'
 
 
 def main():
@@ -15,6 +37,11 @@ def main():
     repo = args.repo.resolve()
     tg = args.telegram_source
     with tempfile.TemporaryDirectory(prefix='aorus-tabs-') as temp:
+        options = Path(temp) / 'main.swift'
+        options.write_text(segment_options_test_source(repo))
+        options_binary = temp + '/segments'
+        subprocess.run([args.swiftc, '-warnings-as-errors', '-O', str(options), '-o', options_binary], check=True)
+        subprocess.run([options_binary], check=True)
         binary = str(Path(temp) / 'tabs')
         source = tg / 'submodules/Display/Source' if tg else repo / 'patches/submodules/Display/Source'
         subprocess.run([args.swiftc, '-swift-version', '5', '-module-cache-path', temp + '/cache', str(source / 'AorusTabBarLayout.swift'), str(source / 'AorusLightSurface.swift'), str(repo / 'scripts/tests/AorusTabBarLayoutTests.swift'), '-o', binary], check=True)
