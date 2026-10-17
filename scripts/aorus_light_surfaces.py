@@ -52,6 +52,23 @@ INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
             raise RuntimeError('Light surfaces: expected both ' + kind + ' page background updates')
         source = source.replace(anchor, anchor + '                            self.aorusUpdatePageBackground()\n')
     path.write_text(source)
+    path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift'
+    source = path.read_text()
+    source = edit(source, '        self.scrollNode = ASScrollNode()\n', '        self.scrollNode = ASScrollNode()\n        self.scrollNode.isOpaque = false\n', 'transparent profile scroll backing')
+    source = edit(source, '        guard !self.isSettings else {\n            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)', '        guard !self.isSettings else {\n            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.overallDarkAppearance ? self.presentationData.theme.list.blocksBackgroundColor : self.presentationData.theme.list.plainBackgroundColor)', 'settings publishes its own light page')
+    source = edit(source, '        self.aorusUpdatePageBackdrop(image: nil)\n        let color: UIColor\n', '        self.aorusUpdatePageBackdrop(image: nil)\n        if AorusInterfaceV2.isEnabled && self.isSettings && !self.presentationData.theme.overallDarkAppearance {\n            let page = self.presentationData.theme.list.plainBackgroundColor\n            self.backgroundColor = page\n            self.isOpaque = page.cgColor.alpha >= 1.0\n            return\n        }\n        let color: UIColor\n', 'settings page uses the native light background')
+    path.write_text(source)
+    path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift'
+    source = path.read_text()
+    source = edit(source, '        self.backgroundNode.backgroundColor = aorusGlass ? .clear : presentationData.theme.list.itemBlocksBackgroundColor\n', '        self.isOpaque = !aorusGlass\n        self.backgroundNode.isOpaque = !aorusGlass\n        self.backgroundNode.backgroundColor = aorusGlass ? .clear : presentationData.theme.list.itemBlocksBackgroundColor\n', 'transparent native profile sections')
+    path.write_text(source)
+    path = tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift'
+    source = path.read_text()
+    # Telegram 13 does not attach the classic selected counter's content. Its glass branch
+    # attaches content to the effect view; the legacy branch needs the same hierarchy itself.
+    source = edit(source, '            self.containerView.addSubnode(background)\n', '            self.containerView.addSubnode(background)\n            self.containerView.addSubnode(self.icon)\n            self.containerView.addSubnode(self.label)\n            self.containerView.addSubview(self.button)\n', 'classic gallery counter content')
+    source = edit(source, '            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0,', '            let selectedButtonX: CGFloat = AorusOldInterface.isEnabled ? 16.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0 : 16.0 + 44.0 + 12.0\n            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonX,', 'classic gallery counter follows the measured close button')
+    path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift'
     source = edit(path.read_text(), 'return component.isSelected ? accent : accent.withAlphaComponent(0.5)', 'return accent', 'profile tab ink')
     path.write_text(source)

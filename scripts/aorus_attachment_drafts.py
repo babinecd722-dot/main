@@ -300,7 +300,7 @@ def patch_picker(tg):
     body = edit(body, old, '''                if let present = self?.controller?.aorusPresentDraftGallery { present(c, a) }
                 else { self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true) }
 ''', 'direct editor presentation')
-    body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionView?(item.uniqueIdentifier)?.window ?? self?.selectionNode?.view\n', 'composer transition host')
+    body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionView?(item.uniqueIdentifier)?.window?.rootViewController?.view ?? self?.selectionNode?.view\n', 'composer transition host')
     body = edit(body, '                return self?.transitionView(for: identifier)\n', '                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n', 'composer thumbnail transition source')
     body = edit(body, '            }, editCover: { _, _ in\n', '            }, finishedTransitionOut: { [weak self] in\n                self?.controller?.aorusDraftGalleryClosed?()\n            }, editCover: { _, _ in\n', 'persist editor after its return transition')
     end = start + len(block(s, '        fileprivate func openSelectedMedia('))

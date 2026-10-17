@@ -70,8 +70,8 @@ def patch_tab_settings(tg: Path) -> None:
         public func aorusPreviewHideItem(at index: Int?) {
             guard let component = self.component else { return }
             for (i, item) in component.items.enumerated() {
-                self.itemViews[item.id]?.view?.alpha = i == index ? 0.0 : 1.0
-                self.selectedItemViews[item.id]?.view?.alpha = i == index ? 0.0 : 1.0
+                self.itemViews[item.id]?.view?.isHidden = i == index
+                self.selectedItemViews[item.id]?.view?.isHidden = i == index
             }
         }
 
@@ -94,8 +94,8 @@ def patch_tab_settings(tg: Path) -> None:
 
     func aorusPreviewHideItem(at index: Int?) {
         for (i, container) in self.tabBarNodeContainers.enumerated() {
-            container.imageNode.alpha = i == index ? 0.0 : 1.0
-            container.badgeContainerNode.alpha = i == index ? 0.0 : 1.0
+            container.imageNode.isHidden = i == index
+            container.badgeContainerNode.isHidden = i == index
         }
     }
 

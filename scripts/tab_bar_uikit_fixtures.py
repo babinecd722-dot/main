@@ -1,6 +1,7 @@
 """Exercise the production preview gesture/lifecycle with a renderer supplied at its boundary."""
 import re
 from pathlib import Path
+from telegram13_list_check import block
 
 
 def tab_preview_test_source(tg: Path) -> str:
@@ -9,6 +10,19 @@ def tab_preview_test_source(tg: Path) -> str:
     names = ['TabBarControllerNode', 'PresentationTheme', 'PresentationStrings', 'ContainedViewLayoutTransition', 'ContainerViewLayout', 'DeviceMetrics', 'LayoutMetrics', 'TabBarNodeItem']
     for name in names: source = re.sub(r'\b' + name + r'\b', 'TabPreview' + name + 'Fixture', source)
     source = source.replace('public ', '')
+    native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
+    hide = block(native, '        public func aorusPreviewHideItem(at index: Int?)').replace('public ', '')
+    visibility = r'''
+private struct NativeTabVisibilityItem { let id: Int }
+private struct NativeTabVisibilityComponent { var items: [NativeTabVisibilityItem] }
+private final class NativeTabVisibilityContent { let view: UIView? = UIView() }
+private final class NativeTabVisibilityProbe {
+    var component: NativeTabVisibilityComponent? = NativeTabVisibilityComponent(items: [.init(id: 10), .init(id: 20)])
+    var itemViews = [10: NativeTabVisibilityContent(), 20: NativeTabVisibilityContent()]
+    var selectedItemViews = [10: NativeTabVisibilityContent(), 20: NativeTabVisibilityContent()]
+''' + hide + r'''
+}
+'''
     return r'''import UIKit
 import UIKit.UIGestureRecognizerSubclass
 
@@ -61,7 +75,7 @@ final class TabPreviewTabBarControllerNodeFixture {
         return CGRect(x: CGFloat(index) * width, y: 40, width: width, height: 55)
     }
 }
-''' + source + r'''
+''' + visibility + source + r'''
 private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     var phase: UIGestureRecognizer.State = .possible
     var point = CGPoint.zero
@@ -103,6 +117,18 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     try? await Task.sleep(nanoseconds: 80_000_000)
     let hold = TabPreviewHoldFixture()
     func phase(_ state: UIGestureRecognizer.State, x: CGFloat) { hold.phase = state; hold.point = CGPoint(x: x, y: 65); let _ = preview.perform(NSSelectorFromString("hold:"), with: hold) }
+    let visibility = NativeTabVisibilityProbe()
+    visibility.aorusPreviewHideItem(at: 0)
+    // Native component updates animate alpha on both copies after the preview's render pass.
+    // Visibility must survive those updates, rather than be animated back to one.
+    for content in Array(visibility.itemViews.values) + Array(visibility.selectedItemViews.values) { content.view?.alpha = 1 }
+    expect(visibility.itemViews[10]?.view?.isHidden == true && visibility.selectedItemViews[10]?.view?.isHidden == true, "dragged tab stays hidden in both native lens trees after native alpha updates")
+    expect(visibility.itemViews[20]?.view?.isHidden == false, "other tabs remain visible")
+    visibility.component?.items.reverse()
+    visibility.aorusPreviewHideItem(at: 1)
+    expect(visibility.itemViews[10]?.view?.isHidden == true && visibility.itemViews[20]?.view?.isHidden == false, "reorder preserves the hidden identity")
+    visibility.aorusPreviewHideItem(at: nil)
+    expect(visibility.itemViews.values.allSatisfy { $0.view?.isHidden == false } && visibility.selectedItemViews.values.allSatisfy { $0.view?.isHidden == false }, "drop restores both lens trees")
     phase(.began, x: 60)
     let lifted = preview.subviews.compactMap { $0 as? UIImageView }.first
     expect(lifted != nil && lifted?.isOpaque == false, "drag owns a transparent image of the tab content")

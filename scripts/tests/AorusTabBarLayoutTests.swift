@@ -79,7 +79,7 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         for dark in [false, true] { for v2 in [false, true] {
             let (min, max) = aorusGlassLuminance(isDark: dark, interfaceV2: v2)
             expect(min >= 0 && max <= 1 && min < max, "valid compositor luminance interval")
-            expect(dark ? min == 0 && max == 0.15 : v2 ? min == 0 && max == 1 : min == 0.8 && max == 0.801, "light v2 preserves actual backdrop luminance")
+            expect(dark ? min == 0 && max == 0.15 : min == 0.8 && max == 0.801, "every interface retains Telegram native backdrop contrast")
         } }
         let saved = UserDefaults.standard.data(forKey: AorusTabBarSettings.key)
         defer { if let saved { UserDefaults.standard.set(saved, forKey: AorusTabBarSettings.key) } else { UserDefaults.standard.removeObject(forKey: AorusTabBarSettings.key) } }

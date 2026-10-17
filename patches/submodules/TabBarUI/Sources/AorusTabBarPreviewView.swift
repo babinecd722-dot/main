@@ -19,6 +19,7 @@ public final class AorusTabBarPreviewView: UIView {
     private var dragged: String?
     private var ghost: UIView?
     private var dragOffset: CGFloat = 0.0
+    private var dragSlots: [CGRect] = []
     private var animation: UIViewPropertyAnimator?
     private var ending = false
     private var elements: [UIAccessibilityElement] = []
@@ -93,6 +94,8 @@ public final class AorusTabBarPreviewView: UIView {
         switch gesture.state {
         case .began:
             guard !self.ending, let index = self.index(at: point), let frame = self.node?.frameForControllerTab(at: index), let snapshot = self.node?.aorusPreviewSnapshotItem(at: index) else { return }
+            self.dragSlots = self.items.indices.compactMap { self.node?.frameForControllerTab(at: $0) }
+            guard self.dragSlots.count == self.items.count else { return }
             self.original = self.items
             self.dragged = self.items[index].aorusTabIdentifier
             self.dragOffset = point.x - frame.midX
@@ -110,7 +113,7 @@ public final class AorusTabBarPreviewView: UIView {
         case .changed:
             guard let ghost, let dragged, let source = self.items.firstIndex(where: { $0.aorusTabIdentifier == dragged }) else { return }
             ghost.center.x = max(ghost.bounds.width / 2.0, min(self.bounds.width - ghost.bounds.width / 2.0, point.x - self.dragOffset))
-            guard let destination = self.items.indices.min(by: { abs((self.node?.frameForControllerTab(at: $0)?.midX ?? point.x) - ghost.center.x) < abs((self.node?.frameForControllerTab(at: $1)?.midX ?? point.x) - ghost.center.x) }), destination != source else { return }
+            guard let destination = self.items.indices.min(by: { abs(self.dragSlots[$0].midX - ghost.center.x) < abs(self.dragSlots[$1].midX - ghost.center.x) }), destination != source else { return }
             self.items.insert(self.items.remove(at: source), at: destination)
             self.render(.animated(duration: 0.3, curve: .spring))
             AorusTabBarFeedback.selection()
@@ -124,7 +127,7 @@ public final class AorusTabBarPreviewView: UIView {
     private func finishDrag() {
         guard self.original != nil, let ghost, let index = self.items.firstIndex(where: { $0.aorusTabIdentifier == self.dragged }), let target = self.node?.frameForControllerTab(at: index) else { self.cancelDrag(); return }
         self.ending = true
-        let animator = UIViewPropertyAnimator(duration: UIAccessibility.isReduceMotionEnabled ? 0.0 : 0.3, dampingRatio: 0.85) { ghost.transform = .identity; ghost.frame = target }
+        let animator = UIViewPropertyAnimator(duration: UIAccessibility.isReduceMotionEnabled ? 0.0 : 0.3, dampingRatio: 0.85) { ghost.transform = .identity; ghost.bounds = CGRect(origin: .zero, size: target.size); ghost.center = CGPoint(x: target.midX, y: target.midY) }
         self.animation = animator
         animator.addCompletion { [weak self] _ in
             guard let self, self.ending else { return }
@@ -139,6 +142,7 @@ public final class AorusTabBarPreviewView: UIView {
         self.animation = nil
         self.ghost?.removeFromSuperview()
         self.ghost = nil
+        self.dragSlots = []
         self.dragged = nil
         self.original = nil
         self.ending = false
