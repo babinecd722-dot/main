@@ -97,7 +97,10 @@ print("Native media draft identities passed: 6 assertions")
 '''
     selected = block(picker, '        fileprivate func openSelectedMedia(')
     assert 'aorusDraftTransitionView?(identifier)' in selected
-    assert '?.window?.rootViewController?.view' in selected, 'the native editor transition needs a host with a parent for its returning image'
+    assert 'aorusDraftTransitionHost?()' in selected, 'the host lookup must not scroll the original thumbnail back into view'
+    host = block(controller, '        controller.aorusDraftTransitionHost = ')
+    assert 'activeTransitionHost(id:' in host and 'aorusDraftTransitionView' not in host
+    assert '.window?.rootViewController?.view' in host, 'the native editor needs a host with a parent for its returning image'
     assert '?.window ??' not in selected
     assert 'aorusDraftGalleryClosed' not in selected.split('finishedTransitionOut:')[0]
     legacy = (tg / 'submodules/MediaPickerUI/Sources/LegacyMediaPickerGallery.swift').read_text()

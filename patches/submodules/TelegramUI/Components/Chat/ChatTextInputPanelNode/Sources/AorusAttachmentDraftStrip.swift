@@ -60,6 +60,11 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
         self.updateVisibleTiles(force: true, transition: transition)
     }
 
+    public static func activeTransitionHost(id: String) -> UIView? {
+        guard let strip = self.activeTransitionStrip, strip.draft?.items.contains(where: { $0.id == id }) == true else { return nil }
+        return strip.window?.rootViewController?.view
+    }
+
     public static func activeTransitionView(id: String) -> UIView? {
         guard let strip = self.activeTransitionStrip, strip.window != nil else { return nil }
         return strip.transitionView(id: id)

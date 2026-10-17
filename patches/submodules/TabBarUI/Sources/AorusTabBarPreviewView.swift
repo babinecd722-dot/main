@@ -29,6 +29,8 @@ public final class AorusTabBarPreviewView: UIView {
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
+        self.isOpaque = false
+        self.backgroundColor = .clear
         let hold = UILongPressGestureRecognizer(target: self, action: #selector(hold(_:)))
         hold.minimumPressDuration = 0.25
         self.addGestureRecognizer(hold)

@@ -197,6 +197,9 @@ extension ChatControllerImpl {
         for (index, item) in selected.enumerated() where draft.items.indices.contains(index) {
             if let item = item as? TGMediaSelectableItem { identifiers[item.uniqueIdentifier] = draft.items[index].id }
         }
+        controller.aorusDraftTransitionHost = { [weak self] in
+            return AorusAttachmentDraftStrip.activeTransitionHost(id: draft.items[index].id) ?? self?.chatDisplayNode.view.window?.rootViewController?.view
+        }
         controller.aorusDraftTransitionView = { [weak self] identifier in
             guard let id = identifiers[identifier] else { return nil }
             return AorusAttachmentDraftStrip.activeTransitionView(id: id) ?? self?.chatDisplayNode.textInputPanelNode?.aorusDraftTransitionView(id: id)

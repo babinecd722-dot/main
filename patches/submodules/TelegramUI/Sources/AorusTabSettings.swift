@@ -41,7 +41,12 @@ private final class AorusTabPreviewItem: ListViewItem, ItemListItem {
 private final class AorusTabPreviewNode: ListViewItemNode {
     private let preview = AorusTabBarPreviewView(frame: .zero)
     override var canBeSelected: Bool { false }
-    init() { super.init(layerBacked: false); self.view.addSubview(self.preview) }
+    init() {
+        super.init(layerBacked: false)
+        self.isOpaque = false
+        self.backgroundColor = .clear
+        self.view.addSubview(self.preview)
+    }
     func layout(item: AorusTabPreviewItem, params: ListViewItemLayoutParams, neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
         let size = CGSize(width: params.width, height: 130.0)
         return (ListViewItemNodeLayout(contentSize: size, insets: .zero), { [weak self] in

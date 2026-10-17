@@ -28,6 +28,8 @@ def patch_tab_settings(tg: Path) -> None:
 
     func aorusPreviewLayout(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         self.aorusIsPreview = true
+        self.backgroundColor = .clear
+        self.isOpaque = false
         self.layoutResult = nil
         let _ = self.containerLayoutUpdated(layout, toolbar: nil, transition: transition)
     }
@@ -54,6 +56,7 @@ def patch_tab_settings(tg: Path) -> None:
         self.aorusBaseTheme = theme
         let theme = aorusTabBarTheme(theme)
         self.theme = theme''', 'tab theme and preview hooks')
+    s = edit(s, '        self.backgroundColor = theme.list.plainBackgroundColor\n', '        self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor\n', 'preview excludes the controller page background', count=2)
     s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        defer { self.aorusApplyPreviewVisibility() }', 'preview visibility survives native relayout')
     path.write_text(s)
 

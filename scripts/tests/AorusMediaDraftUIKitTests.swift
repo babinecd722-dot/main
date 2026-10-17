@@ -65,6 +65,10 @@ import UIKit
         let removePlate = first.subviews.compactMap { $0 as? AorusClassicBackgroundProbe }.first!
         expect(removePlate.isHidden == old, "ordinary close plate and native glass are selected by interface")
         if !old, #available(iOS 26.0, *) { expect(removePlate.nativeView != nil, "current close button constructs real UIKit glass") }
+        let focused = strip.transitionView(id: entries[3].id)
+        let focusedOffset = scroll.contentOffset
+        expect(AorusAttachmentDraftStrip.activeTransitionHost(id: entries[0].id) === window.rootViewController!.view, "the editor uses the connected root as a stable transition host")
+        expect(scroll.contentOffset == focusedOffset && focused?.window === window, "resolving the host never scrolls away from the currently focused media")
         scroll.setContentOffset(CGPoint(x: scroll.contentSize.width - width, y: 0), animated: false)
         let reduced = draft.removing(entries[3].id)!
         strip.update(draft: reduced, accountBasePath: root.path, width: width, theme: theme, strings: strings)

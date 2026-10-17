@@ -66,7 +66,9 @@ def main():
         root = require('TelegramUI/Sources/TelegramRootController.swift', 'AorusTabBarCatalogue.publish', 'AorusTabBarSettings.changedNotification', 'controllers = self.aorusOrderTabs(controllers)')
         assert root.count('controllers = self.aorusOrderTabs(controllers)') == 2
         require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction', 'self.node?.aorusPreviewSnapshotItem(at: index)')
-        require('TabBarUI/Sources/TabBarContollerNode.swift', 'aorusTabBarTheme(theme)', 'self.aorusBaseTheme = theme', 'AorusTabBarSettings.changedNotification')
+        controller = require('TabBarUI/Sources/TabBarContollerNode.swift', 'aorusTabBarTheme(theme)', 'self.aorusBaseTheme = theme', 'AorusTabBarSettings.changedNotification', 'self.backgroundColor = .clear', 'self.isOpaque = false')
+        assert controller.count('self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor') == 2
+        assert 'self.isOpaque = false' in tabs
         require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'aorusTabSnapshot(in: self.view', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusTabSnapshot(in: self, bounds: bounds, contents: [content])', 'self.itemViews[item.id]?.view?.isHidden = i == index', 'self.selectedItemViews[item.id]?.view?.isHidden = i == index')
         require('TelegramPresentationData/Sources/PresentationData.swift', 'modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page')

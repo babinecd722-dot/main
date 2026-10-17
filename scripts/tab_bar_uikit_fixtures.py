@@ -10,6 +10,9 @@ def tab_preview_test_source(tg: Path) -> str:
     names = ['TabBarControllerNode', 'PresentationTheme', 'PresentationStrings', 'ContainedViewLayoutTransition', 'ContainerViewLayout', 'DeviceMetrics', 'LayoutMetrics', 'TabBarNodeItem']
     for name in names: source = re.sub(r'\b' + name + r'\b', 'TabPreview' + name + 'Fixture', source)
     source = source.replace('public ', '')
+    controller = (tg / 'submodules/TabBarUI/Sources/TabBarContollerNode.swift').read_text()
+    preview_layout = block(controller, '    func aorusPreviewLayout(')
+    for name in names: preview_layout = re.sub(r'\b' + name + r'\b', 'TabPreview' + name + 'Fixture', preview_layout)
     native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
     hide = block(native, '        public func aorusPreviewHideItem(at index: Int?)').replace('public ', '')
     classic = (tg / 'submodules/TabBarUI/Sources/TabBarNode.swift').read_text()
@@ -65,12 +68,17 @@ struct TabPreviewTabBarNodeItemFixture {
 final class TabPreviewTabBarControllerNodeFixture {
     let view = UIView()
     var items: [TabPreviewTabBarNodeItemFixture] = []
+    var aorusIsPreview = false
+    var layoutResult: Int?
+    var backgroundColor: UIColor? { get { view.backgroundColor } set { view.backgroundColor = newValue } }
+    var isOpaque: Bool { get { view.isOpaque } set { view.isOpaque = newValue } }
     var frame: CGRect { get { view.frame } set { view.frame = newValue } }
     init(theme: TabPreviewPresentationThemeFixture, strings: TabPreviewPresentationStringsFixture, itemSelected: @escaping (Int, Bool, [AnyObject]) -> Void, itemHasDoubleTapAction: @escaping (Int) -> Bool, itemDoubleTapped: @escaping (Int) -> Void, contextAction: @escaping (Int, UIView, UIGestureRecognizer) -> Void, swipeAction: @escaping (Int, Int) -> Void, toolbarActionSelected: @escaping (Int) -> Void, disabledPressed: @escaping () -> Void, activateSearch: @escaping () -> Void, deactivateSearch: @escaping () -> Void) { view.backgroundColor = .systemBackground }
     func updateTheme(_ theme: TabPreviewPresentationThemeFixture) {}
     func updateTabBarItems(items: [TabPreviewTabBarNodeItemFixture]) { self.items = items }
     func updateSelectedIndex(index: Int) {}
-    func aorusPreviewLayout(_ layout: TabPreviewContainerViewLayoutFixture, transition: TabPreviewContainedViewLayoutTransitionFixture) {}
+    func containerLayoutUpdated(_ layout: TabPreviewContainerViewLayoutFixture, toolbar: Int?, transition: TabPreviewContainedViewLayoutTransitionFixture) -> CGFloat { 0 }
+''' + preview_layout + r'''
     func aorusPreviewHideItem(at index: Int?) {}
     func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
         guard let bounds = frameForControllerTab(at: index) else { return nil }
@@ -125,6 +133,8 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     window.addSubview(preview)
     func update(_ source: [UITabBarItem] = items) { preview.update(theme: TabPreviewPresentationThemeFixture(), strings: TabPreviewPresentationStringsFixture(), items: source, moveLeft: "Left", moveRight: "Right"); preview.layoutIfNeeded() }
     update()
+    expect(!preview.isOpaque && preview.backgroundColor?.cgColor.alpha == 0, "preview exposes only the native panel without an opaque wrapper")
+    expect(preview.subviews.count == 1 && preview.subviews.allSatisfy { !$0.isOpaque && $0.backgroundColor?.cgColor.alpha == 0 }, "the real controller preview layout clears the full-screen rectangle around the oval")
     try? await Task.sleep(nanoseconds: 80_000_000)
     let hold = TabPreviewHoldFixture()
     func phase(_ state: UIGestureRecognizer.State, x: CGFloat) { hold.phase = state; hold.point = CGPoint(x: x, y: 65); let _ = preview.perform(NSSelectorFromString("hold:"), with: hold) }
