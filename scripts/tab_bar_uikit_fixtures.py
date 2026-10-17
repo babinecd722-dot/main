@@ -12,6 +12,8 @@ def tab_preview_test_source(tg: Path) -> str:
     source = source.replace('public ', '')
     native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
     hide = block(native, '        public func aorusPreviewHideItem(at index: Int?)').replace('public ', '')
+    classic = (tg / 'submodules/TabBarUI/Sources/TabBarNode.swift').read_text()
+    classic_hide = block(classic, '    func aorusPreviewHideItem(at index: Int?)')
     visibility = r'''
 private struct NativeTabVisibilityItem { let id: Int }
 private struct NativeTabVisibilityComponent { var items: [NativeTabVisibilityItem] }
@@ -21,6 +23,15 @@ private final class NativeTabVisibilityProbe {
     var itemViews = [10: NativeTabVisibilityContent(), 20: NativeTabVisibilityContent()]
     var selectedItemViews = [10: NativeTabVisibilityContent(), 20: NativeTabVisibilityContent()]
 ''' + hide + r'''
+}
+private final class NativeClassicVisibilityContainer {
+    let imageNode = UIView()
+    let badgeContainerNode = UIView()
+    init(empty: Bool) { imageNode.addSubview(badgeContainerNode); badgeContainerNode.isHidden = empty }
+}
+private final class NativeClassicVisibilityProbe {
+    let tabBarNodeContainers = [NativeClassicVisibilityContainer(empty: true), NativeClassicVisibilityContainer(empty: false)]
+''' + classic_hide + r'''
 }
 '''
     return r'''import UIKit
@@ -117,6 +128,12 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     try? await Task.sleep(nanoseconds: 80_000_000)
     let hold = TabPreviewHoldFixture()
     func phase(_ state: UIGestureRecognizer.State, x: CGFloat) { hold.phase = state; hold.point = CGPoint(x: x, y: 65); let _ = preview.perform(NSSelectorFromString("hold:"), with: hold) }
+    let classicVisibility = NativeClassicVisibilityProbe()
+    classicVisibility.aorusPreviewHideItem(at: 1)
+    expect(classicVisibility.tabBarNodeContainers[1].imageNode.isHidden, "classic drag hides the entire tab including its badge child")
+    classicVisibility.aorusPreviewHideItem(at: nil)
+    expect(classicVisibility.tabBarNodeContainers[0].badgeContainerNode.isHidden, "drop preserves the native hidden empty badge")
+    expect(!classicVisibility.tabBarNodeContainers[1].imageNode.isHidden && !classicVisibility.tabBarNodeContainers[1].badgeContainerNode.isHidden, "drop restores the filled badge with its parent")
     let visibility = NativeTabVisibilityProbe()
     visibility.aorusPreviewHideItem(at: 0)
     // Native component updates animate alpha on both copies after the preview's render pass.

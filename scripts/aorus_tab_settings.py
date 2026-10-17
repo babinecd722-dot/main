@@ -89,13 +89,12 @@ def patch_tab_settings(tg: Path) -> None:
     s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', '''    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
         guard self.tabBarNodeContainers.indices.contains(index), let bounds = self.frameForControllerTab(at: index) else { return nil }
         let container = self.tabBarNodeContainers[index]
-        return aorusTabSnapshot(in: self.view, bounds: bounds, contents: [container.imageNode.view, container.badgeContainerNode.view])
+        return aorusTabSnapshot(in: self.view, bounds: bounds, contents: [container.imageNode.view])
     }
 
     func aorusPreviewHideItem(at index: Int?) {
         for (i, container) in self.tabBarNodeContainers.enumerated() {
             container.imageNode.isHidden = i == index
-            container.badgeContainerNode.isHidden = i == index
         }
     }
 
