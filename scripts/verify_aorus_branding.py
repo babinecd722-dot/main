@@ -3651,7 +3651,7 @@ def main() -> None:
                 "abs(scrollView.contentOffset.y) < 1.0",
                 # The gallery opens and closes onto a square photo, which stays until it is covered.
                 "sourceCorners: aorusSquareSource ? .none : .round",
-                "aorusRevealUntil",
+                "crossfadeContent: aorusSquareSource",
                 "aorusSquareSource ? Optional(shownEntry) : centralEntry",
             ),
         ),

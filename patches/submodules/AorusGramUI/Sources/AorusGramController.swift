@@ -373,6 +373,7 @@ private final class AorusArguments {
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
     let openBubbleSettings: () -> Void
+    let openTabSettings: () -> Void
     let openMessageSettings: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
@@ -395,6 +396,7 @@ private final class AorusArguments {
          openAppBadgePicker: @escaping () -> Void,
          openFont: @escaping () -> Void,
          openBubbleSettings: @escaping () -> Void,
+         openTabSettings: @escaping () -> Void,
          openMessageSettings: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
@@ -416,6 +418,7 @@ private final class AorusArguments {
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
         self.openBubbleSettings = openBubbleSettings
+        self.openTabSettings = openTabSettings
         self.openMessageSettings = openMessageSettings
     }
 }
@@ -478,6 +481,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case subscriptionBanner(PresentationTheme, String, Bool)
     case showStories(PresentationTheme, String, Bool)
     case bubbleSettings(PresentationTheme, String)
+    case tabSettings(PresentationTheme, String)
     case messageSettings(PresentationTheme, String)
 
     case tabsHeader(PresentationTheme, String)
@@ -540,7 +544,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .interfaceV2, .oldInterface, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
             return AorusSection.ui.rawValue
-        case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar:
+        case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar, .tabSettings:
             return AorusSection.tabs.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled, .messageSeconds:
             return AorusSection.editLocal.rawValue
@@ -621,6 +625,7 @@ private enum AorusEntry: ItemListNodeEntry {
         // Directly under Show Stories. The number only has to be one no other row uses; where
         // the row stands is set in `<` below.
         case .bubbleSettings:       return 1001
+        case .tabSettings:          return 1002
         case .messageSettings:      return 1000
         case .customFont:           return 60
         case .tabsHeader:           return 61
@@ -674,6 +679,7 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .pluginShortcut(_, _, _, _, _, _, _, placementOrder) = entry { return placementOrder }
             // Bubble Settings just above Message Settings, both under Show Stories.
             if case .bubbleSettings = entry { return 59 * 1000 + 400 }
+            if case .tabSettings = entry { return 66 * 1000 + 500 }
             if case .messageSettings = entry { return 59 * 1000 + 500 }
             // Directly under Interface 2.0, the other way to change the whole interface.
             if case .oldInterface = entry { return 51 * 1000 + 500 }
@@ -786,6 +792,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .bubbleSettings(lt, ls):
             if case let .bubbleSettings(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .tabSettings(lt, ls):
+            if case let .tabSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .messageSettings(lt, ls):
             if case let .messageSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .tabsHeader(lt, ls):
@@ -985,6 +993,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.showStories, $0) })
         case let .bubbleSettings(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openBubbleSettings)
+        case let .tabSettings(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openTabSettings)
         case let .messageSettings(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMessageSettings)
         case let .tabsHeader(_, text):
@@ -1114,6 +1124,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         // Names switch reflects PRESENCE: on = names shown (stored hide flag inverted).
         .hideTabTitles(theme, l10n.hideTabTitles, !state.hideTabTitles),
         .compactTabBar(theme, l10n.compactTabBar, state.compactTabBar),
+        .tabSettings(theme, aorusL("Настройка вкладок", "Tab Settings")),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -1693,6 +1704,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                   let screen = AorusBubbleSettingsRoute.make(context) else {
                 return
             }
+            navigationController.pushViewController(screen)
+        },
+        openTabSettings: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController,
+                  let screen = AorusTabSettingsRoute.make(context) else { return }
             navigationController.pushViewController(screen)
         },
         openMessageSettings: {

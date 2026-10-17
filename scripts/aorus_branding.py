@@ -30453,6 +30453,12 @@ def main() -> None:
 
     # After every pass that draws Interface 2.0: each asks the choice the run started with,
     # and this gives those files their import and fails on any live read of the switch.
+    from aorus_light_surfaces import patch_light_surfaces
+    from aorus_tab_settings import patch_tab_settings
+    patch_light_surfaces(tg)
+    patch_tab_settings(tg)
+    from aorus_avatar_crossfade import patch_avatar_crossfade
+    patch_avatar_crossfade(tg)
     patch_interface_v2_run_switch(tg)
 
     # Last: discovers every file the patches above left calling aorusL() and gives its

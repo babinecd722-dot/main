@@ -201,11 +201,11 @@ private final class AorusAttachmentDraftTile: UIView {
         self.removeButton.accessibilityLabel = strings.Common_Delete
         self.openButton.accessibilityLabel = item.isVideo ? strings.Message_Video : strings.Message_Photo
         self.removeIcon.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
-        // The cross on a round video sits on its dark corner, so it is drawn for a dark surface.
-        let darkSurface = theme.overallDarkAppearance || item.isRound
+        // The cross overlays a photo, so its contrast follows the media scrim, not the chat theme.
+        let darkSurface = true
         self.removeIcon.tintColor = AorusOldInterface.isEnabled ? .black : (darkSurface ? .white : .black)
         self.removeBackground.isHidden = AorusOldInterface.isEnabled
-        self.removeIcon.backgroundColor = AorusOldInterface.isEnabled ? UIColor.white.withAlphaComponent(0.94) : .clear
+        self.removeIcon.backgroundColor = AorusOldInterface.isEnabled ? UIColor.white.withAlphaComponent(0.94) : UIColor.black.withAlphaComponent(0.3)
         self.removeIcon.layer.cornerRadius = 14
         self.removeIcon.clipsToBounds = true
         self.removeBackground.update(size: CGSize(width: 28, height: 28), cornerRadius: 14, isDark: darkSurface, tintColor: .init(kind: .clear), isInteractive: false, transition: .immediate)

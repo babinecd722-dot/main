@@ -68,6 +68,7 @@ swift_library(
         "//submodules/AorusVoiceDSP:AorusVoiceDSP",
         ":LibXraySystemLibraries",
         "//submodules/Display:Display",
+        "//submodules/InvisibleInkDustNode:InvisibleInkDustNode",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/MediaResources:MediaResources",

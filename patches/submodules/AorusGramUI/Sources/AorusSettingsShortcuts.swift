@@ -161,3 +161,22 @@ public enum AorusMessageSettingsRoute {
         return value?(context)
     }
 }
+
+/// The tab bar customisation screen, built alongside the client’s tab renderer.
+public enum AorusTabSettingsRoute {
+    private static let lock = NSLock()
+    private static var builder: ((AccountContext) -> ViewController)?
+
+    public static func register(_ value: @escaping (AccountContext) -> ViewController) {
+        lock.lock()
+        builder = value
+        lock.unlock()
+    }
+
+    public static func make(_ context: AccountContext) -> ViewController? {
+        lock.lock()
+        let value = builder
+        lock.unlock()
+        return value?(context)
+    }
+}

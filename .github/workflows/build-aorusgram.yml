@@ -1060,6 +1060,13 @@ jobs:
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
+          cp $PATCHES/submodules/Display/Source/AorusLightSurface.swift $TG/submodules/Display/Source/AorusLightSurface.swift
+          cp $PATCHES/submodules/Display/Source/AorusTabBarLayout.swift $TG/submodules/Display/Source/AorusTabBarLayout.swift
+          cp $PATCHES/submodules/Display/Source/AorusTabBarIdentity.swift $TG/submodules/Display/Source/AorusTabBarIdentity.swift
+          cp $PATCHES/submodules/TelegramPresentationData/Sources/AorusTabBarTheme.swift $TG/submodules/TelegramPresentationData/Sources/AorusTabBarTheme.swift
+          cp $PATCHES/submodules/TabBarUI/Sources/AorusTabBarPreviewView.swift $TG/submodules/TabBarUI/Sources/AorusTabBarPreviewView.swift
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusTabSettings.swift $TG/submodules/TelegramUI/Sources/AorusTabSettings.swift
+
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"
           ls -la $TG/submodules/AorusGramUI/Sources/
@@ -1176,6 +1183,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Aorusgram" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
+
+      - name: Validate tab settings and light surfaces
+        run: python3 aorusgram/scripts/tab_settings_check.py aorusgram --telegram-source telegram-ios
 
       - name: Telegram 13 native compatibility preflight
         run: python3 aorusgram/scripts/telegram13_check.py telegram-ios

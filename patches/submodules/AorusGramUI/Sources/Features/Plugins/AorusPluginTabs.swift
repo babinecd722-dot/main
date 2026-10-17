@@ -93,6 +93,7 @@ public final class AorusPluginTabHost {
             }
             next[key] = entry
             decorate(entry)
+            entry.controller.tabBarItem.aorusTabIdentifier = AorusTabBarLayout.pluginIdentifier(entry.pluginId, tab: entry.tab.id)
             result.append(entry.controller)
         }
         entries = next

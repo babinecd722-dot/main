@@ -79,7 +79,10 @@ public typealias ItemListSectionId = Int32
             name = match[1]
             grouped = bool(re.search(r"\bItemListItem\b", match[2]))
             source += "class " + name + ": ListViewItem" + (", ItemListItem" if grouped else "") + " {\n"
-            source += signatures(body)
+            try:
+                source += signatures(body)
+            except RuntimeError as error:
+                raise RuntimeError(f"{path} ({name}): {error}") from error
             if grouped:
                 source += "var sectionId: ItemListSectionId = 1\n"
                 calls = list(re.finditer(r"\bitemListNeighbors\s*\(", body))
@@ -92,8 +95,10 @@ public typealias ItemListSectionId = Int32
                 source += block(body, "var neighborDescriptor:") + "\n"
             source += "}\n"
             names.append((name, grouped))
-    if len(names) != 19:
-        raise RuntimeError(f"Expected all 19 custom and classic list items, found {len(names)}")
+    if len(names) != 20:
+        raise RuntimeError(f"Expected all 20 custom and classic list items, found {len(names)}")
+    if ("AorusTabPreviewItem", True) not in names:
+        raise RuntimeError("Native tab preview must implement the grouped list item protocol")
     source += '''var checks = 0
 func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
 func same(_ value: ItemListNeighbor) -> Bool { if case .sameSection(alwaysPlain: true) = value { return true }; return false }
@@ -143,7 +148,7 @@ expect(messageNeighbors.previous == (index == 0 ? nil : chatItems[index - 1].nei
 expect(messageNeighbors.next == (index == chatItems.count - 1 ? nil : chatItems[index + 1].neighborDescriptor), "preview preserves the complete next descriptor")
 }
 '''
-    source += 'print("Telegram 13 list integration passed: 19 protocol conformances; \\(checks) neighbor assertions")\n'
+    source += 'print("Telegram 13 list integration passed: 20 protocol conformances; \\(checks) neighbor assertions")\n'
     return source
 
 

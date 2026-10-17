@@ -7,10 +7,20 @@ def subscription_test_source(repo: Path) -> str:
     root = repo / "AorusGram/Sources/Features/Subscription"
     parts = [(repo / "patches/submodules/Display/Source/AorusAppearanceRecord.swift").read_text()]
     for name in ("SubscriptionStyle", "SubscriptionBaseController", "ConcealedKeyView", "SubscriptionBanner"):
-        parts.append(re.sub(r"\bFont\.", "SubscriptionFontFixture.", (root / (name + ".swift")).read_text().replace("import Display\n", "")))
+        parts.append(re.sub(r"\bFont\.", "SubscriptionFontFixture.", (root / (name + ".swift")).read_text().replace("import Display\n", "").replace("import InvisibleInkDustNode\n", "")))
     if 'systemThickMaterialDark' in parts[-1] or '.textColor = .white' in parts[-1]:
         raise RuntimeError("Subscription overlays force a dark material or white text")
     return "\n".join(parts) + r'''
+// The native particle renderer is supplied at the module boundary. These tests exercise
+// the actual key view's reveal, accessibility and lifecycle, not a substitute implementation.
+private final class InvisibleInkDustNode {
+    let view = UIView()
+    var frame: CGRect { get { view.frame } set { view.frame = newValue } }
+    init(textNode: AnyObject?, enableAnimations: Bool) {}
+    func update(size: CGSize, color: UIColor, textColor: UIColor, rects: [CGRect], wordRects: [CGRect]) {}
+    func update(revealed: Bool, animated: Bool) { view.alpha = revealed ? 0.0 : 1.0 }
+    func revealAtLocation(_ point: CGPoint) { view.alpha = 0.0 }
+}
 private enum SubscriptionFontFixture {
     static func regular(_ size: CGFloat) -> UIFont { UIFont.systemFont(ofSize: size) }
     static func semibold(_ size: CGFloat) -> UIFont { UIFont.systemFont(ofSize: size, weight: .semibold) }
@@ -100,27 +110,28 @@ private extension SubscriptionBanner {
     key.frame = CGRect(x: 0, y: 0, width: 280, height: 44)
     key.layoutIfNeeded()
     let label = key.subviews.compactMap { $0 as? UILabel }.first!
-    let cover = key.subviews.compactMap { $0 as? UIVisualEffectView }.first!
-    let eye = key.subviews.compactMap { $0 as? UIButton }.first!
-    expect(!key.isRevealed && cover.effect is UIBlurEffect, "a deep-linked key is initially blurred")
-    expect(label.accessibilityElementsHidden && !label.isAccessibilityElement, "a hidden key is not read by VoiceOver")
-    expect(eye.frame.width == 44 && eye.frame.height == 44, "key reveal has a native minimum tap target")
-    expect(cover.frame == label.frame && !cover.frame.intersects(eye.frame), "blur covers the key without obscuring the eye")
-    expect(eye.accessibilityLabel == "Show key", "eye describes the available action")
-    eye.sendActions(for: .touchUpInside)
-    expect(key.isRevealed && !label.accessibilityElementsHidden, "the eye reveals the existing key")
-    expect(eye.accessibilityLabel == "Hide key" && eye.accessibilityTraits.contains(.selected), "revealed eye exposes its selected state")
-    let concealed = await waitUntil { !key.isRevealed && cover.effect is UIBlurEffect }
-    expect(concealed && cover.effect is UIBlurEffect, "key blur returns automatically")
+    expect(!key.isRevealed && label.alpha == 0.0, "a deep-linked key is initially hidden by the native spoiler")
+    expect(label.accessibilityElementsHidden && !label.isAccessibilityElement && key.accessibilityValue == nil, "a hidden key is not read by VoiceOver")
+    expect(key.subviews.compactMap { $0 as? UIButton }.isEmpty, "the spoiler has no eye button")
+    expect(key.subviews.compactMap { $0 as? UIVisualEffectView }.isEmpty, "the key uses Telegram spoiler particles rather than a blur panel")
+    expect(key.bounds.height >= 44 && label.frame == key.bounds, "the whole key is a native minimum tap target")
+    expect(key.accessibilityLabel == "Show key", "spoiler describes the available action")
+    expect(key.accessibilityActivate(), "VoiceOver can reveal the spoiler")
+    expect(key.isRevealed && key.accessibilityValue == "AORUS-TEST-KEY", "tapping the spoiler reveals the existing key")
+    expect(key.accessibilityLabel == "Hide key" && key.accessibilityTraits.contains(.selected), "revealed spoiler exposes its selected state")
+    let concealed = await waitUntil { !key.isRevealed }
+    expect(concealed && key.accessibilityValue == nil, "spoiler conceals the key automatically")
     key.setRevealed(true, animated: false)
     key.setRevealed(false, animated: false)
-    expect(!key.isRevealed && cover.effect is UIBlurEffect, "a second tap can hide a key before the timer")
+    expect(!key.isRevealed && label.alpha == 0.0, "a second tap can hide a key before the timer")
+    for _ in 0 ..< 20 { key.setRevealed(true, animated: true); key.setRevealed(false, animated: false) }
+    expect(!key.isRevealed && label.alpha == 0.0, "rapid reveal cancellation cannot leave key text visible")
     key.setRevealed(true, animated: false)
     NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
-    expect(!key.isRevealed && cover.effect is UIBlurEffect, "backgrounding hides a revealed key immediately")
+    expect(!key.isRevealed && label.alpha == 0.0 && key.accessibilityValue == nil, "backgrounding hides a revealed key immediately")
     key.setRevealed(true, animated: false)
     key.removeFromSuperview()
-    expect(!key.isRevealed && cover.effect is UIBlurEffect, "dismissing the screen conceals the key and cancels its timer")
+    expect(!key.isRevealed && label.alpha == 0.0, "dismissing the screen conceals the key and cancels its timer")
     let productionKey = ConcealedKeyView(key: "KEY", font: .systemFont(ofSize: 17), textColor: .label, tintColor: .systemBlue, showTitle: "Show", hideTitle: "Hide")
     let revealedAt = CACurrentMediaTime()
     productionKey.setRevealed(true, animated: false)
