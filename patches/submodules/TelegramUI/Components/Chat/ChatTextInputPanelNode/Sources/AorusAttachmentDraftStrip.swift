@@ -202,13 +202,12 @@ private final class AorusAttachmentDraftTile: UIView {
         self.openButton.accessibilityLabel = item.isVideo ? strings.Message_Video : strings.Message_Photo
         self.removeIcon.image = UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
         // The cross overlays a photo, so its contrast follows the media scrim, not the chat theme.
-        let darkSurface = true
-        self.removeIcon.tintColor = AorusOldInterface.isEnabled ? .black : (darkSurface ? .white : .black)
+        self.removeIcon.tintColor = AorusOldInterface.isEnabled ? .black : .white
         self.removeBackground.isHidden = AorusOldInterface.isEnabled
         self.removeIcon.backgroundColor = AorusOldInterface.isEnabled ? UIColor.white.withAlphaComponent(0.94) : UIColor.black.withAlphaComponent(0.3)
         self.removeIcon.layer.cornerRadius = 14
         self.removeIcon.clipsToBounds = true
-        self.removeBackground.update(size: CGSize(width: 28, height: 28), cornerRadius: 14, isDark: darkSurface, tintColor: .init(kind: .clear), isInteractive: false, transition: .immediate)
+        self.removeBackground.update(size: CGSize(width: 28, height: 28), cornerRadius: 14, isDark: true, tintColor: .init(kind: .clear), isInteractive: false, transition: .immediate)
         self.duration.isHidden = !item.isVideo
         let seconds = Int(min(24 * 3600, max(0, item.duration)))
         self.duration.text = item.isVideo ? String(format: "%d:%02d", seconds / 60, seconds % 60) : nil
