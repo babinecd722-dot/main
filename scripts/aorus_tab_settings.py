@@ -85,6 +85,8 @@ def patch_tab_settings(tg: Path) -> None:
         if index == 'i': before = part
         else: after = part
     s = before + '    private func updateNodeImage(_ index: Int, layout: Bool)' + after
+    for image, state in (('selectedImage', 'active'), ('image', 'inactive')):
+        s = s.replace('tabBarItemImage(item.item.' + image + ', title:', 'tabBarItemImage(aorusTabBarImage(item.item.' + image + ', customInk: AorusTabBarSettings.current.appearance(dark: self.theme.overallDarkAppearance).' + state + ' != nil), title:')
     s = edit(s, '''                if container.badgeValue != container.appliedBadgeValue {
                     container.appliedBadgeValue = container.badgeValue
                     if let badgeValue = container.badgeValue, !badgeValue.isEmpty {''', '''                let aorusBadge = AorusTabBarSettings.current.badge(container.badgeValue)
