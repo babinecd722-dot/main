@@ -565,7 +565,7 @@ final class MediaPickerScreenImpl {
 
 def native_draft_views(tg):
     """Use the actual draft views and the installed native glass constructor."""
-    imports = ('import Display\n', 'import AorusGramUI\n', 'import TelegramCore\n', 'import TelegramPresentationData\n', 'import GlassBackgroundComponent\n')
+    imports = ('import Display\n', 'import AorusGramUI\n', 'import TelegramCore\n', 'import TelegramPresentationData\n', 'import GlassBackgroundComponent\n', 'import LegacyComponents\n')
     sources = []
     for rel in ('submodules/TelegramCore/Sources/AorusAttachmentDraft.swift', 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusAttachmentDraftStrip.swift', 'submodules/ChatListUI/Sources/Node/AorusAttachmentDraftPreviewView.swift'):
         text = (tg / rel).read_text()
@@ -574,6 +574,10 @@ def native_draft_views(tg):
         sources.append(text.replace('public ', ''))
     adapter = """
 import UIKit
+@objc protocol TGModernGalleryTransitionView {
+    func transitionImage() -> UIImage?
+    @objc optional func transitionContentRect() -> CGRect
+}
 final class PresentationTheme {
     struct Panel { var inputBackgroundColor: UIColor = .white }
     struct Chat { var inputPanel = Panel() }

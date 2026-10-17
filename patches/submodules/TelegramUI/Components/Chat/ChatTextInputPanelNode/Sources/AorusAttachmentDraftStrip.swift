@@ -5,6 +5,7 @@ import AorusGramUI
 import TelegramCore
 import TelegramPresentationData
 import GlassBackgroundComponent
+import LegacyComponents
 
 public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
     private static weak var activeTransitionStrip: AorusAttachmentDraftStrip?
@@ -119,7 +120,7 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
 private final class AorusAttachmentDraftTile: UIView {
     var open: () -> Void = {}
     var remove: () -> Void = {}
-    private let imageView = UIImageView()
+    private let imageView = AorusDraftTransitionImageView()
     var transitionImageView: UIView { self.imageView }
     private let openButton = UIButton(type: .custom)
     private let removeButton = UIButton(type: .custom)
@@ -217,7 +218,7 @@ private final class AorusAttachmentDraftTile: UIView {
     private func setRound(_ isRound: Bool, animated: Bool) {
         self.isRound = isRound
         let background = isRound ? UIColor(white: 0.06, alpha: 1.0) : (self.panelColor ?? .clear)
-        let radius = isRound ? self.bounds.width * 0.5 : 0.0
+        let radius = isRound ? self.bounds.width * 0.5 : 14.0
         guard animated, self.bounds.width > 0 else {
             self.backgroundColor = background
             self.imageView.layer.cornerRadius = radius
@@ -241,7 +242,7 @@ private final class AorusAttachmentDraftTile: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         self.imageView.frame = self.bounds
-        self.imageView.layer.cornerRadius = self.isRound ? self.bounds.width * 0.5 : 0.0
+        self.imageView.layer.cornerRadius = self.isRound ? self.bounds.width * 0.5 : 14.0
         self.openButton.frame = self.bounds
         self.removeButton.frame = CGRect(x: max(0, self.bounds.width - 44), y: 0, width: 44, height: 44)
         self.removeBackground.frame = CGRect(x: max(0, self.bounds.width - 36), y: 8, width: 28, height: 28)
@@ -261,4 +262,21 @@ private func aorusDecodedDraftPreview(path: String) -> UIImage? {
     format.scale = image.scale
     format.opaque = true
     return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in image.draw(at: .zero) }
+}
+
+/// A stable image for both directions of the native editor transition. Rendering local
+/// bounds keeps the crop and round-video mask without moving a live view out of its tile.
+private final class AorusDraftTransitionImageView: UIImageView, TGModernGalleryTransitionView {
+    func transitionImage() -> UIImage? {
+        guard self.image != nil, self.bounds.width > 0, self.bounds.height > 0 else { return self.image }
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = self.window?.screen.scale ?? UIScreen.main.scale
+        format.preferredRange = .standard
+        return UIGraphicsImageRenderer(size: self.bounds.size, format: format).image { renderer in
+            self.layer.render(in: renderer.cgContext)
+        }
+    }
+
+    func transitionContentRect() -> CGRect { self.bounds }
 }

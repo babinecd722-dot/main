@@ -316,6 +316,10 @@ def patch_picker(tg):
 
 
 def patch_composer(tg):
+    path = tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/BUILD'
+    s = path.read_text()
+    s = edit(s, '        "//submodules/Display",\n', '        "//submodules/Display",\n        "//submodules/LegacyComponents",\n', 'native draft transition image protocol', count=2)
+    path.write_text(s)
     path = tg / 'submodules/ChatPresentationInterfaceState/Sources/ChatPanelInterfaceInteraction.swift'
     s = path.read_text()
     anchor = 'public final class ChatPanelInterfaceInteraction {\n'

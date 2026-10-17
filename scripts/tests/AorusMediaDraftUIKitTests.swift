@@ -47,6 +47,12 @@ import UIKit
         first.layoutIfNeeded()
         let photo = first.subviews.first as! UIImageView
         expect(strip.transitionView(id: entries[0].id) === photo, "editor transition starts at the visible composer thumbnail")
+        let transition = photo as? TGModernGalleryTransitionView
+        expect(transition != nil, "the thumbnail uses the native gallery image protocol")
+        let originalFrame = photo.frame, originalParent = photo.superview
+        let opening = transition?.transitionImage(), closing = transition?.transitionImage()
+        expect(opening != nil && opening!.size == photo.bounds.size && closing != nil && samePixels(closing, opening!), "opening and closing render the same crop at the visible thumbnail size")
+        expect(photo.frame == originalFrame && photo.superview === originalParent, "native transition capture never moves the source outside its clipped tile")
         expect(samePixels(photo.image, images[0]) && photo.image?.renderingMode != .alwaysTemplate && photo.contentMode == .scaleAspectFill, "draft shows the selected photo without template tint")
         expect(first.layer.borderWidth == 0 && first.layer.cornerRadius == 14, "large photo has no outline")
         let buttons = first.subviews.compactMap { $0 as? UIButton }
