@@ -219,6 +219,14 @@ private struct NavigationBarPresentationData {
             expect(window.traitCollection.userInterfaceStyle == system, "app theme does not overwrite system appearance")
         }
     }
+    // UIKit propagates live traits on its next update pass, not synchronously
+    // with overrideUserInterfaceStyle. Keep the expected value and bound the wait.
+    func waitForNativeStyle(_ view: UIView, _ expected: UIUserInterfaceStyle) async {
+        for _ in 0 ..< 50 {
+            if view.traitCollection.userInterfaceStyle == expected { return }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
     for hasDecorativeDarkNavigation in [false, true] {
         let actual = NativeThemeControllerProbe()
         if hasDecorativeDarkNavigation { actual.update(dark: true) }
@@ -226,14 +234,18 @@ private struct NavigationBarPresentationData {
         expect(!actual.isViewLoaded, "actual theme setup preserves lazy root loading")
         root.addChild(actual)
         root.view.addSubview(actual.view)
+        actual.view.frame = root.view.bounds
         actual.didMove(toParent: root)
         let field = UITextField()
         actual.view.addSubview(field)
+        await waitForNativeStyle(field, .light)
         expect(actual.overrideUserInterfaceStyle == .light && field.traitCollection.userInterfaceStyle == .light, "Day follows actual screen palette even with nil or decorative dark navigation")
         actual.updateResolved(dark: true)
-        expect(field.traitCollection.userInterfaceStyle == .dark, "live resolved appearance updates native descendants")
+        await waitForNativeStyle(field, .dark)
+        expect(actual.overrideUserInterfaceStyle == .dark && actual.view.overrideUserInterfaceStyle == .dark && field.traitCollection.userInterfaceStyle == .dark, "live resolved appearance updates native descendants")
         actual.updateResolved(dark: false)
-        expect(field.traitCollection.userInterfaceStyle == .light, "live return to Day restores native descendants")
+        await waitForNativeStyle(field, .light)
+        expect(actual.overrideUserInterfaceStyle == .light && actual.view.overrideUserInterfaceStyle == .light && field.traitCollection.userInterfaceStyle == .light, "live return to Day restores native descendants")
     }
     let fixture: UIImage? = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 24)).image { context in
         UIColor.black.setFill(); context.fill(CGRect(x: 3, y: 3, width: 18, height: 18))
