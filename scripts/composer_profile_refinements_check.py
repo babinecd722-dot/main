@@ -108,7 +108,51 @@ print("Native media draft identities passed: 6 assertions")
     assert completed.index('legacyController?.dismiss()') < completed.index('finishedTransitionOut()')
     attachment = (tg / 'submodules/AttachmentUI/Sources/AttachmentController.swift').read_text()
     assert attachment.count('aorusRunDismissal {') == 2
-    for name, source in [('playback', fixture), ('send', send), ('dismissal', gate)]:
+    presentation = block(controller, 'present: { [weak self, weak controller] editor, arguments in')
+    presentation = presentation.rstrip().removesuffix(',').replace('present: ', 'return ', 1)
+    editor_gate = r'''import Foundation
+final class UIApplication {
+    enum State { case active, inactive, background }
+    static let shared = UIApplication()
+    var applicationState: State = .active
+}
+struct PreparedDraft { let revision: String }
+final class PreparedPicker {}
+final class PreparedView { var window: NSObject? = NSObject() }
+final class PreparedChat {
+    struct State {
+        struct Interface { var attachmentDraft: PreparedDraft? }
+        var interfaceState = Interface(attachmentDraft: PreparedDraft(revision: "original"))
+    }
+    enum Location { enum Window { case root }; case window(Window) }
+    var presentationInterfaceState = State()
+    var aorusAttachmentPreviewPicker: PreparedPicker?
+    var viewIfLoaded: PreparedView? = PreparedView()
+    var presentations = 0
+    func present(_ editor: Int, in location: Location, with arguments: Int) { presentations += 1 }
+    func action(controller: PreparedPicker, draft: PreparedDraft) -> (Int, Int) -> Void {
+''' + presentation + r'''
+    }
+}
+var checks = 0
+func expect(_ value: Bool, _ message: String) { checks += 1; precondition(value, message) }
+for scenario in 0..<7 {
+    let chat = PreparedChat(), picker = PreparedPicker(), other = PreparedPicker()
+    chat.aorusAttachmentPreviewPicker = picker
+    UIApplication.shared.applicationState = scenario == 1 ? .inactive : scenario == 2 ? .background : .active
+    let action = chat.action(controller: picker, draft: PreparedDraft(revision: "original"))
+    if scenario == 3 { chat.presentationInterfaceState.interfaceState.attachmentDraft = PreparedDraft(revision: "changed") }
+    if scenario == 4 { chat.viewIfLoaded?.window = nil }
+    if scenario == 5 { chat.aorusAttachmentPreviewPicker = other }
+    if scenario == 6 { chat.presentationInterfaceState.interfaceState.attachmentDraft = nil }
+    action(0, 0)
+    expect(chat.presentations == (scenario < 2 ? 1 : 0), "editor opens only for its current draft and foreground chat")
+    if scenario == 5 { expect(chat.aorusAttachmentPreviewPicker === other, "a stale completion cannot release the newer picker") }
+    else if scenario >= 2 { expect(chat.aorusAttachmentPreviewPicker == nil, "an aborted preparation releases the pending picker") }
+}
+print("Native draft prepared editor ownership: \(checks) assertions passed")
+'''
+    for name, source in [('playback', fixture), ('send', send), ('dismissal', gate), ('editor-ownership', editor_gate)]:
         with tempfile.TemporaryDirectory(prefix='aorus-composer-profile-' + name) as directory:
             work = Path(directory)
             path = work / 'main.swift'

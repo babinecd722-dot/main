@@ -204,8 +204,17 @@ extension ChatControllerImpl {
             guard let id = identifiers[identifier] else { return nil }
             return AorusAttachmentDraftStrip.activeTransitionView(id: id) ?? self?.chatDisplayNode.textInputPanelNode?.aorusDraftTransitionView(id: id)
         }
-        controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self] editor, arguments in
-            self?.present(editor, in: .window(.root), with: arguments)
+        controller.aorusOpenAttachmentDraftPreview(index: index, layout: layout, present: { [weak self, weak controller] editor, arguments in
+            guard let self, let controller else { return }
+            // Preparing a cloud photo can outlive the chat, the draft or foreground activity.
+            guard self.aorusAttachmentPreviewPicker === controller,
+                  self.presentationInterfaceState.interfaceState.attachmentDraft?.revision == draft.revision,
+                  self.viewIfLoaded?.window != nil,
+                  UIApplication.shared.applicationState != .background else {
+                if self.aorusAttachmentPreviewPicker === controller { self.aorusAttachmentPreviewPicker = nil }
+                return
+            }
+            self.present(editor, in: .window(.root), with: arguments)
         }, closed: { [weak self, weak controller] in
             guard let controller else { return }
             let shown = self?.aorusRemoveDeselectedAttachments(from: controller, draft: draft)
