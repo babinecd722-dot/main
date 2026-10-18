@@ -62,7 +62,7 @@ def objc_source(tg: Path) -> str:
     conversion_methods = '\n'.join(declaration(converter, prefix) for prefix in ['+ (CGSize)dimensionsFor:', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize\n', '+ (CGSize)_renderSizeWithCropSize:(CGSize)cropSize rotateSideward:'])
     maximum_size = declaration(converter, '+ (CGSize)maximumSizeForPreset:')
     fit_size = declaration((lc / 'Sources/TGImageUtils.mm').read_text(), 'CGSize TGFitSizeF(')
-    return '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + tab_enum + zoom_crop + '''
+    result = '#import <UIKit/UIKit.h>\n#import <float.h>\n#import <math.h>\n' + enum + tab_enum + zoom_crop + '''
 static bool _CGRectEqualToRectWithEpsilon(CGRect a, CGRect b, CGFloat epsilon) {
     return fabs(a.origin.x-b.origin.x) <= epsilon && fabs(a.origin.y-b.origin.y) <= epsilon && fabs(a.size.width-b.size.width) <= epsilon && fabs(a.size.height-b.size.height) <= epsilon;
 }
@@ -447,3 +447,4 @@ int AorusNativeRoundEditorTests(void) {
     return checks;
 }
 '''
+    return result.replace('SSignal', 'AorusRoundFixtureSignal')
