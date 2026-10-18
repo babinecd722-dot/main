@@ -1060,7 +1060,6 @@ jobs:
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
-          cp $PATCHES/submodules/Display/Source/AorusLightSurface.swift $TG/submodules/Display/Source/AorusLightSurface.swift
           cp $PATCHES/submodules/Display/Source/AorusTabBarLayout.swift $TG/submodules/Display/Source/AorusTabBarLayout.swift
           cp $PATCHES/submodules/Display/Source/AorusTabBarIdentity.swift $TG/submodules/Display/Source/AorusTabBarIdentity.swift
           cp $PATCHES/submodules/TelegramPresentationData/Sources/AorusTabBarTheme.swift $TG/submodules/TelegramPresentationData/Sources/AorusTabBarTheme.swift
