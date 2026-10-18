@@ -1,5 +1,6 @@
 """Execute the installed ordinary glass-theme derivation and preserve native palette roles."""
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from telegram13_list_check import block
@@ -18,6 +19,15 @@ def check_native_light_palette(tg: Path, swiftc: str) -> None:
     assert 'var buttonBackgroundColor = self.presentationData.theme.list.itemCheckColors.fillColor' in controls
     assert 'tintColor: self.presentationData.theme.list.itemCheckColors.foregroundColor' in controls
     assert 'aorusPlayerInk' not in controls and 'aorusButtonInk' not in controls
+    # Compile the real profile call against Telegram's exact installed argument order.
+    signature = re.search(r'    public func withUpdated\(blocksBackgroundColor:.*?-> PresentationThemeList', source).group(0)
+    signature = signature.replace('-> PresentationThemeList', '-> NativeProfileList')
+    profile_start = source.index('        let list = palette.list.withUpdated(')
+    profile_end = source.index('\n        )', profile_start) + len('\n        )')
+    profile_call = source[profile_start:profile_end]
+    value_types = sorted(set(re.findall(r': ([A-Za-z][A-Za-z0-9_]*)\?? = nil', signature)) - {'UIColor'})
+    profile_api = '\n'.join('typealias ' + name + ' = Int' for name in value_types) + '\nstruct NativeProfileList {\n' + signature + ' { return self }\n}\nstruct NativeProfilePalette { let list = NativeProfileList() }\n'
+    profile_api += 'func checkProfilePaletteCall(dark: Bool) {\n    let palette = NativeProfilePalette()\n    let ink = 1\n    let hairline = 2\n    func aorusInk(_ alpha: Double) -> Int { Int(alpha * 100) }\n' + profile_call + '\n    _ = list\n}\n'
     fields = ['name', 'index', 'referenceTheme', 'intro', 'passcode', 'rootController', 'chatList', 'chat', 'actionSheet', 'contextMenu', 'inAppNotification', 'chart', 'preview']
     declarations = '\n'.join('    let ' + name + ': Int' for name in fields)
     parameters = ', '.join(name + ': Int' for name in fields[:3]) + ', overallDarkAppearance: Bool, ' + ', '.join(name + ': Int' for name in fields[3:6]) + ', list: PaletteList, ' + ', '.join(name + ': Int' for name in fields[6:])
@@ -26,7 +36,7 @@ def check_native_light_palette(tg: Path, swiftc: str) -> None:
     comparisons = '\n'.join('        expect(result.' + name + ' == theme.' + name + ', "native ' + name + ' preserved")' for name in fields)
     swift = '''import Foundation
 typealias UIColor = Int
-extension Int { static let clear = -3 }
+extension Int { static let clear = -3; static let white = -4; static let black = -5 }
 enum AorusGlassPane {
     static let blockMarker = -1
     static let blockMarkerLight = -2
@@ -64,6 +74,9 @@ final class Cache {
     var entries: [Entry] = []
 ''' + method + '''
 }
+''' + profile_api + '''
+checkProfilePaletteCall(dark: false)
+checkProfilePaletteCall(dark: true)
 let cache = Cache()
 var checks = 0
 func expect(_ value: Bool, _ label: String) { checks += 1; precondition(value, label) }

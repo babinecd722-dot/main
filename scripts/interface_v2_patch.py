@@ -316,8 +316,8 @@ private final class AorusGlassThemeCache {
         }
 
         let list = palette.list.withUpdated(
-            plainBackgroundColor: dark ? UIColor.black : UIColor.white,
             modalBlocksBackgroundColor: dark ? UIColor.black : UIColor.white,
+            plainBackgroundColor: dark ? UIColor.black : UIColor.white,
             modalPlainBackgroundColor: dark ? UIColor.black : UIColor.white,
             itemPrimaryTextColor: ink,
             // Full ink, not a dimmed shade of it. Interface 2.0 is one page of ink over one page
