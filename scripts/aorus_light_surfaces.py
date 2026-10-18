@@ -107,3 +107,135 @@ def patch_light_surfaces(tg: Path) -> None:
 ''', 'refresh gift collection palette after avatar changes')
     source = edit(source, '    deinit {\n', '    deinit {\n        if let observer = self.aorusCollectionPageObserver { NotificationCenter.default.removeObserver(observer) }\n', 'release gift page observation')
     path.write_text(source)
+
+    extracted_block = (
+        "                if AorusOldInterface.isEnabled {\n"
+        "                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 28.0, color: theme.list.plainBackgroundColor)\n"
+        "                } else {\n"
+        "                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.plainBackgroundColor)\n"
+        "                }"
+    )
+    extracted_override = (
+        extracted_block
+        + "\n                strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: AorusOldInterface.isEnabled ? 28.0 : 52.0, color: theme.aorusExtractedProfileRowColor)"
+    )
+    for item_name in (
+        "PeerInfoScreenAddressItem.swift",
+        "PeerInfoScreenBusinessHoursItem.swift",
+        "PeerInfoScreenContactInfoItem.swift",
+        "PeerInfoScreenLabeledValueItem.swift",
+        "PeerInfoScreenPersonalChannelItem.swift",
+    ):
+        item_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems" / item_name
+        item_source = item_path.read_text()
+        if "theme.aorusExtractedProfileRowColor" not in item_source:
+            item_source = edit(item_source, extracted_block, extracted_override, f"contrast-safe extracted profile row background in {item_name}")
+            item_path.write_text(item_source)
+
+    for menu_name, pd_expr in (
+        ("PeerInfoScreenOpenUsername.swift", "self.presentationData"),
+        ("PeerInfoScreenOpenPhone.swift", "strongSelf.presentationData"),
+        ("PeerInfoScreenOpenBio.swift", "self.presentationData"),
+        ("PeerInfoScreenOpenBirthday.swift", "self.presentationData"),
+        ("PeerInfoScreenBusinessActions.swift", "self.presentationData"),
+    ):
+        menu_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources" / menu_name
+        menu_source = menu_path.read_text()
+        old_call = f"makeContextController(presentationData: {pd_expr}, source: .extracted("
+        new_call = f"makeContextController(presentationData: AorusInterfaceV2Run.isEnabled ? {pd_expr}.withUpdated(theme: {pd_expr}.theme.aorusGlassProfileTheme) : {pd_expr}, source: .extracted("
+        if new_call not in menu_source:
+            count = 2 if menu_name == "PeerInfoScreenBusinessActions.swift" else 1
+            menu_source = edit(menu_source, old_call, new_call, f"profile-themed extracted context menu in {menu_name}", count=count)
+            menu_path.write_text(menu_source)
+
+    media_node_path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageInteractiveMediaNode/Sources/ChatMessageInteractiveMediaNode.swift"
+    media_node_source = media_node_path.read_text()
+    if "let aorusPreviewFile = file" not in media_node_source:
+        old_hls_block = (
+            "                        if var file = effectiveFile {\n"
+            "                            var uploading = false\n"
+        )
+        new_hls_block = (
+            "                        if var file = effectiveFile {\n"
+            "                            let aorusPreviewFile = file\n"
+            "                            var uploading = false\n"
+        )
+        media_node_source = edit(media_node_source, old_hls_block, new_hls_block, "preserve parent video file for thumbnail preview before HLS quality replacement")
+        old_preview_section = (
+            "                            if isSecretMedia {\n"
+            "                                updateImageSignal = { synchronousLoad, _ in\n"
+            "                                    return chatSecretMessageVideo(account: context.account, userLocation: .peer(message.id.peerId), videoReference: .message(message: MessageReference(message), media: file))\n"
+            "                                }\n"
+            "                            } else {\n"
+            "                                if let _ = media as? TelegramMediaImage {\n"
+            "                                    \n"
+            "                                } else if let image = file.videoCover {\n"
+            "                                    updateImageSignal = { synchronousLoad, highQuality in\n"
+            "                                        return chatMessagePhoto(postbox: context.account.postbox, userLocation: .peer(message.id.peerId), photoReference: .message(message: MessageReference(message), media: image), synchronousLoad: synchronousLoad, highQuality: highQuality)\n"
+            "                                    }\n"
+            "                                    updateBlurredImageSignal = { synchronousLoad, _ in\n"
+            "                                        return chatSecretPhoto(account: context.account, userLocation: .peer(message.id.peerId), photoReference: .message(message: MessageReference(message), media: image), ignoreFullSize: true, synchronousLoad: true)\n"
+            "                                    }\n"
+            "                                } else if file.isAnimatedSticker {\n"
+            "                                    let dimensions = file.dimensions ?? PixelDimensions(width: 512, height: 512)\n"
+            "                                    updateImageSignal = { synchronousLoad, _ in\n"
+            "                                        return chatMessageAnimatedSticker(postbox: context.account.postbox, userLocation: .peer(message.id.peerId), file: file, small: false, size: dimensions.cgSize.aspectFitted(CGSize(width: 400.0, height: 400.0)))\n"
+            "                                    }\n"
+            "                                } else if file.isSticker || file.isVideoSticker {\n"
+            "                                    updateImageSignal = { synchronousLoad, _ in\n"
+            "                                        return chatMessageSticker(account: context.account, userLocation: .peer(message.id.peerId), file: file, small: false)\n"
+            "                                    }\n"
+            "                                } else {\n"
+            "                                    onlyFullSizeVideoThumbnail = isSendingUpdated\n"
+            "                                    let codecConfiguration = HLSCodecConfiguration(context: context)\n"
+            "                                    updateImageSignal = { synchronousLoad, _ in\n"
+            "                                        let videoReference: FileMediaReference = .message(message: MessageReference(message), media: file)\n"
+        )
+        new_preview_section = (
+            old_preview_section
+            .replace("else if let image = file.videoCover {", "else if let image = aorusPreviewFile.videoCover {")
+            .replace("let videoReference: FileMediaReference = .message(message: MessageReference(message), media: file)", "let videoReference: FileMediaReference = .message(message: MessageReference(message), media: aorusPreviewFile)")
+        )
+        media_node_source = edit(media_node_source, old_preview_section, new_preview_section, "use parent video file for cover, previewRepresentations and HLSQualitySet")
+        media_node_path.write_text(media_node_source)
+
+    photo_res_path = tg / "submodules/PhotoResources/Sources/PhotoResources.swift"
+    photo_res_source = photo_res_path.read_text()
+    if "aorusHlsPreviewThumbnail" not in photo_res_source:
+        old_hls_thumb = (
+            "            var resultSignal: Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> = .complete()\n"
+            "            if let decodedThumbnailData = fileReference.media.immediateThumbnailData.flatMap(decodeTinyThumbnail) {\n"
+            "                resultSignal = .single(Tuple(decodedThumbnailData, nil, false))\n"
+            "            }\n"
+            "            resultSignal = resultSignal |> then(loadSignal)\n"
+        )
+        new_hls_thumb = (
+            "            var resultSignal: Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> = .complete()\n"
+            "            let aorusDecodedImmediate = fileReference.media.immediateThumbnailData.flatMap(decodeTinyThumbnail)\n"
+            "            if let aorusDecodedImmediate {\n"
+            "                resultSignal = .single(Tuple(aorusDecodedImmediate, nil, false))\n"
+            "            }\n"
+            "            if let aorusHlsPreviewThumbnail = largestImageRepresentation(fileReference.media.previewRepresentations) ?? smallestImageRepresentation(fileReference.media.previewRepresentations) {\n"
+            "                let previewThumbSignal = Signal<Tuple3<Data?, Tuple2<Data, String>?, Bool>, NoError> { subscriber in\n"
+            "                    let fetchedDisposable = fetchedMediaResource(mediaBox: postbox.mediaBox, userLocation: userLocation, userContentType: customUserContentType ?? MediaResourceUserContentType(file: fileReference.media), reference: fileReference.resourceReference(aorusHlsPreviewThumbnail.resource), statsCategory: .video).start()\n"
+            "                    let dataDisposable = postbox.mediaBox.resourceData(aorusHlsPreviewThumbnail.resource, attemptSynchronously: synchronousLoad).start(next: { next in\n"
+            "                        if next.size > 0, let data = try? Data(contentsOf: URL(fileURLWithPath: next.path), options: []) {\n"
+            "                            subscriber.putNext(Tuple(aorusDecodedImmediate, Tuple(data, next.path), true))\n"
+            "                            subscriber.putCompletion()\n"
+            "                        }\n"
+            "                    }, completed: {\n"
+            "                        subscriber.putCompletion()\n"
+            "                    })\n"
+            "                    return ActionDisposable {\n"
+            "                        fetchedDisposable.dispose()\n"
+            "                        dataDisposable.dispose()\n"
+            "                    }\n"
+            "                }\n"
+            "                resultSignal = resultSignal |> then(previewThumbSignal)\n"
+            "            }\n"
+            "            resultSignal = resultSignal |> then(loadSignal)\n"
+        )
+        photo_res_source = edit(photo_res_source, old_hls_thumb, new_hls_thumb, "HLS video preview falls back to previewRepresentations before stream prefix loads")
+        photo_res_path.write_text(photo_res_source)
+
+

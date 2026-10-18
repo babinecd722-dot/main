@@ -156,6 +156,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
     private static let barTop: CGFloat = 8.0
 
     private var backgroundNode: WallpaperBackgroundNode?
+    private let cardNode: ASDisplayNode
     private let topStripeNode: ASDisplayNode
     private let bottomStripeNode: ASDisplayNode
     private let maskNode: ASImageNode
@@ -178,6 +179,8 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
     private var backgroundSize: CGSize?
 
     init() {
+        self.cardNode = ASDisplayNode()
+        self.cardNode.clipsToBounds = true
         self.topStripeNode = ASDisplayNode()
         self.topStripeNode.isLayerBacked = true
         self.bottomStripeNode = ASDisplayNode()
@@ -186,14 +189,12 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
 
         super.init(layerBacked: false)
 
-        self.clipsToBounds = true
+        self.addSubnode(self.cardNode)
     }
 
     func layout(item: AorusBubblePreviewItem, params: ListViewItemLayoutParams, neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
         let contentSize = CGSize(width: params.width, height: AorusBubblePreviewItemNode.height)
-        var insets = itemListNeighborsGroupedInsets(neighbors, params)
-        insets.top = 0.0
-        insets.bottom = 0.0
+        let insets = itemListNeighborsGroupedInsets(neighbors, params)
         let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
         return (layout, { [weak self] in
             self?.apply(item: item, params: params, neighbors: neighbors, contentSize: contentSize, insets: insets)
@@ -217,7 +218,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
                 self?.updateHeader(animated: false)
             }
             self.backgroundNode = backgroundNode
-            self.insertSubnode(backgroundNode, at: 0)
+            self.cardNode.insertSubnode(backgroundNode, at: 0)
         }
         backgroundNode.update(wallpaper: item.wallpaper, animated: false)
         backgroundNode.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
@@ -238,7 +239,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
             button = current
         } else {
             button = AorusLookShuffleButton(frame: CGRect())
-            self.view.addSubview(button)
+            self.cardNode.view.addSubview(button)
             self.shuffleButton = button
         }
         button.shuffle = { [weak self] in
@@ -249,7 +250,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         let frame = CGRect(x: params.width - params.rightInset - 16.0 - 22.0 - size / 2.0, y: contentSize.height - 12.0 - size, width: size, height: size)
         button.update(frame: frame, theme: item.theme, wallpaper: item.wallpaper, backgroundNode: self.backgroundNode, backgroundSize: backgroundSize, title: item.shuffleTitle)
         // Above the header and the rounded edge of the card.
-        self.view.bringSubviewToFront(button)
+        self.cardNode.view.bringSubviewToFront(button)
     }
 
     /// The bar, its title and its avatar for the item shown. With `animated`, the person
@@ -281,9 +282,9 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
             }
             self.navigationBar = bar
             if let backgroundNode = self.backgroundNode {
-                self.insertSubnode(bar, aboveSubnode: backgroundNode)
+                self.cardNode.insertSubnode(bar, aboveSubnode: backgroundNode)
             } else {
-                self.addSubnode(bar)
+                self.cardNode.addSubnode(bar)
             }
         }
 
@@ -383,6 +384,13 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
         self.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: contentSize.width, height: separatorHeight))
         self.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: contentSize.width, height: separatorHeight))
+        let cardRect = CGRect(x: hasCorners ? params.leftInset : 0.0, y: 0.0, width: hasCorners ? max(0.0, params.width - params.leftInset - params.rightInset) : params.width, height: contentSize.height)
+        self.cardNode.frame = cardRect
+        self.cardNode.bounds = cardRect
+        self.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
+        if #available(iOS 13.0, *) {
+            self.cardNode.layer.cornerCurve = .continuous
+        }
         self.maskNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset * 2.0), height: contentSize.height)
     }
 
@@ -825,6 +833,7 @@ private final class AorusIconLookItemNode: AorusLookRowNode {
 
 private enum AorusBubbleSettingsSection: Int32 {
     case preview
+    case online
     case material
     case colors
     case outline
@@ -889,8 +898,10 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
 
     var section: ItemListSectionId {
         switch self {
-        case .preview, .exactOnline:
+        case .preview:
             return AorusBubbleSettingsSection.preview.rawValue
+        case .exactOnline:
+            return AorusBubbleSettingsSection.online.rawValue
         case .materialHeader, .material, .roundness, .pixelSize, .pixelIcons, .pixelIconSize, .materialFooter:
             return AorusBubbleSettingsSection.material.rawValue
         case .colorsHeader, .color, .tintStrength, .colorsFooter:

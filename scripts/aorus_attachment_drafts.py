@@ -181,6 +181,8 @@ def patch_picker(tg):
     public var aorusAttachmentRestorePending = false
     var aorusAttachmentRestoreWaiters: [(Bool) -> Void] = []
     public var aorusCommittedAttachmentState: AorusAttachmentDraftState?
+    public var aorusPreparedDraftCapture: (state: AorusAttachmentDraftState?, capture: AorusAttachmentDraftCapture)?
+    public var aorusDiscardPreparedDraft: (() -> Void)?
     public var aorusAttachmentStableIds: [String: String] = [:]
     public var aorusHasSentAttachmentSelection = false
     public var aorusPresentDraftGallery: ((ViewController, Any?) -> Void)?
@@ -288,7 +290,7 @@ def patch_picker(tg):
     }
 '''
     s = edit(s, anchor, gateway, 'picker bridge')
-    s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
+    s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        self.aorusDiscardPreparedDraft?()\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
     anchor = '    public func requestDismiss(completion: @escaping () -> Void) {        \n'
     new = anchor + '''        if self.aorusPersistAttachmentDraft != nil, !self.aorusHasSentAttachmentSelection {
             self.aorusRequestAttachmentPersistence(completion: completion)
@@ -298,6 +300,10 @@ def patch_picker(tg):
     s = edit(s, anchor, new, 'dismiss saves the draft')
     anchor = '    public func shouldDismissImmediately() -> Bool {\n'
     s = edit(s, anchor, anchor + '        if self.aorusPersistAttachmentDraft != nil, !self.aorusHasSentAttachmentSelection { return false }\n', 'interactive dismissal')
+    anchor = '        }, sendSelected: { [weak self] currentItem, silently, scheduleTime, animated, parameters, completion in\n            if let strongSelf = self, let selectionState = strongSelf.interaction?.selectionState, !strongSelf.isDismissing {\n'
+    s = edit(s, anchor, anchor + '                strongSelf.aorusHasSentAttachmentSelection = true\n                strongSelf.aorusWarmWork?.cancel()\n                strongSelf.aorusDiscardPreparedDraft?()\n', 'mark send before single-item selection update')
+    anchor = '        fileprivate func send(fromGallery: Bool = false, asFile: Bool = false, silently: Bool, scheduleTime: Int32?, animated: Bool, parameters: ChatSendMessageActionSheetController.SendParameters?, completion: @escaping () -> Void) {\n            guard let controller = self.controller, !controller.completed else {\n                return\n            }\n'
+    s = edit(s, anchor, anchor + '            controller.aorusHasSentAttachmentSelection = true\n            controller.aorusWarmWork?.cancel()\n            controller.aorusDiscardPreparedDraft?()\n', 'mark send before conversion or alerts')
     anchor = '                controller.completed = true\n'
     s = edit(s, anchor, anchor + '                controller.aorusHasSentAttachmentSelection = true\n', 'sent selection is not recaptured')
     anchor = '        self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: navigationLayout(layout: layout).navigationFrame.maxY, transition: transition)\n'
@@ -499,7 +505,7 @@ def patch_controller(tg):
     anchor = '                    if let _ = strongSelf.presentationInterfaceState.interfaceState.mediaDraftState {\n                        strongSelf.sendMediaRecording(silentPosting: result.silentPosting, scheduleTime: result.time,'
     s = edit(s, anchor, '                    if strongSelf.aorusSendAttachmentDraft(silentPosting: result.silentPosting, scheduleTime: result.time, parameters: params) {\n                        return\n                    }\n' + anchor, 'native scheduling action')
     anchor = '                var completionImpl: (() -> Void)? = completion\n'
-    s = edit(s, anchor, '                guard strongSelf.aorusAttachmentDraftPrepared(messages: items.map(\\.message)) else { return }\n' + anchor, 'no partial outgoing draft')
+    s = edit(s, anchor, '                let aorusPendingDraft = strongSelf.aorusSendingAttachmentDraft\n                let aorusPendingCaption = strongSelf.aorusAttachmentSendCaption\n                guard strongSelf.aorusAttachmentDraftPrepared(messages: items.map(\\.message)) else { strongSelf.aorusRestoreSendingAttachmentDraftInComposer(aorusPendingDraft, caption: aorusPendingCaption); return }\n' + anchor, 'no partial outgoing draft')
     anchor = '    func sendMessages(_ messages: [EnqueueMessage], media: Bool = false, postpone: Bool = false, commit: Bool = false) {\n'
     s = edit(s, anchor, anchor + '        let aorusAttachmentSendRevision = media ? self.aorusSendingAttachmentDraft?.revision : nil\n', 'scope accepted-send callback to the media operation')
     anchor = '''                let _ = (enqueueMessages(account: self.context.account, peerId: peerId, messages: self.transformEnqueueMessages(messages, postpone: postpone))
@@ -515,15 +521,17 @@ def patch_controller(tg):
     anchor = '                let messages = strongSelf.transformEnqueueMessages(mappedMessages, silentPosting: silentPosting, scheduleTime: scheduleTime, postpone: postpone)\n'
     s = edit(s, anchor, anchor.replace('mappedMessages, silentPosting:', 'strongSelf.aorusAttachmentDraftOutgoingMessages(mappedMessages), silentPosting:'), 'text and media share the native paid and scheduled enqueue')
     anchor = '        self.enqueueMediaMessageDisposable.set((legacyAssetPickerEnqueueMessages(context:'
-    s = edit(s, anchor, '        if self.aorusSendingAttachmentDraft != nil { self.aorusAttachmentDraftConverting = true }\n' + anchor, 'conversion lifecycle')
+    s = edit(s, anchor, '        if self.aorusSendingAttachmentDraft != nil { self.aorusAttachmentDraftConverting = true; self.aorusHideSendingAttachmentDraftInComposer() }\n' + anchor, 'conversion lifecycle')
     start = s.index('    private func commitEnqueueMediaMessages(')
     body = s.index('    ) {', start)
     method = s[start:body] + block(s[body:], '    ) {')
     old = '            })\n        }))\n    }\n'
     new = '''            })
         }, error: { [weak self] _ in
-            guard let self, self.aorusSendingAttachmentDraft != nil else { return }
+            guard let self, let draft = self.aorusSendingAttachmentDraft else { return }
+            let caption = self.aorusAttachmentSendCaption
             self.aorusCancelAttachmentDraftSend()
+            self.aorusRestoreSendingAttachmentDraftInComposer(draft, caption: caption)
             self.aorusShowAttachmentDraftError()
         }))
     }

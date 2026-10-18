@@ -9933,6 +9933,214 @@ def patch_local_premium(tg: Path) -> None:
     else:
         print("Premium: ChatThemes.swift not found — skipped")
 
+    # 9) Global Post Search ("Посты" / .globalPosts) with Local Premium.
+    #    Without server-side Premium, `channels.checkSearchPostsFlood` and
+    #    `channels.searchPosts(query:)` are rejected by the server, leaving the
+    #    "Посты" search tab with a nil state and empty results. Under Local
+    #    Premium, seed a valid free-search state, run `.globalPosts` queries
+    #    without blocking on manual approval, and fall back to broadcast global
+    #    search + public hashtag post search when `channels.searchPosts(query:)`
+    #    is rejected or empty.
+    search_messages = tg / "submodules/TelegramCore/Sources/TelegramEngine/Messages/SearchMessages.swift"
+    if search_messages.is_file():
+        t = search_messages.read_text(encoding="utf-8")
+        if "_aorusFallbackGlobalPostSearch" not in t:
+            fallback_helper = (
+                "private func _aorusExtractMessages(_ result: Api.messages.Messages?) -> (messages: [Api.Message], chats: [Api.Chat], users: [Api.User], count: Int32, nextRate: Int32?) {\n"
+                "    guard let result else { return ([], [], [], 0, nil) }\n"
+                "    switch result {\n"
+                "    case let .channelMessages(data):\n"
+                "        return (data.messages, data.chats, data.users, data.count, nil)\n"
+                "    case let .messages(data):\n"
+                "        return (data.messages, data.chats, data.users, Int32(data.messages.count), nil)\n"
+                "    case let .messagesSlice(data):\n"
+                "        return (data.messages, data.chats, data.users, data.count, data.nextRate)\n"
+                "    case .messagesNotModified:\n"
+                "        return ([], [], [], 0, nil)\n"
+                "    }\n"
+                "}\n"
+                "\n"
+                "private func _aorusFallbackGlobalPostSearch(\n"
+                "    account: Account,\n"
+                "    query: String,\n"
+                "    nextRate: Int32,\n"
+                "    inputPeer: Api.InputPeer,\n"
+                "    lowerBound: MessageIndex?,\n"
+                "    limit: Int32\n"
+                ") -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> {\n"
+                "    let clean = query.trimmingCharacters(in: .whitespacesAndNewlines)\n"
+                "    guard !clean.isEmpty else {\n"
+                "        return .single((nil, nil))\n"
+                "    }\n"
+                "    let globalBroadcasts = account.network.request(\n"
+                "        Api.functions.messages.searchGlobal(\n"
+                "            flags: 1 << 1,\n"
+                "            folderId: nil,\n"
+                "            community: nil,\n"
+                "            q: clean,\n"
+                "            filter: .inputMessagesFilterEmpty,\n"
+                "            minDate: 0,\n"
+                "            maxDate: Int32.max - 1,\n"
+                "            offsetRate: nextRate,\n"
+                "            offsetPeer: inputPeer,\n"
+                "            offsetId: lowerBound?.id.id ?? 0,\n"
+                "            limit: limit\n"
+                "        ),\n"
+                "        automaticFloodWait: false\n"
+                "    )\n"
+                "    |> map(Optional.init)\n"
+                "    |> `catch` { _ -> Signal<Api.messages.Messages?, NoError> in\n"
+                "        return .single(nil)\n"
+                "    }\n"
+                "\n"
+                "    let rawToken = clean.components(separatedBy: .whitespacesAndNewlines).first ?? \"\"\n"
+                "    let hashtagToken = rawToken.trimmingCharacters(in: CharacterSet(charactersIn: \"#$.,!?:;\\\"'()[]{}\"))\n"
+                "    let publicHashtagPosts: Signal<Api.messages.Messages?, NoError>\n"
+                "    if lowerBound == nil && !hashtagToken.isEmpty {\n"
+                "        publicHashtagPosts = account.network.request(\n"
+                "            Api.functions.channels.searchPosts(\n"
+                "                flags: 1 << 0,\n"
+                "                hashtag: hashtagToken,\n"
+                "                query: nil,\n"
+                "                offsetRate: 0,\n"
+                "                offsetPeer: .inputPeerEmpty,\n"
+                "                offsetId: 0,\n"
+                "                limit: limit,\n"
+                "                allowPaidStars: nil\n"
+                "            ),\n"
+                "            automaticFloodWait: false\n"
+                "        )\n"
+                "        |> map(Optional.init)\n"
+                "        |> `catch` { _ -> Signal<Api.messages.Messages?, NoError> in\n"
+                "            return .single(nil)\n"
+                "        }\n"
+                "    } else {\n"
+                "        publicHashtagPosts = .single(nil)\n"
+                "    }\n"
+                "\n"
+                "    return combineLatest(globalBroadcasts, publicHashtagPosts)\n"
+                "    |> map { broadcastResult, hashtagResult -> (Api.messages.Messages?, Api.messages.Messages?) in\n"
+                "        let b = _aorusExtractMessages(broadcastResult)\n"
+                "        let h = _aorusExtractMessages(hashtagResult)\n"
+                "        if b.messages.isEmpty && h.messages.isEmpty {\n"
+                "            return (broadcastResult ?? hashtagResult, nil)\n"
+                "        }\n"
+                "        if h.messages.isEmpty {\n"
+                "            return (broadcastResult, nil)\n"
+                "        }\n"
+                "        if b.messages.isEmpty {\n"
+                "            return (hashtagResult, nil)\n"
+                "        }\n"
+                "        let merged: Api.messages.Messages = .messagesSlice(.init(\n"
+                "            flags: 0,\n"
+                "            count: max(b.count + h.count, Int32(b.messages.count + h.messages.count)),\n"
+                "            nextRate: b.nextRate,\n"
+                "            offsetIdOffset: nil,\n"
+                "            searchFlood: nil,\n"
+                "            messages: b.messages + h.messages,\n"
+                "            topics: [],\n"
+                "            chats: b.chats + h.chats,\n"
+                "            users: b.users + h.users\n"
+                "        ))\n"
+                "        return (merged, nil)\n"
+                "    }\n"
+                "}\n\n"
+            )
+            search_anchor = "func _internal_searchMessages("
+            posts_req_old = (
+                "                    return account.network.request(Api.functions.channels.searchPosts(flags: flags, hashtag: nil, query: query, offsetRate: nextRate, offsetPeer: inputPeer, offsetId: lowerBound?.id.id ?? 0, limit: limit, allowPaidStars: allowPaidStars.flatMap(Int64.init)), automaticFloodWait: false)\n"
+                "                    |> map { result -> (Api.messages.Messages?, Api.messages.Messages?) in\n"
+                "                        return (result, nil)\n"
+                "                    }\n"
+                "                    |> `catch` { _ -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> in\n"
+                "                        return .single((nil, nil))\n"
+                "                    }\n"
+            )
+            posts_req_new = (
+                "                    return account.network.request(Api.functions.channels.searchPosts(flags: flags, hashtag: nil, query: query, offsetRate: nextRate, offsetPeer: inputPeer, offsetId: lowerBound?.id.id ?? 0, limit: limit, allowPaidStars: allowPaidStars.flatMap(Int64.init)), automaticFloodWait: false)\n"
+                "                    |> mapToSignal { result -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> in\n"
+                "                        if AorusGramPremium.isEnabled && _aorusExtractMessages(result).messages.isEmpty && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {\n"
+                "                            return _aorusFallbackGlobalPostSearch(account: account, query: query, nextRate: nextRate, inputPeer: inputPeer, lowerBound: lowerBound, limit: limit)\n"
+                "                        }\n"
+                "                        return .single((result, nil))\n"
+                "                    }\n"
+                "                    |> `catch` { _ -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> in\n"
+                "                        if AorusGramPremium.isEnabled {\n"
+                "                            return _aorusFallbackGlobalPostSearch(account: account, query: query, nextRate: nextRate, inputPeer: inputPeer, lowerBound: lowerBound, limit: limit)\n"
+                "                        }\n"
+                "                        return .single((nil, nil))\n"
+                "                    }\n"
+            )
+            flood_old = (
+                "            guard let result else {\n"
+                "                return\n"
+                "            }\n"
+                "            transaction.updatePreferencesEntry(key: PreferencesKeys.globalPostSearchState(), { _ in\n"
+                "                switch result {\n"
+                "                case let .searchPostsFlood(searchPostsFloodData):\n"
+                "                    let (_, totalDaily, remains, waitTill, starsAmount) = (searchPostsFloodData.flags, searchPostsFloodData.totalDaily, searchPostsFloodData.remains, searchPostsFloodData.waitTill, searchPostsFloodData.starsAmount)\n"
+                "                    return PreferencesEntry(TelegramGlobalPostSearchState(\n"
+                "                        totalFreeSearches: totalDaily,\n"
+                "                        remainingFreeSearches: remains,\n"
+                "                        price: StarsAmount(value: starsAmount, nanos: 0),\n"
+                "                        unlockTimestamp: waitTill\n"
+                "                    ))\n"
+                "                }\n"
+                "            })\n"
+            )
+            flood_new = (
+                "            guard let result else {\n"
+                "                if AorusGramPremium.isEnabled {\n"
+                "                    transaction.updatePreferencesEntry(key: PreferencesKeys.globalPostSearchState(), { _ in\n"
+                "                        return PreferencesEntry(TelegramGlobalPostSearchState(\n"
+                "                            totalFreeSearches: 100,\n"
+                "                            remainingFreeSearches: 100,\n"
+                "                            price: StarsAmount(value: 0, nanos: 0),\n"
+                "                            unlockTimestamp: nil\n"
+                "                        ))\n"
+                "                    })\n"
+                "                }\n"
+                "                return\n"
+                "            }\n"
+                "            transaction.updatePreferencesEntry(key: PreferencesKeys.globalPostSearchState(), { _ in\n"
+                "                switch result {\n"
+                "                case let .searchPostsFlood(searchPostsFloodData):\n"
+                "                    let (_, totalDaily, remains, waitTill, starsAmount) = (searchPostsFloodData.flags, searchPostsFloodData.totalDaily, searchPostsFloodData.remains, searchPostsFloodData.waitTill, searchPostsFloodData.starsAmount)\n"
+                "                    let effectiveTotal = AorusGramPremium.isEnabled ? max(totalDaily, 100) : totalDaily\n"
+                "                    let effectiveRemains = AorusGramPremium.isEnabled ? max(remains, 100) : remains\n"
+                "                    return PreferencesEntry(TelegramGlobalPostSearchState(\n"
+                "                        totalFreeSearches: effectiveTotal,\n"
+                "                        remainingFreeSearches: effectiveRemains,\n"
+                "                        price: StarsAmount(value: starsAmount, nanos: 0),\n"
+                "                        unlockTimestamp: AorusGramPremium.isEnabled ? nil : waitTill\n"
+                "                    ))\n"
+                "                }\n"
+                "            })\n"
+            )
+            if search_anchor not in t or posts_req_old not in t or flood_old not in t:
+                raise RuntimeError("Premium: SearchMessages global post search anchors not found")
+            t = t.replace(search_anchor, fallback_helper + search_anchor, 1)
+            t = t.replace(posts_req_old, posts_req_new, 1)
+            t = t.replace(flood_old, flood_new, 1)
+            search_messages.write_text(t, encoding="utf-8")
+            print("Premium: patched SearchMessages (Local Premium global post search fallback)")
+
+    search_pane = tg / "submodules/ChatListUI/Sources/ChatListSearchListPaneNode.swift"
+    if search_pane.is_file():
+        t = search_pane.read_text(encoding="utf-8")
+        gate_old = "            } else if key == .globalPosts && (cleanFinalQuery.isEmpty || approvedGlobalPostQueryState?.query != finalQuery) {\n"
+        gate_new = "            } else if key == .globalPosts && (cleanFinalQuery.isEmpty || (!AorusGramPremium.isEnabled && approvedGlobalPostQueryState?.query != finalQuery)) {\n"
+        empty_old = "                            } else if let query = transition.query, !query.isEmpty {\n                                if transition.approvedGlobalPostQueryState?.query == query {\n"
+        empty_new = "                            } else if let query = transition.query, !query.isEmpty {\n                                if AorusGramPremium.isEnabled || transition.approvedGlobalPostQueryState?.query == query {\n"
+        if gate_new not in t:
+            if gate_old not in t or empty_old not in t:
+                raise RuntimeError("Premium: ChatListSearchListPaneNode globalPosts anchors not found")
+            t = t.replace(gate_old, gate_new, 1)
+            t = t.replace(empty_old, empty_new, 1)
+            search_pane.write_text(t, encoding="utf-8")
+            print("Premium: patched ChatListSearchListPaneNode (Local Premium post search auto-approval)")
+
+
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
 import Security

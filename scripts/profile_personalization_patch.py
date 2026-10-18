@@ -804,7 +804,9 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "            return nil\n"
         "        }\n"
         "        guard !self.isSettings else {\n"
-        "            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)\n"
+        "            if self.view.window != nil {\n"
+        "                AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)\n"
+        "            }\n"
         "            return nil\n"
         "        }\n"
         "        let aorusPageColor = AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value())\n"
@@ -842,6 +844,16 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "        // profile's ink and not in whatever the last one left in the slot.\n"
         "        self.aorusUpdatePageColor()\n",
         "page ink before layout",
+    )
+    screen = _replace_once(
+        screen,
+        "        var validRegularSections: [AnyHashable] = []\n",
+        "        // AorusGram: headerNode.update synchronously samples the opening avatar or cover\n"
+        "        // into pageColors[peerId]; republish before building sections so the first pass\n"
+        "        // gives every profile row its actual page ink instead of the app theme fallback.\n"
+        "        self.aorusUpdatePageColor()\n"
+        "        var validRegularSections: [AnyHashable] = []\n",
+        "page ink after header sample",
     )
     screen = _replace_once(
         screen,

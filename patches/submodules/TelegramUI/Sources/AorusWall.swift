@@ -83,6 +83,47 @@ private func aorusWallPostScore(_ message: Message, now: Int32) -> Double {
     return log(1.0 + engagement) * (0.35 + 0.65 * freshness)
 }
 
+private func aorusWallMessageWithText(from textSource: Message, on target: Message) -> Message {
+    guard target.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          !textSource.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return target
+    }
+    var attributes = target.attributes.filter { !($0 is TextEntitiesMessageAttribute) }
+    for attribute in textSource.attributes where attribute is TextEntitiesMessageAttribute {
+        attributes.append(attribute)
+    }
+    var associatedMedia = target.associatedMedia
+    for (key, value) in textSource.associatedMedia where associatedMedia[key] == nil {
+        associatedMedia[key] = value
+    }
+    return Message(
+        stableId: target.stableId,
+        stableVersion: target.stableVersion,
+        id: target.id,
+        globallyUniqueId: target.globallyUniqueId,
+        groupingKey: target.groupingKey,
+        groupInfo: target.groupInfo,
+        threadId: target.threadId,
+        timestamp: target.timestamp,
+        flags: target.flags,
+        tags: target.tags,
+        globalTags: target.globalTags,
+        localTags: target.localTags,
+        customTags: target.customTags,
+        forwardInfo: target.forwardInfo,
+        author: target.author,
+        text: textSource.text,
+        attributes: attributes,
+        media: target.media,
+        peers: target.peers,
+        associatedMessages: target.associatedMessages,
+        associatedMessageIds: target.associatedMessageIds,
+        associatedMedia: associatedMedia,
+        associatedThreadInfo: target.associatedThreadInfo,
+        associatedStories: target.associatedStories
+    )
+}
+
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     // Computed, not stored: the language can change while the app is running and a stored
     // copy would keep the title in the old language until the next launch.
@@ -149,6 +190,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // bottomless.
         private var expansionDisposable: Disposable?
         private var expansionPreloadDisposable = DisposableSet()
+        private let thumbnailPreloadDisposable = DisposableSet()
         private var expandedSeeds = Set<PeerId>()
         /// Every recommendation source seen during the current settings session. This is kept
         /// separately from the active 512-source window so evicted channels cannot be discovered
@@ -253,6 +295,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.messageUpdatesDisposable?.dispose()
             self.expansionDisposable?.dispose()
             self.expansionPreloadDisposable.dispose()
+            self.thumbnailPreloadDisposable.dispose()
         }
 
         private func updateRecommendationsIfNeeded(forceRefresh: Bool = false) {
@@ -638,10 +681,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // 0 = subscribed, 1 = Telegram's own recommendations, 2+ = the
                 // similar-of-similar chain.
                 var buckets: [PeerId: (rank: Int, messages: [(message: Message, score: Double)])] = [:]
+                var groupSiblings: [PeerId: [Int64: [Message]]] = [:]
                 var uniqueIds = Set<MessageId>()
 
                 func gather(peerId: PeerId, rank: Int, readState: CombinedPeerReadState?) {
                     var collected: [(message: Message, score: Double)] = []
+                    var peerGroups: [Int64: [Message]] = [:]
+                    var groupCaptions: [Int64: Message] = [:]
                     var fromIndex = MessageIndex.upperBound(
                         peerId: peerId,
                         timestamp: ceiling,
@@ -657,7 +703,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     while collected.count < Impl.candidatesPerChannel
                         && fetchedCount < Impl.maxFetchPerChannel
                         && !reachedFloor {
-                        let batch = transaction.aorusWallMessages(
+                        var batch = transaction.aorusWallMessages(
                             peerId: peerId,
                             namespace: Namespaces.Message.Cloud,
                             before: fromIndex,
@@ -671,7 +717,57 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         }
                         fetchedCount += batch.count
 
-                        for message in batch {
+                        // Complete any album split across the batch boundary so a video item at
+                        // the tail of `batch` never loses the earlier sibling that holds its text.
+                        if let tail = batch.last, let tailGroupKey = tail.groupingKey {
+                            let tailSiblings = transaction.aorusWallMessages(
+                                peerId: peerId,
+                                namespace: Namespaces.Message.Cloud,
+                                before: tail.index,
+                                limit: 10
+                            ).prefix(while: { $0.groupingKey == tailGroupKey })
+                            if !tailSiblings.isEmpty {
+                                batch.append(contentsOf: tailSiblings)
+                                fetchedCount += tailSiblings.count
+                            }
+                        }
+
+                        for item in batch {
+                            if let key = item.groupingKey,
+                               !item.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                               groupCaptions[key] == nil {
+                                groupCaptions[key] = item
+                            }
+                        }
+
+                        func adjacentCompanionText(for mediaMessage: Message, at index: Int) -> Message? {
+                            let neighbors = [index - 1, index + 1]
+                            for neighborIndex in neighbors where batch.indices.contains(neighborIndex) {
+                                let candidate = batch[neighborIndex]
+                                guard candidate.groupingKey == nil,
+                                      candidate.media.isEmpty,
+                                      !candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                      abs(candidate.timestamp - mediaMessage.timestamp) <= 120 else {
+                                    continue
+                                }
+                                let otherNeighbors = [neighborIndex - 1, neighborIndex + 1]
+                                let closerToAnotherMedia = otherNeighbors.contains { otherIdx in
+                                    guard otherIdx != index, batch.indices.contains(otherIdx) else { return false }
+                                    let other = batch[otherIdx]
+                                    return other.groupingKey == nil
+                                        && !other.media.isEmpty
+                                        && other.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        && abs(other.timestamp - candidate.timestamp) < abs(mediaMessage.timestamp - candidate.timestamp)
+                                }
+                                if !closerToAnotherMedia {
+                                    return candidate
+                                }
+                            }
+                            return nil
+                        }
+
+                        for (idx, rawMessage) in batch.enumerated() {
+                            var message = rawMessage
                             if message.timestamp < floor {
                                 reachedFloor = true
                                 break
@@ -685,10 +781,51 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             if removed.contains(message.id) || AorusWallSettingsStore.isSeen(message.id, in: seen) || placed.contains(message.id) {
                                 continue
                             }
+                            // A standalone text post that sits directly beside a captionless media
+                            // post in the same channel is the body of that media post; attach it to
+                            // the media rather than letting the media win the channel quota naked.
+                            if message.groupingKey == nil,
+                               message.media.isEmpty,
+                               !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                let belongsToAdjacentMedia = [idx - 1, idx + 1].contains { mediaIdx in
+                                    guard batch.indices.contains(mediaIdx) else { return false }
+                                    let other = batch[mediaIdx]
+                                    return other.groupingKey == nil
+                                        && !other.media.isEmpty
+                                        && other.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                        && abs(other.timestamp - message.timestamp) <= 120
+                                        && adjacentCompanionText(for: other, at: mediaIdx)?.id == message.id
+                                }
+                                if belongsToAdjacentMedia {
+                                    continue
+                                }
+                            }
                             guard uniqueIds.insert(message.id).inserted else {
                                 continue
                             }
-                            collected.append((message, aorusWallPostScore(message, now: now)))
+                            if let groupKey = message.groupingKey {
+                                let existing = peerGroups[groupKey] ?? []
+                                peerGroups[groupKey] = existing + [message]
+                                let score = aorusWallPostScore(
+                                    groupCaptions[groupKey].map { aorusWallMessageWithText(from: $0, on: message) } ?? message,
+                                    now: now
+                                )
+                                if let existingIdx = collected.firstIndex(where: { $0.message.groupingKey == groupKey }) {
+                                    if score > collected[existingIdx].score {
+                                        collected[existingIdx] = (collected[existingIdx].message, score)
+                                    }
+                                    continue
+                                }
+                                collected.append((message, score))
+                            } else {
+                                if !message.media.isEmpty,
+                                   message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                   let companion = adjacentCompanionText(for: message, at: idx) {
+                                    uniqueIds.insert(companion.id)
+                                    message = aorusWallMessageWithText(from: companion, on: message)
+                                }
+                                collected.append((message, aorusWallPostScore(message, now: now)))
+                            }
                             if collected.count >= Impl.candidatesPerChannel {
                                 break
                             }
@@ -698,6 +835,21 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             break
                         }
                         fromIndex = last.index
+                    }
+                    for (groupKey, members) in peerGroups {
+                        let sortedMembers = members.sorted(by: { $0.index < $1.index })
+                        if !sortedMembers.contains(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
+                           let captionSource = groupCaptions[groupKey],
+                           let first = sortedMembers.first {
+                            var updated = sortedMembers
+                            updated[0] = aorusWallMessageWithText(from: captionSource, on: first)
+                            peerGroups[groupKey] = updated
+                        } else {
+                            peerGroups[groupKey] = sortedMembers
+                        }
+                    }
+                    if !peerGroups.isEmpty {
+                        groupSiblings[peerId] = peerGroups
                     }
                     if !collected.isEmpty {
                         buckets[peerId] = (rank, collected)
@@ -791,7 +943,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             guard offset < source.messages.count else {
                                 continue
                             }
-                            page.append(source.messages[offset].message)
+                            let chosen = source.messages[offset].message
+                            if let groupKey = chosen.groupingKey,
+                               let siblings = groupSiblings[source.peerId]?[groupKey],
+                               !siblings.isEmpty {
+                                page.append(contentsOf: siblings)
+                            } else {
+                                page.append(chosen)
+                            }
                             offsets[source.peerId] = offset + 1
                             appended = true
                         }
@@ -1007,6 +1166,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 isLoading: false
             )
             self.currentMessageIds = messages.map(\.id)
+            AorusWallChatContents.aorusSetActiveFeedIds(Set(self.currentMessageIds), accountId: self.accountId)
             self.currentMessages = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
             self.currentEntries = entries
             self.currentEntryPositions = Dictionary(
@@ -1015,9 +1175,44 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.visibleDurations = self.visibleDurations.filter { self.currentMessages[$0.key] != nil }
             self.markedInCurrentView = self.markedInCurrentView.intersection(self.currentMessages.keys)
             self.mergedHistoryView = view
+            self.preloadInitialVideoThumbnails(messages)
             self.historyViewStream.putNext((view, updateType))
             self.searchingPromise.set(false)
             self.publishCurrentBadge()
+        }
+
+        private func preloadInitialVideoThumbnails(_ messages: [Message]) {
+            let mediaBox = self.context.account.postbox.mediaBox
+            var preloaded = 0
+            for message in messages.prefix(24) {
+                guard preloaded < 12 else { break }
+                for media in message.media {
+                    guard let file = media as? TelegramMediaFile, file.isVideo else { continue }
+                    if let cover = file.videoCover, let rep = cover.representations.last {
+                        let ref = ImageMediaReference.message(message: MessageReference(message), media: cover).resourceReference(rep.resource)
+                        self.thumbnailPreloadDisposable.add(
+                            fetchedMediaResource(
+                                mediaBox: mediaBox,
+                                userLocation: .peer(message.id.peerId),
+                                userContentType: .image,
+                                reference: ref
+                            ).start()
+                        )
+                        preloaded += 1
+                    } else if let rep = file.previewRepresentations.last {
+                        let ref = FileMediaReference.message(message: MessageReference(message), media: file).resourceReference(rep.resource)
+                        self.thumbnailPreloadDisposable.add(
+                            fetchedMediaResource(
+                                mediaBox: mediaBox,
+                                userLocation: .peer(message.id.peerId),
+                                userContentType: .video,
+                                reference: ref
+                            ).start()
+                        )
+                        preloaded += 1
+                    }
+                }
+            }
         }
 
         /// Watch the posts the reader can actually see, so reactions, edits and view
@@ -1632,6 +1827,19 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     /// media of posts the reader is looking at.
     private static let aorusVisibilityLock = NSLock()
     private static var aorusVisibleInstances = Set<ObjectIdentifier>()
+    private static var aorusActiveFeedIdsByAccount: [Int64: Set<MessageId>] = [:]
+
+    fileprivate static func aorusSetActiveFeedIds(_ ids: Set<MessageId>, accountId: Int64) {
+        self.aorusVisibilityLock.lock()
+        self.aorusActiveFeedIdsByAccount[accountId] = ids
+        self.aorusVisibilityLock.unlock()
+    }
+
+    fileprivate static func aorusActiveFeedIds(accountId: Int64) -> Set<MessageId> {
+        self.aorusVisibilityLock.lock()
+        defer { self.aorusVisibilityLock.unlock() }
+        return self.aorusActiveFeedIdsByAccount[accountId] ?? []
+    }
 
     fileprivate static var aorusIsAnyWallVisible: Bool {
         self.aorusVisibilityLock.lock()
@@ -1795,7 +2003,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 /// a channel you follow will therefore re-download if you later scroll to it in that channel.
 /// It is the same post, so that is unavoidable — and the cost is a re-download, not lost data.
 private func aorusInstallWallCacheCleanup(context: AccountContext) {
-    let accountId = context.account.peerId.toInt64()
+    let accountId = context.account.id.int64
     AorusCacheManager.shared.registerWallMediaCleanup(accountId: context.account.id.int64) { [weak context] in
         guard let context else {
             return
@@ -1806,7 +2014,8 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
         guard !AorusWallChatContents.aorusIsAnyWallVisible else {
             return
         }
-        let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId)
+        let activeIds = AorusWallChatContents.aorusActiveFeedIds(accountId: accountId)
+        let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId).subtracting(activeIds)
         guard !recorded.isEmpty else {
             return
         }

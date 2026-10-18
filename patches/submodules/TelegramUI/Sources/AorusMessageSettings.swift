@@ -621,6 +621,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private static let verticalInset: CGFloat = 14.0
 
     private var backgroundNode: WallpaperBackgroundNode?
+    private let cardNode: ASDisplayNode
     private let topStripeNode: ASDisplayNode
     private let bottomStripeNode: ASDisplayNode
     private let maskNode: ASImageNode
@@ -642,6 +643,8 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private var backgroundSize: CGSize?
 
     init() {
+        self.cardNode = ASDisplayNode()
+        self.cardNode.clipsToBounds = true
         self.topStripeNode = ASDisplayNode()
         self.topStripeNode.isLayerBacked = true
         self.bottomStripeNode = ASDisplayNode()
@@ -655,8 +658,8 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
 
         super.init(layerBacked: false)
 
-        self.clipsToBounds = true
-        self.addSubnode(self.containerNode)
+        self.addSubnode(self.cardNode)
+        self.cardNode.addSubnode(self.containerNode)
         self.containerNode.addSubnode(self.shadowsNode)
     }
 
@@ -667,7 +670,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             button = current
         } else {
             button = AorusLookShuffleButton(frame: CGRect())
-            self.view.addSubview(button)
+            self.cardNode.view.addSubview(button)
             self.shuffleButton = button
         }
         button.shuffle = { [weak self] in
@@ -677,7 +680,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         let frame = CGRect(x: params.width - params.rightInset - 12.0 - size, y: 12.0, width: size, height: size)
         button.update(frame: frame, theme: item.theme, wallpaper: item.wallpaper, backgroundNode: self.backgroundNode, backgroundSize: backgroundSize, title: item.shuffleTitle)
         // Above the messages and the rounded edge of the card.
-        self.view.bringSubviewToFront(button)
+        self.cardNode.view.bringSubviewToFront(button)
     }
 
     /// Lays the messages out now and returns the row's size with what places them.
@@ -687,7 +690,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             backgroundNode.update(wallpaper: item.wallpaper, animated: false)
             backgroundNode.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
             self.backgroundNode = backgroundNode
-            self.insertSubnode(backgroundNode, at: 0)
+            self.cardNode.insertSubnode(backgroundNode, at: 0)
         }
         let backgroundNode = self.backgroundNode
 
@@ -739,9 +742,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         for entry in laidOut {
             contentSize.height += entry.size.height
         }
-        var insets = itemListNeighborsGroupedInsets(neighbors, params)
-        insets.top = 0.0
-        insets.bottom = 0.0
+        let insets = itemListNeighborsGroupedInsets(neighbors, params)
         let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
         let layoutSize = layout.size
         let separatorHeight = UIScreenPixel
@@ -766,7 +767,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
                 strongSelf.outgoingPreview = snapshot
                 snapshot.frame = strongSelf.containerNode.frame
                 snapshot.isUserInteractionEnabled = false
-                strongSelf.view.insertSubview(snapshot, aboveSubview: strongSelf.containerNode.view)
+                strongSelf.cardNode.view.insertSubview(snapshot, aboveSubview: strongSelf.containerNode.view)
                 UIView.animate(withDuration: 0.4, delay: 0.0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
                     snapshot.alpha = 0.0
                     snapshot.transform = CGAffineTransform(translationX: 0.0, y: -8.0)
@@ -879,6 +880,13 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
             strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
             strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width, height: separatorHeight))
+            let cardRect = CGRect(x: hasCorners ? params.leftInset : 0.0, y: 0.0, width: hasCorners ? max(0.0, params.width - params.leftInset - params.rightInset) : params.width, height: contentSize.height)
+            strongSelf.cardNode.frame = cardRect
+            strongSelf.cardNode.bounds = cardRect
+            strongSelf.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
+            if #available(iOS 13.0, *) {
+                strongSelf.cardNode.layer.cornerCurve = .continuous
+            }
             // The rounded card is exactly the row. The list gives a row its final size at once and
             // only slides the rows around it, so the edges are placed there, not at a height that
             // is still on its way.

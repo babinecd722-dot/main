@@ -496,6 +496,26 @@ public extension PresentationTheme {
     func aorusBadgeForegroundColor(over fill: UIColor?) -> UIColor {
         return self.list.itemCheckColors.foregroundColor.aorusLegible(over: fill)
     }
+
+    /// Contrast-safe capsule fill for an extracted profile row (username, phone, bio, address,
+    /// personal channel) so long-pressing a row in the light theme never draws white-on-white.
+    var aorusExtractedProfileRowColor: UIColor {
+        guard AorusInterfaceV2Run.isEnabled else {
+            return self.list.plainBackgroundColor.isEqual(UIColor.white) ? UIColor(rgb: 0xf2f2f7) : self.list.plainBackgroundColor
+        }
+        let lightInk = AorusGlassPane.isLight(self.list.itemPrimaryTextColor)
+        if lightInk {
+            if let page = AorusGlassPane.profilePageColor, !AorusGlassPane.isLight(page) {
+                return page.withAlphaComponent(0.92)
+            }
+            return UIColor(white: 0.14, alpha: 0.92)
+        } else {
+            if let page = AorusGlassPane.profilePageColor, AorusGlassPane.isLight(page) {
+                return page.mixedWith(UIColor.black, alpha: 0.06).withAlphaComponent(0.94)
+            }
+            return UIColor(rgb: 0xf2f2f7, alpha: 0.94)
+        }
+    }
 }
 '''
 
@@ -6453,7 +6473,7 @@ extension PeerInfoScreenNode {
         let anchorRect = sourceRect ?? sourceNode.bounds
         let location = sourceNode.view.convert(CGPoint(x: anchorRect.minX, y: anchorRect.maxY), to: nil)
         let contextController = makeContextController(
-            presentationData: self.presentationData,
+            presentationData: self.presentationData.withUpdated(theme: self.presentationData.theme.aorusGlassProfileTheme),
             source: .location(AorusTapMenuLocationSource(location: location)),
             items: .single(ContextController.Items(content: .list(items))),
             gesture: nil
