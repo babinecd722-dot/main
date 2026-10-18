@@ -102,7 +102,8 @@ print("Native media draft identities passed: 6 assertions")
     assert 'aorusDraftTransitionHost?()' in selected, 'the host lookup must not scroll the original thumbnail back into view'
     host = block(controller, '        controller.aorusDraftTransitionHost = ')
     assert 'activeTransitionHost(id:' in host and 'aorusDraftTransitionView' not in host
-    assert '.window?.rootViewController?.view' in host, 'the native editor needs a host with a parent for its returning image'
+    assert 'transitionHost(for: self.chatDisplayNode.view)' in host, 'the native editor must keep its image copy below the editor presentation'
+    assert '.window?.rootViewController?.view' not in host, 'using the root itself puts the stretched thumbnail above the entire editor'
     assert '?.window ??' not in selected
     assert 'aorusDraftGalleryClosed' not in selected.split('finishedTransitionOut:')[0]
     legacy = (tg / 'submodules/MediaPickerUI/Sources/LegacyMediaPickerGallery.swift').read_text()

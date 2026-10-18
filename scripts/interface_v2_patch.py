@@ -1,8 +1,8 @@
 """Interface 2.0: native glass, centred header, frosted placeholders.
 
 Everything here restyles code Telegram already ships rather than drawing a replacement.
-The glass is Telegram's own `GlassBackgroundView`, which resolves to `UIGlassEffect(style:
-.regular)` on the iOS 26 SDK and to its `LegacyGlassView` below it. That matters for three
+The glass is Telegram's own `GlassBackgroundView`, which uses `UIGlassEffect` on the iOS 26
+SDK and its `LegacyGlassView` below it. That matters for three
 reasons: it is the actual system material rather than a blur with a white sheen painted on
 top, it needs no SDK shims of ours, and it already answers to the fork's global glass
 toggle. `TintColor(kind: .clear)` is the variant with no tint, no rim and no inner fill.
@@ -64,10 +64,8 @@ _GLASS_THEME_SWIFT = '''
 
 // MARK: - AorusGram Interface 2.0
 
-// One derived theme instead of a patch per row. Every list row on both the settings screens
-// and the peer-info screen paints itself from PresentationThemeList, so substituting that one
-// struct turns all of them white-on-glass at once -- and leaves them exactly as Telegram drew
-// them the moment Interface 2.0 is switched off.
+// Ordinary lists keep Telegram's palette and add only the marker used to find glass blocks.
+// Profile pages derive their contrast separately because their backdrop follows the avatar.
 //
 // The derived theme has to be cached. Both ItemListPresentationData and the item nodes compare
 // themes by identity (===), so handing out a fresh instance per read would make every
@@ -244,16 +242,38 @@ private final class AorusGlassThemeCache {
         let source: PresentationTheme
         let dark: Bool
         let derived: PresentationTheme
+        let isList: Bool
 
-        init(source: PresentationTheme, dark: Bool, derived: PresentationTheme) {
+        init(source: PresentationTheme, dark: Bool, derived: PresentationTheme, isList: Bool = false) {
             self.source = source
             self.dark = dark
             self.derived = derived
+            self.isList = isList
         }
     }
 
     private let lock = NSLock()
     private var entries: [Entry] = []
+
+    func deriveList(from theme: PresentationTheme) -> PresentationTheme {
+        // A profile may hand an ItemList its scoped page palette. Keep that palette intact.
+        if AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor) { return theme }
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        for entry in self.entries where entry.isList && entry.source === theme { return entry.derived }
+        let marker = theme.overallDarkAppearance ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight
+        let list = theme.list.withUpdated(
+            itemBlocksBackgroundColor: marker,
+            itemModalBlocksBackgroundColor: marker,
+            itemHighlightedBackgroundColor: .clear
+        )
+        let derived = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: theme.rootController, list: list, chatList: theme.chatList, chat: theme.chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)
+        derived.forceSync = theme.forceSync
+        derived.starGift = theme.starGift
+        self.entries.append(Entry(source: theme, dark: theme.overallDarkAppearance, derived: derived, isList: true))
+        if self.entries.count > 8 { self.entries.removeFirst(self.entries.count - 8) }
+        return derived
+    }
 
     func derive(from theme: PresentationTheme, dark: Bool) -> PresentationTheme {
         // Deriving from an already derived theme would compound the alpha of every colour. Which of
@@ -261,7 +281,8 @@ private final class AorusGlassThemeCache {
         // and by nothing else in the app, so the test is exact and needs no memory of what was
         // handed out before -- and cannot be fooled by an address that has changed hands.
         let expectedMarker = dark ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight
-        if theme.list.itemBlocksBackgroundColor.isEqual(expectedMarker) {
+        if theme.list.itemBlocksBackgroundColor.isEqual(expectedMarker),
+           theme.list.itemAccentColor.isEqual(dark ? UIColor.white : UIColor.black) {
             return theme
         }
 
@@ -269,9 +290,19 @@ private final class AorusGlassThemeCache {
         defer { self.lock.unlock() }
 
         for entry in self.entries {
-            if entry.dark == dark && entry.source === theme {
+            if !entry.isList && entry.dark == dark && entry.source === theme {
                 return entry.derived
             }
+        }
+
+        // A profile's controls and extracted previews follow the page side too. A light
+        // application theme over a dark photograph must not carry white preview fills.
+        let palette: PresentationTheme
+        if theme.overallDarkAppearance == dark {
+            palette = theme
+        } else {
+            let native = makeDefaultPresentationTheme(reference: dark ? .night : .day, serviceBackgroundColor: nil)
+            palette = customizePresentationTheme(native, editing: false, accentColor: theme.list.itemCheckColors.fillColor, outgoingAccentColor: nil, backgroundColors: [], bubbleColors: [], animateBubbleColors: false)
         }
 
         // Ink and pane, and both of them flip with the appearance. That flip is the whole of
@@ -284,7 +315,10 @@ private final class AorusGlassThemeCache {
             return dark ? UIColor(white: 1.0, alpha: alpha) : UIColor(white: 0.0, alpha: alpha)
         }
 
-        let list = theme.list.withUpdated(
+        let list = palette.list.withUpdated(
+            plainBackgroundColor: dark ? UIColor.black : UIColor.white,
+            modalBlocksBackgroundColor: dark ? UIColor.black : UIColor.white,
+            modalPlainBackgroundColor: dark ? UIColor.black : UIColor.white,
             itemPrimaryTextColor: ink,
             // Full ink, not a dimmed shade of it. Interface 2.0 is one page of ink over one page
             // of colour, and every grey in the middle read as a third colour that belonged to
@@ -315,7 +349,7 @@ private final class AorusGlassThemeCache {
         // a real ChatListItem, laid out by ChatListUI inside a peer-info section. It takes its
         // colours from here and not from theme.list, which is why its last post stayed grey while
         // everything around it turned white -- the one complaint this block was reported for.
-        let chatList = theme.chatList.withUpdated(
+        let chatList = palette.chatList.withUpdated(
             itemSeparatorColor: hairline,
             itemBackgroundColor: .clear,
             pinnedItemBackgroundColor: .clear,
@@ -335,18 +369,18 @@ private final class AorusGlassThemeCache {
         let derived = PresentationTheme(
             name: theme.name,
             index: theme.index,
-            referenceTheme: theme.referenceTheme,
-            overallDarkAppearance: theme.overallDarkAppearance,
-            intro: theme.intro,
-            passcode: theme.passcode,
-            rootController: theme.rootController,
+            referenceTheme: dark ? .night : .day,
+            overallDarkAppearance: dark,
+            intro: palette.intro,
+            passcode: palette.passcode,
+            rootController: palette.rootController,
             list: list,
             chatList: chatList,
-            chat: theme.chat,
-            actionSheet: theme.actionSheet,
-            contextMenu: theme.contextMenu,
-            inAppNotification: theme.inAppNotification,
-            chart: theme.chart,
+            chat: palette.chat,
+            actionSheet: palette.actionSheet,
+            contextMenu: palette.contextMenu,
+            inAppNotification: palette.inAppNotification,
+            chart: palette.chart,
             preview: theme.preview
         )
         derived.forceSync = theme.forceSync
@@ -364,13 +398,12 @@ private final class AorusGlassThemeCache {
 }
 
 public extension PresentationTheme {
-    /// Labels and panes for the settings lists: white on dark panes under a dark theme, black on
-    /// pale ones under a light one.
+    /// Native palette roles over glass blocks, including the chosen accent and secondary ink.
     var aorusGlassListTheme: PresentationTheme {
         guard AorusInterfaceV2Run.isEnabled else {
             return self
         }
-        return AorusGlassThemeCache.shared.derive(from: self, dark: self.overallDarkAppearance)
+        return AorusGlassThemeCache.shared.deriveList(from: self)
     }
 
     /// The same, for the peer-info list. The pair is chosen by the page the list sits on rather
@@ -413,7 +446,7 @@ public extension PresentationTheme {
     /// status bar are drawn on the page too, and from the app theme they would be white on
     /// a light page under a dark theme, or black on a dark one under a light theme.
     func aorusWithPageBackground(_ color: UIColor) -> PresentationTheme {
-        let list = self.list.withUpdated(blocksBackgroundColor: color)
+        let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)
         let lightPage = AorusGlassPane.isLight(color)
         let ink = self.list.itemPrimaryTextColor
         let rootController = self.rootController.withUpdated(
@@ -425,7 +458,7 @@ public extension PresentationTheme {
         let derived = PresentationTheme(
             name: self.name,
             index: self.index,
-            referenceTheme: self.referenceTheme,
+            referenceTheme: lightPage ? .day : .night,
             // Glass panes, the bar's buttons and the system controls on this one screen
             // take the page's lightness, not the app's.
             overallDarkAppearance: !lightPage,
@@ -5008,9 +5041,11 @@ def _patch_overlay_palette(tg: Path) -> None:
         "        // off the bottom of the photo and is no longer forced dark, so a light photo gives a\n"
         "        // light page -- and every label, capsule and icon over it has to follow, or it comes\n"
         "        // out white on white. Off Interface 2.0 these are the values the stock code had.\n"
-        "        let aorusOverlayInk: UIColor = aorusOverlayPalette ? AorusGlassPane.profilePageInk : UIColor.white\n"
-        "        let aorusOverlaySecondaryInk: UIColor = aorusOverlayPalette ? AorusGlassPane.profilePageInk(0.7) : UIColor(white: 1.0, alpha: 0.7)\n"
-        "        let aorusOverlayScrim: UIColor = aorusOverlayPalette ? AorusGlassPane.profilePageScrim : UIColor(white: 1.0, alpha: 0.1)\n"
+        "        let aorusHeaderPage = peer.flatMap { AorusGlassProfileTint.pageBackgroundColor(for: $0.id.id._internalGetInt64Value()) } ?? presentationData.theme.list.blocksBackgroundColor\n"
+        "        let aorusHeaderPageIsDark = !AorusGlassPane.isLight(aorusHeaderPage)\n"
+        "        let aorusOverlayInk: UIColor = aorusOverlayPalette ? AorusGlassPane.ink(over: aorusHeaderPage) : UIColor.white\n"
+        "        let aorusOverlaySecondaryInk: UIColor = aorusOverlayPalette ? aorusOverlayInk.withAlphaComponent(0.7) : UIColor(white: 1.0, alpha: 0.7)\n"
+        "        let aorusOverlayScrim: UIColor = aorusOverlayPalette ? UIColor(white: aorusHeaderPageIsDark ? 1.0 : 0.0, alpha: aorusHeaderPageIsDark ? 0.12 : 0.1) : UIColor(white: 1.0, alpha: 0.1)\n"
         "\n"
         "        let isLandscape = containerInset > 16.0\n",
         "overlay palette flag",
@@ -5989,32 +6024,7 @@ def _patch_music_player_glass(tg: Path) -> None:
         "        self.addSubnode(self.scrubberNode)\n",
         "music controls wave",
     )
-    controls_text = _replace_once(
-        controls_text,
-        "            let profileAudioButtonContent: AnyComponentWithIdentity<Empty>\n"
-        "            var buttonBackgroundColor = self.presentationData.theme.list.itemCheckColors.fillColor\n",
-        "            let profileAudioButtonContent: AnyComponentWithIdentity<Empty>\n"
-        "            // AorusGram: \"Добавить в профиль\" in the page's ink -- white on a dark theme, near-black\n"
-        "            // on a light one -- with its label and glyph in the inverse of it, which is the pair the\n"
-        "            // profile's own header buttons are drawn with. The accent fill it replaces was the last\n"
-        "            // colour in the player that answered to no surface behind it.\n"
-        "            let aorusPlayerInk: UIColor? = AorusGlassPane.isEnabled ? AorusGlassPane.ink(over: self.presentationData.theme.list.plainBackgroundColor) : nil\n"
-        "            let aorusButtonInk: UIColor = aorusPlayerInk.flatMap { AorusGlassPane.ink(over: $0) } ?? self.presentationData.theme.list.itemCheckColors.foregroundColor\n"
-        "            var buttonBackgroundColor = aorusPlayerInk ?? self.presentationData.theme.list.itemCheckColors.fillColor\n",
-        "music controls button ink",
-    )
-    controls_text = _replace_once(
-        controls_text,
-        "                            BundleIconComponent(name: \"Peer Info/SaveMusic\", tintColor: self.presentationData.theme.list.itemCheckColors.foregroundColor)\n",
-        "                            BundleIconComponent(name: \"Peer Info/SaveMusic\", tintColor: aorusButtonInk)\n",
-        "music controls button icon",
-    )
-    controls_text = _replace_once(
-        controls_text,
-        "                            MultilineTextComponent(text: .plain(NSAttributedString(string: self.presentationData.strings.MediaPlayer_SavedMusic_AddToProfile, font: Font.semibold(17.0), textColor: self.presentationData.theme.list.itemCheckColors.foregroundColor)))\n",
-        "                            MultilineTextComponent(text: .plain(NSAttributedString(string: self.presentationData.strings.MediaPlayer_SavedMusic_AddToProfile, font: Font.semibold(17.0), textColor: aorusButtonInk)))\n",
-        "music controls button label",
-    )
+    # Playback controls keep the native accent and foreground roles in both themes.
     controls.write_text(controls_text, encoding="utf-8")
     print("InterfaceV2: stood the music player on glass")
 
@@ -7344,6 +7354,26 @@ def patch_interface_v2_run_switch(tg: Path) -> None:
     print(f"InterfaceV2: {readers} files draw from the run's choice")
 
 
+def _patch_native_light_base(tg: Path) -> None:
+    path = tg / "submodules/TelegramPresentationData/Sources/MakePresentationTheme.swift"
+    source = path.read_text()
+    if "let aorusNativeLight" in source:
+        return
+    source = _replace_once(source, "import TelegramCore\n", "import TelegramCore\nimport Display\n", "native light base import")
+    source = _replace_once(source,
+        "            let defaultTheme = makeDefaultPresentationTheme(reference: reference, extendingThemeReference: extendingThemeReference, serviceBackgroundColor: serviceBackgroundColor, preview: preview)",
+        "            let aorusNativeLight = AorusInterfaceV2Run.isEnabled && reference == .dayClassic\n"
+        "            let defaultTheme = makeDefaultPresentationTheme(reference: aorusNativeLight ? .day : reference, extendingThemeReference: extendingThemeReference ?? (aorusNativeLight ? themeReference : nil), serviceBackgroundColor: serviceBackgroundColor, preview: preview)",
+        "native Day palette before accent customization")
+    path.write_text(source)
+    path = tg / "submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift"
+    source = _replace_once(path.read_text(),
+        "public let defaultPresentationTheme = makeDefaultDayPresentationTheme(serviceBackgroundColor: defaultServiceBackgroundColor, day: false, preview: false)",
+        "public let defaultPresentationTheme = makeDefaultDayPresentationTheme(extendingThemeReference: AorusInterfaceV2Run.isEnabled ? .builtin(.dayClassic) : nil, serviceBackgroundColor: defaultServiceBackgroundColor, day: AorusInterfaceV2Run.isEnabled, preview: false)",
+        "native Day fallback keeps the original persisted identity")
+    path.write_text(source)
+
+
 def patch_interface_v2(tg: Path) -> None:
     """Interface 2.0, end to end.
 
@@ -7351,6 +7381,7 @@ def patch_interface_v2(tg: Path) -> None:
     cornered from the round-button flag that patch inserts, and the section pane has to be put in
     place after the code that used to colour those sections has been pointed at a clear fill.
     """
+    _patch_native_light_base(tg)
     _patch_glass_theme(tg)
     _patch_item_list_theme(tg)
     _patch_badge_contrast(tg)
@@ -7373,6 +7404,14 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_avatar_gallery_gesture(tg)
     _patch_compact_music(tg)
     _patch_music_player_glass(tg)
+    header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    header_text = header.read_text()
+    music_start = header_text.index("                    self.aorusMusicCapsule.update(")
+    music_end = header_text.index("                    )", music_start)
+    music_body = header_text[music_start:music_end]
+    if "isDark: aorusHeaderPageIsDark," not in music_body:
+        music_body = _replace_once(music_body, "isDark: AorusGlassPane.profilePageIsDark,", "isDark: aorusHeaderPageIsDark,", "peer-local music glass side")
+    header.write_text(header_text[:music_start] + music_body + header_text[music_end:])
     _patch_wave_scrubber(tg)
     _patch_chat_nav_glass(tg)
     _patch_legacy_menu_glass(tg)

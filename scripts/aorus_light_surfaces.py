@@ -6,13 +6,6 @@ from telegram13_list_check import block
 
 def patch_light_surfaces(tg: Path) -> None:
     (tg / 'submodules/Display/Source/AorusLightSurface.swift').unlink(missing_ok=True)
-    path = tg / 'submodules/TelegramPresentationData/Sources/PresentationData.swift'
-    source = path.read_text()
-    source = edit(source,
-        'let list = theme.list.withUpdated(blocksBackgroundColor: page, itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)',
-        'let list = theme.list.withUpdated(blocksBackgroundColor: page, modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page, itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)',
-        'Interface 2.0 light modal pages')
-    path.write_text(source)
     path = tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift'
     source = path.read_text()
     # Telegram 13 does not attach the classic selected counter's content. Its glass branch

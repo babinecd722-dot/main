@@ -2933,7 +2933,7 @@ def main() -> None:
                 "aorusBadgeForegroundColor",
                 # The profile's personal-channel row is a real ChatListItem, so its greys come from
                 # theme.chatList and not theme.list -- it needs its own derivation.
-                "theme.chatList.withUpdated",
+                "palette.chatList.withUpdated",
             ),
         ),
         # cornersImage returns nil under Interface 2.0. Those wedges are an opaque overlay painted
@@ -3186,10 +3186,10 @@ def main() -> None:
             ),
         ),
         # The panel under the transport controls draws its own fill and shadow in two generators;
-        # both have to decline to draw. The "Add to Profile" button takes the page's own ink.
+        # both have to decline to draw. Controls retain the native theme's accent/foreground.
         (
             "submodules/TelegramUI/Sources/OverlayAudioPlayerControlsNode.swift",
-            ("aorusPlayerInk", "aorusButtonInk", "self.scrubberNode.aorusWaveStyle"),
+            ("var buttonBackgroundColor = self.presentationData.theme.list.itemCheckColors.fillColor", "tintColor: self.presentationData.theme.list.itemCheckColors.foregroundColor", "self.scrubberNode.aorusWaveStyle"),
         ),
         # The playback position reads as a wave rather than a bar: both copies are drawn at the
         # laid-out width and pinned to the same edge, so the crests line up and clipping the played
@@ -3708,15 +3708,15 @@ def main() -> None:
             ("AorusGlassProfileTint.prepareOpeningPage(for: aorusPeerIdValue, path: path,",),
         ),
         ("submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift", ("public static func prepareOpeningPage(for peerId: Int64, path: String,",)),
-        # The light page is the theme's plain white, as the dark one is its black; the theme's look
-        # is recorded for the licence screens.
+        # The native palette is recorded for licence screens without remapping its page roles.
         (
             "submodules/TelegramPresentationData/Sources/PresentationData.swift",
             (
-                "let page: UIColor? = dark ? nil : theme.list.plainBackgroundColor",
+                "Native palette roles are preserved. ItemList derives only its glass markers.",
                 "AorusAppearanceRecord.record(isDark: theme.overallDarkAppearance, page: theme.list.blocksBackgroundColor,",
             ),
         ),
+        ("submodules/TelegramPresentationData/Sources/MakePresentationTheme.swift", ("let aorusNativeLight = AorusInterfaceV2Run.isEnabled && reference == .dayClassic", "reference: aorusNativeLight ? .day : reference", "extendingThemeReference ?? (aorusNativeLight ? themeReference : nil)")),
         ("submodules/Display/Source/AorusAppearanceRecord.swift", ("public enum AorusAppearanceRecord",)),
         (
             "submodules/AorusGram/Sources/Features/Subscription/SubscriptionStyle.swift",
@@ -3748,7 +3748,7 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
         ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("let aorusToastTint: GlassBackgroundView.TintColor",)),
         ("submodules/ShareController/Sources/ShareControllerNode.swift", ("GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)",)),
-        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: AorusGlassPane.profilePageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)",)),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)",)),
     )
     ghost_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
     if ghost_buttons.is_file() and "let ghostColor = UIColor.white" in ghost_buttons.read_text(encoding="utf-8"):

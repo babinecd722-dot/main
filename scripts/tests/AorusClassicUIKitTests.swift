@@ -3,6 +3,7 @@ import UIKit
 @MainActor func runClassicInputRegression(window: UIWindow) -> Int {
     var checks = 0
     checks += runClassicGlassRegression()
+    checks += runClassicHeaderBoundsRegression(window: window)
     if #available(iOS 15.0, *) {
         checks += runOverlayButtonRegression(window: window)
     }

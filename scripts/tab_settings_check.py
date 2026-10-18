@@ -63,6 +63,8 @@ def main():
             text = (tg / 'submodules' / rel).read_text()
             for needle in needles: assert needle in text, f'{rel}: missing {needle}'
             return text
+        from native_light_palette_check import check_native_light_palette
+        check_native_light_palette(tg, args.swiftc)
         root = require('TelegramUI/Sources/TelegramRootController.swift', 'AorusTabBarCatalogue.publish', 'AorusTabBarSettings.changedNotification', 'controllers = self.aorusOrderTabs(controllers)')
         assert root.count('controllers = self.aorusOrderTabs(controllers)') == 2
         require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction', 'node.aorusPreviewMoveItem(at:')
@@ -71,7 +73,8 @@ def main():
         assert 'self.isOpaque = false' in tabs
         require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusDraggedFrame = itemFrame', 'self.aorusIsPreview ? .immediate : itemTransition', 'self.liquidLensView.contentView.convert(center, from: self)')
-        require('TelegramPresentationData/Sources/PresentationData.swift', 'modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page')
+        require('TelegramPresentationData/Sources/MakePresentationTheme.swift', 'let aorusNativeLight =', 'reference: aorusNativeLight ? .day : reference')
+        require('TelegramPresentationData/Sources/PresentationTheme.swift', 'func deriveList(from theme:', 'deriveList(from: self)')
         glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = 0.8', 'nativeParamsView.lumaMax = 0.801')
         assert 'aorusGlassLuminance' not in glass and 'regularLight' not in glass
         pages = require('ItemListUI/Sources/ItemListControllerNode.swift')

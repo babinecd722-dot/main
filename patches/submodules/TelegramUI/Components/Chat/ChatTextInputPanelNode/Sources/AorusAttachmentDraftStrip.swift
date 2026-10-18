@@ -62,7 +62,20 @@ public final class AorusAttachmentDraftStrip: UIView, UIScrollViewDelegate {
 
     public static func activeTransitionHost(id: String) -> UIView? {
         guard let strip = self.activeTransitionStrip, strip.draft?.items.contains(where: { $0.id == id }) == true else { return nil }
-        return strip.window?.rootViewController?.view
+        return self.transitionHost(for: strip)
+    }
+
+    public static func transitionHost(for source: UIView) -> UIView? {
+        guard let root = source.window?.rootViewController?.view, source !== root else { return nil }
+        // The gallery inserts its thumbnail copy above this host in the host's parent.
+        // Keep that copy above the source presentation and below the editor, which is
+        // another child of the window's root container.
+        var host = source
+        while let parent = host.superview {
+            if parent === root { return host }
+            host = parent
+        }
+        return nil
     }
 
     public static func activeTransitionView(id: String) -> UIView? {

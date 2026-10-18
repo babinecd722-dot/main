@@ -5,6 +5,7 @@ from telegram13_list_check import block
 
 
 def tab_preview_test_source(tg: Path) -> str:
+    from tab_gutter_fixtures import gutter_test_source
     source = (tg / 'submodules/TabBarUI/Sources/AorusTabBarPreviewView.swift').read_text()
     source = re.sub(r'^import (AsyncDisplayKit|Display|TelegramPresentationData)\n', '', source, flags=re.M)
     names = ['TabBarControllerNode', 'PresentationTheme', 'PresentationStrings', 'ContainedViewLayoutTransition', 'ContainerViewLayout', 'DeviceMetrics', 'LayoutMetrics', 'TabBarNodeItem']
@@ -266,7 +267,8 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     expect(accessible[0].accessibilityActivate(), "VoiceOver can select a preview tab")
     expect(accessible[0].accessibilityCustomActions?.count == 1 && accessible[1].accessibilityCustomActions?.count == 2, "VoiceOver can move tabs without dragging")
     preview.removeFromSuperview()
+    checks += runTabGutterRegression()
     print("Native tab preview: \(checks) assertions passed")
     return checks
 }
-'''
+''' + gutter_test_source(tg)

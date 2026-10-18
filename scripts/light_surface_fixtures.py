@@ -86,9 +86,9 @@ def light_surface_test_source(tg: Path) -> str:
     assert 'aorusUpdatePageBackground' not in (tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift').read_text()
     return '''import UIKit
 private enum AorusGlassPane {\n''' + markers + '''\n}
-private struct GiftMarkerTheme { struct List { let itemBlocksBackgroundColor: UIColor }; let list: List }
+private struct GiftMarkerTheme { struct List { let itemBlocksBackgroundColor: UIColor; let itemAccentColor: UIColor }; let list: List }
 private func giftMarkerMatches(_ marker: UIColor, dark: Bool) -> Bool {
-    let theme = GiftMarkerTheme(list: .init(itemBlocksBackgroundColor: marker))
+    let theme = GiftMarkerTheme(list: .init(itemBlocksBackgroundColor: marker, itemAccentColor: dark ? .white : .black))
 ''' + marker_check + '''
     return false
 }

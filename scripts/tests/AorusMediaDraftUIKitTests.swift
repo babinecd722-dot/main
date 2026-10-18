@@ -36,7 +36,12 @@ import UIKit
         theme.chat.inputPanel.inputBackgroundColor = dark ? .black : .white
         let draft = AorusAttachmentDraft(items: entries, grouping: true, captionAbove: false, highQuality: true, forceLivePhoto: false)
         let strip = AorusAttachmentDraftStrip(frame: CGRect(x: 0, y: 0, width: width, height: AorusAttachmentDraftStrip.height(width: width)))
-        window.rootViewController!.view.addSubview(strip)
+        let rootView = window.rootViewController!.view!
+        let sourcePresentation = UIView(frame: rootView.bounds)
+        let composer = UIView(frame: CGRect(x: 0, y: 120, width: width, height: strip.bounds.height))
+        rootView.addSubview(sourcePresentation)
+        sourcePresentation.addSubview(composer)
+        composer.addSubview(strip)
         strip.update(draft: draft, accountBasePath: root.path, width: width, theme: theme, strings: strings)
         strip.layoutIfNeeded()
         let scroll = strip.subviews.first as! UIScrollView
@@ -67,13 +72,39 @@ import UIKit
         if !old, #available(iOS 26.0, *) { expect(removePlate.nativeView != nil, "current close button constructs real UIKit glass") }
         let focused = strip.transitionView(id: entries[3].id)
         let focusedOffset = scroll.contentOffset
-        expect(AorusAttachmentDraftStrip.activeTransitionHost(id: entries[0].id) === window.rootViewController!.view, "the editor uses the connected root as a stable transition host")
+        expect(AorusAttachmentDraftStrip.activeTransitionHost(id: entries[0].id) === sourcePresentation, "the editor uses the source presentation below the shared root")
+        expect(AorusAttachmentDraftStrip.transitionHost(for: composer) === sourcePresentation, "the chat fallback resolves the same source presentation")
+        expect(AorusAttachmentDraftStrip.transitionHost(for: rootView) == nil, "the shared root cannot be its own transition host")
+        let editorPresentation = UIView(frame: rootView.bounds)
+        editorPresentation.backgroundColor = .green
+        rootView.addSubview(editorPresentation)
+        let nativeHost = AorusAttachmentDraftStrip.activeTransitionHost(id: entries[0].id)!
+        let sourceRect = photo.convert(photo.bounds, to: nativeHost.superview)
+        let thumbnailCopy = UIImageView(image: opening)
+        thumbnailCopy.frame = sourceRect
+        // This is the gallery's production insertion operation: it animates this copy
+        // independently in X/Y, and keeps it until its spring finishes.
+        nativeHost.superview!.insertSubview(thumbnailCopy, aboveSubview: nativeHost)
+        let siblings = rootView.subviews
+        expect(siblings.firstIndex(of: sourcePresentation)! < siblings.firstIndex(of: thumbnailCopy)! && siblings.firstIndex(of: thumbnailCopy)! < siblings.firstIndex(of: editorPresentation)!, "the native animated thumbnail is above the source but below the editor")
+        expect(thumbnailCopy.convert(thumbnailCopy.bounds, to: window) == photo.convert(photo.bounds, to: window), "native insertion preserves the source thumbnail's window coordinates")
+        thumbnailCopy.frame = rootView.bounds
+        let probe = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+        let actual = probe.image { context in
+            context.cgContext.translateBy(x: -rootView.bounds.midX, y: -rootView.bounds.midY)
+            rootView.layer.render(in: context.cgContext)
+        }
+        let expected = probe.image { context in UIColor.green.setFill(); context.fill(CGRect(x: 0, y: 0, width: 1, height: 1)) }
+        expect(samePixels(actual, expected), "a full-screen stretched source copy never paints over the correct editor image")
+        thumbnailCopy.removeFromSuperview()
+        editorPresentation.removeFromSuperview()
         expect(scroll.contentOffset == focusedOffset && focused?.window === window, "resolving the host never scrolls away from the currently focused media")
         scroll.setContentOffset(CGPoint(x: scroll.contentSize.width - width, y: 0), animated: false)
         let reduced = draft.removing(entries[3].id)!
         strip.update(draft: reduced, accountBasePath: root.path, width: width, theme: theme, strings: strings)
         expect(scroll.subviews.filter { $0.subviews.compactMap { $0 as? UIButton }.count == 2 }.count == 3 && scroll.contentOffset.x <= max(0, scroll.contentSize.width - width), "removal clamps horizontal scroll without losing other photos")
-        strip.removeFromSuperview()
+        sourcePresentation.removeFromSuperview()
+        expect(AorusAttachmentDraftStrip.transitionHost(for: strip) == nil, "a detached source cannot supply a stale transition host")
     } } }
     let mini = AorusAttachmentDraftPreviewView(frame: CGRect(x: 0, y: 0, width: 80, height: 18))
     mini.update(previews: entries.map(\.preview), side: 18)

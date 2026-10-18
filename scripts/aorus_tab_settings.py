@@ -5,12 +5,58 @@ from aorus_attachment_drafts import edit
 from aorus_tab_preview import CONTROLLER, CLASSIC, patch_modern_preview
 
 
+_GUTTER_OVERFLOW = '''public protocol ItemListGutterOverflowNode: AnyObject {
+    var itemListGutterOverflowRect: CGRect { get }
+}
+
+'''
+
+_GUTTER_MASKS = '''    private func aorusUpdateGutterMasks() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        var overflow: [CGRect] = []
+        self.listNode.forEachItemNode { node in
+            if let item = node as? ItemListGutterOverflowNode {
+                overflow.append(node.layer.convert(item.itemListGutterOverflowRect, to: self.listNodeContainer.layer))
+            }
+        }
+        for overlay in [self.leftOverlayNode, self.rightOverlayNode] {
+            guard !overflow.isEmpty, !overlay.bounds.isEmpty else {
+                overlay.layer.mask = nil
+                continue
+            }
+            let path = UIBezierPath(rect: overlay.bounds)
+            for rect in overflow {
+                let cutout = overlay.layer.convert(rect, from: self.listNodeContainer.layer).intersection(overlay.bounds)
+                if !cutout.isNull && !cutout.isEmpty { path.append(UIBezierPath(rect: cutout)) }
+            }
+            let mask = (overlay.layer.mask as? CAShapeLayer) ?? CAShapeLayer()
+            mask.frame = overlay.bounds
+            mask.fillRule = .evenOdd
+            mask.path = path.cgPath
+            overlay.layer.mask = mask
+        }
+    }
+
+'''
+
+
 def patch_tab_settings(tg: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in ('Display/Source/AorusTabBarLayout.swift', 'Display/Source/AorusTabBarIdentity.swift', 'TelegramPresentationData/Sources/AorusTabBarTheme.swift', 'TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TelegramUI/Sources/AorusTabSettings.swift'):
         target = tg / 'submodules' / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(repo / 'patches/submodules' / rel, target)
+
+    # The native gutters cover full-width row fills, but must not crop a native
+    # tab bar's glass and shadow. Exclude only the preview row, not the other rows
+    # or their gesture boundaries. The same scroll/transaction hooks update both.
+    path = tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift'
+    s = path.read_text()
+    s = edit(s, 'open class ItemListControllerNode:', _GUTTER_OVERFLOW + 'open class ItemListControllerNode:', 'list gutter overflow contract')
+    s = edit(s, '    private func aorusUpdateListGlass() {', _GUTTER_MASKS + '    private func aorusUpdateListGlass() {\n        self.aorusUpdateGutterMasks()', 'unobscured preview gutter masks')
+    path.write_text(s)
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarContollerNode.swift'
     s = path.read_text()

@@ -53,6 +53,52 @@ def patch_native_theme(tg: Path) -> None:
         ("            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }", "            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n            self.aorusApplyNativeViewStyle(style)"),
         ("        self.view = self.displayNode.view\n", "        self.view = self.displayNode.view\n        // AorusGram: apply presentation traits to the custom display-node root.\n        if #available(iOS 13.0, *) { self.aorusApplyNativeViewStyle(self.overrideUserInterfaceStyle) }\n"),
     ])
+    # A decorative navigation bar is not the screen's appearance. Profiles deliberately
+    # use white navigation ink, and component screens can have no navigation bar at all.
+    edit(tg, controller, "public func aorusSetNativeStyle", [
+        ("""    private func aorusUpdatePresentationStyle(_ presentationData: NavigationBarPresentationData) {
+        if #available(iOS 13.0, *) {
+            let style: UIUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
+            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
+            self.aorusApplyNativeViewStyle(style)
+        }
+    }""", """    public func aorusSetNativeStyle(dark: Bool) {
+        if #available(iOS 13.0, *) {
+            let style: UIUserInterfaceStyle = dark ? .dark : .light
+            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
+            self.aorusApplyNativeViewStyle(style)
+        }
+    }
+
+    private func aorusUpdatePresentationStyle(_ presentationData: NavigationBarPresentationData) {
+        self.aorusSetNativeStyle(dark: presentationData.theme.overallDarkAppearance)
+    }"""),
+    ])
+    components = tg / 'submodules/Components/ViewControllerComponent/Sources/ViewControllerComponent.swift'
+    component_source = components.read_text()
+    if 'aorusSetNativeStyle' not in component_source:
+        anchor = '        super.init(navigationBarPresentationData: navigationBarPresentationData)\n'
+        if component_source.count(anchor) != 2:
+            raise RuntimeError('NativeTheme: both component container initializers must resolve native appearance')
+        component_source = component_source.replace(anchor, anchor + '        self.aorusSetNativeStyle(dark: resolveTheme(baseTheme: presentationData.theme, theme: theme).overallDarkAppearance)\n')
+        anchor = '                    strongSelf.navigationBar?.updatePresentationData(navigationBarPresentationData, transition: .immediate)\n                }\n'
+        if component_source.count(anchor) != 1:
+            raise RuntimeError('NativeTheme: component navigation update anchor missing')
+        component_source = component_source.replace(anchor, anchor + '                strongSelf.aorusSetNativeStyle(dark: resolvedTheme.overallDarkAppearance)\n', 1)
+        components.write_text(component_source)
+    profile = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift'
+    profile_source = profile.read_text()
+    if 'aorusSetNativeStyle' not in profile_source:
+        anchor = '        ), strings: baseNavigationBarPresentationData.strings))\n'
+        if profile_source.count(anchor) != 1:
+            raise RuntimeError('NativeTheme: profile decorative navigation anchor missing')
+        profile_source = profile_source.replace(anchor, anchor + '        self.aorusSetNativeStyle(dark: self.presentationData.theme.overallDarkAppearance)\n', 1)
+        anchor = '                strongSelf.presentationData = presentationData\n'
+        if profile_source.count(anchor) != 1:
+            raise RuntimeError('NativeTheme: profile presentation update anchor missing')
+        profile_source = profile_source.replace(anchor, anchor + '                strongSelf.aorusSetNativeStyle(dark: presentationData.theme.overallDarkAppearance)\n', 1)
+        profile.write_text(profile_source)
+
     # A UIKit controller presented from a Display controller -- an alert, a share sheet, a
     # document or photo picker -- is presented by the window's root, which now carries the
     # phone's appearance. It takes the presenting screen's theme instead, unless it chose one.
@@ -79,6 +125,14 @@ def verify_native_theme(tg: Path) -> list[str]:
         errors.append("NativeTheme: controllers must apply traits at creation and theme updates")
     if controller.count("self.aorusApplyNativeViewStyle(") != 2:
         errors.append("NativeTheme: loaded and newly created display-node roots must receive presentation traits")
+    if 'public func aorusSetNativeStyle(dark: Bool)' not in controller:
+        errors.append('NativeTheme: actual screen appearance setter is missing')
+    components = (tg / 'submodules/Components/ViewControllerComponent/Sources/ViewControllerComponent.swift').read_text()
+    if components.count('self.aorusSetNativeStyle(dark: resolveTheme(baseTheme: presentationData.theme, theme: theme).overallDarkAppearance)') != 2 or 'strongSelf.aorusSetNativeStyle(dark: resolvedTheme.overallDarkAppearance)' not in components:
+        errors.append('NativeTheme: component screens must use actual resolved appearance with or without navigation')
+    profile = (tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift').read_text()
+    if profile.count('aorusSetNativeStyle(dark:') != 2:
+        errors.append('NativeTheme: profile native controls must not follow decorative dark navigation')
     if "viewControllerToPresent.overrideUserInterfaceStyle = self.overrideUserInterfaceStyle" not in controller:
         errors.append("NativeTheme: UIKit controllers presented from a screen must take its theme, not the phone's")
     return errors
@@ -89,6 +143,9 @@ def native_theme_test_source(tg: Path, repo: Path) -> str:
     match = re.search(r"    private func aorusUpdatePresentationStyle\(.*?\n    }", source, re.S)
     if not match:
         raise RuntimeError("NativeTheme: native controller style helper is missing")
+    actual_style = re.search(r"    public func aorusSetNativeStyle\(.*?\n    }", source, re.S)
+    if not actual_style:
+        raise RuntimeError('NativeTheme: actual appearance helper is missing')
     view_style = re.search(r"    private func aorusApplyNativeViewStyle\(.*?\n    }", source, re.S)
     load_style = re.search(r"        // AorusGram: apply presentation traits to the custom display-node root\.\n([^\n]+)", source)
     if not view_style or not load_style:
@@ -111,11 +168,12 @@ private struct NavigationBarPresentationData {
     let theme: Theme
 }
 @MainActor private final class NativeThemeControllerProbe: UIViewController {
-""" + view_style.group(0) + "\n" + match.group(0) + """
+""" + view_style.group(0) + "\n" + actual_style.group(0) + "\n" + match.group(0) + """
     override func loadView() {
         self.view = UIView()
 """ + load_style.group(1) + """
     }
+    func updateResolved(dark: Bool) { aorusSetNativeStyle(dark: dark) }
     func update(dark: Bool) { aorusUpdatePresentationStyle(NavigationBarPresentationData(theme: .init(overallDarkAppearance: dark))) }
 }
 @MainActor func runNativeThemeRegression(window: UIWindow) async -> Int {
@@ -160,6 +218,22 @@ private struct NavigationBarPresentationData {
             }
             expect(window.traitCollection.userInterfaceStyle == system, "app theme does not overwrite system appearance")
         }
+    }
+    for hasDecorativeDarkNavigation in [false, true] {
+        let actual = NativeThemeControllerProbe()
+        if hasDecorativeDarkNavigation { actual.update(dark: true) }
+        actual.updateResolved(dark: false)
+        expect(!actual.isViewLoaded, "actual theme setup preserves lazy root loading")
+        root.addChild(actual)
+        root.view.addSubview(actual.view)
+        actual.didMove(toParent: root)
+        let field = UITextField()
+        actual.view.addSubview(field)
+        expect(actual.overrideUserInterfaceStyle == .light && field.traitCollection.userInterfaceStyle == .light, "Day follows actual screen palette even with nil or decorative dark navigation")
+        actual.updateResolved(dark: true)
+        expect(field.traitCollection.userInterfaceStyle == .dark, "live resolved appearance updates native descendants")
+        actual.updateResolved(dark: false)
+        expect(field.traitCollection.userInterfaceStyle == .light, "live return to Day restores native descendants")
     }
     let fixture: UIImage? = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 24)).image { context in
         UIColor.black.setFill(); context.fill(CGRect(x: 3, y: 3, width: 18, height: 18))

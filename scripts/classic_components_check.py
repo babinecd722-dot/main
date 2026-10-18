@@ -3,6 +3,9 @@
 import argparse
 import hashlib
 import json
+import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 from aorus_old_interface import patch_old_interface, verify_old_interface
@@ -11,6 +14,80 @@ from classic_browser_check import check_classic_browser
 from classic_layout_check import check_classic_layout
 from classic_attachment_check import check_classic_attachment
 from classic_sheets_check import check_classic_sheets, native_timer_source, native_sheet_source, native_sticker_source, native_menu_source
+
+
+def native_header_geometry_source(tg: Path) -> str:
+    """Use the installed header expressions, including native scroll expansion."""
+    text = (tg / "submodules/TelegramUI/Components/ChatListHeaderComponent/Sources/ChatListNavigationBar.swift").read_text()
+    lines = []
+    for name in ("visibleSize", "aorusVisibleHeight", "aorusBackgroundFrame"):
+        matches = re.findall(r"^\s*(let " + name + r" = [^\n]+)$", text, re.M)
+        if len(matches) != 1:
+            raise RuntimeError("Expected one installed header geometry expression: " + name)
+        lines.append(matches[0])
+    return """
+func aorusClassicInstalledHeaderFrame(size: CGSize, clippedScrollOffset: CGFloat) -> CGRect {
+    let currentLayout = (size: size, placeholder: false)
+EXPRESSIONS
+    return aorusBackgroundFrame
+}
+""".replace("EXPRESSIONS", "\n".join("    " + line for line in lines))
+
+
+def check_classic_header_geometry(tg: Path, swiftc: str) -> None:
+    source = """import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
+""" + native_header_geometry_source(tg) + """
+var checks = 0
+for width: CGFloat in [320, 390, 428, 768] {
+    for statusBarHeight: CGFloat in [0, 20, 47, 59] {
+        let height = statusBarHeight + 44 + 52
+        for offset: CGFloat in [-240, -80, 0, 26, 52] {
+            let frame = aorusClassicInstalledHeaderFrame(size: CGSize(width: width, height: height), clippedScrollOffset: offset)
+            precondition(frame.minY == 0, "An embedded header paints above the sheet")
+            precondition(frame.width == width && frame.height == height - offset, "Visible scroll extent changed")
+            precondition(frame.contains(CGPoint(x: width / 2, y: statusBarHeight + 1)), "The fullscreen status/header background has a gap")
+            checks += 3
+        }
+    }
+}
+print("Classic header geometry passed: \\(checks) assertions")
+"""
+    with tempfile.TemporaryDirectory(prefix="aorus-classic-header-") as temporary:
+        path = Path(temporary)
+        fixture = path / "main.swift"
+        fixture.write_text(source)
+        binary = path / "header-check"
+        subprocess.run([swiftc, "-module-cache-path", str(path / "module-cache"), str(fixture), "-o", str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+
+
+def native_header_view_source(tg: Path) -> str:
+    return native_header_geometry_source(tg) + """
+@MainActor func runClassicHeaderBoundsRegression(window: UIWindow) -> Int {
+    var checks = 0
+    let sheet = UIView(frame: window.bounds)
+    window.addSubview(sheet)
+    defer { sheet.removeFromSuperview() }
+    for originY: CGFloat in [0, 220, 500] {
+        for scrollOffset: CGFloat in [-120, 0, 52] {
+            let header = UIView(frame: CGRect(x: 0, y: originY, width: 390, height: 143))
+            sheet.addSubview(header)
+            let background = UIView(frame: aorusClassicInstalledHeaderFrame(size: header.bounds.size, clippedScrollOffset: scrollOffset))
+            header.addSubview(background)
+            let projectedFrame = background.convert(background.bounds, to: sheet)
+            precondition(projectedFrame.minY == originY, "Header blur must begin at the actual sheet header")
+            precondition(!projectedFrame.contains(CGPoint(x: 195, y: originY - 1)), "Header paints over the dimmed screen above the sheet")
+            precondition(projectedFrame.maxY == originY + 143 - scrollOffset, "Header preserves native scroll expansion")
+            checks += 3
+            header.removeFromSuperview()
+        }
+    }
+    return checks
+}
+"""
 
 
 def native_hit_test_source(tg: Path) -> str:
@@ -49,7 +126,7 @@ METHOD
     from telegram13_preview_check import native_overlay_source
     from attachment_drafts_check import native_draft_views
     from composer_profile_refinements_check import native_profile_views
-    return fixture + native_glass_source(tg) + native_draft_views(tg) + native_profile_views(tg) + native_overlay_source(tg) + native_timer_source(tg) + """
+    return fixture + native_header_view_source(tg) + native_glass_source(tg) + native_draft_views(tg) + native_profile_views(tg) + native_overlay_source(tg) + native_timer_source(tg) + """
 final class AorusClassicNodeViewFixture: UIView {
     var view: UIView { return self }
 }
@@ -121,6 +198,7 @@ def main() -> None:
         raise RuntimeError("\n".join(errors))
     checks += check_classic_layout(args.repo, args.telegram_source, args.reference_source)
     checks += check_classic_sheets(args.repo, args.telegram_source, args.reference_source, args.swiftc)
+    check_classic_header_geometry(args.telegram_source, args.swiftc)
     native_hit_test_source(args.telegram_source)
 
     # Reapplying the complete feature must not duplicate handlers, constructor

@@ -414,7 +414,7 @@ def _patch_chat_list_toolbar(tg: Path) -> None:
 
 _CHAT_LIST_CLASSIC_BACKGROUND = '''            if AorusOldInterface.isEnabled {
                 // AorusGram: old interface: 12.0's header, a blurred bar with a line under it,
-                // ending where the header ends.
+                // bounded by its visible height, including the status bar and pull-down.
                 let aorusVisibleHeight = visibleSize.height
                 let aorusBackgroundView: BlurredBackgroundView
                 let aorusSeparatorLayer: SimpleLayer
@@ -432,7 +432,7 @@ _CHAT_LIST_CLASSIC_BACKGROUND = '''            if AorusOldInterface.isEnabled {
                 }
                 aorusBackgroundView.updateColor(color: component.theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
                 aorusSeparatorLayer.backgroundColor = component.theme.rootController.navigationBar.separatorColor.cgColor
-                let aorusBackgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: aorusVisibleHeight - 1000.0), size: CGSize(width: currentLayout.size.width, height: 1000.0))
+                let aorusBackgroundFrame = CGRect(origin: .zero, size: CGSize(width: currentLayout.size.width, height: aorusVisibleHeight))
                 transition.setFrame(view: aorusBackgroundView, frame: aorusBackgroundFrame)
                 aorusBackgroundView.update(size: aorusBackgroundFrame.size, transition: transition.containedViewLayoutTransition)
                 transition.setFrame(layer: aorusSeparatorLayer, frame: CGRect(origin: CGPoint(x: 0.0, y: aorusVisibleHeight), size: CGSize(width: currentLayout.size.width, height: UIScreenPixel)))
