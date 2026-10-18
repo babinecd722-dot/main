@@ -67,7 +67,9 @@ def patch_light_surfaces(tg: Path) -> None:
     source = edit(source, '    private let peerId: EnginePeer.Id\n', '    private let peerId: EnginePeer.Id\n    private var aorusCollectionPageObserver: NSObjectProtocol?\n    private var aorusCollectionThemeCache: (source: PresentationTheme, page: UIColor, derived: PresentationTheme)?\n', 'gift page observer storage')
     source = edit(source, '        super.init()\n', '''        super.init()
         self.aorusCollectionPageObserver = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            guard let self, AorusInterfaceV2Run.isEnabled else { return }
+            guard let self, AorusInterfaceV2Run.isEnabled, let params = self.currentParams else { return }
+            let page = AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value()) ?? params.presentationData.theme.list.blocksBackgroundColor
+            if let cached = self.aorusCollectionThemeCache, cached.source === params.presentationData.theme, cached.page.isEqual(page) { return }
             self.updateScrolling(transition: .immediate)
         }
 ''', 'refresh gift collection palette after avatar changes')
