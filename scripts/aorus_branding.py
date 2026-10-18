@@ -30453,6 +30453,8 @@ def main() -> None:
 
     # After every pass that draws Interface 2.0: each asks the choice the run started with,
     # and this gives those files their import and fails on any live read of the switch.
+    from aorus_paid_composer import patch_paid_composer
+    patch_paid_composer(tg)
     from aorus_light_surfaces import patch_light_surfaces
     from aorus_tab_settings import patch_tab_settings
     patch_light_surfaces(tg)

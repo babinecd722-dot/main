@@ -155,7 +155,6 @@ struct AorusFormattingToolbarView: View {
         }
         .accentColor(Color(self.model.themeAccentColor))
         .background(Color(UIColor.clear))
-        .clipped()
     }
 
     private var formattingToolbar: some View {
@@ -203,6 +202,7 @@ struct AorusFormattingToolbarView: View {
             .padding(.horizontal, 8)
         }
         .background(Color(UIColor.clear))
+        .modifier(AorusToolbarScrollOverflow())
     }
 
     private var translatorPanel: some View {
@@ -619,6 +619,18 @@ private final class AorusGlassEffectsPreference: ObservableObject {
 }
 
 // Glass circle background — matches Swiftgram's toolbar button glass.
+private struct AorusToolbarScrollOverflow: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            // The circular controls cast a shadow beyond the 44pt scroll row.
+            // Clipping that shadow produces a straight line under the buttons.
+            content.scrollClipDisabled()
+        } else {
+            content
+        }
+    }
+}
+
 private struct AorusGlass: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var glassEffects = AorusGlassEffectsPreference.shared

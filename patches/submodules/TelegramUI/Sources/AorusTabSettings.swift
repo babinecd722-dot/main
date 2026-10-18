@@ -51,7 +51,9 @@ private final class AorusTabPreviewNode: ListViewItemNode {
         let size = CGSize(width: params.width, height: 130.0)
         return (ListViewItemNodeLayout(contentSize: size, insets: .zero), { [weak self] in
             guard let self else { return }
-            self.preview.frame = CGRect(origin: .zero, size: size)
+            // ItemList paints its page gutters above the rows. Keep the native bar,
+            // including its rounded ends, inside the same visible content region.
+            self.preview.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, size.width - params.leftInset - params.rightInset), height: size.height)
             self.preview.update(theme: item.theme, strings: item.strings, items: item.items, selectedIdentifier: item.selectedIdentifier, moveLeft: aorusL("Переместить влево", "Move Left"), moveRight: aorusL("Переместить вправо", "Move Right"))
         })
     }

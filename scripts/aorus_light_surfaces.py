@@ -18,7 +18,46 @@ def patch_light_surfaces(tg: Path) -> None:
     # Telegram 13 does not attach the classic selected counter's content. Its glass branch
     # attaches content to the effect view; the legacy branch needs the same hierarchy itself.
     source = edit(source, '            self.containerView.addSubnode(background)\n', '            self.containerView.addSubnode(background)\n            self.containerView.addSubnode(self.icon)\n            self.containerView.addSubnode(self.label)\n            self.containerView.addSubview(self.button)\n', 'classic gallery counter content')
-    source = edit(source, '            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0,', '            let selectedButtonX: CGFloat = AorusOldInterface.isEnabled ? 16.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0 : 16.0 + 44.0 + 12.0\n            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonX,', 'classic gallery counter follows the measured close button')
+    source = edit(source,
+        '            let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - selectedSize.height) / 2.0) + 1.0), size: selectedSize)',
+        '            self.aorusLayoutSelectionCounter(size: selectedSize, layout: layout)',
+        'selection changes use the same counter geometry as layout')
+    source = edit(source,
+        '        let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n        self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - self.selectedButtonNode.frame.height) / 2.0) + 1.0), size: self.selectedButtonNode.frame.size)',
+        '        self.aorusLayoutSelectionCounter(size: self.selectedButtonNode.bounds.size, layout: layout)',
+        'layout does not restore the glass counter position in classic mode')
+    source = edit(source, '    public func dismissAnimated() {', '''    private func aorusLayoutSelectionCounter(size: CGSize, layout: ContainerViewLayout) {
+        let isBack = self.cancelButtonNode.state == .back
+        let selectedButtonX: CGFloat = AorusOldInterface.isEnabled ? 16.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0 : 16.0 + 44.0 + 12.0
+        let navigationHeight = navigationLayout(layout: layout).navigationFrame.height
+        self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonX, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - size.height) / 2.0) + 1.0), size: size)
+        if AorusOldInterface.isEnabled, self.selectionCount > 0, self.controllerNode.currentDisplayMode == .all, let navigationBar = self.navigationBar {
+            self.titleView.aorusLeadingContentInset = max(0.0, self.titleView.convert(CGPoint(x: self.selectedButtonNode.frame.maxX + 8.0, y: 0.0), from: navigationBar.view).x)
+        } else {
+            self.titleView.aorusLeadingContentInset = 0.0
+        }
+    }
+
+    public func dismissAnimated() {''', 'shared counter placement')
+    source = edit(source,
+        'self.titleView.updateIsDark(isDark: self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
+        'self.titleView.updateIsDark(isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
+        'classic title follows its navigation theme rather than the glass scroll state')
+    path.write_text(source)
+    path = tg / 'submodules/MediaPickerUI/Sources/MediaPickerTitleView.swift'
+    source = path.read_text()
+    source = edit(source, '    private let glass: Bool\n', '''    private let glass: Bool
+    var aorusLeadingContentInset: CGFloat = 0.0 {
+        didSet { if self.aorusLeadingContentInset != oldValue { self.setNeedsLayout() } }
+    }
+''', 'title reserves the visible classic selection control')
+    source = edit(source, '        let titleSize = self.titleNode.updateLayout(CGSize(width: 210.0, height: 44.0))\n        let subtitleSize = self.subtitleNode.updateLayout(CGSize(width: 210.0, height: 44.0))', '''        let leadingInset = self.aorusLeadingContentInset
+        let contentWidth = max(0.0, size.width - leadingInset)
+        let textWidth = leadingInset > 0.0 ? min(210.0, max(0.0, contentWidth - 25.0)) : 210.0
+        let titleSize = self.titleNode.updateLayout(CGSize(width: textWidth, height: 44.0))
+        let subtitleSize = self.subtitleNode.updateLayout(CGSize(width: textWidth, height: 44.0))''', 'title and arrow fit beside the measured counter')
+    source = edit(source, 'floorToScreenPixels((size.width - totalWidth) / 2.0)', 'leadingInset + floorToScreenPixels((contentWidth - totalWidth) / 2.0)', 'center title in available header space')
+    source = edit(source, 'floorToScreenPixels((size.width - subtitleSize.width) / 2.0)', 'leadingInset + floorToScreenPixels((contentWidth - subtitleSize.width) / 2.0)', 'subtitle follows title content space')
     path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift'
     source = edit(path.read_text(), 'return component.isSelected ? accent : accent.withAlphaComponent(0.5)', 'return accent', 'profile tab ink')

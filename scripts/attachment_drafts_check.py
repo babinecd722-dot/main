@@ -256,7 +256,7 @@ def geometry_fixture_source(tg):
     """Compile native composer insets and height in their installed declaration order."""
     composer = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift').read_text()
     strip = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusAttachmentDraftStrip.swift').read_text()
-    start = composer.index('        var textFieldInsets = self.textFieldInsets(metrics: metrics, bottomInset: bottomInset)\n')
+    start = composer.index('        var textFieldInsets = self.textFieldInsets(metrics: metrics, bottomInset: bottomInset)\n', composer.index('        var effectiveActionButtonsSize = '))
     glass = block(composer, '        if !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && mediaRecordingState == nil && !AorusOldInterface.isEnabled {')
     end = composer.index(glass, start) + len(glass)
     segments = [(start, composer[start:end])]
@@ -283,11 +283,13 @@ final class Composer {
     func textFieldInsets(metrics: Int, bottomInset: CGFloat) -> UIEdgeInsets {
         UIEdgeInsets(top: 6, left: 42, bottom: bottomInset, right: AorusOldInterface.isEnabled ? 42 : 52)
     }
-    func measure(width: CGFloat, sideInset: CGFloat, draft: Draft?, controls: Int) -> (CGFloat, CGFloat) {
+    func measure(width: CGFloat, sideInset: CGFloat, draft: Draft?, controls: Int, sendWidth: CGFloat) -> (CGFloat, CGFloat) {
         let metrics = 0, bottomInset: CGFloat = 0
         let leftInset: CGFloat = 0, leftMenuInset: CGFloat = 0, rightInset: CGFloat = 0, rightSlowModeInset: CGFloat = 0
         let additionalSideInsets = UIEdgeInsets(right: sideInset)
         let inputHasText = false, hasMediaDraft = draft?.items.isEmpty == false
+        let sendButtonIsLaidOut = hasMediaDraft
+        let sendActionButtonsSize = CGSize(width: sendWidth, height: 39)
         let hasForward = false, hasSlowmodeButton = false, isEditingMedia = false
         let mediaRecordingState: Int? = nil
         let starReactionButtonSize: CGSize? = controls == 4 ? CGSize(width: 40, height: 40) : nil
@@ -306,14 +308,14 @@ let defaults = UserDefaults.standard, key = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b0
 let previous = defaults.object(forKey: key)
 defer { if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) } }
 let composer = Composer()
-for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] {
+for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] { for sendWidth: CGFloat in [39, 88, 120] {
     AorusOldInterface.isEnabled = old
     defaults.set(!glass, forKey: key)
     let draft: Draft? = count == 0 ? nil : Draft(items: Array(0..<count))
-    let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls)
+    let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls, sendWidth: sendWidth)
     expect(inputWidth > 0 && inputWidth < width, "native controls leave a usable input field")
     expect(height == (count == 0 ? 0 : AorusAttachmentDraftStrip.height(width: inputWidth)), "draft and composer use the same final width and height")
-} } } } } }
+} } } } } } }
 print("Media draft native composer geometry passed: \\(checks) assertions")
 '''
 

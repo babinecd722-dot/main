@@ -2424,6 +2424,15 @@ def _patch_classic_message_panel(tg: Path) -> None:
          "send as button"),
     )
     for old, new, label in edits:
+        # The paid-composer pass runs after this one. Recognize its exact installed
+        # forms on replay rather than putting the old fixed-width geometry back.
+        paid_forms = {
+            "send button position": new.replace("maxX + 40.5 - sendActionButtonsSize.width", "maxX + 1.5"),
+            "field text inset": new.replace("effectiveActionButtonsSize.width", "sendActionButtonsSize.width"),
+            "field metrics": new.replace("AorusOldInterface.isEnabled ? 0.0 : sendActionButtonsSize.width", "sendButtonIsLaidOut ? sendActionButtonsSize.width : 0.0"),
+        }
+        if label in paid_forms and paid_forms[label] in text:
+            continue
         text = _edit(text, old, new, label)
     # 13.0 already derives text attributes from the chat font size. Its three-line
     # height cache must use that same font when drawing the classic field.

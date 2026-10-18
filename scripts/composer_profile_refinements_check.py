@@ -7,6 +7,8 @@ from telegram13_list_check import block
 
 
 def check_refinements(tg, swiftc='swiftc'):
+    from composer_controls_check import check_controls
+    check_controls(tg, swiftc)
     music = (tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusProfileMusicPlayback.swift').read_text()
     native = (tg / 'submodules/MediaPlayer/Sources/MediaPlayer.swift').read_text()
     geometry_import = '#if canImport(CoreGraphics)\nimport CoreGraphics\n#endif\n'
