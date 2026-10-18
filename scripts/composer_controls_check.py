@@ -29,6 +29,9 @@ def check_controls(tg: Path, swiftc: str) -> None:
     toolbar = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusInputToolbar.swift').read_text()
     assert '.clipped()' not in toolbar and 'content.scrollClipDisabled()' in toolbar
     source = '''import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 enum AorusOldInterface { static var isEnabled = false }
 func floorToScreenPixels(_ x: CGFloat) -> CGFloat { x }
 struct Params { let leftInset: CGFloat; let rightInset: CGFloat }
