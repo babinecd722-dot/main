@@ -4,6 +4,7 @@
 #import <LegacyComponents/TGPaintingData.h>
 #import <LegacyComponents/TGMediaAssetImageSignals.h>
 #import <LegacyComponents/TGMediaAsset.h>
+#import <LegacyComponents/TGMediaAsset+TGMediaEditableItem.h>
 
 SSignal *AorusMediaDraftTransitionImage(TGMediaAsset *asset, TGMediaEditingContext *editing) {
     SSignal *original = [TGMediaAssetImageSignals imageForAsset:asset imageType:TGMediaAssetImageTypeScreen size:CGSizeMake(1280, 1280)];
