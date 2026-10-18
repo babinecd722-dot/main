@@ -2905,7 +2905,8 @@ def main() -> None:
                 # came out as a flat rectangle with no glass behind it.
                 "private final class Entry",
                 "entry.source === theme",
-                "AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor)",
+                "let expectedMarker = dark ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight",
+                "theme.list.itemBlocksBackgroundColor.isEqual(expectedMarker)",
                 # Two markers, not one: the sentinel carries the page's own ink at 1/255 of an alpha
                 # rather than a hue of its own. A marker with a hue is invisible only while nothing
                 # touches it, and upstream derives a new colour from the card colour in eighty-odd
