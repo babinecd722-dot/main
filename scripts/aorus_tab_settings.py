@@ -2,6 +2,7 @@
 from pathlib import Path
 import shutil
 from aorus_attachment_drafts import edit
+from aorus_tab_preview import CONTROLLER, CLASSIC, patch_modern_preview
 
 
 def patch_tab_settings(tg: Path) -> None:
@@ -14,7 +15,7 @@ def patch_tab_settings(tg: Path) -> None:
     path = tg / 'submodules/TabBarUI/Sources/TabBarContollerNode.swift'
     s = path.read_text()
     if 'aorusPreviewLayout' not in s:
-        s = edit(s, '    private var theme: PresentationTheme\n', '    private var aorusBaseTheme: PresentationTheme\n    private var aorusSettingsObserver: NSObjectProtocol?\n    private var aorusIsPreview = false\n    private var aorusHiddenPreviewIndex: Int?\n    private var theme: PresentationTheme\n', 'tab base theme')
+        s = edit(s, '    private var theme: PresentationTheme\n', '    private var aorusBaseTheme: PresentationTheme\n    private var aorusSettingsObserver: NSObjectProtocol?\n    private var aorusIsPreview = false\n    private var aorusPreviewDragItem: UITabBarItem?\n    private var aorusPreviewDragCenter: CGPoint?\n    private var theme: PresentationTheme\n', 'tab base theme')
         s = edit(s, '        self.theme = theme\n        self.strings = strings', '        self.aorusBaseTheme = theme\n        let theme = aorusTabBarTheme(theme)\n        self.theme = theme\n        self.strings = strings', 'initial tab theme')
         s = edit(s, '        super.init()\n', '''        super.init()
         self.aorusSettingsObserver = NotificationCenter.default.addObserver(forName: AorusTabBarSettings.changedNotification, object: nil, queue: .main) { [weak self] _ in
@@ -26,59 +27,17 @@ def patch_tab_settings(tg: Path) -> None:
         if let observer = self.aorusSettingsObserver { NotificationCenter.default.removeObserver(observer) }
     }
 
-    func aorusPreviewLayout(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
-        self.aorusIsPreview = true
-        self.backgroundColor = .clear
-        self.isOpaque = false
-        self.layoutResult = nil
-        let _ = self.containerLayoutUpdated(layout, toolbar: nil, transition: transition)
-    }
-
-    func aorusPreviewHideItem(at index: Int?) {
-        self.aorusHiddenPreviewIndex = index
-        self.aorusApplyPreviewVisibility()
-    }
-
-    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
-        if let tabBar = self.aorusClassicTabBar {
-            return tabBar.aorusPreviewSnapshotItem(at: index)
-        }
-        return (self.tabBarView.view as? TabBarComponent.View)?.aorusPreviewSnapshotItem(at: index)
-    }
-
-    private func aorusApplyPreviewVisibility() {
-        guard self.aorusIsPreview else { return }
-        self.aorusClassicTabBar?.aorusPreviewHideItem(at: self.aorusHiddenPreviewIndex)
-        (self.tabBarView.view as? TabBarComponent.View)?.aorusPreviewHideItem(at: self.aorusHiddenPreviewIndex)
-    }
-
-    func updateTheme(_ theme: PresentationTheme) {
+''' + CONTROLLER + '''    func updateTheme(_ theme: PresentationTheme) {
         self.aorusBaseTheme = theme
         let theme = aorusTabBarTheme(theme)
         self.theme = theme''', 'tab theme and preview hooks')
     s = edit(s, '        self.backgroundColor = theme.list.plainBackgroundColor\n', '        self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor\n', 'preview excludes the controller page background', count=2)
-    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        defer { self.aorusApplyPreviewVisibility() }', 'preview visibility survives native relayout')
+    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        defer { self.aorusApplyPreviewDrag(transition: transition) }', 'preview visibility survives native relayout')
     path.write_text(s)
 
     path = tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift' 
     s = path.read_text()
-    s = edit(s, '        private var searchView: NavigationSearchView?', '''        public func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
-            guard let component = self.component, component.items.indices.contains(index), let bounds = self.frameForItem(at: index) else { return nil }
-            let item = component.items[index]
-            let content = (item.id == component.selectedId ? self.selectedItemViews[item.id]?.view : self.itemViews[item.id]?.view) ?? self.itemViews[item.id]?.view
-            guard let content else { return nil }
-            return aorusTabSnapshot(in: self, bounds: bounds, contents: [content])
-        }
-
-        public func aorusPreviewHideItem(at index: Int?) {
-            guard let component = self.component else { return }
-            for (i, item) in component.items.enumerated() {
-                self.itemViews[item.id]?.view?.isHidden = i == index
-                self.selectedItemViews[item.id]?.view?.isHidden = i == index
-            }
-        }
-
-        private var searchView: NavigationSearchView?''', 'native preview drag visibility')
+    s = patch_modern_preview(s)
     s = s.replace('hideTitle: component.hideTitles,', 'hideTitle: component.hideTitles || (AorusTabBarSettings.current.selectedTitleOnly && item.id != component.selectedId),')
     s = edit(s, 'if let badgeText = badgeValue, !badgeText.isEmpty {', 'if let badgeText = AorusTabBarSettings.current.badge(badgeValue), !badgeText.isEmpty {', 'native badge style')
     # A native still image is precoloured. Only a chosen colour makes it a template.
@@ -89,19 +48,15 @@ def patch_tab_settings(tg: Path) -> None:
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
     s = path.read_text()
-    s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', '''    func aorusPreviewSnapshotItem(at index: Int) -> UIView? {
-        guard self.tabBarNodeContainers.indices.contains(index), let bounds = self.frameForControllerTab(at: index) else { return nil }
-        let container = self.tabBarNodeContainers[index]
-        return aorusTabSnapshot(in: self.view, bounds: bounds, contents: [container.imageNode.view])
-    }
-
-    func aorusPreviewHideItem(at index: Int?) {
-        for (i, container) in self.tabBarNodeContainers.enumerated() {
-            container.imageNode.isHidden = i == index
-        }
-    }
-
-    func frameForControllerTab(at index: Int) -> CGRect? {''', 'classic preview drag visibility')
+    s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', CLASSIC + '    func frameForControllerTab(at index: Int) -> CGRect? {', 'classic preview native movement')
+    s = edit(s, '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {', '\n'.join([
+        '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {',
+        '        defer {',
+        '            if let item = self.aorusPreviewDragItem, let index = self.tabBarNodeContainers.firstIndex(where: { $0.item === item }) {',
+        '                self.aorusPreviewSlot = self.tabBarNodeContainers[index].imageNode.frame',
+        '                if let center = self.aorusPreviewDragCenter { self.aorusPreviewMoveItem(at: index, center: center, transition: .immediate) }',
+        '            }',
+        '        }']), 'remember the native classic drop slot')
     before, after = s.split('    private func updateNodeImage(_ index: Int, layout: Bool)', 1)
     for index, part in [('i', before), ('index', after)]:
         part = part.replace('title: item.item.title ?? "",', 'title: AorusTabBarSettings.current.title(item.item.title, selected: self.selectedIndex == ' + index + ', hideAll: !AorusOldInterface.isEnabled && UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")),')

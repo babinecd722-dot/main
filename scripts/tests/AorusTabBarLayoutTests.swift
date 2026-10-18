@@ -76,11 +76,6 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         expect(layout.title("Chats", selected: false, hideAll: false).isEmpty, "inactive title hidden")
         expect(layout.title("Chats", selected: true, hideAll: false) == "Chats", "selected title retained")
         expect(layout.title("Chats", selected: true, hideAll: true).isEmpty, "global hide title setting wins")
-        for dark in [false, true] { for v2 in [false, true] {
-            let (min, max) = aorusGlassLuminance(isDark: dark, interfaceV2: v2)
-            expect(min >= 0 && max <= 1 && min < max, "valid compositor luminance interval")
-            expect(dark ? min == 0 && max == 0.15 : min == 0.8 && max == 0.801, "every interface retains Telegram native backdrop contrast")
-        } }
         let saved = UserDefaults.standard.data(forKey: AorusTabBarSettings.key)
         defer { if let saved { UserDefaults.standard.set(saved, forKey: AorusTabBarSettings.key) } else { UserDefaults.standard.removeObject(forKey: AorusTabBarSettings.key) } }
         UserDefaults.standard.removeObject(forKey: AorusTabBarSettings.key)

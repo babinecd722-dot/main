@@ -44,6 +44,9 @@ def _patch(tg: Path, rel: str, edits) -> None:
     if not rel.startswith("submodules/Display/") and not (text.startswith("import Display\n") or "\nimport Display\n" in text):
         raise RuntimeError(f"ClassicSpacing: {path.name} does not import Display")
     for old, new, label, *count in edits:
+        if label == "collections colour" and "let aorusCollectionTheme: PresentationTheme" in text:
+            old = old.replace("params.presentationData.theme", "aorusCollectionTheme")
+            new = new.replace("params.presentationData.theme", "aorusCollectionTheme")
         text = _edit(text, old, new, f"{path.name}: {label}", *count)
     path.write_text(text, encoding="utf-8")
 

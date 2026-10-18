@@ -1,79 +1,68 @@
-"""Exercise the installed page compositor contract with real UIKit views."""
+"""Exercise installed profile marker selection and native selector image painting."""
 from pathlib import Path
 from telegram13_list_check import block
 
 
 def light_surface_test_source(tg: Path) -> str:
-    source = (tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift').read_text()
-    helper = block(source, 'private func aorusUpdatePageBackground()')
-    helper = helper.replace('private func', 'func', 1).replace('AorusGlassPane.isEnabled', 'NativeLightPagePolicy.interfaceV2')
+    presentation = (tg / 'submodules/TelegramPresentationData/Sources/PresentationTheme.swift').read_text()
+    markers = '\n'.join(line.replace('public ', '') for line in presentation.splitlines() if 'static let blockMarker' in line)
+    start = presentation.index('        let expectedMarker = dark ? AorusGlassPane.blockMarker')
+    end = presentation.index('\n        self.lock.lock()', start)
+    marker_check = presentation[start:end].replace('return theme', 'return true')
+    ink = next(line for line in presentation.splitlines() if 'let ink: UIColor = dark ? UIColor(white:' in line)
+    painter = (tg / 'submodules/Display/Source/GenerateImage.swift').read_text()
+    paint = block(painter, 'public func generateFilledCircleImage(diameter:') + '\n' + block(painter, 'public func generateStretchableFilledCircleImage(diameter:')
+    paint = paint.replace('generateFilledCircleImage', 'giftFixtureFilledCircle').replace('generateStretchableFilledCircleImage', 'giftFixtureStretchableCircle').replace('contextGenerator:', 'rotatedContext:')
+    selector = (tg / 'submodules/TelegramUI/Components/TabSelectorComponent/Sources/TabSelectorComponent.swift').read_text()
+    expression = next(line.strip() for line in selector.splitlines() if 'self.selectionView.image = generateStretchableFilledCircleImage' in line).replace('generateStretchableFilledCircleImage', 'giftFixtureStretchableCircle')
     glass = (tg / 'submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift').read_text()
-    assert 'let regularLight' not in glass
+    assert 'regularLight' not in glass and 'aorusGlassLuminance' not in glass
     assert 'case .clear:\n                                glassEffectValue = UIGlassEffect(style: .clear)' in glass
-    return r'''import UIKit
-@MainActor private enum NativeLightPagePolicy { static var interfaceV2 = false }
-private struct NativeLightPageList {
-    var plainBackgroundColor: UIColor = .white
-    var blocksBackgroundColor = UIColor(white: 0.94, alpha: 1)
+    assert 'aorusUpdatePageBackground' not in (tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift').read_text()
+    return '''import UIKit
+private enum AorusGlassPane {\n''' + markers + '''\n}
+private struct GiftMarkerTheme { struct List { let itemBlocksBackgroundColor: UIColor }; let list: List }
+private func giftMarkerMatches(_ marker: UIColor, dark: Bool) -> Bool {
+    let theme = GiftMarkerTheme(list: .init(itemBlocksBackgroundColor: marker))
+''' + marker_check + '''
+    return false
 }
-private struct NativeLightPageTheme {
-    var overallDarkAppearance = false
-    var list = NativeLightPageList()
-}
-private enum NativeLightPageStyle { case plain, blocks }
-@MainActor private final class NativeLightPageProbe: UIView {
-    var theme: NativeLightPageTheme? = NativeLightPageTheme()
-    var listStyle: NativeLightPageStyle? = .blocks
-    let listNode = UIView()
-    let listNodeContainer = UIView()
-    let leftOverlayNode = UIView()
-    let rightOverlayNode = UIView()
-''' + helper + r'''
+''' + paint + '''
+private final class GiftSelectionPaintProbe {
+    struct Component { struct Colors { let selection: UIColor }; let colors: Colors }
+    let selectionView = UIImageView()
+    func paint(dark: Bool, height: CGFloat) {
+''' + ink + '''
+        let component = Component(colors: .init(selection: ink.withAlphaComponent(0.15)))
+        let baseHeight = height
+        ''' + expression + '''
+    }
 }
 @MainActor func runLightPageRegression() -> Int {
     var checks = 0
     func expect(_ value: Bool, _ label: String) { checks += 1; precondition(value, label) }
-    for interfaceV2 in [false, true] {
-        NativeLightPagePolicy.interfaceV2 = interfaceV2
-        for dark in [false, true] {
-            for grouped in [false, true] {
-                let page = NativeLightPageProbe()
-                page.theme?.overallDarkAppearance = dark
-                page.theme?.list.blocksBackgroundColor = dark ? .black : UIColor(white: 0.94, alpha: 1)
-                page.theme?.list.plainBackgroundColor = dark ? .black : .white
-                page.listStyle = grouped ? .blocks : .plain
-                page.backgroundColor = .gray
-                page.isOpaque = false
-                page.listNode.isOpaque = true
-                page.listNode.backgroundColor = .clear
-                page.listNodeContainer.isOpaque = true
-                page.aorusUpdatePageBackground()
-                if interfaceV2 {
-                    let expected: UIColor = dark ? .black : .white
-                    expect(page.backgroundColor?.isEqual(expected) == true, "the page uses its actual light or dark background")
-                    expect(page.isOpaque && !page.listNodeContainer.isOpaque, "only the solid page advertises an opaque backing")
-                    expect(page.listNode.isOpaque == !grouped, "a clear scrolling list never advertises an opaque backing")
-                    expect(page.listNode.backgroundColor?.isEqual(grouped ? UIColor.clear : expected) == true, "the glass list stays transparent, plain lists keep their fill")
-                    expect(page.leftOverlayNode.backgroundColor?.isEqual(expected) == true && page.rightOverlayNode.backgroundColor?.isEqual(expected) == true, "side insets share the same page")
-                    let previous = page.backgroundColor
-                    page.aorusUpdatePageBackground()
-                    expect(page.backgroundColor?.isEqual(previous) == true, "repeated scroll passes preserve the page colour")
-                } else {
-                    expect(page.backgroundColor?.isEqual(UIColor.gray) == true && !page.isOpaque && page.listNode.isOpaque, "other interfaces retain their native renderer state")
-                }
+    for dark in [false, true, false, true] {
+        let expected = dark ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight
+        let other = dark ? AorusGlassPane.blockMarkerLight : AorusGlassPane.blockMarker
+        expect(giftMarkerMatches(expected, dark: dark), "matching page derivation is idempotent")
+        expect(!giftMarkerMatches(other, dark: dark), "an already derived theme from the opposite page must be recolored")
+        for height: CGFloat in [28, 34] {
+            let painter = GiftSelectionPaintProbe()
+            painter.paint(dark: dark, height: height)
+            let image = painter.selectionView.image!.cgImage!
+            let width = image.width, h = image.height
+            var pixels = [UInt8](repeating: 0, count: width * h * 4)
+            pixels.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data: buffer.baseAddress, width: width, height: h, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: h))
             }
+            let center = ((h / 2) * width + width / 2) * 4
+            expect(pixels[center + 3] >= 37 && pixels[center + 3] <= 40, "native selection preserves translucent ink rather than opaque black")
+            expect(dark ? pixels[center] >= 37 : pixels[center] == 0, "selection switches between light and dark page ink")
+            expect(pixels[3] == 0, "native capsule corners remain transparent")
         }
     }
-    NativeLightPagePolicy.interfaceV2 = true
-    let explicit = NativeLightPageProbe()
-    let profileColor = UIColor(red: 0.8, green: 0.9, blue: 0.7, alpha: 1)
-    explicit.theme?.list.plainBackgroundColor = profileColor
-    explicit.aorusUpdatePageBackground()
-    expect(explicit.backgroundColor?.isEqual(profileColor) == true, "an explicit profile page keeps its own colour")
-    explicit.theme?.list.plainBackgroundColor = profileColor.withAlphaComponent(0.5)
-    explicit.aorusUpdatePageBackground()
-    expect(!explicit.isOpaque && !explicit.listNode.isOpaque, "an explicitly translucent page never claims to be opaque")
-    print("Native page composition: \(checks) assertions passed")
+    print("Profile gift selection palette: \\(checks) assertions passed")
     return checks
 }
 '''

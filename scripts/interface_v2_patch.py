@@ -260,7 +260,8 @@ private final class AorusGlassThemeCache {
         // the two a theme is, it carries with it: the marker fill below is written by this method
         // and by nothing else in the app, so the test is exact and needs no memory of what was
         // handed out before -- and cannot be fooled by an address that has changed hands.
-        if AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor) {
+        let expectedMarker = dark ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight
+        if theme.list.itemBlocksBackgroundColor.isEqual(expectedMarker) {
             return theme
         }
 

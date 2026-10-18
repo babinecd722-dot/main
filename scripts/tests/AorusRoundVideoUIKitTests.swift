@@ -1,5 +1,8 @@
 import UIKit
 
+@_silgen_name("AorusNativeDraftTransitionTests") private func nativeDraftTransitionTests() -> Int32
+@_silgen_name("AorusNativeDraftTransitionTimeoutTests") private func nativeDraftTransitionTimeoutTests() -> Int32
+
 @_silgen_name("AorusNativeRoundEditorTests") private func nativeRoundEditorTests() -> Int32
 
 @MainActor private final class CountdownLifetime {
@@ -74,6 +77,11 @@ import UIKit
             }
         } } } }
     }
+    _ = nativeDraftTransitionTests()
+    try? await Task.sleep(nanoseconds: 3_300_000_000)
+    let preparationChecks = Int(nativeDraftTransitionTimeoutTests())
+    checks += preparationChecks
+    print("Native draft transition image preparation: \(preparationChecks) assertions passed with real SSignalKit")
     let lifetime = CountdownLifetime()
     checks += await runCountdownBehavior(window: window, lifetime: lifetime)
     for _ in 0..<40 {

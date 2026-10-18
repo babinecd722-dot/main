@@ -44,7 +44,7 @@ def main():
         subprocess.run([options_binary], check=True)
         binary = str(Path(temp) / 'tabs')
         source = tg / 'submodules/Display/Source' if tg else repo / 'patches/submodules/Display/Source'
-        subprocess.run([args.swiftc, '-swift-version', '5', '-module-cache-path', temp + '/cache', str(source / 'AorusTabBarLayout.swift'), str(source / 'AorusLightSurface.swift'), str(repo / 'scripts/tests/AorusTabBarLayoutTests.swift'), '-o', binary], check=True)
+        subprocess.run([args.swiftc, '-swift-version', '5', '-module-cache-path', temp + '/cache', str(source / 'AorusTabBarLayout.swift'), str(repo / 'scripts/tests/AorusTabBarLayoutTests.swift'), '-o', binary], check=True)
         subprocess.run([binary], check=True)
     key = (repo / 'AorusGram/Sources/Features/Subscription/ConcealedKeyView.swift').read_text()
     assert 'InvisibleInkDustNode(textNode: nil' in key and 'revealAtLocation' in key
@@ -65,24 +65,23 @@ def main():
             return text
         root = require('TelegramUI/Sources/TelegramRootController.swift', 'AorusTabBarCatalogue.publish', 'AorusTabBarSettings.changedNotification', 'controllers = self.aorusOrderTabs(controllers)')
         assert root.count('controllers = self.aorusOrderTabs(controllers)') == 2
-        require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction', 'self.node?.aorusPreviewSnapshotItem(at: index)')
+        require('TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TabBarControllerNode(theme:', 'frameForControllerTab(at:', 'self.clearDrag()', 'UIApplication.willResignActiveNotification', 'UIAccessibilityCustomAction', 'node.aorusPreviewMoveItem(at:')
         controller = require('TabBarUI/Sources/TabBarContollerNode.swift', 'aorusTabBarTheme(theme)', 'self.aorusBaseTheme = theme', 'AorusTabBarSettings.changedNotification', 'self.backgroundColor = .clear', 'self.isOpaque = false')
         assert controller.count('self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor') == 2
         assert 'self.isOpaque = false' in tabs
-        require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'aorusTabSnapshot(in: self.view', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
-        require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusTabSnapshot(in: self, bounds: bounds, contents: [content])', 'self.itemViews[item.id]?.view?.isHidden = i == index', 'self.selectedItemViews[item.id]?.view?.isHidden = i == index')
+        require('TabBarUI/Sources/TabBarNode.swift', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
+        require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusDraggedFrame = itemFrame', 'self.aorusIsPreview ? .immediate : itemTransition', 'self.liquidLensView.contentView.convert(center, from: self)')
         require('TelegramPresentationData/Sources/PresentationData.swift', 'modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page')
-        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'aorusGlassLuminance')
-        assert glass.count('aorusGlassLuminance(') == 2
-        assert 'regularLight' not in glass
-        pages = require('ItemListUI/Sources/ItemListControllerNode.swift', 'self.listNodeContainer.isOpaque = false', 'self.listNode.isOpaque = listFill.cgColor.alpha >= 1.0', 'if subnode.isOpaque { subnode.isOpaque = false }', 'if itemNode.isOpaque { itemNode.isOpaque = false }', 'container.isOpaque = false')
-        assert pages.count('self.aorusUpdatePageBackground()') == 5
-        require('TelegramPresentationData/Sources/PresentationTheme.swift', 'blocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)')
+        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = 0.8', 'nativeParamsView.lumaMax = 0.801')
+        assert 'aorusGlassLuminance' not in glass and 'regularLight' not in glass
+        pages = require('ItemListUI/Sources/ItemListControllerNode.swift')
+        assert 'aorusUpdatePageBackground' not in pages
+        require('TelegramPresentationData/Sources/PresentationTheme.swift', 'let expectedMarker = dark ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight')
+        gifts = require('TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift', 'let aorusCollectionTheme: PresentationTheme', 'AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value())', 'theme: aorusCollectionTheme', 'aorusCollectionTheme.list.itemSecondaryTextColor.withMultipliedAlpha(0.15)')
+        assert gifts.count('theme: aorusCollectionTheme') == 3
         require('GalleryUI/Sources/GalleryControllerNode.swift', 'public var aorusDismissWithCrossfade:', 'if let dismissWithCrossfade = self.aorusDismissWithCrossfade', 'self.pager.layer.transform = CATransform3DIdentity')
         profile = require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift', 'crossfadeContent: aorusSquareSource', 'if aorusSquareSource { return nil }')
         assert 'aorusRevealUntil' not in profile
-        assert 'self.scrollNode.isOpaque = false' in profile
-        assert 'if AorusInterfaceV2.isEnabled && self.isSettings && !self.presentationData.theme.overallDarkAppearance' in profile
         require('MediaPickerUI/Sources/MediaPickerScreen.swift', 'self.containerView.addSubnode(self.icon)', 'self.containerView.addSubnode(self.label)', 'self.containerView.addSubview(self.button)', 'max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0')
         require('TelegramUI/Components/LottieComponent/Sources/LottieComponent.swift', 'AorusRGBColors.sameSource(lhs.color, rhs.color)', 'AorusRGBColors.tintImage(self, color: component.color ?? .white)')
         require('ComponentFlow/Source/Components/Image.swift', 'AorusRGBColors.sameSource(lhs.tintColor, rhs.tintColor)')

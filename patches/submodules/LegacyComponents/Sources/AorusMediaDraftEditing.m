@@ -2,6 +2,19 @@
 #import <LegacyComponents/PGPhotoEditorValues.h>
 #import <LegacyComponents/TGVideoEditAdjustments.h>
 #import <LegacyComponents/TGPaintingData.h>
+#import <LegacyComponents/TGMediaAssetImageSignals.h>
+#import <LegacyComponents/TGMediaAsset.h>
+
+SSignal *AorusMediaDraftTransitionImage(TGMediaAsset *asset, TGMediaEditingContext *editing) {
+    SSignal *original = [TGMediaAssetImageSignals imageForAsset:asset imageType:TGMediaAssetImageTypeScreen size:CGSizeMake(1280, 1280)];
+    SSignal *image = [[editing imageSignalForItem:asset withUpdates:false] mapToSignal:^SSignal *(id value) {
+        return [value isKindOfClass:[UIImage class]] ? [SSignal single:value] : original;
+    }];
+    image = [[[[image filter:^bool(id value) { return [value isKindOfClass:[UIImage class]]; }] then:[SSignal single:nil]] take:1] deliverOn:[SQueue mainQueue]];
+    // A cloud-only or missing asset must not leave the composer waiting indefinitely.
+    image = [image catch:^SSignal *(__unused id error) { return [SSignal single:nil]; }];
+    return [[image deliverOn:[SQueue mainQueue]] timeout:3.0 onQueue:[SQueue mainQueue] orSignal:[SSignal single:nil]];
+}
 
 static void AorusMediaDraftSetFileError(NSError **error, NSString *path) {
     if (error != NULL) *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSFileReadNoSuchFileError userInfo:@{NSFilePathErrorKey: path}];

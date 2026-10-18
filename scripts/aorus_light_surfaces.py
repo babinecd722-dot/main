@@ -1,66 +1,17 @@
 """Keep live light surfaces and their media controls faithful to their actual background."""
 from pathlib import Path
-import shutil
 from aorus_attachment_drafts import edit
+from telegram13_list_check import block
 
 
 def patch_light_surfaces(tg: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    rel = 'submodules/Display/Source/AorusLightSurface.swift'
-    shutil.copyfile(repo / 'patches' / rel, tg / rel)
+    (tg / 'submodules/Display/Source/AorusLightSurface.swift').unlink(missing_ok=True)
     path = tg / 'submodules/TelegramPresentationData/Sources/PresentationData.swift'
     source = path.read_text()
     source = edit(source,
         'let list = theme.list.withUpdated(blocksBackgroundColor: page, itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)',
         'let list = theme.list.withUpdated(blocksBackgroundColor: page, modalBlocksBackgroundColor: page, modalPlainBackgroundColor: page, itemBlocksBackgroundColor: fill, itemModalBlocksBackgroundColor: fill, itemBlocksSeparatorColor: separator)',
         'Interface 2.0 light modal pages')
-    path.write_text(source)
-    path = tg / 'submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift'
-    source = path.read_text()
-    for indent in ('                        ', '            '):
-        old = indent + '''if isDark {
-INDENT    nativeParamsView.lumaMin = 0.0
-INDENT    nativeParamsView.lumaMax = 0.15
-INDENT} else {
-INDENT    nativeParamsView.lumaMin = 0.8
-INDENT    nativeParamsView.lumaMax = 0.801
-INDENT}'''.replace('INDENT', indent)
-        new = indent + '''let (minimum, maximum) = aorusGlassLuminance(isDark: isDark, interfaceV2: AorusInterfaceV2Run.isEnabled)
-INDENTnativeParamsView.lumaMin = minimum
-INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
-        source = edit(source, old, new, 'live glass luminance ' + str(len(indent)))
-    path.write_text(source)
-    path = tg / 'submodules/TelegramPresentationData/Sources/PresentationTheme.swift'
-    source = path.read_text()
-    source = edit(source, '''        let list = theme.list.withUpdated(
-            itemPrimaryTextColor: ink,''', '''        let list = theme.list.withUpdated(
-            blocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
-            modalBlocksBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
-            modalPlainBackgroundColor: theme.overallDarkAppearance ? nil : theme.list.plainBackgroundColor,
-            itemPrimaryTextColor: ink,''', 'normalise light pages at the list theme boundary')
-    source = edit(source, 'let list = self.list.withUpdated(blocksBackgroundColor: color)', 'let list = self.list.withUpdated(blocksBackgroundColor: color, modalBlocksBackgroundColor: color, plainBackgroundColor: color, modalPlainBackgroundColor: color)', 'preserve explicit profile page colours through modal lists')
-    path.write_text(source)
-    path = tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift'
-    source = path.read_text()
-    source = edit(source, '    private func aorusUpdateListGlass() {\n', PAGE_BACKGROUND_SWIFT + '    private func aorusUpdateListGlass() {\n        self.aorusUpdatePageBackground()\n', 'transparent list compositor contract')
-    source = edit(source, '            container = ASDisplayNode()\n            container.isUserInteractionEnabled = false', '            container = ASDisplayNode()\n            container.isOpaque = false\n            container.isUserInteractionEnabled = false', 'transparent glass pane container')
-    source = edit(source, '            if let color = subnode.backgroundColor, AorusGlassPane.isBlockMarker(color) {\n', '            if let color = subnode.backgroundColor, AorusGlassPane.isBlockMarker(color) {\n                if subnode.isOpaque { subnode.isOpaque = false }\n', 'transparent marked card backgrounds')
-    source = edit(source, '        self.listNode.forEachItemNode { itemNode in\n', '        self.listNode.forEachItemNode { itemNode in\n            if itemNode.isOpaque { itemNode.isOpaque = false }\n', 'transparent glass list rows')
-    for kind in ('blocks', 'plain'):
-        anchor = '                            self.rightOverlayNode.backgroundColor = transition.theme.list.' + kind + 'BackgroundColor\n'
-        if source.count(anchor) != 2:
-            raise RuntimeError('Light surfaces: expected both ' + kind + ' page background updates')
-        source = source.replace(anchor, anchor + '                            self.aorusUpdatePageBackground()\n')
-    path.write_text(source)
-    path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift'
-    source = path.read_text()
-    source = edit(source, '        self.scrollNode = ASScrollNode()\n', '        self.scrollNode = ASScrollNode()\n        self.scrollNode.isOpaque = false\n', 'transparent profile scroll backing')
-    source = edit(source, '        guard !self.isSettings else {\n            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)', '        guard !self.isSettings else {\n            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.overallDarkAppearance ? self.presentationData.theme.list.blocksBackgroundColor : self.presentationData.theme.list.plainBackgroundColor)', 'settings publishes its own light page')
-    source = edit(source, '        self.aorusUpdatePageBackdrop(image: nil)\n        let color: UIColor\n', '        self.aorusUpdatePageBackdrop(image: nil)\n        if AorusInterfaceV2.isEnabled && self.isSettings && !self.presentationData.theme.overallDarkAppearance {\n            let page = self.presentationData.theme.list.plainBackgroundColor\n            self.backgroundColor = page\n            self.isOpaque = page.cgColor.alpha >= 1.0\n            return\n        }\n        let color: UIColor\n', 'settings page uses the native light background')
-    path.write_text(source)
-    path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift'
-    source = path.read_text()
-    source = edit(source, '        self.backgroundNode.backgroundColor = aorusGlass ? .clear : presentationData.theme.list.itemBlocksBackgroundColor\n', '        self.isOpaque = !aorusGlass\n        self.backgroundNode.isOpaque = !aorusGlass\n        self.backgroundNode.backgroundColor = aorusGlass ? .clear : presentationData.theme.list.itemBlocksBackgroundColor\n', 'transparent native profile sections')
     path.write_text(source)
     path = tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift'
     source = path.read_text()
@@ -87,31 +38,38 @@ INDENTnativeParamsView.lumaMax = maximum'''.replace('INDENT', indent)
     # Colored settings tiles carry their own ink. Do not let an inherited tint change them.
     source = edit(source, '    let image = make()\n    cache.lock.lock()', '    let image = make()?.withRenderingMode(.alwaysOriginal)\n    cache.lock.lock()', 'settings tile intrinsic colours')
     path.write_text(source)
-
-
-PAGE_BACKGROUND_SWIFT = '''    private func aorusUpdatePageBackground() {
-        guard AorusGlassPane.isEnabled, let theme = self.theme else { return }
-        let page: UIColor
-        let listFill: UIColor
-        switch self.listStyle {
-        case .blocks?:
-            page = theme.overallDarkAppearance ? theme.list.blocksBackgroundColor : theme.list.plainBackgroundColor
-            listFill = .clear
-        case .plain?:
-            page = theme.list.plainBackgroundColor
-            listFill = page
-        default:
-            return
+    path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift'
+    source = path.read_text()
+    source = edit(source, '    func updateScrolling(interactive: Bool = false, transition: ComponentTransition) {\n        if let params = self.currentParams {', '''    func updateScrolling(interactive: Bool = false, transition: ComponentTransition) {
+        if let params = self.currentParams {
+            // Collection labels, the All Gifts title and the selection share this peer's
+            // page palette. The application theme can be light over a dark avatar page.
+            let aorusCollectionTheme: PresentationTheme
+            if AorusInterfaceV2Run.isEnabled {
+                let page = AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value()) ?? params.presentationData.theme.list.blocksBackgroundColor
+                if let cached = self.aorusCollectionThemeCache, cached.source === params.presentationData.theme, cached.page.isEqual(page) {
+                    aorusCollectionTheme = cached.derived
+                } else {
+                    aorusCollectionTheme = params.presentationData.theme.aorusGlassTheme(dark: !AorusGlassPane.isLight(page)).aorusWithPageBackground(page)
+                    self.aorusCollectionThemeCache = (params.presentationData.theme, page, aorusCollectionTheme)
+                }
+            } else {
+                aorusCollectionTheme = params.presentationData.theme
+            }''', 'gift collections use their own profile page')
+    start = source.index('    func updateScrolling(')
+    end = start + len(block(source, '    func updateScrolling('))
+    body = source[start:end]
+    # Limit this to the selector, leaving native gift cells and purchase screens alone.
+    body = body.replace('theme: params.presentationData.theme', 'theme: aorusCollectionTheme')
+    body = body.replace('params.presentationData.theme.list.itemSecondaryTextColor', 'aorusCollectionTheme.list.itemSecondaryTextColor')
+    body = body.replace('params.presentationData.theme.list.itemPrimaryTextColor', 'aorusCollectionTheme.list.itemPrimaryTextColor')
+    source = source[:start] + body + source[end:]
+    source = edit(source, '    private let peerId: EnginePeer.Id\n', '    private let peerId: EnginePeer.Id\n    private var aorusCollectionPageObserver: NSObjectProtocol?\n    private var aorusCollectionThemeCache: (source: PresentationTheme, page: UIColor, derived: PresentationTheme)?\n', 'gift page observer storage')
+    source = edit(source, '        super.init()\n', '''        super.init()
+        self.aorusCollectionPageObserver = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, AorusInterfaceV2Run.isEnabled else { return }
+            self.updateScrolling(transition: .immediate)
         }
-        // A transparent list must not advertise an opaque backing to Core Animation.
-        // Keep the page opaque underneath the glass; its scrolling content stays transparent.
-        if self.backgroundColor?.isEqual(page) != true { self.backgroundColor = page }
-        self.isOpaque = page.cgColor.alpha >= 1.0
-        self.listNodeContainer.isOpaque = false
-        if self.listNode.backgroundColor?.isEqual(listFill) != true { self.listNode.backgroundColor = listFill }
-        self.listNode.isOpaque = listFill.cgColor.alpha >= 1.0
-        if self.leftOverlayNode.backgroundColor?.isEqual(page) != true { self.leftOverlayNode.backgroundColor = page }
-        if self.rightOverlayNode.backgroundColor?.isEqual(page) != true { self.rightOverlayNode.backgroundColor = page }
-    }
-
-'''
+''', 'refresh gift collection palette after avatar changes')
+    source = edit(source, '    deinit {\n', '    deinit {\n        if let observer = self.aorusCollectionPageObserver { NotificationCenter.default.removeObserver(observer) }\n', 'release gift page observation')
+    path.write_text(source)

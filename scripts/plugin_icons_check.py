@@ -183,7 +183,6 @@ def main():
             light_page.write_text(light_surface_test_source(args.telegram_source))
             tab_model = args.repo / "patches/submodules/Display/Source/AorusTabBarLayout.swift"
             tab_identity = args.repo / "patches/submodules/Display/Source/AorusTabBarIdentity.swift"
-            light_surface = args.repo / "patches/submodules/Display/Source/AorusLightSurface.swift"
             stub = work / "AppBundle.swift"
             stub.write_text(APP_BUNDLE)
             renderer = work / "AorusPluginIconValues.swift"
@@ -242,7 +241,18 @@ def main():
                 toolbar.write_text(toolbar_source)
                 editor_object = work / "NativeRoundEditor.o"
                 subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(native_editor), "-o", str(editor_object)], check=True)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(light_page), str(tab_model), str(tab_identity), str(light_surface), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                from draft_transition_fixtures import objc_source as draft_transition_source
+                signal_root = args.telegram_source / "submodules/SSignalKit/SSignalKit/Source"
+                signal_objects = []
+                for signal_source in sorted((signal_root / "SSignalKit").glob("*.m")):
+                    signal_object = work / ("SSignalKit-" + signal_source.stem + ".o")
+                    subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wno-deprecated-declarations", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(signal_source), "-o", str(signal_object)], check=True)
+                    signal_objects.append(str(signal_object))
+                draft_transition = work / "NativeDraftTransition.m"
+                draft_transition.write_text(draft_transition_source(args.telegram_source))
+                draft_transition_object = work / "NativeDraftTransition.o"
+                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(draft_transition), "-o", str(draft_transition_object)], check=True)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(light_page), str(tab_model), str(tab_identity), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(draft_transition_object), *signal_objects, str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 data_container = subprocess.run(["xcrun", "simctl", "get_app_container", device["udid"], bundle_id, "data"], capture_output=True, text=True, check=True).stdout.strip()

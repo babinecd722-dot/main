@@ -134,6 +134,8 @@ def patch_editing(tg):
 FOUNDATION_EXPORT NSDictionary *AorusMediaDraftSnapshotAdjustments(id<TGMediaEditAdjustments> adjustments);
 FOUNDATION_EXPORT NSData *AorusMediaDraftWriteAdjustments(NSDictionary *snapshot, NSString *directory, NSError **error);
 FOUNDATION_EXPORT NSObject<TGMediaEditAdjustments> *AorusMediaDraftReadAdjustments(NSData *data, NSString *directory, NSError **error);
+@class TGMediaAsset;
+FOUNDATION_EXPORT SSignal *AorusMediaDraftTransitionImage(TGMediaAsset *asset, TGMediaEditingContext *editing);
 '''
     if declaration not in s:
         s += declaration
@@ -185,6 +187,7 @@ def patch_picker(tg):
     public var aorusDraftGalleryClosed: (() -> Void)?
     public var aorusDraftTransitionView: ((String) -> UIView?)?
     public var aorusDraftTransitionHost: (() -> UIView?)?
+    private var aorusPreviewImageDisposable: SDisposable?
     private var aorusWarmWork: DispatchWorkItem?
     private var aorusWarmRunning = false
     public var aorusIsPreparingAttachmentDraft: Bool { self.aorusWarmRunning && !self.aorusAttachmentPersistenceStarted }
@@ -274,12 +277,18 @@ def patch_picker(tg):
         self.aorusAttachmentPreviewIndex = nil
         let items = selection.selectedItems() ?? []
         guard items.indices.contains(index), let item = items[index] as? TGMediaSelectableItem else { return }
-        Queue.mainQueue().justDispatch { [weak self] in
-            self?.controllerNode.openSelectedMedia(item: item, immediateThumbnail: nil)
-        }
+        guard let asset = item as? TGMediaAsset, let editing = self.interaction?.editingState else { return }
+        self.aorusPreviewImageDisposable?.dispose()
+        self.aorusPreviewImageDisposable = AorusMediaDraftTransitionImage(asset, editing).start(next: { [weak self] image in
+            guard let self, !self.completed else { return }
+            // Use an image with the editor's aspect ratio before the native transition
+            // captures its target. A square draft tile is not an editor thumbnail.
+            self.controllerNode.openSelectedMedia(item: item, immediateThumbnail: image as? UIImage)
+        })
     }
 '''
     s = edit(s, anchor, gateway, 'picker bridge')
+    s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
     anchor = '    public func requestDismiss(completion: @escaping () -> Void) {        \n'
     new = anchor + '''        if self.aorusPersistAttachmentDraft != nil, !self.aorusHasSentAttachmentSelection {
             self.aorusRequestAttachmentPersistence(completion: completion)
@@ -304,15 +313,31 @@ def patch_picker(tg):
     body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionHost?() ?? self?.selectionNode?.view\n', 'composer transition host')
     body = edit(body, '                return self?.transitionView(for: identifier)\n', '                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n', 'composer thumbnail transition source')
     body = edit(body, '            }, editCover: { _, _ in\n', '            }, finishedTransitionOut: { [weak self] in\n                self?.controller?.aorusDraftGalleryClosed?()\n            }, editCover: { _, _ in\n', 'persist editor after its return transition')
+    body = edit(body, '            }, editCover: { _, _ in\n', '            }, aorusDraftTransition: controller.aorusDraftTransitionView != nil, editCover: { _, _ in\n', 'stable draft gallery transition geometry')
     end = start + len(block(s, '        fileprivate func openSelectedMedia('))
     s = s[:start] + body + s[end:]
     path.write_text(s)
     path = tg / 'submodules/MediaPickerUI/Sources/LegacyMediaPickerGallery.swift'
     s = path.read_text()
     native = '    editCover: @escaping (CGSize, @escaping (UIImage) -> Void) -> Void = { _, _ in }\n'
-    s = edit(s, native, '    finishedTransitionOut: @escaping () -> Void = {},\n' + native, 'completed gallery return callback')
+    s = edit(s, native, '    finishedTransitionOut: @escaping () -> Void = {},\n    aorusDraftTransition: Bool = false,\n' + native, 'completed gallery return callback')
+    s = edit(s, '    controller.asyncTransitionIn = true\n', '    controller.asyncTransitionIn = true\n    controller.aorusRefreshTransitionGeometry = aorusDraftTransition\n', 'draft waits for current transition geometry')
     native = '        legacyController?.dismiss()\n    }\n'
     s = edit(s, native, '        legacyController?.dismiss()\n        finishedTransitionOut()\n    }\n', 'complete before saving editor changes')
+    path.write_text(s)
+    path = tg / 'submodules/LegacyComponents/PublicHeaders/LegacyComponents/TGModernGalleryController.h'
+    s = edit(path.read_text(), '@property (nonatomic, assign) bool asyncTransitionIn;\n', '@property (nonatomic, assign) bool asyncTransitionIn;\n@property (nonatomic, assign) bool aorusRefreshTransitionGeometry;\n', 'draft transition geometry policy')
+    path.write_text(s)
+    path = tg / 'submodules/LegacyComponents/Sources/TGModernGalleryController.m'
+    s = edit(path.read_text(), '                        [strongSelf animateTransitionInFromView:transitionInFromView toView:transitionInToView toViewContentRect:transitionInToViewContentRect];', '''                        UIView *targetView = transitionInToView;
+                        CGRect targetRect = transitionInToViewContentRect;
+                        if (strongSelf.aorusRefreshTransitionGeometry) {
+                            [strongSelf.view layoutIfNeeded];
+                            [transitionFromItemView layoutIfNeeded];
+                            targetView = [transitionFromItemView transitionView];
+                            targetRect = [transitionFromItemView transitionViewContentRect];
+                        }
+                        [strongSelf animateTransitionInFromView:transitionInFromView toView:targetView toViewContentRect:targetRect];''', 'resolve the draft transition destination after image readiness')
     path.write_text(s)
 
 

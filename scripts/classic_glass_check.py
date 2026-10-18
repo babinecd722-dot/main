@@ -240,7 +240,7 @@ extension CALayer {
             AorusClassicControlledLook.interfaceV2 = v2
             container.update(size: container.bounds.size, isDark: dark, transition: AorusClassicImmediateTransition())
             if let parameters = container.nativeParamsView {
-                let (minimum, maximum) = aorusGlassLuminance(isDark: dark, interfaceV2: v2)
+                let (minimum, maximum) = dark ? (0.0, 0.15) : (0.8, 0.801)
                 expect(parameters.lumaMin == minimum && parameters.lumaMax == maximum, "live native glass receives the actual page luminance interval")
                 expect(container.nativeView?.overrideUserInterfaceStyle == (dark ? .dark : .light), "live native glass follows its page appearance")
             }

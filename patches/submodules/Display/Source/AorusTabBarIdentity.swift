@@ -54,29 +54,3 @@ public enum AorusTabBarFeedback {
 public func aorusTabBarImage(_ image: UIImage?, customInk: Bool) -> UIImage? {
     return customInk ? image?.withRenderingMode(.alwaysTemplate) : image
 }
-
-/// Capture the tab's own content, without the material or page behind the tab bar.
-public func aorusTabSnapshot(in host: UIView, bounds: CGRect, contents: [UIView]) -> UIView? {
-    guard bounds.width > 0, bounds.height > 0, bounds.width.isFinite, bounds.height.isFinite, !contents.isEmpty else { return nil }
-    let format = UIGraphicsImageRendererFormat()
-    format.opaque = false
-    format.scale = host.window?.screen.scale ?? UIScreen.main.scale
-    format.preferredRange = .standard
-    let image = UIGraphicsImageRenderer(size: bounds.size, format: format).image { renderer in
-        let context = renderer.cgContext
-        context.clear(CGRect(origin: .zero, size: bounds.size))
-        for view in contents where !view.isHidden && view.alpha > 0 {
-            let origin = view.convert(CGPoint.zero, to: host)
-            let x = view.convert(CGPoint(x: 1, y: 0), to: host)
-            let y = view.convert(CGPoint(x: 0, y: 1), to: host)
-            context.saveGState()
-            context.concatenate(CGAffineTransform(a: x.x - origin.x, b: x.y - origin.y, c: y.x - origin.x, d: y.y - origin.y, tx: origin.x - bounds.minX, ty: origin.y - bounds.minY))
-            view.layer.render(in: context)
-            context.restoreGState()
-        }
-    }
-    let result = UIImageView(image: image)
-    result.backgroundColor = UIColor.clear
-    result.isOpaque = false
-    return result
-}
