@@ -120,6 +120,7 @@ final class MediaPickerScreenImpl {
     var aorusDraftSelection: Selection? = Selection()
     var aorusDraftCurrentCaption: NSAttributedString?
     var aorusPresentDraftGallery: Int?
+    var aorusSendCompleted = false
     func aorusResetAttachmentDraftSend() {}
 }
 enum EnqueueMessage {
@@ -248,6 +249,20 @@ expect(controller.aorusAttachmentSendCaption?.isEqual(to: controller.presentatio
 controller.aorusCancelAttachmentDraftSend()
 expect(controller.presentationInterfaceState.interfaceState.composeInputState.inputText.string == "Caption changed in the gallery", "cancelling payment preserves the edited gallery caption")
 expect(controller.presentationInterfaceState.interfaceState.attachmentDraft == draft, "cancelling payment preserves all draft attachments")
+// A send left waiting by a Stars top-up abandoned after confirming never reaches the chat; the
+// next picker's send must not be swallowed by it, and a send that is converting is never replaced.
+let abandoned = MediaPickerScreenImpl()
+controller.aorusTrackNativeAttachmentSelection(abandoned)
+expect(controller.aorusAttachmentDraftPicker === abandoned, "a picker that holds the draft starts its send")
+let next = MediaPickerScreenImpl()
+next.aorusSendCompleted = true
+controller.aorusTrackNativeAttachmentSelection(next)
+expect(controller.aorusAttachmentDraftPicker === next && controller.aorusSendingAttachmentDraft == draft, "a send left waiting by an abandoned purchase gives way to the next send")
+controller.aorusAttachmentDraftConverting = true
+let late = MediaPickerScreenImpl()
+controller.aorusTrackNativeAttachmentSelection(late)
+expect(controller.aorusAttachmentDraftPicker === next, "a send whose media is converting is never taken over")
+controller.aorusCancelAttachmentDraftSend()
 print("Media draft native send lifecycle passed: \(checks) assertions")
 """
 
