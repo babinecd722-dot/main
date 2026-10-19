@@ -89,14 +89,19 @@ extension ChatControllerImpl {
                             let _ = ChatInterfaceState.update(engine: context.engine, peerId: peerId, threadId: threadId, update).startStandalone()
                         }
                     }
+                    // Nothing is committed, so a capture prepared in the background is not
+                    // anybody's draft: its folder goes now rather than staying for good.
+                    controller.aorusDiscardPreparedDraft?()
                     completion(true)
                     return
                 }
                 // Nothing has changed since the draft was last saved -- restored into this picker
                 // or written by its previous save -- so there is nothing to write: the files, the
                 // revision and the composer's previews stay as they are, and closing is immediate.
+                // A capture prepared for a selection that was then undone is not needed either.
                 let savedState = controller.aorusAttachmentDraftState()
                 if let savedState, savedState == controller.aorusCommittedAttachmentState {
+                    controller.aorusDiscardPreparedDraft?()
                     completion(true)
                     return
                 }
@@ -444,6 +449,12 @@ extension ChatControllerImpl {
         // Only a picker that holds the draft sends it. One whose restore failed, or has not
         // finished, sends what was picked in it, and the draft stays in the chat.
         guard !controller.aorusAttachmentRestorePending, !controller.aorusAttachmentRestoreFailed else { return }
+        // A send another picker left waiting -- a Stars top-up abandoned after the payment was
+        // confirmed -- never reached the chat. This picker's send is the draft's now.
+        if self.aorusSendingAttachmentDraft != nil, !self.aorusAttachmentDraftConverting,
+           self.aorusAttachmentDraftPicker !== controller, self.aorusAttachmentDraftPicker?.aorusSendCompleted != true {
+            self.aorusCancelAttachmentDraftSend(keepSelection: false)
+        }
         guard self.aorusSendingAttachmentDraft == nil, let draft = self.presentationInterfaceState.interfaceState.attachmentDraft else { return }
         self.aorusSendingAttachmentDraft = draft
         self.aorusAttachmentExpectedCount = Int(controller.aorusDraftSelection?.count() ?? 0)
@@ -461,6 +472,9 @@ extension ChatControllerImpl {
 
     func aorusAttachmentDraftDidEnqueue(revision: String) {
         guard let sent = self.aorusSendingAttachmentDraft, sent.revision == revision, !self.aorusAttachmentPreparedResources.isEmpty else { return }
+        // Accepted: from here the saved chat no longer keeps the draft for a conversion that
+        // could still be dropped, so the save below clears it for good.
+        self.aorusAttachmentDraftConverting = false
         let cleanupResources = self.aorusAttachmentPreparedResources
         let caption = self.aorusAttachmentSendCaption
         let update: (ChatInterfaceState) -> ChatInterfaceState = { previous in

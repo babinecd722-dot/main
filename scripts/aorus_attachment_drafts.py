@@ -267,6 +267,12 @@ def patch_picker(tg):
         self.aorusAttachmentPersistenceFinished = false
     }
 
+    /// Whether this picker is in the middle of handing its selection over: the native send
+    /// sets it just before the chat receives the selection, and clears it shortly after.
+    public var aorusSendCompleted: Bool {
+        return self.completed
+    }
+
     public func aorusOpenAttachmentDraftPreview(index: Int, layout: ContainerViewLayout, present: @escaping (ViewController, Any?) -> Void, closed: @escaping () -> Void) {
         self.aorusPresentDraftGallery = present
         self.aorusDraftGalleryClosed = closed
@@ -290,7 +296,9 @@ def patch_picker(tg):
     }
 '''
     s = edit(s, anchor, gateway, 'picker bridge')
-    s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        self.aorusDiscardPreparedDraft?()\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
+    # A capture prepared in the background and never committed is discarded here directly: the
+    # chat's discard closure holds this picker weakly, and a weak reference reads nil in deinit.
+    s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        if let draft = self.aorusPreparedDraftCapture?.capture.draft {\n            AorusAttachmentDraftCleanup.discard(accountBasePath: self.context.account.basePath, draft: draft)\n        }\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
     anchor = '    public func requestDismiss(completion: @escaping () -> Void) {        \n'
     new = anchor + '''        if self.aorusPersistAttachmentDraft != nil, !self.aorusHasSentAttachmentSelection {
             self.aorusRequestAttachmentPersistence(completion: completion)
@@ -518,10 +526,39 @@ def patch_controller(tg):
     anchor = '        if let _ = self.presentationInterfaceState.sendPaidMessageStars {\n            self.presentPaidMessageAlertIfNeeded(count: Int32(signals?.count ?? 1), forceDark: fromGallery, completion:'
     new = anchor.replace('Int32(signals?.count ?? 1)', 'Int32((signals?.count ?? 1) + self.aorusAttachmentDraftTextMessages().count)').replace('forceDark: fromGallery, completion:', 'forceDark: fromGallery, cancelled: { [weak self] in self?.aorusCancelAttachmentDraftSend() }, completion:')
     s = edit(s, anchor, new, 'native payment includes each media/text message and preserves a cancelled draft')
+    # A draft send reaches this entry point in the same call in which its picker hands the
+    # selection over. One still set when another send arrives was left waiting by an earlier
+    # press that never got here -- a Stars top-up abandoned after the payment was confirmed --
+    # and must not take this send over: it is let go, and the draft stays in the chat.
+    anchor = new
+    s = edit(s, anchor, '''        if self.aorusSendingAttachmentDraft != nil, !self.aorusAttachmentDraftConverting, self.aorusAttachmentDraftPicker?.aorusSendCompleted != true {
+            self.aorusCancelAttachmentDraftSend(keepSelection: false)
+        }
+''' + anchor, 'an abandoned draft send does not take over the next media send')
     anchor = '                let messages = strongSelf.transformEnqueueMessages(mappedMessages, silentPosting: silentPosting, scheduleTime: scheduleTime, postpone: postpone)\n'
     s = edit(s, anchor, anchor.replace('mappedMessages, silentPosting:', 'strongSelf.aorusAttachmentDraftOutgoingMessages(mappedMessages), silentPosting:'), 'text and media share the native paid and scheduled enqueue')
     anchor = '        self.enqueueMediaMessageDisposable.set((legacyAssetPickerEnqueueMessages(context:'
     s = edit(s, anchor, '        if self.aorusSendingAttachmentDraft != nil { self.aorusAttachmentDraftConverting = true; self.aorusHideSendingAttachmentDraftInComposer() }\n' + anchor, 'conversion lifecycle')
+    # The strip is hidden while its media converts, but the chat is saved as the draft still
+    # stands until Postbox accepts the messages: a chat closed, or an app killed, during the
+    # conversion drops the conversion with the controller, and must reopen with its draft.
+    anchor = """        interfaceState = interfaceState.withUpdatedInputLanguage(self.chatDisplayNode.currentTextInputLanguage)
+        let _ = ChatInterfaceState.update(engine: self.context.engine, peerId: peerId, threadId: threadId, { _ in
+            return interfaceState
+        }).startStandalone()
+"""
+    s = edit(s, anchor, """        interfaceState = interfaceState.withUpdatedInputLanguage(self.chatDisplayNode.currentTextInputLanguage)
+        if self.aorusAttachmentDraftConverting, let sending = self.aorusSendingAttachmentDraft, interfaceState.attachmentDraft == nil,
+           self.chatLocation.peerId == self.aorusAttachmentSendPeer, self.chatLocation.threadId == self.aorusAttachmentSendThread {
+            interfaceState = interfaceState.withUpdatedAttachmentDraft(sending)
+            if let caption = self.aorusAttachmentSendCaption, interfaceState.composeInputState.inputText.length == 0 {
+                interfaceState = interfaceState.aorusWithAttachmentCaption(caption)
+            }
+        }
+        let _ = ChatInterfaceState.update(engine: self.context.engine, peerId: peerId, threadId: threadId, { _ in
+            return interfaceState
+        }).startStandalone()
+""", 'a draft being converted is saved until it is sent')
     start = s.index('    private func commitEnqueueMediaMessages(')
     body = s.index('    ) {', start)
     method = s[start:body] + block(s[body:], '    ) {')
