@@ -5164,6 +5164,16 @@ def _patch_overlay_palette(tg: Path) -> None:
         "            self.subtitleNode.updateTintColor(color: aorusOverlayPalette ? aorusOverlayInk : presentationData.theme.list.itemSecondaryTextColor, transition: navigationTransition)\n",
         "overlay palette subtitle tint",
     )
+    # The fade under the navigation bar is drawn from the plain page: white in the light theme,
+    # over a profile whose page is the photo's colour. It read as a white haze across the top of
+    # every profile, and over a profile without a photo page as white over the grouped grey. It
+    # is drawn from this profile's page instead, as the dark theme's black already matched it.
+    text = _replace_once(
+        text,
+        "        self.headerEdgeEffectView.update(content: presentationData.theme.list.plainBackgroundColor, blur: true, rect: edgeEffectFrame, edge: .top, edgeSize: edgeEffectHeight, transition: ComponentTransition(transition))\n",
+        "        self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage : presentationData.theme.list.plainBackgroundColor, blur: true, rect: edgeEffectFrame, edge: .top, edgeSize: edgeEffectHeight, transition: ComponentTransition(transition))\n",
+        "overlay palette top fade",
+    )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: header labels stay white on the avatar's page")
 

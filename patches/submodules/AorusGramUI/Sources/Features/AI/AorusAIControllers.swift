@@ -23,6 +23,29 @@ public func aorusAILocalized(_ ru: String, _ en: String) -> String {
     return aorusL(ru, en)
 }
 
+/// The glass AorusAI's chrome is made of: the capsules over the conversation, the input and
+/// the button that returns to the newest message.
+///
+/// Telegram's clear glass where the system draws real glass, so the chrome is a lens the
+/// conversation passes under rather than a frosted plate over it. Before that the panel
+/// glass: the older fallback for clear glass is a bare outline that text behind it would
+/// read straight through.
+private var aorusAIGlassTint: GlassBackgroundView.TintColor {
+    if #available(iOS 26.0, *) {
+        return GlassBackgroundView.TintColor(kind: .clear)
+    }
+    return GlassBackgroundView.TintColor(kind: .panel)
+}
+
+/// The navigation capsules — back, new chat — in the same glass, through the navigation
+/// bar's own clear style rather than drawn over it.
+private var aorusAINavigationGlassStyle: NavigationBarGlassStyle {
+    if #available(iOS 26.0, *) {
+        return .clear
+    }
+    return .default
+}
+
 private func aorusAIPresentActionSheet(_ controller: UIAlertController, from presenter: UIViewController) {
     if let popover = controller.popoverPresentationController {
         popover.sourceView = presenter.view
@@ -625,7 +648,8 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         // up dissolves under the capsules instead of meeting a hard edge.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
             presentationData: presentationData,
-            style: .glass
+            style: .glass,
+            glassStyle: aorusAINavigationGlassStyle
         ))
         self.title = "AorusAI"
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
@@ -1550,6 +1574,24 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// rectangle is the fill: the navigation bar leaves it at the 0.75 default, which is what
     /// paints a fade. At zero there is no fill at all — only the blur.
     private let topBlurView = EdgeEffectView(frame: CGRect())
+    /// The same scroll edge at the bottom. The list now runs under the input, so the glass
+    /// shows the conversation through it, and the text fades into the page below it.
+    private let bottomBlurView = EdgeEffectView(frame: CGRect())
+    private let scrollDownButton = AorusAIScrollDownButton()
+    /// Whether the list keeps the newest text in view while an answer arrives.
+    ///
+    /// The reader decides it, never the geometry of a single moment: scrolling away turns it
+    /// off, scrolling back to the end, sending or the round button turns it on. It used to be
+    /// worked out again on every delta, within sixty points of the end, so a reader holding
+    /// the list near the bottom was pulled down under their finger, and an answer that grew
+    /// faster than that while an animated scroll was on its way was left behind for good.
+    private var followsNewest = true
+    /// An animated return to the newest message is on its way. Deltas let it land rather
+    /// than setting the offset underneath it.
+    private var isReturningToNewest = false
+    private var returnFallbackWork: DispatchWorkItem?
+    /// The run was ended with send: what was heard is sent as soon as it arrives.
+    private var dictationSendsWhenFinished = false
 
     /// `initialPrompt` is what the user sees in the conversation. `initialRequest`
     /// is what is actually sent when the two differ — a chat analysis shows a short
@@ -1595,7 +1637,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // does not need it. This screen is a flat page, so it takes the rule.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
             presentationData: presentationData,
-            style: .glass
+            style: .glass,
+            glassStyle: aorusAINavigationGlassStyle
         ))
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
@@ -1646,6 +1689,13 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.displayNode.view.addSubview(tableView)
         topBlurView.isUserInteractionEnabled = false
         self.displayNode.view.addSubview(topBlurView)
+        bottomBlurView.isUserInteractionEnabled = false
+        self.displayNode.view.addSubview(bottomBlurView)
+        scrollDownButton.configure(theme: presentationData.theme)
+        scrollDownButton.onPress = { [weak self] in
+            self?.returnToNewest(animated: true)
+        }
+        self.displayNode.view.addSubview(scrollDownButton)
         composer.configure(context: context, theme: presentationData.theme)
         composer.onOpenPeer = { [weak self] peerId in self?.openPeer(peerId) }
         composer.onHeightChanged = { [weak self] in
@@ -1656,6 +1706,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         composer.onSend = { [weak self] in self?.sendOrStop() }
         composer.onDictation = { [weak self] in self?.toggleDictation() }
         composer.onCancelDictation = { [weak self] in self?.cancelDictation() }
+        composer.onSendDictation = { [weak self] in self?.finishDictationAndSend() }
         composer.onDismissReference = { [weak self] in self?.pendingReference = nil; self?.composer.reference = nil }
         composer.text = conversation.draft
         composer.reference = pendingReference
@@ -1813,18 +1864,37 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private func applyLayout(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         // Read before anything moves: both the frame and the insets are about to change, and
-        // the question is where the reader was, not where they end up.
-        let wasAtBottom = isScrolledToBottom()
+        // the question is where the reader was, not where they end up. A reader who is not
+        // following keeps the distance between what they read and the input, so the
+        // keyboard or a growing input lifts the text instead of covering it.
+        let keepsNewest = followsNewest
+        let distanceFromEnd = max(0.0, bottomOffset() - tableView.contentOffset.y)
         let top = self.navigationLayout(layout: layout).navigationFrame.maxY
         let bottomInset = max(layout.intrinsicInsets.bottom, keyboardHeight)
         let composerHeight = composer.requiredHeight(width: layout.size.width)
         let composerFrame = CGRect(x: 0, y: layout.size.height - bottomInset - composerHeight, width: layout.size.width, height: composerHeight)
         transition.updateFrame(view: composer, frame: composerFrame)
-        // The list starts at the very top of the screen and is inset by the bar rather than
-        // starting under it. That is the whole difference between this and a chat: there the
-        // messages slide beneath the floating capsules, here they used to stop at a hard
-        // edge and leave a flat band of page colour above it.
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
+        composer.updateLayout(size: composerFrame.size, transition: transition)
+        // The list runs the full height of the screen and is inset at both ends, so messages
+        // pass beneath the capsules at the top and beneath the input at the bottom: the glass
+        // of both shows the conversation, as it does in a chat.
+        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: layout.size.height))
+        // The text fades into the page where it passes under the input and below it, as it
+        // does under the capsules at the top.
+        let bottomEdgeTop = max(0.0, composerFrame.minY - 16.0)
+        let bottomBlurFrame = CGRect(x: 0.0, y: bottomEdgeTop, width: layout.size.width, height: max(0.0, layout.size.height - bottomEdgeTop))
+        transition.updateFrame(view: bottomBlurView, frame: bottomBlurFrame)
+        bottomBlurView.update(
+            content: palette.plainBackground,
+            blur: true,
+            alpha: 0.75,
+            rect: CGRect(origin: CGPoint(), size: bottomBlurFrame.size),
+            edge: .bottom,
+            edgeSize: min(64.0, bottomBlurFrame.height),
+            transition: .immediate
+        )
+        let scrollDownSize = AorusAIScrollDownButton.size
+        transition.updateFrame(view: scrollDownButton, frame: CGRect(x: floor((layout.size.width - scrollDownSize) / 2.0), y: composerFrame.minY - 10.0 - scrollDownSize, width: scrollDownSize, height: scrollDownSize))
         // The same four numbers NavigationBarImpl computes for its own edge effect, so this
         // is the app's treatment and not an approximation of it:
         //
@@ -1855,15 +1925,34 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             edgeSize: min(64.0, edgeEffectHeight),
             transition: .immediate
         )
-        tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)
+        let underInput = max(0.0, layout.size.height - composerFrame.minY)
+        tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: underInput + 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.
-        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0.0, bottom: 8.0, right: 0.0)
-        // Changing the top inset moves the content under the reader. A list that was at the
-        // newest message stays there — which is where a chat always is when the keyboard
-        // opens or the composer grows.
-        if wasAtBottom {
-            stickToBottom()
+        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0.0, bottom: underInput, right: 0.0)
+        // Changing the insets moves the content under the reader. A list following the
+        // newest message stays on it — which is where a chat always is when the keyboard
+        // opens or the input grows — and one the reader scrolled up keeps its place against
+        // the input. Never while a finger is on the list: that offset is theirs.
+        if !tableView.isTracking && !tableView.isDecelerating && !isReturningToNewest, tableView.numberOfSections > 0, tableView.numberOfRows(inSection: 0) > 0 {
+            tableView.layoutIfNeeded()
+            let target = keepsNewest ? bottomOffset() : max(-tableView.contentInset.top, bottomOffset() - distanceFromEnd)
+            moveList(to: target, transition: transition)
+        }
+        updateScrollDownButton(animated: transition.isAnimated)
+    }
+
+    /// Moves the list with the input it is anchored to: in the same animation when the input
+    /// grows or shrinks, at once otherwise (inside the keyboard's own animation, that is the
+    /// keyboard's curve).
+    private func moveList(to target: CGFloat, transition: ContainedViewLayoutTransition) {
+        guard abs(tableView.contentOffset.y - target) > 0.5 else { return }
+        if case let .animated(duration, _) = transition {
+            UIView.animate(withDuration: duration, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut], animations: {
+                self.tableView.contentOffset = CGPoint(x: 0.0, y: target)
+            })
+        } else {
+            tableView.setContentOffset(CGPoint(x: 0.0, y: target), animated: false)
         }
     }
 
@@ -2086,7 +2175,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         let mentioned = Self.mentionedUsernames(in: entities)
         updateComposer()
         tableView.reloadData()
-        jumpToNewestMessage(animated: true)
+        returnToNewest(animated: true)
         persist(force: true)
         resolveEntities(forMessageId: userMessage.id)
 
@@ -3364,6 +3453,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     private func cancelDictation() {
         guard dictation.isActive else { return }
         dictationCancelled = true
+        dictationSendsWhenFinished = false
         dictationSpokenText = ""
         dictation.stop()
         composer.isDictating = false
@@ -3374,6 +3464,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private func toggleDictation() {
         if dictation.isActive {
+            // The square: the run ends and what was heard goes into the input. The row
+            // stops where it is while the last words arrive.
+            composer.beginFinishingDictation()
             dictation.stop()
             return
         }
@@ -3382,6 +3475,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         dictationBaseText = composer.text
         dictationSpokenText = ""
         dictationCancelled = false
+        dictationSendsWhenFinished = false
         let locale = AorusAIDictation.locale(for: presentationData.strings.baseLanguageCode)
         composer.isDictating = true
         updateComposer()
@@ -3396,6 +3490,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         }, onFailure: { [weak self] failure in
             guard let self, !self.dictationCancelled else { return }
             self.dictationSpokenText = ""
+            self.dictationSendsWhenFinished = false
             self.composer.isDictating = false
             self.updateComposer()
             self.presentError(failure.message)
@@ -3414,9 +3509,29 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             self.textViewDidChangeSilently()
             self.dictationBaseText = self.composer.text
             self.dictationSpokenText = ""
-            self.composer.textView.becomeFirstResponder()
-            self.updateComposer()
+            if self.dictationSendsWhenFinished {
+                // Ended with send: what was said goes as it is, the way a typed question
+                // would. Nothing heard sends nothing and leaves the input as it was.
+                self.dictationSendsWhenFinished = false
+                self.updateComposer()
+                self.send()
+            } else {
+                self.composer.textView.becomeFirstResponder()
+                self.updateComposer()
+            }
         })
+    }
+
+    /// The send button while dictating: ends the run and sends what was heard as soon as
+    /// the recogniser hands over its last words.
+    private func finishDictationAndSend() {
+        guard dictation.isActive else {
+            send()
+            return
+        }
+        dictationSendsWhenFinished = true
+        composer.beginFinishingDictation()
+        dictation.stop()
     }
 
     /// What the input is given when the run ends: whatever was already typed, then
@@ -3871,20 +3986,23 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // §27: during streaming this method fires several times per second. Rebuilding the
         // whole cell drops the text selection and flickers, so try to push only the changed
         // text into the live views and let the table re-measure the height.
-        // Asked before anything changes, and honoured after — the same rule `applyLayout`
-        // follows. It used to re-anchor unconditionally, about eighteen times a second while
-        // an answer streamed, so scrolling up to re-read an earlier message was impossible:
-        // the next delta yanked the list back down. Tapping an artifact card or a handle
-        // resolving in an old message did it too.
-        let wasAtBottom = isScrolledToBottom()
+        // Whether the list then moves is the reader's choice, `followsNewest`, not where the
+        // offset happens to be. It used to re-anchor on every delta, about eighteen times a
+        // second while an answer streamed, so scrolling up to re-read an earlier message was
+        // a fight: the next delta pulled the list back down.
         if let cell = tableView.cellForRow(at: indexPath) as? AorusAIMessageCell,
            cell.applyIncremental(message: message, theme: presentationData.theme, canRetry: canRetry, loadingArtifactIds: loadingArtifactIds) {
             // Laid out before the table asks for the height, not after. `endUpdates` reads
             // whatever the cell currently reports, so a stack that has not re-measured hands
             // back the previous answer's height and the new text is clipped inside it.
             cell.contentView.layoutIfNeeded()
-            tableView.beginUpdates()
-            tableView.endUpdates()
+            // Without an animation. The table animates a height change by default, and the
+            // list is then moved to the new end at once: for a third of a second every delta
+            // the content and the offset disagreed, which is the jitter of a streaming answer.
+            UIView.performWithoutAnimation {
+                tableView.beginUpdates()
+                tableView.endUpdates()
+            }
             // A streaming answer grows while it is on screen and `willDisplay` will not
             // fire again, so the height it was remembered at is already out of date. Left
             // stale, the estimate used the moment it scrolls out of view is the height it
@@ -3899,11 +4017,17 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                cell.isReaderHolding, message.state == .streaming {
                 return
             }
-            tableView.reloadRows(at: [indexPath], with: .none)
+            UIView.performWithoutAnimation {
+                tableView.reloadRows(at: [indexPath], with: .none)
+            }
         }
-        if wasAtBottom {
+        // The list follows only while the reader lets it: not while their finger is on it,
+        // not while it is still gliding from a flick, and not under a return that is on its
+        // way — that one lands on the end by itself.
+        if followsNewest && !isReturningToNewest && !tableView.isTracking && !tableView.isDecelerating {
             stickToBottom()
         }
+        updateScrollDownButton(animated: true)
     }
 
     /// Land on the newest message, wherever the reader happens to be.
@@ -3925,10 +4049,119 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// a row it has not been told about, and UIKit raises on that rather than ignoring it —
     /// every single send crashed the app. Asking the table what it holds cannot outrun it.
     private func jumpToNewestMessage(animated: Bool) {
+        followsNewest = true
         guard tableView.numberOfSections > 0 else { return }
         let rows = tableView.numberOfRows(inSection: 0)
         guard rows > 0 else { return }
         tableView.scrollToRow(at: IndexPath(row: rows - 1, section: 0), at: .bottom, animated: animated)
+        updateScrollDownButton(animated: animated)
+    }
+
+    /// Brings the newest message back and follows it from then on: sending, and the round
+    /// button above the input.
+    ///
+    /// Animated, and while it is on its way the deltas leave the offset alone — setting it
+    /// underneath a running animation is what used to make the list jump halfway and stop
+    /// short of an answer that had grown in the meantime. When it lands it settles on the
+    /// end as it is by then. A return the table never reports finishing is settled anyway.
+    private func returnToNewest(animated: Bool) {
+        followsNewest = true
+        guard animated, tableView.numberOfSections > 0, tableView.numberOfRows(inSection: 0) > 0 else {
+            finishReturnToNewest()
+            return
+        }
+        tableView.layoutIfNeeded()
+        let target = bottomOffset()
+        guard abs(tableView.contentOffset.y - target) > 1.0 else {
+            finishReturnToNewest()
+            return
+        }
+        isReturningToNewest = true
+        returnFallbackWork?.cancel()
+        let fallback = DispatchWorkItem { [weak self] in
+            guard let self, self.isReturningToNewest else { return }
+            self.finishReturnToNewest()
+        }
+        returnFallbackWork = fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: fallback)
+        tableView.setContentOffset(CGPoint(x: 0.0, y: target), animated: true)
+        updateScrollDownButton(animated: true)
+    }
+
+    private func finishReturnToNewest() {
+        cancelReturnToNewest()
+        followsNewest = true
+        stickToBottom()
+        updateScrollDownButton(animated: true)
+    }
+
+    private func cancelReturnToNewest() {
+        isReturningToNewest = false
+        returnFallbackWork?.cancel()
+        returnFallbackWork = nil
+    }
+
+    /// Where the list rests when its last line is just above the input.
+    private func bottomOffset() -> CGFloat {
+        let maximum = tableView.contentSize.height + tableView.contentInset.bottom - tableView.bounds.height
+        return max(-tableView.contentInset.top, maximum)
+    }
+
+    /// The round button shows whenever the newest text is out of sight and the list is not
+    /// already on its way back to it.
+    private func updateScrollDownButton(animated: Bool) {
+        let isAway = !isScrolledToBottom(slack: 80.0)
+        scrollDownButton.setShown(isAway && !isReturningToNewest && tableView.numberOfSections > 0 && tableView.numberOfRows(inSection: 0) > 0, animated: animated)
+    }
+
+    // MARK: - The reader's scrolling
+
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        guard scrollView === tableView else { return }
+        // The finger wins over a return that is still on its way.
+        cancelReturnToNewest()
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === tableView else { return }
+        // Only the reader's own scrolling decides whether the list follows. An offset set
+        // here, or one the table corrected while measuring rows, says nothing about intent.
+        if tableView.isDragging || tableView.isDecelerating {
+            followsNewest = isScrolledToBottom(slack: 24.0)
+        }
+        updateScrollDownButton(animated: true)
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard scrollView === tableView, !decelerate else { return }
+        settleAfterReaderScroll()
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        guard scrollView === tableView else { return }
+        settleAfterReaderScroll()
+    }
+
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        guard scrollView === tableView, isReturningToNewest else { return }
+        finishReturnToNewest()
+    }
+
+    func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+        if scrollView === tableView {
+            cancelReturnToNewest()
+            followsNewest = false
+        }
+        return true
+    }
+
+    /// The reader let go. A list left at the end follows again and catches up with what
+    /// arrived while it was held; one left elsewhere stays exactly where it is.
+    private func settleAfterReaderScroll() {
+        if followsNewest {
+            stickToBottom()
+        }
+        updateScrollDownButton(animated: true)
     }
 
     /// Keep a list that was already at the bottom there, without moving one that is not.
@@ -3958,9 +4191,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     ///
     /// Asked before the insets change and acted on after, so re-anchoring the list never
     /// yanks a reader who had deliberately scrolled up.
-    private func isScrolledToBottom() -> Bool {
+    private func isScrolledToBottom(slack: CGFloat = 60.0) -> Bool {
         let maximum = tableView.contentSize.height + tableView.contentInset.bottom - tableView.bounds.height
-        return tableView.contentOffset.y >= maximum - 60.0
+        return tableView.contentOffset.y >= maximum - slack
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { conversation.messages.count }
@@ -4309,19 +4542,32 @@ private final class AorusAIComposerView: UIView {
     private let referenceLine = UIView()
     private let referenceLabel = UILabel()
     private let referenceClose = UIButton(type: .system)
-    private let sendButton = UIButton(type: .system)
-    private let dictationButton = UIButton(type: .system)
+    /// The round button at the right end of the capsule. It sends, it stops an answer that is
+    /// arriving, and while dictating it sends what was said.
+    private let sendButton = UIButton(type: .custom)
+    /// The microphone beside it. While dictating it is the square that ends the run and puts
+    /// what was said into the input.
+    private let dictationButton = UIButton(type: .custom)
     private let dictationWave = AorusAIDictationWaveView()
-    private let dictationCancel = UIButton(type: .system)
-    private let dictationDone = UIButton(type: .system)
+    private let dictationCancel = UIButton(type: .custom)
     var onSend: (() -> Void)?
     var onDismissReference: (() -> Void)?
     var onOpenPeer: ((PeerId) -> Void)?
     var onHeightChanged: (() -> Void)?
     var onDictation: (() -> Void)?
     var onCancelDictation: (() -> Void)?
+    var onSendDictation: (() -> Void)?
     private var theme: PresentationTheme?
     private var context: AccountContext?
+    /// The size the capsule was last laid out for. The controller lays the composer out with
+    /// its own transition; the pass UIKit runs afterwards for the same size has nothing left
+    /// to do, and must not undo the animation by laying everything out again at once.
+    private var laidOutSize: CGSize?
+    /// Telegram's own send glyph, the one its input panel draws on the accent circle.
+    private var sendIcon: UIImage?
+    private let stopIcon = UIImage(systemName: "stop.fill")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold))
+    private let microphoneIcon = UIImage(systemName: "mic")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .regular))
+    private let endDictationIcon = UIImage(systemName: "stop.fill")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 12.0, weight: .bold))
     /// Mentions the controller has resolved to real peers. Setting them redraws the pills
     /// inside the input itself: the handle the user typed becomes that person's avatar and
     /// name, in place, without the text they will actually send changing at all.
@@ -4385,51 +4631,61 @@ private final class AorusAIComposerView: UIView {
     }
     var isGenerating = false { didSet { refreshButton(); refreshDictationButton() } }
     var canSend = false { didSet { refreshButton() } }
-    /// While this is on, the panel is the wave and nothing else: the text, both round
-    /// buttons and the placeholder step aside for it, and what was heard is written into
-    /// the input at the end of the run.
+    /// While this is on, the capsule holds the dictation row: the cross, the wave, the
+    /// square and send. What was heard is written into the input when the run ends.
     var isDictating = false {
         didSet {
             guard oldValue != isDictating else { return }
-            refreshDictationButton()
-            dictationWave.isHidden = !isDictating
-            dictationCancel.isHidden = !isDictating
-            dictationDone.isHidden = !isDictating
-            textView.isHidden = isDictating
-            sendButton.isHidden = isDictating
-            dictationButton.isHidden = isDictating
+            isFinishingDictation = false
             dictationWave.setActive(isDictating)
-            placeholder.isHidden = isDictating || !text.isEmpty
             if isDictating {
                 textView.resignFirstResponder()
             }
+            refreshButton()
+            refreshDictationButton()
+            applyModeVisibility(animated: window != nil)
             onHeightChanged?()
             setNeedsLayout()
         }
     }
+    /// Set once a run has been ended and its last words are on their way. The wave stops
+    /// where it is and the row waits, so a second tap cannot end the run twice.
+    private(set) var isFinishingDictation = false
+
+    func beginFinishingDictation() {
+        guard isDictating, !isFinishingDictation else { return }
+        isFinishingDictation = true
+        dictationWave.freeze()
+        refreshButton()
+        refreshDictationButton()
+    }
 
     /// One microphone sample from the running dictation.
     func updateDictationLevel(_ level: CGFloat) {
-        guard isDictating else { return }
+        guard isDictating, !isFinishingDictation else { return }
         dictationWave.update(level: level)
     }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(container)
-        [referenceView, dictationWave, dictationCancel, dictationDone, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
+        // A tap anywhere on the capsule is a tap on the input, as it is in every messenger.
+        containerGlass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusInput)))
+        container.addSubview(containerGlass)
+        [referenceView, dictationWave, dictationCancel, textView, dictationButton, sendButton].forEach { container.addSubview($0) }
         referenceView.addSubview(referenceLine)
         referenceView.addSubview(referenceLabel)
         referenceView.addSubview(referenceClose)
         textView.addSubview(placeholder)
-        placeholder.text = aorusAILocalized("Спросите что-нибудь…", "Ask anything…")
+        placeholder.text = aorusAILocalized("Спросить AorusAI", "Ask AorusAI")
         placeholder.font = aorusUIFont(16)
         textView.font = aorusUIFont(16)
         textView.backgroundColor = .clear
         textView.isScrollEnabled = true
         textView.textContainerInset = UIEdgeInsets(top: 2, left: 0, bottom: 2, right: 0)
         // The default 5pt fragment padding indents the first glyph but not the placeholder
-        // label, which is laid out at x: 0 — so the caret sat on top of the "С" of
-        // "Спросите". Both now start at the same x.
+        // label, which is laid out at x: 0 — so the caret sat on top of the first letter of
+        // the placeholder. Both now start at the same x.
         textView.textContainer.lineFragmentPadding = 0
         textView.onDeleteBackward = { [weak self] in
             return self?.deleteMentionBeforeCaret() ?? false
@@ -4439,26 +4695,21 @@ private final class AorusAIComposerView: UIView {
         referenceLabel.lineBreakMode = .byTruncatingTail
         referenceClose.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
         referenceClose.addTarget(self, action: #selector(closeReference), for: .touchUpInside)
-        sendButton.addTarget(self, action: #selector(send), for: .touchUpInside)
+        for button in [sendButton, dictationButton, dictationCancel] {
+            button.layer.cornerCurve = .circular
+            button.imageView?.contentMode = .center
+        }
+        sendButton.addTarget(self, action: #selector(sendPressed), for: .touchUpInside)
         sendButton.accessibilityLabel = aorusAILocalized("Отправить", "Send")
-        dictationButton.addTarget(self, action: #selector(dictate), for: .touchUpInside)
-        // A turn on the wire refuses dictation, so the button says so rather than swallowing
-        // the tap in silence — the send button next to it has always done this.
-        dictationButton.isEnabled = !isGenerating
-        dictationButton.alpha = isGenerating ? 0.42 : 1.0
+        dictationButton.addTarget(self, action: #selector(dictationPressed), for: .touchUpInside)
         dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
-        // A run has to be abandonable. Finishing commits what was heard, which is right;
-        // there was no way at all to decide it heard the wrong thing.
-        dictationCancel.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .semibold)), for: .normal)
+        // A run has to be abandonable: the cross puts the input back as it was.
+        dictationCancel.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)), for: .normal)
         dictationCancel.addTarget(self, action: #selector(cancelDictation), for: .touchUpInside)
         dictationCancel.accessibilityLabel = aorusAILocalized("Отменить диктовку", "Cancel dictation")
+        dictationCancel.alpha = 0.0
         dictationCancel.isHidden = true
-        // The one thing to press while the wave is running: it ends the run and puts what
-        // was said into the input.
-        dictationDone.setImage(UIImage(systemName: "checkmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .bold)), for: .normal)
-        dictationDone.addTarget(self, action: #selector(dictate), for: .touchUpInside)
-        dictationDone.accessibilityLabel = aorusAILocalized("Закончить диктовку", "Finish dictation")
-        dictationDone.isHidden = true
+        dictationWave.alpha = 0.0
         dictationWave.isHidden = true
         referenceView.isHidden = true
     }
@@ -4469,19 +4720,10 @@ private final class AorusAIComposerView: UIView {
         self.context = context
         self.theme = theme
         let palette = AorusAIPalette.resolve(theme)
-        // Clear, so the capsule below IS the panel rather than a pane of glass laid on top
-        // of an opaque plate. Filling this view with the page colour put a solid sheet
-        // directly behind the glass: glass samples what is behind it, and what was behind it
-        // was a flat colour, so it could only ever come out as a tinted slab. The chat now
-        // runs under the composer the way it does under Telegram's own.
+        // Clear, so the capsule IS the panel rather than a pane of glass laid over an opaque
+        // plate: the conversation runs under it, and the glass shows it.
         backgroundColor = .clear
-        // The input is a pane of Telegram's own glass, the same component the navigation
-        // capsules are made of, rather than a blur with a border drawn to look like one.
         container.backgroundColor = .clear
-        container.layer.cornerRadius = 24
-        container.layer.cornerCurve = .continuous
-        container.clipsToBounds = true
-        container.layer.borderWidth = 0.0
         textView.textColor = palette.label
         textView.tintColor = palette.accent
         textView.keyboardAppearance = palette.isDark ? .dark : .light
@@ -4491,10 +4733,8 @@ private final class AorusAIComposerView: UIView {
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
         dictationWave.configure(palette: palette)
-        dictationCancel.tintColor = palette.secondary
-        dictationCancel.backgroundColor = palette.fill
-        dictationDone.tintColor = palette.onAccent
-        dictationDone.backgroundColor = palette.accent
+        dictationCancel.tintColor = palette.label
+        sendIcon = PresentationResourcesChat.chatInputPanelSendIconImage(theme)?.withRenderingMode(.alwaysTemplate)
         refreshReferenceLabel()
         textView.configureMentions(context: context, theme: theme)
         // The theme decides the base colour every run is drawn in, so the last render is
@@ -4503,88 +4743,97 @@ private final class AorusAIComposerView: UIView {
         applyMentionStyling()
         refreshButton()
         refreshDictationButton()
+        // The glass takes the theme's side, so the capsule is laid out again.
+        laidOutSize = nil
+        setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // The design's composer sits 12pt from the screen edges and insets its text by a
-        // further 16, so the placeholder lines up with the chip row above it.
-        let side: CGFloat = 12
-        let textInset: CGFloat = 16
-        container.frame = CGRect(x: side, y: 0, width: bounds.width - side * 2, height: max(0, bounds.height - 8))
-        if containerGlass.superview !== container {
-            containerGlass.isUserInteractionEnabled = false
-            container.insertSubview(containerGlass, at: 0)
+        if laidOutSize != bounds.size {
+            updateLayout(size: bounds.size, transition: .immediate)
         }
-        containerGlass.frame = container.bounds
-        containerGlass.update(
-            size: container.bounds.size,
-            cornerRadius: 24.0,
-            isDark: theme?.overallDarkAppearance ?? true,
-            tintColor: GlassBackgroundView.TintColor(kind: .panel),
-            isInteractive: false,
-            transition: .immediate
-        )
-        let buttonSize = AorusAIComposerView.actionButtonSize
-        let buttonY = container.bounds.height - buttonSize - 8
-        sendButton.frame = CGRect(x: container.bounds.width - buttonSize - 12, y: buttonY, width: buttonSize, height: buttonSize)
-        sendButton.layer.cornerRadius = buttonSize / 2.0
-        let micSize = AorusAIComposerView.dictationButtonSize
-        dictationButton.frame = CGRect(x: sendButton.frame.minX - micSize - 7, y: buttonY + floor((buttonSize - micSize) / 2.0), width: micSize, height: micSize)
-        let refHeight: CGFloat = reference == nil ? 0 : 32
-        referenceView.frame = CGRect(x: 14, y: 6, width: container.bounds.width - 28, height: refHeight)
-        referenceLine.frame = CGRect(x: 0, y: 5, width: 2, height: max(0, refHeight - 10))
-        referenceLine.layer.cornerRadius = 1
-        referenceLabel.frame = CGRect(x: 9, y: 5, width: max(0, referenceView.bounds.width - 39), height: max(0, refHeight - 10))
-        referenceClose.frame = CGRect(x: referenceView.bounds.width - 27, y: 3, width: 26, height: 26)
-        let inputTop: CGFloat = refHeight == 0 ? 8 : 38
-        // The dictation row owns the whole panel below the quote: a round cancel on the
-        // left, the wave across everything between, and the accent "done" on the right.
-        let waveTop = inputTop
-        let cancelSize = AorusAIComposerView.dictationCancelSize
-        let doneSize = AorusAIComposerView.dictationDoneSize
-        let waveHeight = AorusAIComposerView.dictationPanelHeight - 16.0
-        dictationCancel.frame = CGRect(x: 12.0, y: waveTop + floor((waveHeight - cancelSize) / 2.0), width: cancelSize, height: cancelSize)
-        dictationCancel.layer.cornerRadius = cancelSize / 2.0
-        dictationDone.frame = CGRect(
-            x: max(0, container.bounds.width - doneSize - 12.0),
-            y: waveTop + floor((waveHeight - doneSize) / 2.0),
-            width: doneSize,
-            height: doneSize
-        )
-        dictationDone.layer.cornerRadius = doneSize / 2.0
-        let waveLeft = dictationCancel.frame.maxX + 12.0
-        dictationWave.frame = CGRect(
-            x: waveLeft,
-            y: waveTop,
-            width: max(0, dictationDone.frame.minX - 12.0 - waveLeft),
-            height: waveHeight
-        )
-        let inputRight = dictationButton.frame.minX - 8
-        textView.frame = CGRect(x: textInset, y: inputTop, width: max(0, inputRight - textInset), height: max(0, container.bounds.height - inputTop - 8))
-        placeholder.frame = CGRect(x: 0, y: 2, width: max(0, textView.bounds.width), height: 21)
     }
 
-    private static let actionButtonSize: CGFloat = 32
-    private static let dictationButtonSize: CGFloat = 26
-    private static let dictationCancelSize: CGFloat = 34.0
-    private static let dictationDoneSize: CGFloat = 40.0
-    /// What the panel becomes while dictating: one tall row, the wave and its two buttons.
-    private static let dictationPanelHeight: CGFloat = 68.0
+    /// Lays the capsule out at `size`, moving everything in it with `transition` — the one
+    /// the controller moves the composer itself with, so a capsule growing by a line grows
+    /// as one piece.
+    func updateLayout(size: CGSize, transition: ContainedViewLayoutTransition) {
+        laidOutSize = size
+        let containerFrame = CGRect(x: Self.sideInset, y: 0.0, width: max(0.0, size.width - Self.sideInset * 2.0), height: max(0.0, size.height - Self.bottomGap))
+        transition.updateFrame(view: container, frame: containerFrame)
+        let width = containerFrame.width
+        let height = containerFrame.height
+        transition.updateFrame(view: containerGlass, frame: CGRect(origin: CGPoint(), size: containerFrame.size))
+        containerGlass.update(
+            size: containerFrame.size,
+            cornerRadius: min(Self.cornerRadius, height / 2.0),
+            isDark: theme?.overallDarkAppearance ?? true,
+            tintColor: aorusAIGlassTint,
+            isInteractive: true,
+            transition: ComponentTransition(transition)
+        )
+
+        // The two round controls sit at the bottom right, so a capsule that grows with the
+        // text keeps them by the last line, where the thumb is.
+        let buttonSize = Self.buttonSize
+        let buttonY = max(0.0, height - Self.buttonInset - buttonSize)
+        let sendFrame = CGRect(x: max(0.0, width - Self.buttonInset - buttonSize), y: buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: sendButton, frame: sendFrame)
+        sendButton.layer.cornerRadius = buttonSize / 2.0
+        let microphoneFrame = CGRect(x: max(0.0, sendFrame.minX - Self.buttonSpacing - buttonSize), y: buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: dictationButton, frame: microphoneFrame)
+        dictationButton.layer.cornerRadius = buttonSize / 2.0
+
+        let referenceHeight: CGFloat = reference == nil ? 0.0 : 32.0
+        transition.updateFrame(view: referenceView, frame: CGRect(x: 16.0, y: 8.0, width: max(0.0, width - 32.0), height: referenceHeight))
+        referenceLine.frame = CGRect(x: 0, y: 5, width: 2, height: max(0, referenceHeight - 10))
+        referenceLine.layer.cornerRadius = 1
+        referenceLabel.frame = CGRect(x: 9, y: 5, width: max(0, width - 32.0 - 39.0), height: max(0, referenceHeight - 10))
+        referenceClose.frame = CGRect(x: max(0, width - 32.0 - 27.0), y: 3, width: 26, height: 26)
+
+        let inputTop = Self.verticalPadding + (reference == nil ? 0.0 : Self.referenceExtra)
+        let textFrame = CGRect(x: Self.textLeading, y: inputTop, width: max(0.0, microphoneFrame.minX - 2.0 - Self.textLeading), height: max(0.0, height - inputTop - Self.verticalPadding))
+        transition.updateFrame(view: textView, frame: textFrame)
+        placeholder.frame = CGRect(x: 0, y: 2, width: textFrame.width, height: 21)
+
+        // The dictation row is the capsule's bottom row: the cross at the left, the square
+        // in the microphone's place and send where it always is.
+        let cancelFrame = CGRect(x: Self.buttonInset, y: buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: dictationCancel, frame: cancelFrame)
+        dictationCancel.layer.cornerRadius = buttonSize / 2.0
+        let waveLeft = cancelFrame.maxX + 6.0
+        let waveFrame = CGRect(x: waveLeft, y: buttonY + floor((buttonSize - Self.waveHeight) / 2.0), width: max(0.0, microphoneFrame.minX - 10.0 - waveLeft), height: Self.waveHeight)
+        transition.updateFrame(view: dictationWave, frame: waveFrame)
+    }
+
+    private static let sideInset: CGFloat = 12.0
+    private static let bottomGap: CGFloat = 8.0
+    private static let minimumHeight: CGFloat = 48.0
+    private static let maximumHeight: CGFloat = 184.0
+    private static let cornerRadius: CGFloat = 24.0
+    private static let textLeading: CGFloat = 18.0
+    private static let verticalPadding: CGFloat = 12.0
+    private static let buttonSize: CGFloat = 36.0
+    private static let buttonInset: CGFloat = 6.0
+    private static let buttonSpacing: CGFloat = 2.0
+    /// What a quoted message adds above the text.
+    private static let referenceExtra: CGFloat = 32.0
+    private static let waveHeight: CGFloat = 28.0
 
     func requiredHeight(width: CGFloat) -> CGFloat {
-        var extras: CGFloat = reference == nil ? 0 : 34
+        let extra: CGFloat = reference == nil ? 0.0 : Self.referenceExtra
         if isDictating {
-            // Fixed while the microphone is open: the text is not on screen to measure, and
-            // a panel that changed height as words arrived would make the wave jump.
-            extras += AorusAIComposerView.dictationPanelHeight
-            return extras + 8
+            // One row while the microphone is open: the text is not on screen to measure,
+            // and a capsule that changed height as words arrived would make the wave jump.
+            return Self.minimumHeight + extra + Self.bottomGap
         }
-        // 12pt page inset on each side, then the card's own 16pt text inset on each side.
-        let available = max(100, width - 24 - 32)
-        let measured = textView.sizeThatFits(CGSize(width: available, height: 132)).height
-        let containerHeight = min(184, max(56 + extras, ceil(measured) + 16 + extras))
-        return containerHeight + 8
+        // The width `updateLayout` gives the text: the capsule, less its leading inset and
+        // the two round controls at the right.
+        let available = max(60.0, width - Self.sideInset * 2.0 - Self.textLeading - Self.buttonInset - Self.buttonSize * 2.0 - Self.buttonSpacing - 2.0)
+        let measured = textView.sizeThatFits(CGSize(width: available, height: 1000.0)).height
+        let containerHeight = min(Self.maximumHeight, max(Self.minimumHeight + extra, ceil(measured) + Self.verticalPadding * 2.0 + extra))
+        return containerHeight + Self.bottomGap
     }
 
     func invalidateHeight() {
@@ -4593,33 +4842,102 @@ private final class AorusAIComposerView: UIView {
         setNeedsLayout()
     }
 
+    /// Text mode shows the input and the microphone; dictation mode shows the cross and the
+    /// wave. Send stays where it is and the microphone turns into the square in its place,
+    /// so the only movement is the two rows cross-fading.
+    private func applyModeVisibility(animated: Bool) {
+        let dictating = isDictating
+        let textViews: [UIView] = [textView]
+        let dictationViews: [UIView] = [dictationWave, dictationCancel]
+        (dictating ? dictationViews : textViews).forEach { $0.isHidden = false }
+        let changes: () -> Void = {
+            textViews.forEach { $0.alpha = dictating ? 0.0 : 1.0 }
+            dictationViews.forEach { $0.alpha = dictating ? 1.0 : 0.0 }
+        }
+        let completion: (Bool) -> Void = { [weak self] _ in
+            guard let self, self.isDictating == dictating else { return }
+            textViews.forEach { $0.isHidden = dictating }
+            dictationViews.forEach { $0.isHidden = !dictating }
+        }
+        if animated {
+            UIView.animate(withDuration: 0.25, delay: 0.0, options: [.beginFromCurrentState, .curveEaseInOut], animations: changes, completion: completion)
+        } else {
+            changes()
+            completion(true)
+        }
+    }
+
+    /// Changes a control's glyph with a short cross-fade rather than a cut.
+    private func setImage(_ image: UIImage?, on button: UIButton) {
+        guard button.image(for: .normal) !== image else { return }
+        if window != nil {
+            UIView.transition(with: button, duration: 0.18, options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction], animations: {
+                button.setImage(image, for: .normal)
+            })
+        } else {
+            button.setImage(image, for: .normal)
+        }
+    }
+
+    private func animateIfOnScreen(_ changes: @escaping () -> Void) {
+        if window != nil {
+            UIView.animate(withDuration: 0.2, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseInOut], animations: changes)
+        } else {
+            changes()
+        }
+    }
+
     private func refreshButton() {
-        // A filled accent circle with a plain glyph, as in the design: the tint lives in the
-        // circle, so the same control reads as "send" and, mid-answer, as "stop".
-        //
-        // NOT a pane of glass. Glass inside a 30-point circle is a blurred disc — it
-        // samples what is behind it at that size and reads as a smudge, which is exactly
-        // what putting one here did to every control in the composer.
-        let palette = theme.map { AorusAIPalette.resolve($0) }
-        let configuration = UIImage.SymbolConfiguration(pointSize: isGenerating ? 13 : 17, weight: .semibold)
-        sendButton.setImage(UIImage(systemName: isGenerating ? "stop.fill" : "arrow.up")?.withConfiguration(configuration), for: .normal)
-        sendButton.tintColor = palette?.onAccent ?? .white
-        sendButton.backgroundColor = palette?.accent
-        sendButton.isEnabled = isGenerating || canSend
-        sendButton.alpha = sendButton.isEnabled ? 1 : 0.42
-        sendButton.accessibilityLabel = isGenerating ? aorusAILocalized("Остановить", "Stop") : aorusAILocalized("Отправить", "Send")
+        guard let theme else { return }
+        let palette = AorusAIPalette.resolve(theme)
+        // An accent circle when there is something to do — send, stop, send what was said —
+        // and a quiet one over an empty input, the way the circle reads in every chat app.
+        // NOT a pane of glass: glass inside a circle this size samples what is behind it and
+        // reads as a smudge.
+        let image: UIImage?
+        let isEnabled: Bool
+        let isFilled: Bool
+        if isDictating {
+            image = sendIcon
+            isEnabled = !isFinishingDictation
+            isFilled = true
+            sendButton.accessibilityLabel = aorusAILocalized("Отправить сказанное", "Send what was said")
+        } else if isGenerating {
+            image = stopIcon
+            isEnabled = true
+            isFilled = true
+            sendButton.accessibilityLabel = aorusAILocalized("Остановить", "Stop")
+        } else {
+            image = sendIcon
+            isEnabled = canSend
+            isFilled = canSend
+            sendButton.accessibilityLabel = aorusAILocalized("Отправить", "Send")
+        }
+        sendButton.isEnabled = isEnabled
+        setImage(image, on: sendButton)
+        let isWaiting = isDictating && isFinishingDictation
+        animateIfOnScreen {
+            self.sendButton.backgroundColor = isFilled ? palette.accent : palette.fill
+            self.sendButton.tintColor = isFilled ? palette.onAccent : palette.tertiary
+            self.sendButton.alpha = isWaiting ? 0.5 : 1.0
+        }
     }
 
     private func refreshDictationButton() {
-        let palette = theme.map { AorusAIPalette.resolve($0) }
-        // Only ever the microphone: a running dictation replaces the whole row with the
-        // wave and its own done button, so this one is not on screen to have a second state.
-        dictationButton.setImage(UIImage(systemName: "mic")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)), for: .normal)
-        dictationButton.tintColor = palette?.secondary
-        dictationButton.backgroundColor = .clear
-        dictationButton.layer.cornerRadius = AorusAIComposerView.dictationButtonSize / 2.0
-        dictationButton.layer.cornerCurve = .circular
-        dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
+        guard let theme else { return }
+        let palette = AorusAIPalette.resolve(theme)
+        let isDictating = self.isDictating
+        // A turn on the wire refuses dictation, so the microphone says so rather than
+        // swallowing the tap in silence.
+        let isEnabled = isDictating ? !isFinishingDictation : !isGenerating
+        dictationButton.isEnabled = isEnabled
+        setImage(isDictating ? endDictationIcon : microphoneIcon, on: dictationButton)
+        dictationButton.accessibilityLabel = isDictating ? aorusAILocalized("Закончить диктовку", "Finish dictation") : aorusAILocalized("Диктовать", "Dictate")
+        animateIfOnScreen {
+            self.dictationButton.backgroundColor = isDictating ? palette.fill : .clear
+            self.dictationButton.tintColor = isDictating ? palette.label : palette.secondary
+            self.dictationButton.alpha = isEnabled ? 1.0 : 0.42
+        }
     }
 
     private static let inputFont = aorusUIFont(16.0)
@@ -4840,9 +5158,19 @@ private final class AorusAIComposerView: UIView {
     }
 
     @objc private func closeReference() { onDismissReference?() }
-    @objc private func send() { onSend?() }
-    @objc private func dictate() { onDictation?() }
+    @objc private func sendPressed() {
+        if isDictating {
+            onSendDictation?()
+        } else {
+            onSend?()
+        }
+    }
+    @objc private func dictationPressed() { onDictation?() }
     @objc private func cancelDictation() { onCancelDictation?() }
+    @objc private func focusInput() {
+        guard !isDictating else { return }
+        textView.becomeFirstResponder()
+    }
 }
 
 /// Holds a display link's target weakly.
@@ -4874,91 +5202,52 @@ private final class AorusAIDisplayLinkProxy: NSObject {
     }
 }
 
-/// A running dictation, drawn as one continuous wave of the sound itself.
+/// A running dictation, drawn as a row of dots that rise with the voice.
 ///
-/// The shape is not decoration and it is not a row of bars. The microphone's loudness is
-/// sampled about sixteen times a second, and the ribbon's half-height at any point on the
-/// screen *is* the sample taken at the moment that point entered the panel — so the wave
-/// swells where a word was said and narrows to a thin line through a pause, and the whole
-/// shape travels left as the run goes on. Speaking louder makes it taller immediately;
-/// stopping flattens it immediately. Between samples the height is interpolated with a
-/// raised cosine, which is what turns the sample points into a smooth curve rather than the
-/// staircase a bar meter draws.
-///
-/// A spectrum drifts behind the ribbon and shows through it, so the run shimmers. The hue
-/// is the only decorative part; every height on screen came from the microphone.
+/// Every dot is a moment of the run. The microphone's loudness is sampled continuously, and
+/// a dot laid down while a word was being said stands up as a rounded bar as tall as that
+/// word was loud; one laid down in a pause stays a dot. The row travels left at a steady
+/// pace, so what was just said is at the right, next to the controls, and the start of the
+/// run fades out at the left. Every height on screen came from the microphone.
 private final class AorusAIDictationWaveView: UIView {
-    /// How far apart two consecutive columns sit. Wider makes the wave broader.
-    private static let samplePitch: CGFloat = 6.0
-    /// How fast the strip travels, in points per second. At this pitch that is about twenty
-    /// columns a second — faster than the microphone reports, so the shape is smooth rather
-    /// than stepped, and steady whatever the audio thread does.
-    private static let scrollSpeed: CGFloat = 120.0
-    /// A ceiling on the columns one frame may lay down, so a stalled main thread cannot make
-    /// the next frame do unbounded work.
+    /// How far apart two dots sit.
+    private static let pitch: CGFloat = 5.0
+    /// A dot's diameter, which is also the width of a bar.
+    private static let dot: CGFloat = 3.0
+    /// How fast the row travels, in points per second: twelve dots a second, faster than the
+    /// microphone reports, so the row moves smoothly whatever the audio thread does.
+    private static let scrollSpeed: CGFloat = 60.0
+    /// A ceiling on the dots one frame may lay down, so a stalled main thread cannot make the
+    /// next frame do unbounded work.
     private static let maximumColumnsPerFrame = 8
-    /// Half the thickness of the ribbon where nothing was heard, so a silent microphone is
-    /// a thin line rather than an empty box.
-    private static let silentHalfHeight: CGFloat = 1.25
-    /// How much of each end the ribbon tapers over, so it enters and leaves the panel as a
-    /// point instead of being sliced off mid-swell.
-    private static let taper: CGFloat = 14.0
+    /// How much of the left end the oldest dots fade over.
+    private static let fadeWidth: CGFloat = 28.0
 
-    /// Seven hues, enough of a sweep to read as a spectrum.
-    private static let spectrum: [UIColor] = [
-        UIColor(red: 0.36, green: 0.51, blue: 1.00, alpha: 1.0),
-        UIColor(red: 0.55, green: 0.36, blue: 1.00, alpha: 1.0),
-        UIColor(red: 0.95, green: 0.35, blue: 0.79, alpha: 1.0),
-        UIColor(red: 1.00, green: 0.52, blue: 0.35, alpha: 1.0),
-        UIColor(red: 0.99, green: 0.80, blue: 0.31, alpha: 1.0),
-        UIColor(red: 0.31, green: 0.85, blue: 0.62, alpha: 1.0),
-        UIColor(red: 0.24, green: 0.78, blue: 0.96, alpha: 1.0)
-    ]
-
-    /// The strip the drift animation slides: the seven hues twice over, closed with the
-    /// first one again. Fifteen evenly spaced stops means stop *i* and stop *i + 7* sit
-    /// exactly half the strip apart and carry the same colour, so the strip is periodic with
-    /// a period of one view width and the animation's jump back to the start is invisible.
-    private static let stripColors: [CGColor] = (spectrum + spectrum + [spectrum[0]]).map { $0.cgColor }
-
-    private let gradientHost = CALayer()
-    private let gradient = CAGradientLayer()
-    private let maskLayer = CAShapeLayer()
+    private let barsLayer = CAShapeLayer()
+    private let fadeMask = CAGradientLayer()
     private var displayLink: CADisplayLink?
 
-    /// One column per step of travel, oldest first; the newest is at the right edge.
+    /// One value per dot, oldest first; the newest is at the right edge.
     private var samples: [CGFloat] = []
     private var capacity = 0
-    /// The last loudness the microphone reported, and the value actually being drawn.
+    /// The last loudness the microphone reported, and the value actually being laid down.
     ///
-    /// The drawn one chases the reported one every frame — quickly upward, slowly down — so
-    /// the wave answers a syllable immediately and falls away smoothly rather than flicking
-    /// between two heights.
+    /// The laid one chases the reported one every frame — quickly upward, slowly down — so a
+    /// syllable shows at once and the bars fall away smoothly instead of flicking.
     private var targetLevel: CGFloat = 0.0
     private var drawnLevel: CGFloat = 0.0
-    /// How far the strip has travelled since the last column was laid down, and when the
-    /// last frame was drawn.
-    ///
-    /// Travel is driven by *time*, not by the arrival of microphone samples. Tying it to
-    /// arrivals meant the wave advanced only when a buffer came in and then sat still
-    /// between them: it drew in bursts, with a visible lag, and stopped altogether whenever
-    /// the audio thread was late. Now the strip moves at a constant speed whatever the
-    /// microphone is doing, and each new column simply records the loudness at the moment it
-    /// was laid down.
+    /// Travel since the last dot was laid down, and when the last frame was drawn. Travel
+    /// is driven by time, not by the arrival of samples, so the row never moves in bursts.
     private var scrollOffset: CGFloat = 0.0
     private var lastFrameAt: CFAbsoluteTime = 0.0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
-        gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
-        gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
-        gradient.colors = Self.stripColors
-        gradientHost.addSublayer(gradient)
-        maskLayer.fillColor = UIColor.black.cgColor
-        maskLayer.fillRule = .nonZero
-        gradientHost.mask = maskLayer
-        layer.addSublayer(gradientHost)
+        layer.addSublayer(barsLayer)
+        fadeMask.colors = [UIColor.clear.cgColor, UIColor.black.cgColor]
+        fadeMask.startPoint = CGPoint(x: 0.0, y: 0.5)
+        layer.mask = fadeMask
         isAccessibilityElement = true
         accessibilityLabel = aorusAILocalized("Идёт запись", "Recording")
     }
@@ -4969,26 +5258,25 @@ private final class AorusAIDictationWaveView: UIView {
         displayLink?.invalidate()
     }
 
-    /// Nothing here is themed: the point of the wave is that it is the one saturated thing
-    /// in the panel. The hook stays so the composer can configure it like every other part.
+    /// The dots are the label colour of the theme, as the text they are turning into is.
     func configure(palette: AorusAIPalette) {
+        barsLayer.fillColor = palette.label.cgColor
     }
 
     func setActive(_ active: Bool) {
         displayLink?.invalidate()
         displayLink = nil
-        gradient.removeAnimation(forKey: "aorusDrift")
         guard active else {
             samples.removeAll()
             targetLevel = 0.0
             drawnLevel = 0.0
             scrollOffset = 0.0
             lastFrameAt = 0.0
-            maskLayer.path = nil
+            barsLayer.path = nil
             return
         }
-        // A flat line to begin with, so the panel is a waiting microphone rather than an
-        // empty box that fills up over the first two seconds.
+        // A full row of dots to begin with, so the capsule is a waiting microphone rather
+        // than an empty space that fills up over the first seconds.
         samples = Array(repeating: 0.0, count: max(2, capacity))
         targetLevel = 0.0
         drawnLevel = 0.0
@@ -4999,27 +5287,28 @@ private final class AorusAIDictationWaveView: UIView {
         let link = CADisplayLink(target: AorusAIDisplayLinkProxy(target: self), selector: #selector(AorusAIDisplayLinkProxy.step(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
-        startDrift()
         redraw()
+    }
+
+    /// Stops the row where it is: the run has been ended and its last words are coming.
+    func freeze() {
+        displayLink?.invalidate()
+        displayLink = nil
     }
 
     /// One microphone reading, 0…1 as the recogniser measured it.
     ///
-    /// It is recorded, not drawn: the frame loop decides when a column is laid down. That is
-    /// what keeps the wave moving at a steady speed however irregularly the audio thread
-    /// delivers.
+    /// It is recorded, not drawn: the frame loop decides when a dot is laid down.
     func update(level: CGFloat) {
         targetLevel = Self.shaped(level)
     }
 
     /// What a raw level becomes on screen.
     ///
-    /// The recogniser hands over `(dBFS + 50) / 50`, which puts the room tone of a quiet
-    /// room around 0.2 and ordinary speech between 0.45 and 0.8 — drawn as-is, the wave is
-    /// never still and never full, and the difference between silence and a word is a fifth
-    /// of the height. The floor is subtracted so silence reaches zero, what is left is
-    /// stretched over the whole range, and the square root lifts quiet speech: a word now
-    /// uses the whole panel and a pause drops to the line.
+    /// The recogniser hands over `(dBFS + 50) / 50`, which puts the room tone of a quiet room
+    /// around 0.2 and ordinary speech between 0.45 and 0.8. The floor is subtracted so silence
+    /// is a dot, what is left is stretched over the whole height, and the square root lifts
+    /// quiet speech.
     private static func shaped(_ level: CGFloat) -> CGFloat {
         let floorLevel: CGFloat = 0.16
         let span: CGFloat = 0.60
@@ -5028,44 +5317,25 @@ private final class AorusAIDictationWaveView: UIView {
         return min(1.0, above).squareRoot()
     }
 
-    /// The colour band slides one full view width and repeats. The strip is periodic over
-    /// exactly that distance, so the jump back to the start is invisible.
-    private func startDrift() {
-        guard bounds.width > 1.0 else { return }
-        let drift = CABasicAnimation(keyPath: "position.x")
-        drift.fromValue = gradient.position.x
-        drift.toValue = gradient.position.x - bounds.width
-        drift.duration = 5.0
-        drift.repeatCount = .infinity
-        drift.isRemovedOnCompletion = false
-        gradient.add(drift, forKey: "aorusDrift")
-    }
-
     /// One frame. Called by the proxy, which is what the link actually points at.
-    ///
-    /// Advances the strip by the time that has passed, lays down a column every time it has
-    /// travelled one step, and redraws.
     fileprivate func step() {
         let now = CFAbsoluteTimeGetCurrent()
         let delta = lastFrameAt > 0.0 ? min(0.1, max(0.0, now - lastFrameAt)) : 0.0
         lastFrameAt = now
 
-        // Rises almost at once, falls away over about a fifth of a second. A meter that
-        // fell as fast as it rose flickered on every gap between syllables.
         let rate: CGFloat = targetLevel > drawnLevel ? 0.55 : 0.12
         drawnLevel += (targetLevel - drawnLevel) * rate
 
         scrollOffset += Self.scrollSpeed * CGFloat(delta)
         var laid = 0
-        while scrollOffset >= Self.samplePitch, laid < Self.maximumColumnsPerFrame {
-            scrollOffset -= Self.samplePitch
+        while scrollOffset >= Self.pitch, laid < Self.maximumColumnsPerFrame {
+            scrollOffset -= Self.pitch
             samples.append(drawnLevel)
             laid += 1
         }
         if laid == Self.maximumColumnsPerFrame {
-            // A frame that was starved for a long time — the app was in the background, or
-            // the main thread stalled. Rather than laying down a hundred identical columns,
-            // drop the remainder.
+            // A frame starved for a long time: rather than laying down a run of identical
+            // dots, drop the remainder.
             scrollOffset = 0.0
         }
         let limit = max(2, capacity)
@@ -5079,86 +5349,40 @@ private final class AorusAIDictationWaveView: UIView {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        gradientHost.frame = bounds
-        maskLayer.frame = bounds
-        // Twice the width, so the colour strip still covers the view at the far end of its
-        // travel.
-        gradient.frame = CGRect(x: 0.0, y: 0.0, width: bounds.width * 2.0, height: bounds.height)
+        barsLayer.frame = bounds
+        fadeMask.frame = bounds
+        fadeMask.endPoint = CGPoint(x: bounds.width > 0.0 ? min(1.0, Self.fadeWidth / bounds.width) : 1.0, y: 0.5)
         CATransaction.commit()
-        // Two spare samples: one is sliding out on the left, one is sliding in on the right.
-        capacity = max(2, Int(bounds.width / Self.samplePitch) + 2)
+        // Two spare dots: one is sliding out on the left, one is sliding in on the right.
+        capacity = max(2, Int(bounds.width / Self.pitch) + 2)
         if samples.count > capacity {
             samples.removeFirst(samples.count - capacity)
         } else if displayLink != nil, samples.count < capacity {
             samples.insert(contentsOf: Array(repeating: 0.0, count: capacity - samples.count), at: 0)
         }
-        if displayLink != nil {
-            gradient.removeAnimation(forKey: "aorusDrift")
-            startDrift()
-            redraw()
-        }
-    }
-
-    /// The wave's half-height at a point, in sample units from the newest sample.
-    ///
-    /// A raised cosine between the two samples the point falls between. Linear
-    /// interpolation would leave a visible corner at every sample and read as a chain of
-    /// facets; this joins them into one curve with no corners at all.
-    private func halfHeight(atSampleOffset offset: CGFloat) -> CGFloat {
-        guard samples.count >= 2 else { return samples.first ?? 0.0 }
-        let position = CGFloat(samples.count - 1) - offset
-        if position <= 0.0 { return samples[0] }
-        if position >= CGFloat(samples.count - 1) { return samples[samples.count - 1] }
-        let lower = Int(position)
-        let upper = min(samples.count - 1, lower + 1)
-        let t = position - CGFloat(lower)
-        let smooth = (1.0 - cos(t * .pi)) / 2.0
-        return samples[lower] + (samples[upper] - samples[lower]) * smooth
+        redraw()
     }
 
     private func redraw() {
         let width = bounds.width
         let height = bounds.height
-        guard width > 1.0, height > 1.0, samples.count >= 2 else { return }
-        let middle = height / 2.0
-        // 3pt of air top and bottom, so the loudest moment still sits inside the panel.
-        let maximumHalf = max(Self.silentHalfHeight, middle - 3.0)
-        // How far the strip has travelled past the newest column.
-        let shift = min(Self.samplePitch, max(0.0, scrollOffset))
-
-        let stepWidth: CGFloat = 1.0
-        var top: [CGPoint] = []
-        var bottom: [CGPoint] = []
-        var x: CGFloat = 0.0
-        while x <= width {
-            // Distance from the right edge in sample units: the newest sample is drawn at
-            // the right edge, and the wave slides left between arrivals.
-            let offset = (width - x - shift) / Self.samplePitch
-            var value = halfHeight(atSampleOffset: offset)
-            // Taper both ends to nothing so the ribbon has points, not cut edges.
-            let fromLeft = x / Self.taper
-            let fromRight = (width - x) / Self.taper
-            value *= min(1.0, max(0.0, min(fromLeft, fromRight)))
-            let half = max(Self.silentHalfHeight, value * maximumHalf)
-            top.append(CGPoint(x: x, y: middle - half))
-            bottom.append(CGPoint(x: x, y: middle + half))
-            x += stepWidth
-        }
-        guard top.count >= 2 else { return }
-
+        guard width > 1.0, height > 1.0, !samples.isEmpty else { return }
+        // How far the row has travelled past the newest dot.
+        let shift = min(Self.pitch, max(0.0, scrollOffset))
         let path = UIBezierPath()
-        path.move(to: top[0])
-        for point in top.dropFirst() {
-            path.addLine(to: point)
+        let newest = samples.count - 1
+        for index in stride(from: newest, through: 0, by: -1) {
+            let centerX = width - Self.dot * 0.5 - CGFloat(newest - index) * Self.pitch - shift
+            if centerX < -Self.dot {
+                break
+            }
+            let barHeight = max(Self.dot, samples[index] * height)
+            let rect = CGRect(x: centerX - Self.dot * 0.5, y: floor((height - barHeight) * 0.5), width: Self.dot, height: barHeight)
+            path.append(UIBezierPath(roundedRect: rect, cornerRadius: Self.dot * 0.5))
         }
-        for point in bottom.reversed() {
-            path.addLine(to: point)
-        }
-        path.close()
-
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        maskLayer.path = path.cgPath
+        barsLayer.path = path.cgPath
         CATransaction.commit()
     }
 }
@@ -5937,11 +6161,112 @@ private final class AorusAITypingIndicatorView: UIView {
 /// same material, radius and behaviour as the one next to it rather than a `UIBlurEffect`
 /// with a border drawn to look like one. Over an opaque page that hand-made version read
 /// as a grey slab with a name on it, which is exactly what it was.
+/// The round glass button that brings the newest message back.
+///
+/// It appears once the newest text is out of sight, above the input in the middle, the way
+/// the chat apps people already know put it, and it goes as soon as the newest text is back.
+private final class AorusAIScrollDownButton: UIView {
+    static let size: CGFloat = 40.0
+
+    private let content = UIView()
+    private let glass = GlassBackgroundView(frame: CGRect())
+    private let icon = UIImageView()
+    private var isDark = false
+    private(set) var isShown = false
+    var onPress: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        icon.image = UIImage(systemName: "arrow.down")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .semibold))
+        icon.contentMode = .center
+        icon.isUserInteractionEnabled = false
+        // Telegram's own interactive glass, tapped the way its glass buttons are: the
+        // recogniser is on the glass, so the press is the glass's own.
+        glass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
+        addSubview(content)
+        content.addSubview(glass)
+        glass.contentView.addSubview(icon)
+        // Hidden until there is somewhere to go back to. The scale is on an inner view, so
+        // the frame the controller sets is never a transformed one.
+        content.alpha = 0.0
+        content.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+        isHidden = true
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        accessibilityLabel = aorusAILocalized("К последнему сообщению", "Scroll to latest")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(theme: PresentationTheme) {
+        isDark = theme.overallDarkAppearance
+        icon.tintColor = AorusAIPalette.resolve(theme).label
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        content.bounds = CGRect(origin: CGPoint(), size: bounds.size)
+        content.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        glass.frame = content.bounds
+        glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, tintColor: aorusAIGlassTint, isInteractive: true, transition: .immediate)
+        icon.frame = CGRect(origin: CGPoint(), size: bounds.size)
+    }
+
+    func setShown(_ shown: Bool, animated: Bool) {
+        guard shown != isShown else { return }
+        isShown = shown
+        if shown {
+            isHidden = false
+        }
+        let changes: () -> Void = {
+            self.content.alpha = shown ? 1.0 : 0.0
+            self.content.transform = shown ? .identity : CGAffineTransform(scaleX: 0.5, y: 0.5)
+        }
+        let completion: (Bool) -> Void = { [weak self] _ in
+            guard let self, !self.isShown else { return }
+            self.isHidden = true
+        }
+        if animated && window != nil {
+            UIView.animate(withDuration: shown ? 0.45 : 0.3, delay: 0.0, usingSpringWithDamping: shown ? 0.72 : 1.0, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: changes, completion: completion)
+        } else {
+            changes()
+            completion(true)
+        }
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        // A hidden or fading button takes no taps from the conversation under it.
+        guard isShown else { return false }
+        return super.point(inside: point, with: event)
+    }
+
+    override func accessibilityActivate() -> Bool {
+        pressed()
+        return true
+    }
+
+    @objc private func pressed() {
+        guard isShown else { return }
+        onPress?()
+    }
+}
+
+/// The capsule at the top of the conversation: the AorusAI mark and name, and under them
+/// what the assistant is doing.
+///
+/// The same glass and the same height as the back button beside it, so the bar reads as one
+/// row of capsules. The capsule follows its text: when the status line appears, changes or
+/// goes, it widens or narrows and the name moves, in one spring.
 private final class AorusAINavigationTitleView: UIView {
-    private static let height: CGFloat = 40.0
-    private static let horizontalPadding: CGFloat = 14.0
+    private static let height: CGFloat = 44.0
+    private static let horizontalPadding: CGFloat = 16.0
+    private static let markSize: CGFloat = 16.0
+    private static let markSpacing: CGFloat = 5.0
+    private static let maximumWidth: CGFloat = 260.0
 
     private let glassView = GlassBackgroundView(frame: CGRect())
+    private let markView = UIImageView()
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
     private var isDarkAppearance = false
@@ -5949,13 +6274,17 @@ private final class AorusAINavigationTitleView: UIView {
     init(theme: PresentationTheme) {
         super.init(frame: .zero)
         glassView.isUserInteractionEnabled = false
+        markView.image = UIImage(systemName: "sparkles")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold))
+        markView.contentMode = .center
         titleLabel.text = "AorusAI"
-        titleLabel.font = aorusUIFont(15.0, .semibold)
-        titleLabel.textAlignment = .center
-        statusLabel.font = aorusUIFont(11.0, .regular)
+        titleLabel.font = aorusUIFont(16.0, .semibold)
+        titleLabel.textAlignment = .left
+        statusLabel.font = aorusUIFont(12.0, .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.alpha = 0.0
         addSubview(glassView)
+        addSubview(markView)
         addSubview(titleLabel)
         addSubview(statusLabel)
         isAccessibilityElement = true
@@ -5967,61 +6296,55 @@ private final class AorusAINavigationTitleView: UIView {
 
     func update(theme: PresentationTheme) {
         isDarkAppearance = theme.overallDarkAppearance
+        let palette = AorusAIPalette.resolve(theme)
         titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
-        statusLabel.textColor = AorusAIPalette.resolve(theme).secondary
+        statusLabel.textColor = palette.secondary
+        markView.tintColor = palette.accent
         setNeedsLayout()
     }
 
     func setStatus(_ text: String?) {
         let value = text?.trimmingCharacters(in: .whitespacesAndNewlines)
-        accessibilityValue = (value?.isEmpty == false) ? value : nil
-        guard statusLabel.text != value else { return }
-        UIView.transition(with: statusLabel, duration: 0.18, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
-            self.statusLabel.text = value
-        })
-        // The capsule hugs its text, so a longer status has to widen it.
-        invalidateIntrinsicContentSize()
-        setNeedsLayout()
-    }
-
-    /// The pill hugs its widest line rather than standing at a fixed width, the way a chat
-    /// title does.
-    override var intrinsicContentSize: CGSize {
-        let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
-        let statusWidth = ceil(statusLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
-        let width = min(240.0, max(120.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
-        return CGSize(width: width, height: Self.height)
+        let normalized = (value?.isEmpty == false) ? value : nil
+        accessibilityValue = normalized
+        guard statusLabel.text != normalized else { return }
+        let isOnScreen = window != nil
+        if isOnScreen, !(statusLabel.text ?? "").isEmpty, normalized != nil {
+            UIView.transition(with: statusLabel, duration: 0.2, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
+                self.statusLabel.text = normalized
+            })
+        } else {
+            statusLabel.text = normalized
+        }
+        layoutCapsule(transition: isOnScreen ? .spring(duration: 0.4) : .immediate)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let size = CGSize(width: min(intrinsicContentSize.width, bounds.width), height: min(Self.height, bounds.height))
-        guard size.width > 0.0, size.height > 0.0 else { return }
-        let frame = CGRect(
-            x: floor((bounds.width - size.width) / 2.0),
-            y: floor((bounds.height - size.height) / 2.0),
-            width: size.width,
-            height: size.height
-        )
-        glassView.frame = frame
-        glassView.update(
-            size: size,
-            cornerRadius: size.height / 2.0,
-            isDark: isDarkAppearance,
-            tintColor: GlassBackgroundView.TintColor(kind: .panel),
-            isInteractive: false,
-            transition: .immediate
-        )
-        let hasStatus = !(statusLabel.text ?? "").isEmpty
-        let textWidth = max(0.0, frame.width - Self.horizontalPadding * 2.0)
-        if hasStatus {
-            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 4.0, width: textWidth, height: 18.0)
-            statusLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 21.0, width: textWidth, height: 14.0)
-        } else {
-            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY, width: textWidth, height: frame.height)
-            statusLabel.frame = .zero
-        }
-        statusLabel.isHidden = !hasStatus
+        layoutCapsule(transition: .immediate)
+    }
+
+    private func layoutCapsule(transition: ComponentTransition) {
+        guard bounds.width > 0.0, bounds.height > 0.0 else { return }
+        let status = statusLabel.text ?? ""
+        let hasStatus = !status.isEmpty
+        let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width)
+        let statusWidth = hasStatus ? ceil(statusLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width) : 0.0
+        let lineWidth = Self.markSize + Self.markSpacing + titleWidth
+        let width = min(bounds.width, Self.maximumWidth, max(128.0, max(lineWidth, statusWidth) + Self.horizontalPadding * 2.0))
+        let height = min(Self.height, bounds.height)
+        let frame = CGRect(x: floor((bounds.width - width) / 2.0), y: floor((bounds.height - height) / 2.0), width: width, height: height)
+        transition.setFrame(view: glassView, frame: frame)
+        glassView.update(size: frame.size, cornerRadius: height / 2.0, isDark: isDarkAppearance, tintColor: aorusAIGlassTint, isInteractive: false, transition: transition)
+
+        let visibleTitleWidth = min(titleWidth, max(0.0, width - Self.horizontalPadding * 2.0 - Self.markSize - Self.markSpacing))
+        let lineX = floor(frame.midX - (Self.markSize + Self.markSpacing + visibleTitleWidth) / 2.0)
+        let titleHeight: CGFloat = 20.0
+        let titleY = hasStatus ? frame.minY + 5.0 : frame.minY + floor((height - titleHeight) / 2.0)
+        transition.setFrame(view: markView, frame: CGRect(x: lineX, y: titleY + floor((titleHeight - Self.markSize) / 2.0), width: Self.markSize, height: Self.markSize))
+        transition.setFrame(view: titleLabel, frame: CGRect(x: lineX + Self.markSize + Self.markSpacing, y: titleY, width: visibleTitleWidth, height: titleHeight))
+        transition.setFrame(view: statusLabel, frame: CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 24.0, width: max(0.0, width - Self.horizontalPadding * 2.0), height: 15.0))
+        transition.setAlpha(view: statusLabel, alpha: hasStatus ? 1.0 : 0.0)
     }
 }
 

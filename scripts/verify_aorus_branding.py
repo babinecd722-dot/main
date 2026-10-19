@@ -3708,11 +3708,12 @@ def main() -> None:
             ("AorusGlassProfileTint.prepareOpeningPage(for: aorusPeerIdValue, path: path,",),
         ),
         ("submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift", ("public static func prepareOpeningPage(for peerId: Int64, path: String,",)),
-        # The native palette is recorded for licence screens without remapping its page roles.
+        # The native palette keeps its roles but for the light grouped page, which is its plain
+        # white under glass, and is recorded for licence screens.
         (
             "submodules/TelegramPresentationData/Sources/PresentationData.swift",
             (
-                "Native palette roles are preserved. ItemList derives only its glass markers.",
+                "let list = theme.list.withUpdated(blocksBackgroundColor: theme.list.plainBackgroundColor)",
                 "AorusAppearanceRecord.record(isDark: theme.overallDarkAppearance, page: theme.list.blocksBackgroundColor,",
             ),
         ),
@@ -3748,7 +3749,8 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
         ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("let aorusToastTint: GlassBackgroundView.TintColor",)),
         ("submodules/ShareController/Sources/ShareControllerNode.swift", ("GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)",)),
-        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)",)),
+        # The fade under a profile's top bar is the profile's page, not the plain theme white.
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),
     )
     ghost_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
     if ghost_buttons.is_file() and "let ghostColor = UIColor.white" in ghost_buttons.read_text(encoding="utf-8"):

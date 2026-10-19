@@ -78,7 +78,7 @@ def patch_tab_settings(tg: Path) -> None:
         let theme = aorusTabBarTheme(theme)
         self.theme = theme''', 'tab theme and preview hooks')
     s = edit(s, '        self.backgroundColor = theme.list.plainBackgroundColor\n', '        self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor\n', 'preview excludes the controller page background', count=2)
-    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        defer { self.aorusApplyPreviewDrag(transition: transition) }', 'preview visibility survives native relayout')
+    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        self.aorusStagePreviewDrag()\n        defer { self.aorusApplyPreviewDrag(transition: transition) }', 'preview visibility survives native relayout')
     path.write_text(s)
 
     path = tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift' 
@@ -98,11 +98,14 @@ def patch_tab_settings(tg: Path) -> None:
     s = edit(s, '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {', '\n'.join([
         '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {',
         '        defer {',
-        '            if let item = self.aorusPreviewDragItem, let index = self.tabBarNodeContainers.firstIndex(where: { $0.item === item }) {',
-        '                self.aorusPreviewSlot = self.tabBarNodeContainers[index].imageNode.frame',
-        '                if let center = self.aorusPreviewDragCenter { self.aorusPreviewMoveItem(at: index, center: center, transition: .immediate) }',
+        '            if let item = self.aorusPreviewDragItem, let container = self.tabBarNodeContainers.first(where: { $0.item === item }) {',
+        '                self.aorusPreviewSlot = container.imageNode.frame',
+        '                if let center = self.aorusPreviewDragCenter { self.aorusPreviewMoveItem(item, center: center, transition: .immediate) }',
         '            }',
         '        }']), 'remember the native classic drop slot')
+    # The preview's order places the tabs; their nodes stay in the bar's own order.
+    s = edit(s, '                let originX = floor(leftNodeOriginX + CGFloat(i) * distanceBetweenNodes - nodeSize.width / 2.0)', '                let originX = floor(leftNodeOriginX + CGFloat(self.aorusPreviewPlace(of: container.item, at: i)) * distanceBetweenNodes - nodeSize.width / 2.0)', 'classic preview places')
+    s = edit(s, '        let container = self.tabBarNodeContainers[index]\n        return container.imageNode.frame', '        let container = self.tabBarNodeContainers[self.aorusPreviewContainerIndex(at: index)]\n        return container.imageNode.frame', 'classic preview frames by place')
     before, after = s.split('    private func updateNodeImage(_ index: Int, layout: Bool)', 1)
     for index, part in [('i', before), ('index', after)]:
         part = part.replace('title: item.item.title ?? "",', 'title: AorusTabBarSettings.current.title(item.item.title, selected: self.selectedIndex == ' + index + ', hideAll: !AorusOldInterface.isEnabled && UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")),')

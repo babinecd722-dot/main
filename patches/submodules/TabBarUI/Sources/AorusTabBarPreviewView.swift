@@ -19,7 +19,11 @@ public final class AorusTabBarPreviewView: UIView {
     private var dragged: String?
     private var dragCenter: CGPoint?
     private var dragOffset: CGFloat = 0.0
-    private var dragSlots: [CGRect] = []
+    // The bar's extent and each tab's width when the drag began. A tab keeps its width
+    // wherever it goes, so these give the slots of any order without reading back frames
+    // that are still animating.
+    private var dragBounds: CGRect = .zero
+    private var dragWidths: [String: CGFloat] = [:]
     private var finishWork: DispatchWorkItem?
     private var ending = false
     private var elements: [UIAccessibilityElement] = []
@@ -76,8 +80,8 @@ public final class AorusTabBarPreviewView: UIView {
         let bottom = self.window?.safeAreaInsets.bottom ?? 0.0
         let metrics = DeviceMetrics(screenSize: screen.bounds.size, scale: screen.scale, statusBarHeight: self.window?.safeAreaInsets.top ?? 0.0, onScreenNavigationHeight: bottom > 0 ? bottom : nil)
         let layout = ContainerViewLayout(size: self.bounds.size, metrics: LayoutMetrics(widthClass: self.window?.traitCollection.horizontalSizeClass == .regular ? .regular : .compact, heightClass: self.window?.traitCollection.verticalSizeClass == .regular ? .regular : .compact, orientation: self.window?.windowScene?.interfaceOrientation), deviceMetrics: metrics, intrinsicInsets: UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0), safeInsets: .zero, additionalInsets: .zero, statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: UIAccessibility.isVoiceOverRunning, presentedInFormSheet: false)
-        node.aorusPreviewLayout(layout, items: self.items.map { TabBarNodeItem(item: $0, contextActionType: .none) }, selectedIndex: self.items.firstIndex(where: { $0.aorusTabIdentifier == self.selected }) ?? 0, transition: UIAccessibility.isReduceMotionEnabled ? .immediate : transition)
-        node.aorusPreviewMoveItem(at: self.items.firstIndex(where: { $0.aorusTabIdentifier == self.dragged }), center: self.dragCenter, transition: .immediate)
+        let dragIndex = self.dragCenter == nil ? nil : self.items.firstIndex(where: { $0.aorusTabIdentifier == self.dragged })
+        node.aorusPreviewLayout(layout, items: self.items.map { TabBarNodeItem(item: $0, contextActionType: .none) }, selectedIndex: self.items.firstIndex(where: { $0.aorusTabIdentifier == self.selected }) ?? 0, dragIndex: dragIndex, dragCenter: self.dragCenter, transition: UIAccessibility.isReduceMotionEnabled ? .immediate : transition)
         self.updateAccessibility()
     }
     private func index(at point: CGPoint) -> Int? {
@@ -93,24 +97,43 @@ public final class AorusTabBarPreviewView: UIView {
         let point = gesture.location(in: self)
         switch gesture.state {
         case .began:
-            guard !self.ending, let index = self.index(at: point), let frame = self.node?.frameForControllerTab(at: index) else { return }
-            self.dragSlots = self.items.indices.compactMap { self.node?.frameForControllerTab(at: $0) }
-            guard self.dragSlots.count == self.items.count else { return }
+            guard !self.ending, self.original == nil, let index = self.index(at: point), let dragged = self.items[index].aorusTabIdentifier, let frame = self.node?.frameForControllerTab(at: index) else { return }
+            let frames = self.items.indices.compactMap { self.node?.frameForControllerTab(at: $0) }
+            guard frames.count == self.items.count else { return }
+            self.dragBounds = frames.dropFirst().reduce(frames[0]) { $0.union($1) }
+            self.dragWidths = Dictionary(zip(self.items, frames).compactMap { item, frame in item.aorusTabIdentifier.map { ($0, frame.width) } }, uniquingKeysWith: { first, _ in first })
             self.original = self.items
-            self.dragged = self.items[index].aorusTabIdentifier
+            self.dragged = dragged
             self.dragOffset = point.x - frame.midX
-            self.selected = self.dragged
+            self.selected = dragged
             self.dragCenter = CGPoint(x: frame.midX, y: frame.midY)
-            self.render(.immediate)
+            // One pass picks the tab up: the selection moves to it as it lifts.
+            self.render(.animated(duration: 0.4, curve: .spring))
             AorusTabBarFeedback.selection()
         case .changed:
-            guard !self.ending, let dragged, let source = self.items.firstIndex(where: { $0.aorusTabIdentifier == dragged }) else { return }
-            let x = max(self.dragSlots[0].midX, min(self.dragSlots[self.dragSlots.count - 1].midX, point.x - self.dragOffset))
+            guard !self.ending, let dragged, self.dragCenter != nil, let source = self.items.firstIndex(where: { $0.aorusTabIdentifier == dragged }), let width = self.dragWidths[dragged] else { return }
+            let x = max(self.dragBounds.minX + width * 0.5, min(self.dragBounds.maxX - width * 0.5, point.x - self.dragOffset))
             self.dragCenter?.x = x
             self.node?.aorusPreviewMoveItem(at: source, center: self.dragCenter, transition: .immediate)
-            guard let destination = self.items.indices.min(by: { abs(self.dragSlots[$0].midX - x) < abs(self.dragSlots[$1].midX - x) }), destination != source else { return }
+            // The place whose centre is nearest the tab, with the others closed up around it.
+            // A tab therefore changes places once it covers half of its neighbour.
+            let others = self.items.filter { $0.aorusTabIdentifier != dragged }
+            var destination = source
+            var nearest = CGFloat.greatestFiniteMagnitude
+            var leading = self.dragBounds.minX
+            for place in 0 ... others.count {
+                let distance = abs(leading + width * 0.5 - x)
+                if distance < nearest {
+                    nearest = distance
+                    destination = place
+                }
+                if place < others.count {
+                    leading += others[place].aorusTabIdentifier.flatMap { self.dragWidths[$0] } ?? width
+                }
+            }
+            guard destination != source else { return }
             self.items.insert(self.items.remove(at: source), at: destination)
-            self.render(.animated(duration: 0.3, curve: .spring))
+            self.render(.animated(duration: 0.35, curve: .spring))
             AorusTabBarFeedback.selection()
         case .ended:
             self.finishDrag()
@@ -123,8 +146,9 @@ public final class AorusTabBarPreviewView: UIView {
         guard self.original != nil, self.dragged != nil else { self.cancelDrag(); return }
         self.ending = true
         self.dragCenter = nil
-        let duration = UIAccessibility.isReduceMotionEnabled ? 0.0 : 0.3
-        self.node?.aorusPreviewMoveItem(at: nil, center: nil, transition: duration == 0 ? .immediate : .animated(duration: duration, curve: .spring))
+        // The tab settles into its place and the lens comes down in the same pass.
+        let duration = UIAccessibility.isReduceMotionEnabled ? 0.0 : 0.4
+        self.render(duration == 0 ? .immediate : .animated(duration: duration, curve: .spring))
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.ending else { return }
             let order = self.items.compactMap(\.aorusTabIdentifier)
@@ -138,17 +162,18 @@ public final class AorusTabBarPreviewView: UIView {
         self.finishWork?.cancel()
         self.finishWork = nil
         self.dragCenter = nil
-        self.dragSlots = []
+        self.dragBounds = .zero
+        self.dragWidths = [:]
         self.dragged = nil
         self.original = nil
         self.ending = false
-        self.node?.aorusPreviewMoveItem(at: nil, center: nil, transition: .immediate)
     }
     private func cancelDrag() {
         guard let original = self.original else { return }
         self.items = original
         self.clearDrag()
-        self.render(.immediate)
+        // Put back in one pass: the tab returns to its place as the others close up.
+        self.render(self.window == nil || UIAccessibility.isReduceMotionEnabled ? .immediate : .animated(duration: 0.4, curve: .spring))
     }
     private func updateAccessibility() {
         self.elements = self.items.enumerated().map { index, item in

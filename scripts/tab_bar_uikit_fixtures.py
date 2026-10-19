@@ -15,23 +15,29 @@ def tab_preview_test_source(tg: Path) -> str:
     preview_layout = block(controller, '    func aorusPreviewLayout(')
     for name in names: preview_layout = re.sub(r'\b' + name + r'\b', 'TabPreview' + name + 'Fixture', preview_layout)
     native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
-    move = block(native, '        public func aorusPreviewMoveItem(').replace('public ', '').replace('ComponentTransition', 'TabPreviewContainedViewLayoutTransitionFixture')
+    move = '\n'.join(block(native, marker).replace('public ', '').replace('ComponentTransition', 'TabPreviewContainedViewLayoutTransitionFixture') for marker in ('        public func aorusPreviewStage(', '        public func aorusPreviewMoveItem('))
     frame = native[native.index('                var itemFrame = CGRect(origin: CGPoint(x: nextItemX'):native.index('                if let itemComponentView = itemView.view as? ItemComponent.View')]
     assert 'itemTransition = .immediate' in frame and 'aorusDraggedFrame = itemFrame' in frame
     assert native.count('transition: self.aorusIsPreview ? .immediate : itemTransition,') == 2
     classic = (tg / 'submodules/TabBarUI/Sources/TabBarNode.swift').read_text()
     classic_helpers = classic[classic.index('    private var aorusPreviewDragItem:'):classic.index('    func frameForControllerTab(at index:')]
-    classic_helpers = classic_helpers.replace('ContainedViewLayoutTransition', 'TabPreviewContainedViewLayoutTransitionFixture')
+    classic_helpers = re.sub(r'\bTabBarNodeItem\b', 'TabPreviewTabBarNodeItemFixture', classic_helpers.replace('ContainedViewLayoutTransition', 'TabPreviewContainedViewLayoutTransitionFixture'))
     classic_layout = block(block(classic, '    func updateLayout(size:'), '        defer {')
     classic_probe = r'''
+private final class NativeClassicItemNode: UIView {
+    let containerNode = UIView()
+}
 private final class NativeClassicDragContainer {
     let item = UITabBarItem()
-    let imageNode = UIView()
+    let imageNode = NativeClassicItemNode()
     let badge = UIView()
-    init() { imageNode.addSubview(badge) }
+    init() { imageNode.addSubview(imageNode.containerNode); imageNode.containerNode.addSubview(badge) }
 }
 private final class NativeClassicDragProbe {
     var tabBarNodeContainers = [NativeClassicDragContainer(), NativeClassicDragContainer()]
+    var tabBarItems: [TabPreviewTabBarNodeItemFixture] = []
+    var selectedIndex: Int?
+    init() { tabBarItems = tabBarNodeContainers.map { TabPreviewTabBarNodeItemFixture(item: $0.item, contextActionType: .none) } }
 ''' + classic_helpers + r'''
     func relayout() {
 ''' + classic_layout + r'''
@@ -59,6 +65,7 @@ private final class NativePreviewProbe: UIView {
     let state: NativePreviewState? = NativePreviewState()
     var aorusIsPreview = false
     var aorusPreviewDrag: (id: AnyHashable, center: CGPoint)?
+    var aorusPreviewDragStart: CGPoint?
     var normal: [AnyHashable: UIView] = [:]
     var selected: [AnyHashable: UIView] = [:]
     override init(frame: CGRect) {
@@ -108,6 +115,10 @@ enum TabPreviewContainedViewLayoutTransitionFixture {
     case immediate
     case animated(duration: Double, curve: Curve)
     func updateFrame(node: UIView, frame: CGRect) { setFrame(node, frame) }
+    func updateSublayerTransformScale(node: UIView, scale: CGFloat, completion: ((Bool) -> Void)? = nil) {
+        node.layer.sublayerTransform = CATransform3DMakeScale(scale, scale, 1.0)
+        completion?(true)
+    }
     func setFrame(_ view: UIView, _ frame: CGRect) {
         switch self {
         case .immediate: view.layer.removeAllAnimations(); view.frame = frame
@@ -143,6 +154,8 @@ private final class TabPreviewTabBarControllerNodeFixture {
     var aorusClassicTabBar: TabPreviewTabBarControllerNodeFixture?
     let native = NativePreviewProbe()
     var aorusIsPreview = false
+    var aorusPreviewDragItem: UITabBarItem?
+    var aorusPreviewDragCenter: CGPoint?
     var layoutResult: Int?
     var backgroundColor: UIColor? { get { view.backgroundColor } set { view.backgroundColor = newValue } }
     var isOpaque: Bool { get { view.isOpaque } set { view.isOpaque = newValue } }
@@ -151,15 +164,20 @@ private final class TabPreviewTabBarControllerNodeFixture {
     func updateTheme(_ theme: TabPreviewPresentationThemeFixture) {}
     func updateTabBarItems(items: [TabPreviewTabBarNodeItemFixture]) { self.tabBarItems = items }
     func updateSelectedIndex(index: Int) {}
+    func aorusPreviewArrange(_ items: [TabPreviewTabBarNodeItemFixture], selected: UITabBarItem?) {}
     func containerLayoutUpdated(_ layout: TabPreviewContainerViewLayoutFixture, toolbar: Int?, transition: TabPreviewContainedViewLayoutTransitionFixture) -> CGFloat {
         native.frame = CGRect(x: 0, y: 40, width: layout.size.width, height: 55)
         native.component = NativePreviewComponent(items: items.map { NativePreviewItem(id: ObjectIdentifier($0.item)) })
+        // As the controller does: the carried tab is staged before the pass that lays it out.
+        let _ = native.aorusPreviewStage(item: aorusPreviewDragItem, center: aorusPreviewDragCenter.map { native.convert($0, from: view) })
         native.render(transition)
         return 0
     }
 ''' + preview_layout + r'''
     func aorusPreviewMoveItem(at index: Int?, center: CGPoint?, transition: TabPreviewContainedViewLayoutTransitionFixture) {
-        native.aorusPreviewMoveItem(at: index, center: center.map { native.convert($0, from: view) }, transition: transition)
+        aorusPreviewDragItem = index.flatMap { items.indices.contains($0) ? items[$0].item : nil }
+        aorusPreviewDragCenter = aorusPreviewDragItem == nil ? nil : center
+        native.aorusPreviewMoveItem(item: aorusPreviewDragItem, center: aorusPreviewDragCenter.map { native.convert($0, from: view) }, transition: transition)
     }
     func frameForControllerTab(at index: Int) -> CGRect? {
         guard items.indices.contains(index), !items.isEmpty else { return nil }
@@ -216,13 +234,19 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     let held = classic.tabBarNodeContainers[1]
     held.badge.isHidden = false
     classic.tabBarNodeContainers[0].badge.isHidden = true
-    classic.aorusPreviewMoveItem(at: 1, center: CGPoint(x: 76, y: 25), transition: .immediate)
-    expect(held.imageNode.center.x == 76 && held.badge.superview === held.imageNode, "classic glyph and badge move as the same native tab")
+    classic.aorusPreviewMoveItem(held.item, center: CGPoint(x: 76, y: 25), transition: .immediate)
+    expect(held.imageNode.center.x == 76 && held.badge.isDescendant(of: held.imageNode), "classic glyph and badge move as the same native tab")
+    expect(held.imageNode.containerNode.layer.sublayerTransform.m11 > 1.0 && held.imageNode.layer.zPosition > classic.tabBarNodeContainers[0].imageNode.layer.zPosition, "the carried classic tab is lifted over the others")
     classic.tabBarNodeContainers.reverse()
     classic.relayout()
     expect(held.imageNode.center.x == 76, "native classic relayout preserves the finger position")
-    classic.aorusPreviewMoveItem(at: nil, center: nil, transition: .immediate)
+    classic.aorusPreviewMoveItem(nil, center: nil, transition: .immediate)
     expect(held.imageNode.frame.minX == 0, "classic drop uses the reordered slot rather than its original slot")
+    expect(held.imageNode.containerNode.layer.sublayerTransform.m11 == 1.0, "the dropped classic tab returns to its size")
+    let classicOwnOrder = classic.tabBarItems.map { ObjectIdentifier($0.item) }
+    classic.aorusPreviewArrange(Array(classic.tabBarItems.reversed()), selected: held.item)
+    expect(classic.tabBarItems.map { ObjectIdentifier($0.item) } == classicOwnOrder, "a new classic order moves the tabs without rebuilding them")
+    expect(classic.selectedIndex.map { classic.tabBarItems[$0].item === held.item } == true, "classic selection is kept in the bar's own order")
     expect(!held.badge.isHidden && classic.tabBarNodeContainers[1].badge.isHidden, "native drag preserves filled and hidden badge states")
     phase(.began, x: 60)
     expect(preview.subviews.count == 1, "drag moves the native tab, without a detached snapshot or rectangular wrapper")

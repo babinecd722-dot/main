@@ -14,7 +14,9 @@ def check_native_light_palette(tg: Path, swiftc: str) -> None:
     assert 'extendingThemeReference ?? (aorusNativeLight ? themeReference : nil)' in factory
     data = (tg / 'submodules/TelegramPresentationData/Sources/PresentationData.swift').read_text()
     transform = block(data, 'func aorusApplyInterfaceV2Theme(')
-    assert 'withUpdated(' not in transform and 'return theme' in transform
+    # The one role Interface 2.0 changes: the light grouped page is the plain page.
+    assert transform.count('withUpdated(') == 1 and 'theme.list.withUpdated(blocksBackgroundColor: theme.list.plainBackgroundColor)' in transform
+    assert '!theme.overallDarkAppearance' in transform and 'result.starGift = theme.starGift' in transform
     controls = (tg / 'submodules/TelegramUI/Sources/OverlayAudioPlayerControlsNode.swift').read_text()
     assert 'var buttonBackgroundColor = self.presentationData.theme.list.itemCheckColors.fillColor' in controls
     assert 'tintColor: self.presentationData.theme.list.itemCheckColors.foregroundColor' in controls
