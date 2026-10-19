@@ -5940,6 +5940,50 @@ def _patch_music_player_glass(tg: Path) -> None:
     )
     text = _replace_once(
         text,
+        "        self.presentationData = context.sharedContext.currentPresentationData.with { $0 }\n"
+        "        self.type = type\n",
+        "        self.presentationData = OverlayAudioPlayerControllerNode.aorusPlayerPresentationData(context.sharedContext.currentPresentationData.with { $0 })\n"
+        "        self.type = type\n",
+        "music player palette",
+    )
+    for owner in ("context", "self.context"):
+        text = _replace_once(
+            text,
+            "            updatedPresentationData: (" + owner + ".sharedContext.currentPresentationData.with({ $0 }), " + owner + ".sharedContext.presentationData),\n",
+            "            updatedPresentationData: (OverlayAudioPlayerControllerNode.aorusPlayerPresentationData(" + owner + ".sharedContext.currentPresentationData.with({ $0 })), " + owner + ".sharedContext.presentationData |> map { OverlayAudioPlayerControllerNode.aorusPlayerPresentationData($0) }),\n",
+            "music playlist palette " + owner,
+        )
+    text = _replace_once(
+        text,
+        "        self.presentationDataDisposable = context.sharedContext.presentationData.startStrict(next: { [weak self] presentationData in\n",
+        "        self.presentationDataDisposable = (context.sharedContext.presentationData |> map { OverlayAudioPlayerControllerNode.aorusPlayerPresentationData($0) }).startStrict(next: { [weak self] presentationData in\n",
+        "music player palette updates",
+    )
+    text = _replace_once(
+        text,
+        "    private var aorusPlayerBackgroundView: GlassBackgroundView?\n",
+        "    private var aorusPlayerBackgroundView: GlassBackgroundView?\n"
+        "    // AorusGram: under Interface 2.0 the player is clear glass over the modal's dim, which is dark\n"
+        "    // whatever the theme. In a light theme its words were drawn black on that dark glass: there\n"
+        "    // the player is drawn in the night palette with the person's accent, so its titles, times and\n"
+        "    // controls read white. Made once per theme, so a theme emission does not rebuild the player.\n"
+        "    private static var aorusNightPlayerTheme: (source: PresentationTheme, night: PresentationTheme)?\n"
+        "    static func aorusPlayerPresentationData(_ presentationData: PresentationData) -> PresentationData {\n"
+        "        guard AorusGlassPane.isEnabled, !presentationData.theme.overallDarkAppearance else {\n"
+        "            return presentationData\n"
+        "        }\n"
+        "        if let cached = OverlayAudioPlayerControllerNode.aorusNightPlayerTheme, cached.source === presentationData.theme {\n"
+        "            return presentationData.withUpdated(theme: cached.night)\n"
+        "        }\n"
+        "        let native = makeDefaultPresentationTheme(reference: .night, serviceBackgroundColor: nil)\n"
+        "        let night = customizePresentationTheme(native, editing: false, accentColor: presentationData.theme.list.itemAccentColor, outgoingAccentColor: nil, backgroundColors: [], bubbleColors: [], animateBubbleColors: false)\n"
+        "        OverlayAudioPlayerControllerNode.aorusNightPlayerTheme = (presentationData.theme, night)\n"
+        "        return presentationData.withUpdated(theme: night)\n"
+        "    }\n",
+        "music player night palette",
+    )
+    text = _replace_once(
+        text,
         "        self.historyFrameTopMaskNode.isHidden = self.controlsNode.hasPlainBackground\n",
         "        // AorusGram: those two wedges round the playlist's corners into the header band by\n"
         "        // painting the modal's own fill over them, and Interface 2.0 has no such fill -- one pane\n"

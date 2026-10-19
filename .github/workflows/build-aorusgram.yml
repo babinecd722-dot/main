@@ -1198,6 +1198,9 @@ jobs:
       - name: Wall menus and classic presentation preflight
         run: python3 aorusgram/scripts/wall_menu_check.py aorusgram --telegram-source telegram-ios
 
+      - name: Wall seen tracking preflight
+        run: python3 aorusgram/scripts/wall_seen_check.py aorusgram --telegram-source telegram-ios
+
       - name: Native round video sending preflight
         run: |
           python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios

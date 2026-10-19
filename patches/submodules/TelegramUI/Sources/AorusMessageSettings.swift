@@ -650,6 +650,9 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         self.bottomStripeNode = ASDisplayNode()
         self.bottomStripeNode.isLayerBacked = true
         self.maskNode = ASImageNode()
+        // Telegram's image node takes touches by default, and this one lies over the whole card
+        // to round its corners: it swallowed every tap meant for the button on the preview.
+        self.maskNode.isUserInteractionEnabled = false
         self.containerNode = ASDisplayNode()
         self.containerNode.isUserInteractionEnabled = false
         self.containerNode.subnodeTransform = CATransform3DMakeRotation(CGFloat.pi, 0.0, 0.0, 1.0)
@@ -670,7 +673,8 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             button = current
         } else {
             button = AorusLookShuffleButton(frame: CGRect())
-            self.cardNode.view.addSubview(button)
+            // On the row itself, above the card and the corner mask the row lays over it.
+            self.view.addSubview(button)
             self.shuffleButton = button
         }
         button.shuffle = { [weak self] in
@@ -680,7 +684,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         let frame = CGRect(x: params.width - params.rightInset - 12.0 - size, y: 12.0, width: size, height: size)
         button.update(frame: frame, theme: item.theme, wallpaper: item.wallpaper, backgroundNode: self.backgroundNode, backgroundSize: backgroundSize, title: item.shuffleTitle)
         // Above the messages and the rounded edge of the card.
-        self.cardNode.view.bringSubviewToFront(button)
+        self.view.bringSubviewToFront(button)
     }
 
     /// Lays the messages out now and returns the row's size with what places them.
@@ -1003,6 +1007,13 @@ final class AorusLookShuffleButton: UIButton {
             blur.update(size: bounds.size, cornerRadius: frame.height / 2.0, transition: .immediate)
         }
         self.accessibilityLabel = title
+    }
+
+    // A 32-point circle is smaller than a fingertip: the button answers across the 44 points
+    // a control is given everywhere else.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        let slop = max(0.0, (44.0 - min(self.bounds.width, self.bounds.height)) / 2.0)
+        return self.bounds.insetBy(dx: -slop, dy: -slop).contains(point)
     }
 
     // Pressed, the button dims the way Telegram's own do, and comes back as it is let go.

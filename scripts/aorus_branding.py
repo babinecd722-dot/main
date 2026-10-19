@@ -30572,6 +30572,8 @@ def main() -> None:
     patch_hide_tabs(tg)
     patch_tab_bar_visibility_controls(tg)
     patch_wall_tab(tg)
+    from aorus_wall_scroll import patch_custom_view_scroll_once
+    patch_custom_view_scroll_once(tg)
     # After the Wall: it rewrites the tab assembly this one extends.
     patch_plugin_tabs(tg)
     from aorus_plugin_screens import patch_plugin_screens
@@ -30667,6 +30669,8 @@ def main() -> None:
     from aorus_light_surfaces import patch_light_surfaces
     from aorus_tab_settings import patch_tab_settings
     patch_light_surfaces(tg)
+    from aorus_qr_scan_light import patch_qr_scan_light
+    patch_qr_scan_light(tg)
     patch_tab_settings(tg)
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)

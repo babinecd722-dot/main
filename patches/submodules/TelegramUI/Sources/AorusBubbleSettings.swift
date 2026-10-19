@@ -186,6 +186,9 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         self.bottomStripeNode = ASDisplayNode()
         self.bottomStripeNode.isLayerBacked = true
         self.maskNode = ASImageNode()
+        // Telegram's image node takes touches by default, and this one lies over the whole card
+        // to round its corners: it swallowed every tap meant for the button on the preview.
+        self.maskNode.isUserInteractionEnabled = false
 
         super.init(layerBacked: false)
 
@@ -239,7 +242,8 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
             button = current
         } else {
             button = AorusLookShuffleButton(frame: CGRect())
-            self.cardNode.view.addSubview(button)
+            // On the row itself, above the card and the corner mask the row lays over it.
+            self.view.addSubview(button)
             self.shuffleButton = button
         }
         button.shuffle = { [weak self] in
@@ -250,7 +254,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         let frame = CGRect(x: params.width - params.rightInset - 16.0 - 22.0 - size / 2.0, y: contentSize.height - 12.0 - size, width: size, height: size)
         button.update(frame: frame, theme: item.theme, wallpaper: item.wallpaper, backgroundNode: self.backgroundNode, backgroundSize: backgroundSize, title: item.shuffleTitle)
         // Above the header and the rounded edge of the card.
-        self.cardNode.view.bringSubviewToFront(button)
+        self.view.bringSubviewToFront(button)
     }
 
     /// The bar, its title and its avatar for the item shown. With `animated`, the person

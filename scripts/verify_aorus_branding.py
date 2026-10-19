@@ -1952,6 +1952,25 @@ def main() -> None:
     ):
         if marker not in wall_text:
             err.append(f"Wall: single-source badge publication is missing {marker}")
+    # A rebuilt feed holds nothing the reader has had on screen, and it is read from its top:
+    # Refresh and a tab tap take the top-to-bottom list there (Telegram's tab tap moved it a
+    # few screens down), and nothing is tracked until the list shows it.
+    for marker in (
+        "let messages = self.beginRebuiltFeed(messages)",
+        "private func recordScrolledPast(_ liveIds: Set<MessageId>) {",
+        "guard liveIds.contains(rebuiltFeedTopId) else {",
+        "controller.chatDisplayNode.historyNode.scrollToEndOfHistory()",
+        "controller.scrollToTop = { [weak contents] in",
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: Refresh can bring back posts the reader has seen — missing {marker}")
+    # Telegram repeated a custom list's scroll request with every update until the location
+    # changed; on the Wall that would pull the reader back to the top with each new page.
+    history_list = tg / "submodules" / "TelegramUI" / "Sources" / "ChatHistoryListNode.swift"
+    history_list_text = history_list.read_text(encoding="utf-8") if history_list.is_file() else ""
+    for marker in ("// AorusGram: a scroll request applies once", "if let location, isFirstView {"):
+        if marker not in history_list_text:
+            err.append(f"Wall: a scroll to the top repeats with every update — missing {marker}")
 
     account_details = tg / "submodules" / "AorusGramUI" / "Sources" / "AccountDetailsController.swift"
     account_details_text = account_details.read_text(encoding="utf-8") if account_details.is_file() else ""
@@ -3183,6 +3202,9 @@ def main() -> None:
                 "import GlassBackgroundComponent",
                 "aorusListFill",
                 "aorusFrameFill",
+                # Light theme: the player over its dark glass is drawn in the night palette.
+                "static func aorusPlayerPresentationData(_ presentationData: PresentationData) -> PresentationData {",
+                "self.presentationData = OverlayAudioPlayerControllerNode.aorusPlayerPresentationData(",
             ),
         ),
         # The panel under the transport controls draws its own fill and shadow in two generators;
@@ -3749,6 +3771,9 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
         ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("let aorusToastTint: GlassBackgroundView.TintColor",)),
         ("submodules/ShareController/Sources/ShareControllerNode.swift", ("GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)",)),
+        # The QR scanner follows the app theme around the camera picture.
+        ("submodules/QrCodeUI/Sources/QrCodeScanScreen.swift", ("aorusQrScanIsDark = self.presentationData.theme.overallDarkAppearance", "self.backgroundColor = aorusPage", "isDark: aorusQrScanIsDark,")),
+        ("submodules/QrCodeUI/Sources/GlassButtonNode.swift", ("isDark: aorusQrScanIsDark, tintColor: .init(kind: .panel)",)),
         # The fade under a profile's top bar is the profile's page, not the plain theme white.
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),
     )
