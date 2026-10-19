@@ -228,6 +228,17 @@ def cmd_logs(root: Path, repo: str, branch: str | None, token_file: str | None, 
                 signed_url = exc.headers["Location"]
                 with urllib.request.urlopen(signed_url, timeout=60, context=ctx) as resp:
                     lines = resp.read().decode("utf-8", errors="replace").splitlines()
+                err_hits = [
+                    i for i, ln in enumerate(lines)
+                    if re.search(r" error:|ERROR:", ln) and "re.search" not in ln
+                ]
+                if err_hits:
+                    print("=== Compiler / Bazel Errors ===")
+                    for idx in err_hits[:20]:
+                        for c in lines[max(0, idx - 1):min(len(lines), idx + 5)]:
+                            print(_redact(c, token))
+                        print("---")
+                print(f"=== Last {tail} lines ===")
                 for line in lines[-tail:]:
                     print(_redact(line, token))
             else:

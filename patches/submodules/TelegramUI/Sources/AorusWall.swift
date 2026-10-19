@@ -2015,7 +2015,7 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
             return
         }
         let activeIds = AorusWallChatContents.aorusActiveFeedIds(accountId: accountId)
-        let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId).subtracting(activeIds)
+        let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId).filter { !activeIds.contains($0) }
         guard !recorded.isEmpty else {
             return
         }
