@@ -3702,6 +3702,8 @@ def main() -> None:
                 "layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {",
                 # Back from the background the profile is laid out at the size it has.
                 "self.aorusForegroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification",
+                # On a wide screen a profile menu stays under its button and scrolls in itself.
+                "let aorusMenuStaysUnderButton = window.bounds.width > window.bounds.height",
                 # The pull is armed only from rest at the top.
                 "abs(scrollView.contentOffset.y) < 1.0",
                 # The gallery opens and closes onto a square photo, which stays until it is covered.
@@ -3750,7 +3752,8 @@ def main() -> None:
             (
                 "isDark: component.aorusPageIsDark ?? component.theme.overallDarkAppearance",
                 "aorusSelectedAccent: component.aorusPageInk",
-                "customContent.view?.alpha = component.isSelected ? 1.0 : 0.5",
+                # The gifts tab is drawn at full strength, as the titles beside it.
+                "// AorusGram: in full ink and the gifts' own colours, as the titles beside it.\n                    customContent.view?.alpha = 1.0",
             ),
         ),
         (

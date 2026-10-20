@@ -3022,6 +3022,34 @@ def _patch_landscape_profile(tg: Path) -> None:
             "foreground settle",
         )
         screen_path.write_text(screen, encoding="utf-8")
+    if "aorusMenuStaysUnderButton" not in screen:
+        # A menu that does not fit under its button scrolls the whole menu scene up to show its
+        # end; on a phone on its side, a screen as short as a menu, that carried the profile's
+        # menus away from their buttons and off the top. On a wide screen they are held under
+        # the button, as tall as the room there, and scroll in themselves.
+        screen = _replace_once(
+            screen,
+            "final class PeerInfoContextReferenceContentSource: ContextReferenceContentSource {\n"
+            "    private let controller: ViewController\n"
+            "    private let sourceView: UIView\n",
+            "final class PeerInfoContextReferenceContentSource: ContextReferenceContentSource {\n"
+            "    private let controller: ViewController\n"
+            "    private let sourceView: UIView\n"
+            "    \n"
+            "    // AorusGram: a menu that does not fit under its button scrolls the whole menu scene\n"
+            "    // up to show its end. On a phone on its side the screen is as short as a menu, and\n"
+            "    // the profile's menus went off towards the top, away from their buttons. Held in\n"
+            "    // place, a menu is as tall as the room under its button and scrolls in itself.\n"
+            "    var keepInPlace: Bool {\n"
+            "        guard AorusInterfaceV2Run.isEnabled, let window = self.sourceView.window else {\n"
+            "            return false\n"
+            "        }\n"
+            "        let aorusMenuStaysUnderButton = window.bounds.width > window.bounds.height\n"
+            "        return aorusMenuStaysUnderButton\n"
+            "    }\n",
+            "menus stay under their buttons",
+        )
+        screen_path.write_text(screen, encoding="utf-8")
     print("InterfaceV2: profile laid out for a wide screen")
 
 

@@ -54,6 +54,13 @@ def patch_light_surfaces(tg: Path) -> None:
     path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift'
     source = edit(path.read_text(), 'return component.isSelected ? accent : accent.withAlphaComponent(0.5)', 'return accent', 'profile tab ink')
+    # The gifts tab is drawn by its pane, with the gifts' own colours on it. It was still dimmed
+    # to half when not selected after the titles beside it went to full ink, and read as greyed
+    # out beside them; Telegram draws it at full strength.
+    source = edit(source,
+        '                if component.aorusSelectedAccent != nil {\n                    customContent.view?.alpha = component.isSelected ? 1.0 : 0.5\n                }\n',
+        '                if component.aorusSelectedAccent != nil {\n                    // AorusGram: in full ink and the gifts\' own colours, as the titles beside it.\n                    customContent.view?.alpha = 1.0\n                }\n',
+        'profile gifts tab at full strength')
     path.write_text(source)
     path = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift'
     source = edit(path.read_text(),
