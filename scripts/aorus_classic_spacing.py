@@ -47,6 +47,10 @@ def _patch(tg: Path, rel: str, edits) -> None:
         if label == "collections colour" and "let aorusCollectionTheme: PresentationTheme" in text:
             old = old.replace("params.presentationData.theme", "aorusCollectionTheme")
             new = new.replace("params.presentationData.theme", "aorusCollectionTheme")
+        # The album tabs take the posts' page palette (aorus_posts_page_ink.py) once installed.
+        if label == "albums colour" and "let aorusTabTheme = " in text:
+            old = old.replace("self.presentationData.theme", "aorusTabTheme")
+            new = new.replace("self.presentationData.theme", "aorusTabTheme")
         text = _edit(text, old, new, f"{path.name}: {label}", *count)
     path.write_text(text, encoding="utf-8")
 
