@@ -41,6 +41,10 @@ CONTROLLER = '''    func aorusPreviewLayout(_ layout: ContainerViewLayout, items
         }
         if let tabBar = self.tabBarView.view as? TabBarComponent.View {
             tabBar.aorusPreviewMoveItem(item: self.aorusPreviewDragItem, center: self.aorusPreviewDragCenter.map { tabBar.convert($0, from: self.view) }, transition: ComponentTransition(transition))
+            // The glass bar lays itself out again only when its items or its size change, and
+            // a tab picked up or let go where it is changes neither: the pass the drag was
+            // staged for never ran, and the tab stayed lifted after the finger had gone.
+            tabBar.aorusPreviewRefresh(transition: ComponentTransition(transition))
         }
     }
 
@@ -49,6 +53,8 @@ CONTROLLER = '''    func aorusPreviewLayout(_ layout: ContainerViewLayout, items
 MODERN = '''        private var aorusIsPreview = false
         private var aorusPreviewDrag: (id: AnyHashable, center: CGPoint)?
         private var aorusPreviewDragStart: CGPoint?
+        /// The carried tab changed and no pass has drawn it yet.
+        private var aorusPreviewDragPending = false
 
         /// Records the tab carried in the preview for the next pass and says whether it changed.
         public func aorusPreviewStage(item: UITabBarItem?, center: CGPoint?) -> Bool {
@@ -64,11 +70,19 @@ MODERN = '''        private var aorusIsPreview = false
                 self.aorusPreviewDragStart = drag?.center
             }
             self.aorusPreviewDrag = drag
+            self.aorusPreviewDragPending = true
             return true
         }
 
         public func aorusPreviewMoveItem(item: UITabBarItem?, center: CGPoint?, transition: ComponentTransition) {
             if self.aorusPreviewStage(item: item, center: center) {
+                self.state?.updated(transition: transition)
+            }
+        }
+
+        /// Lays the bar out with the carried tab it holds, when no pass has drawn it yet.
+        public func aorusPreviewRefresh(transition: ComponentTransition) {
+            if self.aorusPreviewDragPending {
                 self.state?.updated(transition: transition)
             }
         }
@@ -141,7 +155,7 @@ CLASSIC = '''    private var aorusPreviewDragItem: UITabBarItem?
 
 def patch_modern_preview(source: str) -> str:
     source = edit(source, '        private var searchView: NavigationSearchView?', MODERN + '        private var searchView: NavigationSearchView?', 'native preview movement')
-    source = edit(source, '            var selectionFrame: CGRect?\n', '            var aorusDraggedFrame: CGRect?\n            let aorusCarriedOver = self.aorusPreviewDrag != nil && self.aorusPreviewDrag?.center != self.aorusPreviewDragStart\n            var selectionFrame: CGRect?\n', 'preview lens geometry')
+    source = edit(source, '            var selectionFrame: CGRect?\n', '            var aorusDraggedFrame: CGRect?\n            let aorusCarriedOver = self.aorusPreviewDrag != nil && self.aorusPreviewDrag?.center != self.aorusPreviewDragStart\n            self.aorusPreviewDragPending = false\n            var selectionFrame: CGRect?\n', 'preview lens geometry')
     # Animate the tab position, not the icon within the tab as well.
     for name in ('itemView', 'selectedItemView'):
         source = edit(source, '                let _ = ' + name + '.update(\n                    transition: itemTransition,', '                let _ = ' + name + '.update(\n                    transition: self.aorusIsPreview ? .immediate : itemTransition,', 'stable preview child ' + name)

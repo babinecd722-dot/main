@@ -6252,8 +6252,8 @@ private final class AorusAIScrollDownButton: UIView {
     }
 }
 
-/// The capsule at the top of the conversation: the AorusAI mark and name, and under them
-/// what the assistant is doing.
+/// The capsule at the top of the conversation: the AorusAI name, and under it what the
+/// assistant is doing.
 ///
 /// The same glass and the same height as the back button beside it, so the bar reads as one
 /// row of capsules. The capsule follows its text: when the status line appears, changes or
@@ -6261,12 +6261,9 @@ private final class AorusAIScrollDownButton: UIView {
 private final class AorusAINavigationTitleView: UIView {
     private static let height: CGFloat = 44.0
     private static let horizontalPadding: CGFloat = 16.0
-    private static let markSize: CGFloat = 16.0
-    private static let markSpacing: CGFloat = 5.0
     private static let maximumWidth: CGFloat = 260.0
 
     private let glassView = GlassBackgroundView(frame: CGRect())
-    private let markView = UIImageView()
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
     private var isDarkAppearance = false
@@ -6274,17 +6271,14 @@ private final class AorusAINavigationTitleView: UIView {
     init(theme: PresentationTheme) {
         super.init(frame: .zero)
         glassView.isUserInteractionEnabled = false
-        markView.image = UIImage(systemName: "sparkles")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold))
-        markView.contentMode = .center
         titleLabel.text = "AorusAI"
         titleLabel.font = aorusUIFont(16.0, .semibold)
-        titleLabel.textAlignment = .left
+        titleLabel.textAlignment = .center
         statusLabel.font = aorusUIFont(12.0, .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.alpha = 0.0
         addSubview(glassView)
-        addSubview(markView)
         addSubview(titleLabel)
         addSubview(statusLabel)
         isAccessibilityElement = true
@@ -6299,7 +6293,6 @@ private final class AorusAINavigationTitleView: UIView {
         let palette = AorusAIPalette.resolve(theme)
         titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
         statusLabel.textColor = palette.secondary
-        markView.tintColor = palette.accent
         setNeedsLayout()
     }
 
@@ -6330,19 +6323,15 @@ private final class AorusAINavigationTitleView: UIView {
         let hasStatus = !status.isEmpty
         let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width)
         let statusWidth = hasStatus ? ceil(statusLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width) : 0.0
-        let lineWidth = Self.markSize + Self.markSpacing + titleWidth
-        let width = min(bounds.width, Self.maximumWidth, max(128.0, max(lineWidth, statusWidth) + Self.horizontalPadding * 2.0))
+        let width = min(bounds.width, Self.maximumWidth, max(128.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
         let height = min(Self.height, bounds.height)
         let frame = CGRect(x: floor((bounds.width - width) / 2.0), y: floor((bounds.height - height) / 2.0), width: width, height: height)
         transition.setFrame(view: glassView, frame: frame)
         glassView.update(size: frame.size, cornerRadius: height / 2.0, isDark: isDarkAppearance, tintColor: aorusAIGlassTint, isInteractive: false, transition: transition)
 
-        let visibleTitleWidth = min(titleWidth, max(0.0, width - Self.horizontalPadding * 2.0 - Self.markSize - Self.markSpacing))
-        let lineX = floor(frame.midX - (Self.markSize + Self.markSpacing + visibleTitleWidth) / 2.0)
         let titleHeight: CGFloat = 20.0
         let titleY = hasStatus ? frame.minY + 5.0 : frame.minY + floor((height - titleHeight) / 2.0)
-        transition.setFrame(view: markView, frame: CGRect(x: lineX, y: titleY + floor((titleHeight - Self.markSize) / 2.0), width: Self.markSize, height: Self.markSize))
-        transition.setFrame(view: titleLabel, frame: CGRect(x: lineX + Self.markSize + Self.markSpacing, y: titleY, width: visibleTitleWidth, height: titleHeight))
+        transition.setFrame(view: titleLabel, frame: CGRect(x: frame.minX + Self.horizontalPadding, y: titleY, width: max(0.0, width - Self.horizontalPadding * 2.0), height: titleHeight))
         transition.setFrame(view: statusLabel, frame: CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 24.0, width: max(0.0, width - Self.horizontalPadding * 2.0), height: 15.0))
         transition.setAlpha(view: statusLabel, alpha: hasStatus ? 1.0 : 0.0)
     }

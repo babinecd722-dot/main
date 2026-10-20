@@ -154,20 +154,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private var markedInCurrentView = Set<MessageId>()
         private var lastVisibilityTimestamp: Double?
         private var previousVisibleMessageIds = Set<MessageId>()
-        /// Posts of the current feed that have been readable on screen without being recorded
-        /// as seen yet. Reading time decides when the post the reader is on counts as read;
-        /// once they leave it, what was on screen counts as viewed all the same. These are
-        /// recorded when the Wall is left, the app goes to the background or Refresh starts a
-        /// new feed, so no feed built afterwards brings back a post that was on screen.
-        private var displayedUnrecordedIds = Set<MessageId>()
-        /// The top of the screen at its lowest point in the current feed. Everything above it
-        /// has been scrolled past: a fling carries posts by between two samples without any of
-        /// them ever counting as readable, and they are behind the reader all the same.
-        private var scrolledPastFrontier: MessageIndex?
-        /// The newest post of a rebuilt feed until the list first shows it. Until then the
-        /// screen can still show the previous feed, or the new one away from its top, and
-        /// neither says what the reader has seen of this one.
-        private var rebuiltFeedTopId: MessageId?
+        /// Posts of the current feed that have been readable on screen. Being on screen is not
+        /// being viewed -- only reading a post marks it seen -- so nothing here is recorded.
+        /// Refresh holds these back from the feed it builds, so it opens on posts the reader
+        /// has not just had in front of them; they stay unseen and can come back later.
+        private var displayedInFeed = Set<MessageId>()
         private var loadDisposable: Disposable?
         private var loadMoreDisposable: Disposable?
         private var recommendationRequestDisposable: Disposable?
@@ -1188,11 +1179,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             )
             self.visibleDurations = self.visibleDurations.filter { self.currentMessages[$0.key] != nil }
             self.markedInCurrentView = self.markedInCurrentView.intersection(self.currentMessages.keys)
-            if let rebuiltFeedTopId = self.rebuiltFeedTopId, self.currentMessages[rebuiltFeedTopId] == nil {
-                // The top the list was waiting for is gone (excluded or removed), so the new top
-                // is what it opens on.
-                self.rebuiltFeedTopId = self.currentMessageIds.last
-            }
             self.mergedHistoryView = view
             self.preloadInitialVideoThumbnails(messages)
             self.historyViewStream.putNext((view, updateType))
@@ -1294,6 +1280,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // ChatHistoryListNode then diffed on the main thread. They are batched instead.
                 let aorusIsUrgent = existingReactions != updatedReactions || pollDidChange
                 if existing.stableVersion != message.stableVersion || aorusIsUrgent {
+                    // The feed lends a captionless photo or video the text of its post: the
+                    // caption of its album, or the text sent beside it. Postbox's copy has none
+                    // of that, so taking it as it comes left the media bare the moment its view
+                    // counter ticked -- on the first screen, where posts are watched first.
+                    let message = aorusWallMessageWithText(from: existing, on: message)
                     self.currentMessages[id] = message
                     if let position = self.currentEntryPositions[id], position < self.currentEntries.count {
                         self.currentEntries[position] = EngineRawMessageHistoryEntry(
@@ -1350,7 +1341,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// is on screen, so it is reserved for opening the Wall and for the Refresh button —
         /// the one place the reader asks for a fresh start. Everything else extends the feed
         /// downwards instead, which cannot disturb the viewport.
-        func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, rebuilt: (() -> Void)? = nil) {
+        func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), rebuilt: (() -> Void)? = nil) {
             self.updateRecommendationsIfNeeded()
             self.loadDisposable?.dispose()
             self.loadMoreDisposable?.dispose()
@@ -1358,7 +1349,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.isPrefetching = false
             self.consecutiveTopUpRetries = 0
             self.lastLoadMoreMarkedCount = 0
-            self.placedIds.removeAll()
+            // Posts held back count as already placed in this feed, so no page offers them.
+            self.placedIds = holdBack
             self.subscribedScanCursor = 0
             self.recommendedScanCursor = 0
             self.windowSpan = Impl.initialWindowSpan
@@ -1369,8 +1361,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 let messages = self.beginRebuiltFeed(messages)
+                if messages.isEmpty && !holdBack.isEmpty {
+                    // Nothing else to show: the posts that were on screen are the feed after all,
+                    // rather than an empty Wall.
+                    self.loadDisposable = nil
+                    self.reload(updateType: updateType, expandIfEmpty: expandIfEmpty, rebuilt: rebuilt)
+                    return
+                }
                 self.applyMessages(messages, updateType: updateType, preserveCurrent: false)
-                self.rebuiltFeedTopId = self.currentMessageIds.last
                 if self.recommendationsEnabled
                     && Set(messages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
                     self.expandRecommendationSources()
@@ -1386,13 +1384,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             })
         }
 
-        /// The feed is about to be rebuilt from `messages`. The reader keeps scrolling the old
-        /// one while the page is collected, and what they reach meanwhile is recorded and left
-        /// out of the new one. Tracking then starts over, from the top of the new feed.
+        /// The feed is about to be rebuilt from `messages`. The reader keeps reading the old one
+        /// while the page is collected, and a post they finish meanwhile is left out of the new
+        /// one. Tracking then starts over for the new feed.
         private func beginRebuiltFeed(_ messages: [Message]) -> [Message] {
-            self.recordDisplayed()
             let messages = messages.filter { !self.markedInCurrentView.contains($0.id) }
-            self.scrolledPastFrontier = nil
+            self.displayedInFeed.removeAll()
             self.previousVisibleMessageIds.removeAll()
             self.lastVisibilityTimestamp = nil
             return messages
@@ -1580,7 +1577,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             } else {
                 self.stopPrefetchTimer()
                 self.observeVisibleMessages([])
-                self.recordDisplayed()
             }
             // Leaving the tab used to rebuild the feed to drop finished posts. That put the
             // reader back at the top every time they came back, and it is not what was asked
@@ -1597,17 +1593,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // Every on-screen post is live, including a partially visible one whose reaction
             // row can already be tapped. Read tracking remains stricter and uses readableIds.
             self.observeVisibleMessages(liveIds)
-            if let rebuiltFeedTopId = self.rebuiltFeedTopId {
-                guard liveIds.contains(rebuiltFeedTopId) else {
-                    self.lastVisibilityTimestamp = nil
-                    self.previousVisibleMessageIds.removeAll()
-                    return
-                }
-                self.rebuiltFeedTopId = nil
-            }
-            self.recordScrolledPast(liveIds)
             for id in readableIds where self.currentMessages[id] != nil && !self.markedInCurrentView.contains(id) {
-                self.displayedUnrecordedIds.insert(id)
+                self.displayedInFeed.insert(id)
             }
             guard let previousTimestamp = self.lastVisibilityTimestamp else {
                 self.lastVisibilityTimestamp = timestamp
@@ -1636,33 +1623,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recordSeen(completedIds)
         }
 
-        /// Record what lies above the top of the screen. The feed only grows below the reader
-        /// and a rebuilt feed is read from its top, so a post above the first one on screen is
-        /// one the reader has gone by.
-        private func recordScrolledPast(_ liveIds: Set<MessageId>) {
-            var screenTop: MessageIndex?
-            for id in liveIds {
-                guard let message = self.currentMessages[id] else {
-                    continue
-                }
-                if screenTop == nil || message.index > screenTop! {
-                    screenTop = message.index
-                }
-            }
-            guard let screenTop else {
-                return
-            }
-            if let scrolledPastFrontier = self.scrolledPastFrontier, !(screenTop < scrolledPastFrontier) {
-                return
-            }
-            self.scrolledPastFrontier = screenTop
-            var passedIds: [MessageId] = []
-            for (id, message) in self.currentMessages where message.index > screenTop && !self.markedInCurrentView.contains(id) {
-                passedIds.append(id)
-            }
-            self.recordSeen(passedIds)
-        }
-
+        /// A post is seen once it has been read: on screen for as long as reading it takes.
         private func recordSeen(_ ids: [MessageId]) {
             guard !ids.isEmpty else {
                 return
@@ -1670,46 +1631,21 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             for id in ids where self.currentMessages[id] != nil {
                 self.markedInCurrentView.insert(id)
             }
-            self.displayedUnrecordedIds.subtract(ids)
             AorusWallSettingsStore.markSeen(ids, accountId: self.accountId)
             self.publishCurrentBadge()
         }
 
-        /// What was on screen counts as viewed once the reader leaves it.
-        func recordDisplayed() {
-            self.recordSeen(Array(self.displayedUnrecordedIds))
-        }
-
-        /// A post leaving the top of the screen is behind the reader while a sliver of it is
-        /// still visible: everything on screen above the lowest readable post has been read
-        /// past by the time Refresh is pressed.
-        private func recordScreenBeforeRefresh() {
-            var lowestReadable: MessageIndex?
-            for id in self.previousVisibleMessageIds {
-                guard let message = self.currentMessages[id] else {
-                    continue
-                }
-                if lowestReadable == nil || message.index < lowestReadable! {
-                    lowestReadable = message.index
-                }
-            }
-            guard let lowestReadable else {
-                return
-            }
-            for id in self.observedMessageIds where !self.markedInCurrentView.contains(id) {
-                if let message = self.currentMessages[id], message.index > lowestReadable {
-                    self.displayedUnrecordedIds.insert(id)
-                }
-            }
+        /// What Refresh keeps out of the feed it builds: the posts that were just on screen and
+        /// have not been read. They are not seen, only not the first thing shown again.
+        func refreshHoldBack() -> Set<MessageId> {
+            return self.displayedInFeed.subtracting(self.markedInCurrentView)
         }
 
         /// Refresh is the single point where finished posts are cleared out. The new feed is
-        /// built from what the reader has not had on screen: what they read or scrolled past is
-        /// recorded as they go, and what is on screen now is recorded here.
+        /// built from what the reader has not read -- new posts and those not read yet -- and
+        /// opens on posts that were not just on screen.
         func refresh(rebuilt: @escaping () -> Void) {
-            self.recordScreenBeforeRefresh()
-            self.recordDisplayed()
-            self.reload(updateType: .Generic, expandIfEmpty: true, rebuilt: rebuilt)
+            self.reload(updateType: .Generic, expandIfEmpty: true, holdBack: self.refreshHoldBack(), rebuilt: rebuilt)
         }
 
         /// Apply settings without rebuilding the current snapshot. Exclusions animate out
@@ -1724,11 +1660,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.topUp(force: true)
             }
             self.recountBadge()
-        }
-
-        func applicationDidEnterBackground() {
-            // The app may not come back: what was on screen is recorded before it can be lost.
-            self.recordDisplayed()
         }
 
         func applicationDidBecomeActive() {
@@ -1896,15 +1827,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             queue: .main
         ) { [weak self] _ in
             self?.applicationDidBecomeActive()
-        })
-        self.observers.append(NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.impl.with { impl in
-                impl.applicationDidEnterBackground()
-            }
         })
 
     }

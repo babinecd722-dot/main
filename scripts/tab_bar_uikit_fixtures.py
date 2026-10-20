@@ -13,9 +13,13 @@ def tab_preview_test_source(tg: Path) -> str:
     source = source.replace('public ', '')
     controller = (tg / 'submodules/TabBarUI/Sources/TabBarContollerNode.swift').read_text()
     preview_layout = block(controller, '    func aorusPreviewLayout(')
+    # The controller's own staging around a pass, with the glass bar's view as the probe.
+    preview_layout += '\n'.join(block(controller, marker).replace('self.tabBarView.view as? TabBarComponent.View', 'Optional(self.native)').replace('ComponentTransition(transition)', 'transition') for marker in ('    private func aorusStagePreviewDrag(', '    private func aorusApplyPreviewDrag('))
     for name in names: preview_layout = re.sub(r'\b' + name + r'\b', 'TabPreview' + name + 'Fixture', preview_layout)
     native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
-    move = '\n'.join(block(native, marker).replace('public ', '').replace('ComponentTransition', 'TabPreviewContainedViewLayoutTransitionFixture') for marker in ('        public func aorusPreviewStage(', '        public func aorusPreviewMoveItem('))
+    move = '\n'.join(block(native, marker).replace('public ', '').replace('ComponentTransition', 'TabPreviewContainedViewLayoutTransitionFixture') for marker in ('        public func aorusPreviewStage(', '        public func aorusPreviewMoveItem(', '        public func aorusPreviewRefresh('))
+    # Every pass of the glass bar draws the carried tab it holds.
+    assert 'self.aorusPreviewDragPending = false\n            var selectionFrame: CGRect?' in native
     frame = native[native.index('                var itemFrame = CGRect(origin: CGPoint(x: nextItemX'):native.index('                if let itemComponentView = itemView.view as? ItemComponent.View')]
     assert 'itemTransition = .immediate' in frame and 'aorusDraggedFrame = itemFrame' in frame
     assert native.count('transition: self.aorusIsPreview ? .immediate : itemTransition,') == 2
@@ -48,8 +52,8 @@ private final class NativeClassicDragProbe {
 }
 '''
     visibility = r'''
-private struct NativePreviewItem { let id: AnyHashable }
-private struct NativePreviewComponent { var items: [NativePreviewItem] }
+private struct NativePreviewItem: Equatable { let id: AnyHashable }
+private struct NativePreviewComponent: Equatable { var items: [NativePreviewItem]; var selected: Int }
 private final class NativePreviewLens {
     let contentView = UIView()
     let selectedContentView = UIView()
@@ -66,6 +70,8 @@ private final class NativePreviewProbe: UIView {
     var aorusIsPreview = false
     var aorusPreviewDrag: (id: AnyHashable, center: CGPoint)?
     var aorusPreviewDragStart: CGPoint?
+    var aorusPreviewDragPending = false
+    var renderedSize: CGSize?
     var normal: [AnyHashable: UIView] = [:]
     var selected: [AnyHashable: UIView] = [:]
     override init(frame: CGRect) {
@@ -77,6 +83,7 @@ private final class NativePreviewProbe: UIView {
 ''' + move + r'''
     func render(_ transition: TabPreviewContainedViewLayoutTransitionFixture) {
         guard let component, !component.items.isEmpty else { return }
+        aorusPreviewDragPending = false
         let tabsSize = bounds.size
         let innerInset: CGFloat = 4
         liquidLensView.contentView.frame = bounds
@@ -84,10 +91,10 @@ private final class NativePreviewProbe: UIView {
         var aorusDraggedFrame: CGRect?
         var selectionFrame: CGRect?
         var nextItemX = innerInset
-        for item in component.items {
+        for (index, item) in component.items.enumerated() {
             let itemSize = CGSize(width: (tabsSize.width - innerInset * 2) / CGFloat(component.items.count), height: 55)
             var itemTransition = transition
-            let isItemSelected = true
+            let isItemSelected = index == component.selected
 ''' + frame + r'''
             for (key, host) in [(false, liquidLensView.contentView), (true, liquidLensView.selectedContentView)] {
                 let content: UIView
@@ -166,13 +173,21 @@ private final class TabPreviewTabBarControllerNodeFixture {
     func updateSelectedIndex(index: Int) {}
     func aorusPreviewArrange(_ items: [TabPreviewTabBarNodeItemFixture], selected: UITabBarItem?) {}
     func containerLayoutUpdated(_ layout: TabPreviewContainerViewLayoutFixture, toolbar: Int?, transition: TabPreviewContainedViewLayoutTransitionFixture) -> CGFloat {
+        // As the controller does: the carried tab is staged before the pass that lays it out
+        // and applied after it.
+        self.aorusStagePreviewDrag()
+        defer { self.aorusApplyPreviewDrag(transition: transition) }
         native.frame = CGRect(x: 0, y: 40, width: layout.size.width, height: 55)
-        native.component = NativePreviewComponent(items: items.map { NativePreviewItem(id: ObjectIdentifier($0.item)) })
-        // As the controller does: the carried tab is staged before the pass that lays it out.
-        let _ = native.aorusPreviewStage(item: aorusPreviewDragItem, center: aorusPreviewDragCenter.map { native.convert($0, from: view) })
-        native.render(transition)
+        let component = NativePreviewComponent(items: items.map { NativePreviewItem(id: ObjectIdentifier($0.item)) }, selected: selectedIndex)
+        // As a component view does: the same component at the same size is not laid out again.
+        if native.component != component || native.renderedSize != native.bounds.size {
+            native.component = component
+            native.renderedSize = native.bounds.size
+            native.render(transition)
+        }
         return 0
     }
+    func aorusPreviewMoveItem(_ item: UITabBarItem?, center: CGPoint?, transition: TabPreviewContainedViewLayoutTransitionFixture) {}
 ''' + preview_layout + r'''
     func aorusPreviewMoveItem(at index: Int?, center: CGPoint?, transition: TabPreviewContainedViewLayoutTransitionFixture) {
         aorusPreviewDragItem = index.flatMap { items.indices.contains($0) ? items[$0].item : nil }
@@ -248,6 +263,21 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     expect(classic.tabBarItems.map { ObjectIdentifier($0.item) } == classicOwnOrder, "a new classic order moves the tabs without rebuilding them")
     expect(classic.selectedIndex.map { classic.tabBarItems[$0].item === held.item } == true, "classic selection is kept in the bar's own order")
     expect(!held.badge.isHidden && classic.tabBarNodeContainers[1].badge.isHidden, "native drag preserves filled and hidden badge states")
+    // Picked up and let go in place: neither the bar's items nor its selection change, so its
+    // own pass is skipped, and the tab still has to come down where it started.
+    let settled = preview.subviews[0].subviews[0] as! NativePreviewProbe
+    let firstID = AnyHashable(ObjectIdentifier(items[0]))
+    let slot = settled.normal[firstID]!.frame
+    phase(.began, x: 60)
+    phase(.changed, x: 80)
+    expect(settled.aorusPreviewDrag != nil && settled.normal[firstID]!.frame.minX > slot.minX, "the carried tab follows the finger")
+    phase(.ended, x: 80)
+    expect(settled.aorusPreviewDrag == nil, "the released tab is no longer carried")
+    expect(settled.normal[firstID]!.frame == slot && settled.selected[firstID]!.frame == slot, "a tab let go where it was settles back into its place")
+    expect(settled.liquidLensView.selection.frame == slot, "the lens comes down onto the settled tab")
+    try? await Task.sleep(nanoseconds: 500_000_000)
+    AorusTabBarSettings.update { $0 = AorusTabBarLayout() }
+    update()
     phase(.began, x: 60)
     expect(preview.subviews.count == 1, "drag moves the native tab, without a detached snapshot or rectangular wrapper")
     let native = (preview.subviews[0].subviews[0] as! NativePreviewProbe)
@@ -264,6 +294,7 @@ private final class TabPreviewHoldFixture: UILongPressGestureRecognizer {
     phase(.changed, x: 300)
     expect(AorusTabBarSettings.current.order.isEmpty, "drag has no per-frame preference writes")
     phase(.ended, x: 300)
+    expect(native.aorusPreviewDrag == nil && native.liquidLensView.selection.frame == native.normal[draggedID]!.frame, "the dropped tab and its lens settle together")
     try? await Task.sleep(nanoseconds: 500_000_000)
     expect(AorusTabBarSettings.current.order == ["chats", "settings", "contacts"], "ending drag commits exactly the shown order")
     let order = AorusTabBarSettings.current.order

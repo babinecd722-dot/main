@@ -1,4 +1,4 @@
-"""Execute the installed Wall seen tracking: reading, scrolling past, leaving and Refresh."""
+"""Execute the installed Wall seen tracking: only reading marks a post seen, and Refresh."""
 import argparse
 import subprocess
 import tempfile
@@ -9,14 +9,11 @@ from classic_sheets_check import block
 METHODS = (
     'func setVisible(_ value: Bool) {',
     'func updateVisibleMessageIds(',
-    'private func recordScrolledPast(',
     'private func recordSeen(',
-    'func recordDisplayed() {',
-    'private func recordScreenBeforeRefresh() {',
+    'func refreshHoldBack() -> Set<MessageId> {',
     'func refresh(rebuilt: @escaping () -> Void) {',
     'private func beginRebuiltFeed(',
     'private func requiredViewingDuration(for message: Message) -> Double {',
-    'func applicationDidEnterBackground() {',
 )
 
 HARNESS = '''import Foundation
@@ -53,9 +50,8 @@ final class Impl {
     var isVisible = false
     var lastVisibilityTimestamp: Double?
     var previousVisibleMessageIds = Set<MessageId>()
-    var displayedUnrecordedIds = Set<MessageId>()
-    var scrolledPastFrontier: MessageIndex?
-    var rebuiltFeedTopId: MessageId?
+    var displayedInFeed = Set<MessageId>()
+    var loadDisposable: AnyObject?
     var observedMessageIds = Set<MessageId>()
     var visibleDurations: [MessageId: Double] = [:]
     var markedInCurrentView = Set<MessageId>()
@@ -63,14 +59,16 @@ final class Impl {
     var currentMessageIds: [MessageId] = []
     var badge = 0
     var reloadCount = 0
+    var pendingHoldBack = Set<MessageId>()
     var pendingRebuilt: (() -> Void)?
     func startPrefetchTimer() {}
     func stopPrefetchTimer() {}
     func topUp(force: Bool) {}
     func observeVisibleMessages(_ ids: Set<MessageId>) { self.observedMessageIds = ids }
     func publishCurrentBadge() { self.badge = self.currentMessageIds.count - self.markedInCurrentView.count }
-    func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, rebuilt: (() -> Void)? = nil) {
+    func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), rebuilt: (() -> Void)? = nil) {
         self.reloadCount += 1
+        self.pendingHoldBack = holdBack
         self.pendingRebuilt = rebuilt
     }
     func applyMessages(_ messages: [Message], updateType: EngineViewUpdateType, preserveCurrent: Bool) {
@@ -78,12 +76,15 @@ final class Impl {
         self.currentMessageIds = messages.map(\\.id)
         self.currentMessages = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         self.markedInCurrentView = self.markedInCurrentView.intersection(self.currentMessages.keys)
-GATE
         self.publishCurrentBadge()
     }
+    /// The reload's completion as installed, for a page Postbox returned.
     func completeReload(_ messages: [Message], updateType: EngineViewUpdateType = .Generic) {
-COMPLETION
+        let holdBack = self.pendingHoldBack
+        let expandIfEmpty = true
         let rebuilt = self.pendingRebuilt
+        let _ = expandIfEmpty
+COMPLETION
         self.pendingRebuilt = nil
         rebuilt?()
     }
@@ -95,25 +96,27 @@ METHODS
 def check(repo: Path, tg: Path, swiftc: str):
     wall = (tg / 'submodules/TelegramUI/Sources/AorusWall.swift').read_text()
     methods = '\n'.join(block(wall, marker) for marker in METHODS)
-    gate = block(wall, 'if let rebuiltFeedTopId = self.rebuiltFeedTopId, self.currentMessages[rebuiltFeedTopId] == nil {')
     first = '                let messages = self.beginRebuiltFeed(messages)\n'
-    last = '                self.rebuiltFeedTopId = self.currentMessageIds.last\n'
+    last = '                self.applyMessages(messages, updateType: updateType, preserveCurrent: false)\n'
     start = wall.index(first)
     completion = wall[start:wall.index(last, start) + len(last)]
-    if 'self.applyMessages(messages, updateType: updateType, preserveCurrent: false)' not in completion:
-        raise RuntimeError('Wall: a rebuilt page no longer goes through the seen filter before it is shown')
     if wall.count('rebuilt?()') != 1:
         raise RuntimeError('Wall: the rebuilt feed is no longer reported back exactly once')
     for marker in (
+        # Held-back posts are placed in the new feed already, so no page offers them.
+        'self.placedIds = holdBack\n',
         'impl.refresh(rebuilt: { [weak self] in',
         'controller.chatDisplayNode.historyNode.scrollToEndOfHistory()',
         'controller.scrollToTop = { [weak contents] in',
-        'forName: UIApplication.didEnterBackgroundNotification,',
-        'impl.applicationDidEnterBackground()',
+        # A live update keeps the caption the feed lent a captionless photo or video.
+        'let message = aorusWallMessageWithText(from: existing, on: message)\n                    self.currentMessages[id] = message',
     ):
         if marker not in wall:
-            raise RuntimeError('Wall: Refresh and leaving the Wall are not wired to the seen tracking: ' + marker)
-    source = HARNESS.replace('METHODS', methods).replace('GATE', gate).replace('COMPLETION', completion)
+            raise RuntimeError('Wall: Refresh or its feed is not wired as tested: ' + marker)
+    for forbidden in ('recordScrolledPast', 'recordDisplayed', 'didEnterBackgroundNotification'):
+        if forbidden in wall:
+            raise RuntimeError('Wall: a post on screen is marked seen without being read: ' + forbidden)
+    source = HARNESS.replace('METHODS', methods).replace('COMPLETION', completion)
     source += (repo / 'scripts/tests/AorusWallSeenTests.swift').read_text()
     with tempfile.TemporaryDirectory(prefix='aorus-wall-seen-') as directory:
         unit = Path(directory) / 'WallSeen.swift'

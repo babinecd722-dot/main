@@ -1952,18 +1952,21 @@ def main() -> None:
     ):
         if marker not in wall_text:
             err.append(f"Wall: single-source badge publication is missing {marker}")
-    # A rebuilt feed holds nothing the reader has had on screen, and it is read from its top:
-    # Refresh and a tab tap take the top-to-bottom list there (Telegram's tab tap moved it a
-    # few screens down), and nothing is tracked until the list shows it.
+    # A rebuilt feed holds nothing the reader has read, and opens on posts other than those
+    # just on screen; Refresh and a tab tap take the top-to-bottom list to its top (Telegram's
+    # tab tap moved it a few screens down). Only reading marks a post seen.
     for marker in (
         "let messages = self.beginRebuiltFeed(messages)",
-        "private func recordScrolledPast(_ liveIds: Set<MessageId>) {",
-        "guard liveIds.contains(rebuiltFeedTopId) else {",
+        "holdBack: self.refreshHoldBack()",
+        "self.placedIds = holdBack",
         "controller.chatDisplayNode.historyNode.scrollToEndOfHistory()",
         "controller.scrollToTop = { [weak contents] in",
     ):
         if marker not in wall_text:
-            err.append(f"Wall: Refresh can bring back posts the reader has seen — missing {marker}")
+            err.append(f"Wall: Refresh can bring back posts the reader has read — missing {marker}")
+    for forbidden in ("recordScrolledPast", "recordDisplayed"):
+        if forbidden in wall_text:
+            err.append(f"Wall: a post on screen is marked seen without being read — {forbidden}")
     # Telegram repeated a custom list's scroll request with every update until the location
     # changed; on the Wall that would pull the reader back to the top with each new page.
     history_list = tg / "submodules" / "TelegramUI" / "Sources" / "ChatHistoryListNode.swift"
