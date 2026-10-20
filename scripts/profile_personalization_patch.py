@@ -814,6 +814,38 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "        return aorusPageColor\n"
         "    }\n"
         "\n"
+        "    // AorusGram: Settings is laid out off screen as well -- under a profile pushed from it\n"
+        "    // when its own data or photo changes, and when a pop or a tab switch brings it back,\n"
+        "    // before it is in the window. It cannot claim the slot for those passes: the profile on\n"
+        "    // top owns it, and that profile's menus and panes read it after its own layout. Nor can\n"
+        "    // it draw from the slot as it stands, because that is the profile's page: that was the\n"
+        "    // grey Settings, sections of dark glass with white labels on a white page, left after a\n"
+        "    // visit to a dark profile -- nothing lays Settings out again once it is back on screen.\n"
+        "    // So it borrows the slot: the theme's page for the length of the pass, and whatever was\n"
+        "    // there before put back at the end of it.\n"
+        "    private func aorusBorrowPageSlot() -> (previous: UIColor?, page: UIColor?)? {\n"
+        "        guard AorusInterfaceV2.isEnabled, self.isSettings, self.view.window == nil else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        let previous = AorusGlassProfileTint.pageBackgroundColor\n"
+        "        AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)\n"
+        "        return (previous: previous, page: AorusGlassProfileTint.pageBackgroundColor)\n"
+        "    }\n"
+        "\n"
+        "    private func aorusReturnPageSlot(_ borrowed: (previous: UIColor?, page: UIColor?)?) {\n"
+        "        // Unless something claimed it during the pass; then it is that screen's now.\n"
+        "        if let borrowed, AorusGlassProfileTint.pageBackgroundColor == borrowed.page {\n"
+        "            AorusGlassProfileTint.setPageBackgroundColor(borrowed.previous)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    // AorusGram: a screen brought back by a pop is not laid out again, so it claims the slot\n"
+        "    // as it appears. Otherwise the page of the profile just closed stays in it, and anything\n"
+        "    // that reads the slot while this screen is up -- a menu opened from it -- takes that page.\n"
+        "    fileprivate func aorusClaimPageSlotOnAppear() {\n"
+        "        self.aorusUpdatePageColor()\n"
+        "    }\n"
+        "\n"
         "    private func updateBackgroundColor() {\n"
         "        // AorusGram: the page carries the avatar's colours the whole way down, so the\n"
         "        // list below the header continues the profile instead of meeting a flat\n"
@@ -842,6 +874,10 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "        \n"
         "        // AorusGram: before anything on this screen is drawn, so it is drawn in this\n"
         "        // profile's ink and not in whatever the last one left in the slot.\n"
+        "        let aorusBorrowedSlot = self.aorusBorrowPageSlot()\n"
+        "        defer {\n"
+        "            self.aorusReturnPageSlot(aorusBorrowedSlot)\n"
+        "        }\n"
         "        self.aorusUpdatePageColor()\n",
         "page ink before layout",
     )
@@ -862,10 +898,26 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "    fileprivate func updateNavigation(transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) {\n"
         "        // AorusGram: as in containerLayoutUpdated -- this pass redraws the header too, and\n"
         "        // does it before updateBackgroundColor at the end of it.\n"
+        "        let aorusBorrowedSlot = self.aorusBorrowPageSlot()\n"
+        "        defer {\n"
+        "            self.aorusReturnPageSlot(aorusBorrowedSlot)\n"
+        "        }\n"
         "        self.aorusUpdatePageColor()\n"
         "        \n"
         "        let offsetY = self.scrollNode.view.contentOffset.y\n",
         "page ink before navigation",
+    )
+    screen = _replace_once(
+        screen,
+        "        DispatchQueue.main.async { [weak self] in\n"
+        "            self?.didAppear = true\n"
+        "        }\n",
+        "        DispatchQueue.main.async { [weak self] in\n"
+        "            self?.didAppear = true\n"
+        "        }\n"
+        "        \n"
+        "        self.controllerNode.aorusClaimPageSlotOnAppear()\n",
+        "page slot on appear",
     )
     screen_path.write_text(screen, encoding="utf-8")
     print("GlassProfileList: patched screen background")

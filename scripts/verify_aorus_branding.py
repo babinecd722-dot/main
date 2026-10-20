@@ -3190,6 +3190,13 @@ def main() -> None:
                 # near-black on near-black.
                 "aorusUpdatePageColor",
                 "AorusGlassProfileTint.publishPageColor",
+                # Settings laid out off screen borrows the slot for the pass and hands it back, and
+                # any screen a pop brings back claims it as it appears. Without either it was drawn
+                # in the page of the profile last opened: grey glass and white labels.
+                "let aorusBorrowedSlot = self.aorusBorrowPageSlot()",
+                "self.aorusReturnPageSlot(aorusBorrowedSlot)",
+                "AorusGlassProfileTint.setPageBackgroundColor(borrowed.previous)",
+                "self.controllerNode.aorusClaimPageSlotOnAppear()",
             ),
         ),
         (
@@ -3317,6 +3324,17 @@ def main() -> None:
                 "let presentationData = self.aorusPagePresentationData(presentationData)",
                 "theme: aorusTabTheme,",
                 "let isDark = self.aorusPostsPageIsDark",
+            ),
+        ),
+        # A bot's styled inline button: the light theme letters the plain pill in the accent with
+        # no wallpaper, so a green button read in violet. Its title, glyph and emoji take the ink
+        # of the button's own colour.
+        (
+            "submodules/TelegramUI/Components/Chat/ChatMessageActionButtonsNode/Sources/ChatMessageActionButtonsNode.swift",
+            (
+                "titleColor = titleColor.aorusLegible(over: aorusStyleFill)",
+                "aorusStyleFill = theme.theme.list.freeTextSuccessColor",
+                "node.iconNode?.image = generateTintedImage(image: iconImage, color: titleColor)",
             ),
         ),
         # The header calls this with photo:/photoCount:, so a stale copy of the table here would
@@ -3702,14 +3720,23 @@ def main() -> None:
                 "layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {",
                 # Back from the background the profile is laid out at the size it has.
                 "self.aorusForegroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification",
-                # On a wide screen a profile menu stays under its button and scrolls in itself.
-                "let aorusMenuStaysUnderButton = window.bounds.width > window.bounds.height",
+                # On a wide screen a profile menu slides over its button to stay on screen.
+                "let aorusMenuStaysOnScreen = window.bounds.width > window.bounds.height",
                 # The pull is armed only from rest at the top.
                 "abs(scrollView.contentOffset.y) < 1.0",
                 # The gallery opens and closes onto a square photo, which stays until it is covered.
                 "sourceCorners: aorusSquareSource ? .none : .round",
                 "crossfadeContent: aorusSquareSource",
                 "aorusSquareSource ? Optional(shownEntry) : centralEntry",
+            ),
+        ),
+        # A menu whose source asks for it slides over the source to stay on screen.
+        ("submodules/ContextUI/Sources/ContextController.swift", ("var aorusKeepsActionsOnScreen: Bool { get }",)),
+        (
+            "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerExtractedPresentationNode.swift",
+            (
+                "actionsFrame.origin.y = max(contentTopInset, min(actionsFrame.origin.y, aorusBottomLimit - totalActionsHeight))",
+                "if aorusKeepsActionsOnScreen {\n                // AorusGram: a menu taller than the screen opens at its start.\n                defaultScrollY = 0.0",
             ),
         ),
         (

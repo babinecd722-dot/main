@@ -30679,6 +30679,8 @@ def main() -> None:
     patch_posts_page_ink(tg)
     from aorus_qr_scan_light import patch_qr_scan_light
     patch_qr_scan_light(tg)
+    from aorus_bot_button_ink import patch_bot_button_ink
+    patch_bot_button_ink(tg)
     patch_tab_settings(tg)
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)

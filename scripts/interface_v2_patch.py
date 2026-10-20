@@ -3022,11 +3022,12 @@ def _patch_landscape_profile(tg: Path) -> None:
             "foreground settle",
         )
         screen_path.write_text(screen, encoding="utf-8")
-    if "aorusMenuStaysUnderButton" not in screen:
+    if "aorusMenuStaysOnScreen" not in screen:
         # A menu that does not fit under its button scrolls the whole menu scene up to show its
         # end; on a phone on its side, a screen as short as a menu, that carried the profile's
-        # menus away from their buttons and off the top. On a wide screen they are held under
-        # the button, as tall as the room there, and scroll in themselves.
+        # menus away from their buttons and off the top. A list menu is never shorter than its
+        # rows, so holding it under the button does not help: it slides up over the button until
+        # its end is on screen instead (`_patch_menus_on_screen`).
         screen = _replace_once(
             screen,
             "final class PeerInfoContextReferenceContentSource: ContextReferenceContentSource {\n"
@@ -3038,19 +3039,112 @@ def _patch_landscape_profile(tg: Path) -> None:
             "    \n"
             "    // AorusGram: a menu that does not fit under its button scrolls the whole menu scene\n"
             "    // up to show its end. On a phone on its side the screen is as short as a menu, and\n"
-            "    // the profile's menus went off towards the top, away from their buttons. Held in\n"
-            "    // place, a menu is as tall as the room under its button and scrolls in itself.\n"
-            "    var keepInPlace: Bool {\n"
+            "    // the profile's menus went off towards the top, away from their buttons. On a wide\n"
+            "    // screen a menu slides up over its button until its end is on screen instead.\n"
+            "    var aorusKeepsActionsOnScreen: Bool {\n"
             "        guard AorusInterfaceV2Run.isEnabled, let window = self.sourceView.window else {\n"
             "            return false\n"
             "        }\n"
-            "        let aorusMenuStaysUnderButton = window.bounds.width > window.bounds.height\n"
-            "        return aorusMenuStaysUnderButton\n"
+            "        let aorusMenuStaysOnScreen = window.bounds.width > window.bounds.height\n"
+            "        return aorusMenuStaysOnScreen\n"
             "    }\n",
-            "menus stay under their buttons",
+            "menus stay on screen",
         )
         screen_path.write_text(screen, encoding="utf-8")
     print("InterfaceV2: profile laid out for a wide screen")
+
+
+def _patch_menus_on_screen(tg: Path) -> None:
+    """Let a context menu's source keep the menu on screen, as a system menu stays.
+
+    A menu that does not fit under its source makes Telegram's context controller scroll the
+    whole menu scene up by what is left over, so that the menu's end shows. A list menu is as
+    tall as its rows whatever the room, so on a short screen -- a phone on its side -- that
+    carried the start of the menu and its source off the top. A source can now ask for its menu
+    to slide up over the source instead, until its end is on screen, the way an iOS menu sits;
+    one taller than the screen starts at the top and scrolls from there. Nothing asks for it
+    but the profile's own menus on a wide screen, so every other menu keeps Telegram's placement.
+    """
+    path = tg / "submodules/ContextUI/Sources/ContextController.swift"
+    text = _read(path, "ContextController.swift")
+    if "aorusKeepsActionsOnScreen" not in text:
+        text = _replace_once(
+            text,
+            "public protocol ContextReferenceContentSource: AnyObject {\n"
+            "    var keepInPlace: Bool { get }\n"
+            "    var shouldBeDismissed: Signal<Bool, NoError> { get }\n"
+            "    var forceDisplayBelowKeyboard: Bool { get }\n",
+            "public protocol ContextReferenceContentSource: AnyObject {\n"
+            "    var keepInPlace: Bool { get }\n"
+            "    var shouldBeDismissed: Signal<Bool, NoError> { get }\n"
+            "    var forceDisplayBelowKeyboard: Bool { get }\n"
+            "    // AorusGram: the menu slides over its source to stay on screen rather than the\n"
+            "    // menu scene scrolling up to show its end.\n"
+            "    var aorusKeepsActionsOnScreen: Bool { get }\n",
+            "menu on screen requirement",
+        )
+        text = _replace_once(
+            text,
+            "public extension ContextReferenceContentSource {\n"
+            "    var keepInPlace: Bool {\n"
+            "        return false\n"
+            "    }\n",
+            "public extension ContextReferenceContentSource {\n"
+            "    var keepInPlace: Bool {\n"
+            "        return false\n"
+            "    }\n"
+            "    \n"
+            "    var aorusKeepsActionsOnScreen: Bool {\n"
+            "        return false\n"
+            "    }\n",
+            "menu on screen default",
+        )
+        path.write_text(text, encoding="utf-8")
+    path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerExtractedPresentationNode.swift"
+    text = _read(path, "ContextControllerExtractedPresentationNode.swift")
+    if "aorusKeepsActionsOnScreen" not in text:
+        text = _replace_once(
+            text,
+            "            } else if case let .reference(reference) = self.source, let transitionInfo = reference.transitionInfo() ?? self.liquidMorphReferenceInfo, let customPosition = transitionInfo.customPosition {\n"
+            "                actionsFrame = actionsFrame.offsetBy(dx: customPosition.x, dy: customPosition.y)\n"
+            "            }\n"
+            "            \n"
+            "            var additionalActionsFrame: CGRect\n",
+            "            } else if case let .reference(reference) = self.source, let transitionInfo = reference.transitionInfo() ?? self.liquidMorphReferenceInfo, let customPosition = transitionInfo.customPosition {\n"
+            "                actionsFrame = actionsFrame.offsetBy(dx: customPosition.x, dy: customPosition.y)\n"
+            "            }\n"
+            "            // AorusGram: a menu whose source asks to stay on screen slides up over the\n"
+            "            // source until its end is on screen, as a system menu does, instead of the\n"
+            "            // whole scene scrolling up and taking the start of the menu off the top. One\n"
+            "            // taller than the screen starts at the top and scrolls from there (below).\n"
+            "            var aorusKeepsActionsOnScreen = false\n"
+            "            if morphMenuAnchor == nil, case let .reference(reference) = self.source, reference.aorusKeepsActionsOnScreen {\n"
+            "                aorusKeepsActionsOnScreen = true\n"
+            "                let aorusBottomLimit = layout.size.height - bottomInset - layout.intrinsicInsets.bottom\n"
+            "                actionsFrame.origin.y = max(contentTopInset, min(actionsFrame.origin.y, aorusBottomLimit - totalActionsHeight))\n"
+            "            }\n"
+            "            \n"
+            "            var additionalActionsFrame: CGRect\n",
+            "menu slides onto the screen",
+        )
+        text = _replace_once(
+            text,
+            "            defaultScrollY = contentSize.height - layout.size.height\n"
+            "            if defaultScrollY < 0.0 {\n"
+            "                defaultScrollY = 0.0\n"
+            "            }\n",
+            "            defaultScrollY = contentSize.height - layout.size.height\n"
+            "            if defaultScrollY < 0.0 {\n"
+            "                defaultScrollY = 0.0\n"
+            "            }\n"
+            "            if aorusKeepsActionsOnScreen {\n"
+            "                // AorusGram: a menu taller than the screen opens at its start.\n"
+            "                defaultScrollY = 0.0\n"
+            "            }\n",
+            "tall menu opens at its start",
+        )
+        path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: a source can keep its menu on screen")
 
 
 def _patch_undo_glass(tg: Path) -> None:
@@ -7696,6 +7790,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_avatar_expansion(tg)
     _patch_keep_avatar_expanded(tg)
     _patch_landscape_profile(tg)
+    _patch_menus_on_screen(tg)
     _patch_overlay_palette(tg)
     _patch_static_avatar(tg)
     _patch_avatar_gallery_gesture(tg)
