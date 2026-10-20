@@ -2885,15 +2885,21 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
 
 
 def _patch_landscape_profile(tg: Path) -> None:
-    """Lay the open photo out for a wide screen, and settle the profile on return.
+    """Lay the open header out for a wide screen, and settle the profile on return.
 
-    Interface 2.0 keeps the photo open in landscape (`_patch_keep_avatar_expanded`). Telegram sizes
+    Interface 2.0 keeps the header open in landscape (`_patch_keep_avatar_expanded`). Telegram sizes
     the open photo square, up to the screen's height less the 61 points it leaves for the page,
     and adds the room for the name and the buttons under it -- which on a phone turned on its side
-    is taller than the screen, so the buttons and the page fell below its bottom edge. On a wide
-    screen the photo is capped so that the photo, the buttons under it and that same strip of page
-    all fit: a wide band of the photo with the name on it, the buttons and the start of the page,
-    as the tall profile has them. On a tall screen the cap is never reached and nothing changes.
+    is taller than the screen, so the buttons and the page fell below its bottom edge.
+
+    A phone on its side shows no photo at all: a band cut out of a square photo is neither the
+    photo nor a page. The open header there is only as tall as the name under the navigation
+    buttons and the header's buttons under it, on the page the photo gave the profile, and the
+    photo is faded out and takes no touches. Turning back to tall lays the photo out where it ends
+    at once, while it is still invisible, and fades it in over the second half of the turn, so it
+    never shows as a band growing into a square. Turning to wide fades it out over the first half.
+    A tablet keeps the photo, capped so that it, the buttons under it and a strip of the page fit.
+    A tall screen reaches neither, and nothing changes there.
 
     And the profile is laid out once more, at once, when the app comes back to the foreground.
     iOS lays a backgrounded app out in other orientations for its snapshots, and those layouts are
@@ -2907,14 +2913,57 @@ def _patch_landscape_profile(tg: Path) -> None:
             header,
             "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n",
             "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n"
-            "        // AorusGram: the photo stays open on a wide screen under Interface 2.0, capped so\n"
-            "        // that it, the name and buttons added under it below and a strip of the page fit\n"
-            "        // on the screen. A tall screen never reaches the cap.\n"
-            "        if AorusInterfaceV2Run.isEnabled && !self.isSettings && width > containerHeight {\n"
+            "        // AorusGram: the header stays open on a wide screen under Interface 2.0. A phone on\n"
+            "        // its side shows no photo: the open header is the name, just under the navigation\n"
+            "        // buttons, and the header's buttons under it -- the slot is sized so that the name,\n"
+            "        // which sits 43 points (my profile: -2) above the slot's end less the music, starts\n"
+            "        // there. A tablet keeps the photo, capped so that it, the name and buttons added\n"
+            "        // under it below and a strip of the page fit. A tall screen reaches neither.\n"
+            "        let aorusWideHeader = AorusInterfaceV2Run.isEnabled && !self.isSettings && width > containerHeight\n"
+            "        let aorusPhotolessHeader = aorusWideHeader && deviceMetrics.type != .tablet\n"
+            "        if aorusPhotolessHeader {\n"
+            "            expandedAvatarListHeight = navigationHeight + 4.0 + (self.isMyProfile ? -2.0 : 43.0) + bottomInset\n"
+            "        } else if aorusWideHeader {\n"
             "            let aorusWideHeaderControls: CGFloat = self.isMyProfile ? 60.0 : 98.0\n"
             "            expandedAvatarListHeight = min(expandedAvatarListHeight, max(160.0, containerHeight - expandedAvatarControlsHeight - aorusWideHeaderControls))\n"
             "        }\n",
             "wide header photo height",
+        )
+        header = _replace_once(
+            header,
+            "        self.avatarListNode.listContainerNode.update(size: expandedAvatarListSize, peer: peer, isExpanded: self.isAvatarExpanded, transition: transition)\n",
+            "        self.avatarListNode.listContainerNode.update(size: expandedAvatarListSize, peer: peer, isExpanded: self.isAvatarExpanded, transition: transition)\n"
+            "        // AorusGram: no photo on a phone on its side (see the slot's height above). Hidden\n"
+            "        // by its alpha, which also keeps it from taking a touch. Coming back, the photo is\n"
+            "        // laid out where it ends at once, while it is still invisible, and fades in over the\n"
+            "        // second half of the turn: animated with the turn, a band of the photo grew into a\n"
+            "        // square on screen. Going, it fades out over the first half.\n"
+            "        let aorusPhotoAlpha: CGFloat = aorusPhotolessHeader && self.isAvatarExpanded ? 0.0 : 1.0\n"
+            "        if self.avatarListNode.alpha != aorusPhotoAlpha {\n"
+            "            if case let .animated(duration, _) = transition {\n"
+            "                if aorusPhotoAlpha > 0.0 && self.isAvatarExpanded {\n"
+            "                    func aorusSettle(_ layer: CALayer) {\n"
+            "                        layer.removeAllAnimations()\n"
+            "                        layer.sublayers?.forEach(aorusSettle)\n"
+            "                    }\n"
+            "                    aorusSettle(self.avatarListNode.layer)\n"
+            "                    ContainedViewLayoutTransition.animated(duration: duration * 0.6, curve: .easeInOut).updateAlpha(node: self.avatarListNode, alpha: aorusPhotoAlpha, delay: duration * 0.4)\n"
+            "                } else {\n"
+            "                    ContainedViewLayoutTransition.animated(duration: duration * 0.5, curve: .easeInOut).updateAlpha(node: self.avatarListNode, alpha: aorusPhotoAlpha)\n"
+            "                }\n"
+            "            } else {\n"
+            "                self.avatarListNode.alpha = aorusPhotoAlpha\n"
+            "            }\n"
+            "        }\n",
+            "photoless wide header",
+        )
+        # The label under a photo someone else set is hit-tested by its own frame; it is part of
+        # the photo, and takes no touch while the photo is hidden.
+        header = _replace_once(
+            header,
+            "        if self.avatarListNode.listContainerNode.setByYouNode.alpha > 0.0, setByFrame.contains(point) {\n",
+            "        if self.avatarListNode.listContainerNode.setByYouNode.alpha > 0.0, self.avatarListNode.alpha > 0.0, setByFrame.contains(point) {\n",
+            "photoless header label touches",
         )
         header_path.write_text(header, encoding="utf-8")
     screen_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"

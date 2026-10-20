@@ -3713,8 +3713,13 @@ def main() -> None:
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
             (
-                # The open photo fits a wide screen with its buttons and a strip of the page.
+                # The open photo fits a wide tablet with its buttons and a strip of the page.
                 "expandedAvatarListHeight = min(expandedAvatarListHeight, max(160.0, containerHeight - expandedAvatarControlsHeight - aorusWideHeaderControls))",
+                # A phone on its side shows the name and the buttons and no photo, which comes back
+                # laid out where it ends and fades in over the turn.
+                "expandedAvatarListHeight = navigationHeight + 4.0 + (self.isMyProfile ? -2.0 : 43.0) + bottomInset",
+                "let aorusPhotoAlpha: CGFloat = aorusPhotolessHeader && self.isAvatarExpanded ? 0.0 : 1.0",
+                "aorusSettle(self.avatarListNode.layer)",
             ),
         ),
         (
@@ -4081,6 +4086,9 @@ def main() -> None:
             ("super.init(navigationBarPresentationData: AorusOldInterface.isEnabled ? aorusAINavigationBarPresentationData(presentationData) : nil)", "AorusAI: a hidden Telegram bar draws a second back arrow"),
             # The glass of Interface 2.0's toasts, not frosted regular glass.
             ("let effect = UIGlassEffect(style: .clear)", "AorusAI: the glass is frosted rather than clear"),
+            # The bubble's pane is laid out in the bubble's own pass, where its size is final: from
+            # the cell it took the previous pass's size, half a pane under a message just sent.
+            ("bubble.onLayout = { [weak self] size in", "AorusAI: a sent message's pane is sized from the layout before"),
             ("private func updatePresentationData(_ presentationData: PresentationData) {", "AorusAI: the screens keep the theme they opened with"),
             ("presentationDataDisposable.set((context.sharedContext.presentationData", "AorusAI: the screens do not follow a theme change"),
         ):

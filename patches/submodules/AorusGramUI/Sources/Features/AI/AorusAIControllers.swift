@@ -5717,6 +5717,23 @@ private final class AorusAIDictationWaveView: UIView {
     }
 }
 
+/// A message's box, which lays its pane of glass out in its own layout pass.
+///
+/// The bubble hugs its text, and its size is final only once the stack around it has laid it
+/// out, which is after the cell's own `layoutSubviews` has returned: a new cell is first laid
+/// out at UIKit's default width and then at the table's. Sized from the cell, the glass took the
+/// size the bubble had on the pass before -- a message just sent showed half its pane, with the
+/// text running out of it, until a later layout corrected it. The bubble's own pass is the one
+/// that knows its size.
+private final class AorusAIBubbleView: UIView {
+    var onLayout: ((CGSize) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?(bounds.size)
+    }
+}
+
 private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     private enum BodySlot {
         case text(AorusAIMentionTextView)
@@ -5739,7 +5756,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// the rest of it was clipped — until any later full layout, such as sending another
     /// message, produced the right one. That is the "message appears cut off until I type
     /// something" report.
-    private let bubble = UIView()
+    private let bubble = AorusAIBubbleView()
     private let bubbleGlass = AorusAIGlassView(interactive: false)
     private let bodyStack = UIStackView()
     private let statusLabel = UILabel()
@@ -5849,6 +5866,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         bodyStack.axis = .vertical
         bodyStack.spacing = 8
         bubble.addSubview(bodyStack)
+        bubble.onLayout = { [weak self] size in
+            self?.layoutBubbleGlass(size: size)
+        }
         // The design puts the progress line *above* the answer — "Читаю профиль диалога…"
         // is what the turn is doing before the text it produces, not a footnote under it.
         statusLabel.font = aorusUIFont(13.0, .semibold)
@@ -5939,17 +5959,19 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         positionStreamCaret()
-        // The pane is sized here rather than at configure time: the bubble hugs its text
-        // and only knows how wide it is once the stack has laid out.
-        if !bubbleGlass.isHidden, bubble.bounds.width > 0.0, bubble.bounds.height > 0.0 {
-            bubbleGlass.frame = bubble.bounds
-            bubbleGlass.update(
-                size: bubble.bounds.size,
-                cornerRadius: 20.0,
-                isDark: configuredTheme?.overallDarkAppearance ?? true,
-                transition: .immediate
-            )
-        }
+    }
+
+    /// The pane follows the bubble, from the bubble's own layout pass: the bubble hugs its text
+    /// and only knows its size once the stack around it has laid it out.
+    private func layoutBubbleGlass(size: CGSize) {
+        guard !bubbleGlass.isHidden, bubbleGlass.superview === bubble, size.width > 0.0, size.height > 0.0 else { return }
+        bubbleGlass.frame = CGRect(origin: CGPoint(), size: size)
+        bubbleGlass.update(
+            size: size,
+            cornerRadius: 20.0,
+            isDark: configuredTheme?.overallDarkAppearance ?? true,
+            transition: .immediate
+        )
     }
 
     /// Keeps the blinking dot on the last glyph of the answer while it grows.
@@ -6161,6 +6183,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         } else {
             bubbleGlass.isHidden = true
         }
+        // A reused cell can keep its bubble's size and so get no layout pass of its own: the
+        // pane is laid out again for the message and theme it now shows.
+        bubble.setNeedsLayout()
         bubble.layer.cornerRadius = isUser ? 20.0 : 0.0
         bubble.layer.cornerCurve = .continuous
         bubble.clipsToBounds = isUser
