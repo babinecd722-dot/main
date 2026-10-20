@@ -196,6 +196,20 @@ public enum AorusGlassPane {
         )
     }
 
+    /// A page so close to white that a pane of clear glass over it reads as a grey slab, with the
+    /// switches on it white against grey, rather than as glass. On such a page a block is the
+    /// page itself, white as the dark theme's block over black is black.
+    public static func isWhitePage(_ color: UIColor?) -> Bool {
+        guard let color else {
+            return false
+        }
+        var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return false
+        }
+        return alpha >= 0.99 && min(red, green, blue) >= 0.97
+    }
+
     /// True when the profile page wants light ink. Defaults to true, which is what an unsampled
     /// page is: the theme background, and the page a photo settles on is dark far more often than
     /// not.
@@ -629,7 +643,9 @@ def _patch_profile_section_glass(tg: Path) -> None:
         "                isDark: AorusGlassPane.profilePageIsDark,\n"
         "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
         "                isInteractive: false,\n"
-        "                isVisible: true,\n"
+        "                // Settings, a profile without a photo and one whose photo ends in white\n"
+        "                // stand on a white page, where the block is the page.\n"
+        "                isVisible: !AorusGlassPane.isWhitePage(AorusGlassPane.profilePageColor),\n"
         "                transition: .immediate\n"
         "            )\n"
         "        } else if let glassView = self.aorusGlassBackgroundView {\n"
@@ -2455,10 +2471,7 @@ def _patch_share_sheet_glass(tg: Path) -> None:
         "        }\n"
         "        let cornerRadius: CGFloat = 16.0\n"
         "        let isDark = self.presentationData.theme.overallDarkAppearance\n"
-        "        // Clear glass on the dark side, where the dim behind the sheet makes it dark. On the\n"
-        "        // light side the same dim showed through clear glass under the sheet's dark text,\n"
-        "        // so there the card is the frosted panel Telegram's own light panels are.\n"
-        "        let tintColor = GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)\n"
+        "        let tintColor = GlassBackgroundView.TintColor(kind: .clear)\n"
         "        \n"
         "        let cardHeight = max(0.0, cardSize.height - footerHeight)\n"
         "        if cardSize.width > 0.0, cardHeight > 0.0 {\n"
@@ -2924,15 +2937,12 @@ def _patch_undo_glass(tg: Path) -> None:
         "        self.effectView.frame = CGRect(x: 0.0, y: 0.0, width: panelWidth, height: contentHeight)\n"
         "        if let aorusGlassView = self.effectView as? GlassBackgroundView {\n"
         "            // A toast is dark in both themes, as Telegram draws it, because its labels are\n"
-        "            // white. Clear glass is dark only over a dark screen: over the light theme it\n"
-        "            // let the white page through and the labels were white on white, so there the\n"
-        "            // glass carries a dark tint of its own.\n"
-        "            let aorusToastTint: GlassBackgroundView.TintColor = self.presentationData.theme.overallDarkAppearance ? GlassBackgroundView.TintColor(kind: .clear) : GlassBackgroundView.TintColor(kind: .custom(style: .default, color: UIColor(white: 0.0, alpha: 0.65)))\n"
+        "            // white: clear glass on the dark side, whatever the theme is.\n"
         "            aorusGlassView.update(\n"
         "                size: CGSize(width: panelWidth, height: contentHeight),\n"
         "                cornerRadius: min(25.0, contentHeight * 0.5),\n"
         "                isDark: true,\n"
-        "                tintColor: aorusToastTint,\n"
+        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
         "                isInteractive: false,\n"
         "                isVisible: true,\n"
         "                transition: .immediate\n"
@@ -3202,6 +3212,7 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
         container.frame = CGRect(origin: CGPoint(), size: aorusLayout.size)
 
         let isDark = self.theme?.overallDarkAppearance ?? true
+        let isWhitePage = !isDark && AorusGlassPane.isWhitePage(self.theme?.list.blocksBackgroundColor)
         while self.aorusGlassPanes.count > runs.count {
             self.aorusGlassPanes.removeLast().removeFromSuperview()
         }
@@ -3223,7 +3234,7 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
                 isDark: isDark,
                 tintColor: GlassBackgroundView.TintColor(kind: .clear),
                 isInteractive: false,
-                isVisible: true,
+                isVisible: !isWhitePage,
                 transition: .immediate
             )
         }
@@ -4229,7 +4240,8 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "            isDark: self.aorusPageIsDark,\n"
         "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
         "            isInteractive: false,\n"
-        "            isVisible: true,\n"
+        "            // On a white page the block is the page, as in the profile's own sections.\n"
+        "            isVisible: !AorusGlassPane.isWhitePage(self.aorusResolvedPageColor),\n"
         "            transition: .immediate\n"
         "        )\n"
         "        \n"
@@ -4674,7 +4686,8 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "            isDark: self.aorusPageIsDark,\n"
         "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
         "            isInteractive: false,\n"
-        "            isVisible: true,\n"
+        "            // On a white page the block is the page, as in the profile's own sections.\n"
+        "            isVisible: !AorusGlassPane.isWhitePage(self.aorusResolvedPageColor),\n"
         "            transition: .immediate\n"
         "        )\n"
         "        \n"

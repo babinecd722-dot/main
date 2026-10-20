@@ -1623,6 +1623,16 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recordSeen(completedIds)
         }
 
+        /// Every post of the feed that carries media, in feed order from the oldest up.
+        func galleryMessages() -> [Message] {
+            return self.currentMessageIds.compactMap { id -> Message? in
+                guard let message = self.currentMessages[id], !message.media.isEmpty else {
+                    return nil
+                }
+                return message
+            }
+        }
+
         /// A post is seen once it has been read: on screen for as long as reading it takes.
         private func recordSeen(_ ids: [MessageId]) {
             guard !ids.isEmpty else {
@@ -1965,6 +1975,26 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
             })
         }
+    }
+
+    /// What the gallery pages through when media is opened in the Wall: the media of the whole
+    /// feed, in the order it stands. Telegram opens media from custom contents as a lone
+    /// message, which left the gallery unable to swipe even to the next photo of an album.
+    /// The gallery lays this list out newest first, so a swipe to the next item goes to the
+    /// post below, as scrolling the Wall does.
+    public func gallerySource(opening message: Message) -> GalleryControllerItemSource {
+        let messages: Signal<([Message], Int32, Bool), NoError> = self.impl.signalWith { impl, subscriber in
+            var feed = impl.galleryMessages()
+            if !feed.contains(where: { $0.id == message.id }) {
+                // Opened from a post the feed has let go of meanwhile: it is still the one shown.
+                feed.append(message)
+                feed.sort(by: { $0.index < $1.index })
+            }
+            subscriber.putNext((feed, Int32(feed.count), false))
+            subscriber.putCompletion()
+            return EmptyDisposable
+        }
+        return .custom(messages: messages, messageId: message.id, loadMore: nil)
     }
 
     /// The Wall's list runs top to bottom, so the newest post at its top is the end of its

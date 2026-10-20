@@ -1044,9 +1044,10 @@ def main() -> None:
         if "cornerRadius: 26.0" not in pane_text:
             err.append(f"InterfaceV2: {pane_name} lost the glass behind its card")
         # The material follows the page, not the app's theme. A pale avatar puts a light page
-        # under a dark theme, and dark glass over a light page is the black card again — the
-        # same signal the rows take their ink from, so the two cannot disagree.
-        if "isDark: AorusGlassPane.profilePageIsDark" not in pane_text:
+        # under a dark theme, and dark glass over a light page is the black card again — this
+        # pane's own peer, the signal the rows take their ink from, so the two cannot disagree
+        # and a profile opened from the list cannot repaint it.
+        if "isDark: self.aorusPageIsDark" not in pane_text or "isDark: AorusGlassPane.profilePageIsDark" in pane_text:
             err.append(f"InterfaceV2: {pane_name} glass no longer follows the page's own ink")
         if "isDark: true" in pane_text:
             err.append(f"InterfaceV2: {pane_name} pins its glass dark regardless of the page")
@@ -1974,6 +1975,13 @@ def main() -> None:
     for marker in ("// AorusGram: a scroll request applies once", "if let location, isFirstView {"):
         if marker not in history_list_text:
             err.append(f"Wall: a scroll to the top repeats with every update — missing {marker}")
+    # Media opened in the Wall pages through the feed rather than opening as a lone message.
+    wall_open_text = (tg / "submodules" / "TelegramUI" / "Sources" / "ChatController.swift").read_text(encoding="utf-8") if (tg / "submodules" / "TelegramUI" / "Sources" / "ChatController.swift").is_file() else ""
+    for marker in ("aorusWallGallerySource = aorusWall.gallerySource(opening: message)", "gallerySource: aorusWallGallerySource,"):
+        if marker not in wall_open_text:
+            err.append(f"Wall: opened media cannot be swiped to the rest of the feed — missing {marker}")
+    if "public func gallerySource(opening message: Message) -> GalleryControllerItemSource {" not in wall_text:
+        err.append("Wall: the feed no longer hands the gallery its media")
 
     account_details = tg / "submodules" / "AorusGramUI" / "Sources" / "AccountDetailsController.swift"
     account_details_text = account_details.read_text(encoding="utf-8") if account_details.is_file() else ""
@@ -3768,12 +3776,12 @@ def main() -> None:
         # A plugin theme that recolours a fill and not the text on it keeps that text readable.
         ("submodules/TelegramPresentationData/Sources/PresentationData.swift", ("func on(_ fill: UIColor?, _ key: String, _ current: UIColor) -> UIColor? {",)),
         # The light theme under Interface 2.0. The ghost beside a chat's avatar is drawn in the
-        # bar's ink rather than in white, a toast keeps a dark pane over a white screen, the share
-        # sheet is frosted where clear glass let the dim through, and the music capsule in a
-        # profile takes the page's side as the ink inside it does.
+        # bar's ink rather than in white, and the music capsule in a profile takes the page's side
+        # as the ink inside it does. Toasts and the share sheet stay clear glass in both themes:
+        # a frosted or tinted pane there is the matte look Interface 2.0 does not have.
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
-        ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("let aorusToastTint: GlassBackgroundView.TintColor",)),
-        ("submodules/ShareController/Sources/ShareControllerNode.swift", ("GlassBackgroundView.TintColor(kind: isDark ? .clear : .panel)",)),
+        ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("isDark: true,\n                tintColor: GlassBackgroundView.TintColor(kind: .clear),",)),
+        ("submodules/ShareController/Sources/ShareControllerNode.swift", ("let tintColor = GlassBackgroundView.TintColor(kind: .clear)",)),
         # The QR scanner follows the app theme around the camera picture.
         ("submodules/QrCodeUI/Sources/QrCodeScanScreen.swift", ("aorusQrScanIsDark = self.presentationData.theme.overallDarkAppearance", "self.backgroundColor = aorusPage", "isDark: aorusQrScanIsDark,")),
         ("submodules/QrCodeUI/Sources/GlassButtonNode.swift", ("isDark: aorusQrScanIsDark, tintColor: .init(kind: .panel)",)),

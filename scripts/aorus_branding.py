@@ -30574,6 +30574,8 @@ def main() -> None:
     patch_wall_tab(tg)
     from aorus_wall_scroll import patch_custom_view_scroll_once
     patch_custom_view_scroll_once(tg)
+    from aorus_wall_gallery import patch_wall_gallery
+    patch_wall_gallery(tg)
     # After the Wall: it rewrites the tab assembly this one extends.
     patch_plugin_tabs(tg)
     from aorus_plugin_screens import patch_plugin_screens

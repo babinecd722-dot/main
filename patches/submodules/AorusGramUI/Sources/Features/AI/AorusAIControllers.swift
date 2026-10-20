@@ -23,20 +23,6 @@ public func aorusAILocalized(_ ru: String, _ en: String) -> String {
     return aorusL(ru, en)
 }
 
-/// The glass AorusAI's chrome is made of: the capsules over the conversation, the input and
-/// the button that returns to the newest message.
-///
-/// Telegram's clear glass where the system draws real glass, so the chrome is a lens the
-/// conversation passes under rather than a frosted plate over it. Before that the panel
-/// glass: the older fallback for clear glass is a bare outline that text behind it would
-/// read straight through.
-private var aorusAIGlassTint: GlassBackgroundView.TintColor {
-    if #available(iOS 26.0, *) {
-        return GlassBackgroundView.TintColor(kind: .clear)
-    }
-    return GlassBackgroundView.TintColor(kind: .panel)
-}
-
 /// The navigation capsules — back, new chat — in the same glass, through the navigation
 /// bar's own clear style rather than drawn over it.
 private var aorusAINavigationGlassStyle: NavigationBarGlassStyle {
@@ -44,6 +30,200 @@ private var aorusAINavigationGlassStyle: NavigationBarGlassStyle {
         return .clear
     }
     return .default
+}
+
+/// System Liquid Glass: the material iOS draws its own bars, buttons and fields with, and the
+/// one ChatGPT's chrome is made of — regular glass that lenses what passes under it and, on a
+/// control, answers the touch.
+///
+/// Telegram's glass view is tuned for capsules over a chat wallpaper: it holds what the glass
+/// sees to one fixed brightness on the light side, and over AorusAI's flat page that read as
+/// matte plates rather than glass. This is the effect alone, in the theme's appearance. Before
+/// iOS 26 there is no such glass, and Telegram's panel glass stands in for it.
+final class AorusAIGlassView: UIView {
+    private let effectView: UIVisualEffectView?
+    private let fallbackView: GlassBackgroundView?
+    private let isInteractiveGlass: Bool
+    /// What is drawn on the glass. Inside the effect, so a touch on it is the glass's own.
+    let contentView: UIView
+
+    init(interactive: Bool) {
+        self.isInteractiveGlass = interactive
+        if #available(iOS 26.0, *) {
+            let effect = UIGlassEffect(style: .regular)
+            effect.isInteractive = interactive
+            let effectView = UIVisualEffectView(effect: effect)
+            effectView.layer.cornerCurve = .continuous
+            self.effectView = effectView
+            self.fallbackView = nil
+            self.contentView = effectView.contentView
+        } else {
+            let fallbackView = GlassBackgroundView(frame: CGRect())
+            self.effectView = nil
+            self.fallbackView = fallbackView
+            self.contentView = fallbackView.contentView
+        }
+        super.init(frame: CGRect())
+        if let effectView {
+            addSubview(effectView)
+        }
+        if let fallbackView {
+            addSubview(fallbackView)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func update(size: CGSize, cornerRadius: CGFloat, isDark: Bool, transition: ComponentTransition) {
+        let bounds = CGRect(origin: CGPoint(), size: size)
+        if let effectView {
+            effectView.overrideUserInterfaceStyle = isDark ? .dark : .light
+            transition.setFrame(view: effectView, frame: bounds)
+            transition.setCornerRadius(layer: effectView.layer, cornerRadius: cornerRadius)
+        }
+        if let fallbackView {
+            transition.setFrame(view: fallbackView, frame: bounds)
+            fallbackView.update(size: size, cornerRadius: cornerRadius, isDark: isDark, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: isInteractiveGlass, transition: transition)
+        }
+    }
+}
+
+/// A round button of system glass with a symbol on it — back and new chat at the top of the
+/// AorusAI screens, as ChatGPT has them, in place of Telegram's navigation capsules.
+final class AorusAIGlassIconButton: UIView {
+    static let size: CGFloat = 44.0
+
+    private let glass = AorusAIGlassView(interactive: true)
+    private let icon = UIImageView()
+    private var isDark = false
+    var onPress: (() -> Void)?
+
+    init(symbol: String, accessibilityLabel: String) {
+        super.init(frame: CGRect())
+        icon.image = UIImage(systemName: symbol)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .semibold))
+        icon.contentMode = .center
+        icon.isUserInteractionEnabled = false
+        glass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
+        addSubview(glass)
+        glass.contentView.addSubview(icon)
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        self.accessibilityLabel = accessibilityLabel
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(theme: PresentationTheme) {
+        isDark = theme.overallDarkAppearance
+        icon.tintColor = AorusAIPalette.resolve(theme).label
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        glass.frame = bounds
+        glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, transition: .immediate)
+        icon.frame = CGRect(origin: CGPoint(), size: bounds.size)
+    }
+
+    override func accessibilityActivate() -> Bool {
+        pressed()
+        return true
+    }
+
+    @objc private func pressed() {
+        onPress?()
+    }
+}
+
+/// The row at the top of an AorusAI screen: a back button, the title in the middle and, on
+/// the list, the new-chat button — every one of them system glass over the page, with the
+/// conversation passing under them.
+///
+/// It stands in for Telegram's navigation bar, which draws its own capsules in its own glass,
+/// under Telegram's interface. The old interface keeps Telegram's classic bar instead.
+final class AorusAITopBar: UIView {
+    /// The height Telegram gives a glass navigation bar under the status bar.
+    static let contentHeight: CGFloat = 60.0
+    private static let sideInset: CGFloat = 16.0
+
+    let backButton = AorusAIGlassIconButton(symbol: "chevron.left", accessibilityLabel: aorusAILocalized("Назад", "Back"))
+    var trailingButton: AorusAIGlassIconButton? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let trailingButton {
+                addSubview(trailingButton)
+            }
+            setNeedsLayout()
+        }
+    }
+    var titleView: UIView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            if let titleView {
+                addSubview(titleView)
+            }
+            setNeedsLayout()
+        }
+    }
+    private var leftInset: CGFloat = 0.0
+    private var rightInset: CGFloat = 0.0
+    private var statusBarHeight: CGFloat = 0.0
+
+    static func height(statusBarHeight: CGFloat) -> CGFloat {
+        return statusBarHeight + AorusAITopBar.contentHeight
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        addSubview(backButton)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(theme: PresentationTheme) {
+        backButton.configure(theme: theme)
+        trailingButton?.configure(theme: theme)
+    }
+
+    /// Whether `controller` has a screen to go back to: a tab's root, as AorusAI is when it is
+    /// a tab of its own, has none, and shows no back button, as Telegram's bar would show none.
+    static func canGoBack(from controller: UIViewController) -> Bool {
+        guard let viewControllers = controller.navigationController?.viewControllers, let index = viewControllers.firstIndex(where: { $0 === controller }) else {
+            return false
+        }
+        return index > 0
+    }
+
+    func update(statusBarHeight: CGFloat, leftInset: CGFloat, rightInset: CGFloat, showsBack: Bool) {
+        backButton.isHidden = !showsBack
+        self.statusBarHeight = statusBarHeight
+        self.leftInset = leftInset
+        self.rightInset = rightInset
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let size = AorusAIGlassIconButton.size
+        let y = statusBarHeight + floor((AorusAITopBar.contentHeight - size) / 2.0)
+        let leading = AorusAITopBar.sideInset + leftInset
+        let trailing = AorusAITopBar.sideInset + rightInset
+        backButton.frame = CGRect(x: leading, y: y, width: size, height: size)
+        trailingButton?.frame = CGRect(x: bounds.width - trailing - size, y: y, width: size, height: size)
+        if let titleView {
+            let reserved = max(leading, trailing) + size + 8.0
+            titleView.frame = CGRect(x: reserved, y: y, width: max(0.0, bounds.width - reserved * 2.0), height: size)
+        }
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        // Only the capsules take touches; the conversation passing under the bar keeps the rest.
+        for view in [backButton, trailingButton, titleView].compactMap({ $0 }) where !view.isHidden && view.frame.contains(point) {
+            return true
+        }
+        return false
+    }
 }
 
 private func aorusAIPresentActionSheet(_ controller: UIAlertController, from presenter: UIViewController) {
@@ -606,6 +786,8 @@ private final class AorusAIConversationListController: ViewController, UITableVi
     private let searchField = AorusAISearchFieldView()
     private let listHeader = AorusAIConversationListHeaderView()
     private let emptyView = AorusAIConversationListEmptyView()
+    /// Back, the title and new chat, under Telegram's interface.
+    private let topBar = AorusAITopBar()
     private let profileNameDisposable = MetaDisposable()
     private var conversations: [AorusAIConversation] = []
     private var sections: [Section] = []
@@ -668,10 +850,28 @@ private final class AorusAIConversationListController: ViewController, UITableVi
                 ?? UIImage(systemName: "square.and.pencil"),
             color: composeColor
         )
-        let composeItem = UIBarButtonItem(image: composeImage, style: .plain, target: self, action: #selector(createConversation))
-        composeItem.tintColor = composeColor
-        composeItem.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
-        self.navigationItem.rightBarButtonItem = composeItem
+        if AorusOldInterface.isEnabled {
+            let composeItem = UIBarButtonItem(image: composeImage, style: .plain, target: self, action: #selector(createConversation))
+            composeItem.tintColor = composeColor
+            composeItem.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
+            self.navigationItem.rightBarButtonItem = composeItem
+        } else {
+            // Back, the title and new chat are system glass of this screen's own, as in the
+            // conversation.
+            self.displayNavigationBar = false
+            let titleLabel = UILabel()
+            titleLabel.text = "AorusAI"
+            titleLabel.font = aorusUIFont(17.0, .semibold)
+            titleLabel.textAlignment = .center
+            titleLabel.textColor = presentationData.theme.rootController.navigationBar.primaryTextColor
+            titleLabel.accessibilityTraits = .header
+            topBar.titleView = titleLabel
+            let composeButton = AorusAIGlassIconButton(symbol: "square.and.pencil", accessibilityLabel: aorusAILocalized("Новый диалог", "New chat"))
+            composeButton.onPress = { [weak self] in
+                self?.createConversation()
+            }
+            topBar.trailingButton = composeButton
+        }
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -711,6 +911,18 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         searchField.textField.delegate = self
         searchField.textField.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
         self.displayNode.view.addSubview(searchField)
+        if !AorusOldInterface.isEnabled {
+            topBar.configure(theme: presentationData.theme)
+            topBar.backButton.onPress = { [weak self] in
+                guard let self else { return }
+                if let navigationController = self.navigationController as? NavigationController, navigationController.viewControllers.count > 1 {
+                    navigationController.popViewController(animated: true)
+                } else {
+                    self.dismiss()
+                }
+            }
+            self.displayNode.view.addSubview(topBar)
+        }
 
         observer = NotificationCenter.default.addObserver(forName: AorusAIStore.changedNotification, object: nil, queue: .main) { [weak self] note in
             guard let self, (note.object as? NSNumber)?.int64Value == self.accountId else { return }
@@ -752,7 +964,14 @@ private final class AorusAIConversationListController: ViewController, UITableVi
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY + (AorusOldInterface.isEnabled ? 12.0 : 0.0)
+        let top: CGFloat
+        if AorusOldInterface.isEnabled {
+            top = self.navigationLayout(layout: layout).navigationFrame.maxY + 12.0
+        } else {
+            top = AorusAITopBar.height(statusBarHeight: layout.statusBarHeight ?? 0.0)
+            transition.updateFrame(view: topBar, frame: CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: top))
+            topBar.update(statusBarHeight: layout.statusBarHeight ?? 0.0, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, showsBack: AorusAITopBar.canGoBack(from: self))
+        }
         let searchFrame = CGRect(x: 16.0, y: top, width: max(0.0, layout.size.width - 32.0), height: 38.0)
         transition.updateFrame(view: searchField, frame: searchFrame)
         // The list runs to the bottom of the screen, the way every list in Telegram does.
@@ -1578,6 +1797,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// shows the conversation through it, and the text fades into the page below it.
     private let bottomBlurView = EdgeEffectView(frame: CGRect())
     private let scrollDownButton = AorusAIScrollDownButton()
+    /// Back and the title over the conversation, under Telegram's interface.
+    private let topBar = AorusAITopBar()
     /// Whether the list keeps the newest text in view while an answer arrives.
     ///
     /// The reader decides it, never the geometry of a single moment: scrolling away turns it
@@ -1644,7 +1865,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // the custom view, never both.
         let titleView = AorusAINavigationTitleView(theme: presentationData.theme)
         self.headerView = titleView
-        self.navigationItem.titleView = titleView
+        if AorusOldInterface.isEnabled {
+            self.navigationItem.titleView = titleView
+        } else {
+            // Back and the title are system glass of this screen's own; Telegram's bar would
+            // draw its capsules in its own glass over them.
+            self.displayNavigationBar = false
+            topBar.titleView = titleView
+        }
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
     }
 
@@ -1691,6 +1919,13 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.displayNode.view.addSubview(topBlurView)
         bottomBlurView.isUserInteractionEnabled = false
         self.displayNode.view.addSubview(bottomBlurView)
+        if !AorusOldInterface.isEnabled {
+            topBar.configure(theme: presentationData.theme)
+            topBar.backButton.onPress = { [weak self] in
+                self?.aorusGoBack()
+            }
+            self.displayNode.view.addSubview(topBar)
+        }
         scrollDownButton.configure(theme: presentationData.theme)
         scrollDownButton.onPress = { [weak self] in
             self?.returnToNewest(animated: true)
@@ -1862,6 +2097,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         applyLayout(layout, transition: transition)
     }
 
+    /// Back, as the navigation bar's own button does it.
+    private func aorusGoBack() {
+        if let navigationController = self.navigationController as? NavigationController, navigationController.viewControllers.count > 1 {
+            navigationController.popViewController(animated: true)
+        } else {
+            self.dismiss()
+        }
+    }
+
     private func applyLayout(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         // Read before anything moves: both the frame and the insets are about to change, and
         // the question is where the reader was, not where they end up. A reader who is not
@@ -1869,7 +2113,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // keyboard or a growing input lifts the text instead of covering it.
         let keepsNewest = followsNewest
         let distanceFromEnd = max(0.0, bottomOffset() - tableView.contentOffset.y)
-        let top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        let top: CGFloat
+        if AorusOldInterface.isEnabled {
+            top = self.navigationLayout(layout: layout).navigationFrame.maxY
+        } else {
+            top = AorusAITopBar.height(statusBarHeight: layout.statusBarHeight ?? 0.0)
+            transition.updateFrame(view: topBar, frame: CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: top))
+            topBar.update(statusBarHeight: layout.statusBarHeight ?? 0.0, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, showsBack: AorusAITopBar.canGoBack(from: self))
+        }
         let bottomInset = max(layout.intrinsicInsets.bottom, keyboardHeight)
         let composerHeight = composer.requiredHeight(width: layout.size.width)
         let composerFrame = CGRect(x: 0, y: layout.size.height - bottomInset - composerHeight, width: layout.size.width, height: composerHeight)
@@ -4536,7 +4787,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 private final class AorusAIComposerView: UIView {
     let textView = AorusAIMentionTextView.make()
     private let container = UIView()
-    private let containerGlass = GlassBackgroundView(frame: CGRect())
+    private let containerGlass = AorusAIGlassView(interactive: true)
     private let placeholder = UILabel()
     private let referenceView = UIView()
     private let referenceLine = UIView()
@@ -4769,8 +5020,6 @@ private final class AorusAIComposerView: UIView {
             size: containerFrame.size,
             cornerRadius: min(Self.cornerRadius, height / 2.0),
             isDark: theme?.overallDarkAppearance ?? true,
-            tintColor: aorusAIGlassTint,
-            isInteractive: true,
             transition: ComponentTransition(transition)
         )
 
@@ -5410,7 +5659,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// message, produced the right one. That is the "message appears cut off until I type
     /// something" report.
     private let bubble = UIView()
-    private let bubbleGlass = GlassBackgroundView(frame: CGRect())
+    private let bubbleGlass = AorusAIGlassView(interactive: false)
     private let bodyStack = UIStackView()
     private let statusLabel = UILabel()
     private let workTrail = AorusAIWorkTrailView()
@@ -5617,8 +5866,6 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 size: bubble.bounds.size,
                 cornerRadius: 20.0,
                 isDark: configuredTheme?.overallDarkAppearance ?? true,
-                tintColor: GlassBackgroundView.TintColor(kind: .panel),
-                isInteractive: false,
                 transition: .immediate
             )
         }
@@ -6169,7 +6416,7 @@ private final class AorusAIScrollDownButton: UIView {
     static let size: CGFloat = 40.0
 
     private let content = UIView()
-    private let glass = GlassBackgroundView(frame: CGRect())
+    private let glass = AorusAIGlassView(interactive: true)
     private let icon = UIImageView()
     private var isDark = false
     private(set) var isShown = false
@@ -6209,7 +6456,7 @@ private final class AorusAIScrollDownButton: UIView {
         content.bounds = CGRect(origin: CGPoint(), size: bounds.size)
         content.center = CGPoint(x: bounds.midX, y: bounds.midY)
         glass.frame = content.bounds
-        glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, tintColor: aorusAIGlassTint, isInteractive: true, transition: .immediate)
+        glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, transition: .immediate)
         icon.frame = CGRect(origin: CGPoint(), size: bounds.size)
     }
 
@@ -6263,7 +6510,7 @@ private final class AorusAINavigationTitleView: UIView {
     private static let horizontalPadding: CGFloat = 16.0
     private static let maximumWidth: CGFloat = 260.0
 
-    private let glassView = GlassBackgroundView(frame: CGRect())
+    private let glassView = AorusAIGlassView(interactive: false)
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
     private var isDarkAppearance = false
@@ -6327,7 +6574,7 @@ private final class AorusAINavigationTitleView: UIView {
         let height = min(Self.height, bounds.height)
         let frame = CGRect(x: floor((bounds.width - width) / 2.0), y: floor((bounds.height - height) / 2.0), width: width, height: height)
         transition.setFrame(view: glassView, frame: frame)
-        glassView.update(size: frame.size, cornerRadius: height / 2.0, isDark: isDarkAppearance, tintColor: aorusAIGlassTint, isInteractive: false, transition: transition)
+        glassView.update(size: frame.size, cornerRadius: height / 2.0, isDark: isDarkAppearance, transition: transition)
 
         let titleHeight: CGFloat = 20.0
         let titleY = hasStatus ? frame.minY + 5.0 : frame.minY + floor((height - titleHeight) / 2.0)

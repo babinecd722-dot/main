@@ -18,9 +18,15 @@ class Table: View {
     var contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     var verticalScrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 }
-struct ContainerViewLayout { let size: CGSize; let intrinsicInsets: UIEdgeInsets; let navigationHeight: CGFloat }
+struct ContainerViewLayout { let size: CGSize; let intrinsicInsets: UIEdgeInsets; let safeInsets: UIEdgeInsets; let statusBarHeight: CGFloat?; let navigationHeight: CGFloat }
 struct ContainedViewLayoutTransition { func updateFrame(view: View, frame: CGRect) { view.frame = frame } }
 enum AorusOldInterface { static var isEnabled = false }
+class AorusAITopBar: View {
+    static func height(statusBarHeight: CGFloat) -> CGFloat { return statusBarHeight + 60.0 }
+    static func canGoBack(from controller: AnyObject) -> Bool { return true }
+    var updates = 0
+    func update(statusBarHeight: CGFloat, leftInset: CGFloat, rightInset: CGFloat, showsBack: Bool) { updates += 1 }
+}
 class Controller {
     func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {}
     func navigationLayout(layout: ContainerViewLayout) -> (navigationFrame: CGRect, visible: Bool) {
@@ -28,7 +34,7 @@ class Controller {
     }
 }
 class Companion: Controller {
-    let searchField = View(), tableView = Table()
+    let searchField = View(), tableView = Table(), topBar = AorusAITopBar()
     var listWidth: CGFloat = 0, measurements = 0
     func updateTableAccessories() { measurements += 1 }
 ''' + method + '''
@@ -39,10 +45,18 @@ let owner = Companion()
 for old in [false, true] { for width: CGFloat in [320, 390, 844] { for height: CGFloat in [300, 844] {
     for nav: CGFloat in [44, 88, 96] { for bottom: CGFloat in [0, 34] {
         AorusOldInterface.isEnabled = old
-        let layout = ContainerViewLayout(size: CGSize(width: width, height: height), intrinsicInsets: UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0), navigationHeight: nav)
+        let statusBar: CGFloat = nav - 44
+        let layout = ContainerViewLayout(size: CGSize(width: width, height: height), intrinsicInsets: UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0), safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0), statusBarHeight: statusBar, navigationHeight: nav)
         let previous = owner.measurements
+        let previousBarUpdates = owner.topBar.updates
         owner.containerLayoutUpdated(layout, transition: ContainedViewLayoutTransition())
-        expect(owner.searchField.frame.minY - nav == (old ? 12 : 0), "classic search clears the navigation plate while current layout is unchanged")
+        if old {
+            expect(owner.searchField.frame.minY - nav == 12, "classic search clears the navigation plate")
+            expect(owner.topBar.updates == previousBarUpdates, "the classic interface keeps Telegram's bar")
+        } else {
+            expect(owner.searchField.frame.minY == statusBar + 60 && owner.topBar.frame.height == statusBar + 60, "search sits under the glass bar of the screen's own")
+            expect(owner.topBar.updates == previousBarUpdates + 1 && owner.topBar.frame.width == width, "the glass bar is laid out with the screen")
+        }
         expect(owner.tableView.frame.minY - owner.searchField.frame.maxY == 12 && owner.tableView.frame.maxY == height, "list never overlays search and reaches the available bottom")
         expect(owner.searchField.frame.width == width - 32 && owner.searchField.frame.height == 38 && owner.listWidth == width, "rotation retains search dimensions and remeasures rows")
         expect(owner.tableView.contentInset.bottom == bottom + 12 && owner.measurements == previous + 1, "safe area and table accessories update on each layout")
