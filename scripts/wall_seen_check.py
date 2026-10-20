@@ -51,6 +51,7 @@ final class Impl {
     var lastVisibilityTimestamp: Double?
     var previousVisibleMessageIds = Set<MessageId>()
     var displayedInFeed = Set<MessageId>()
+    var shownThisSession = Set<MessageId>()
     var loadDisposable: AnyObject?
     var observedMessageIds = Set<MessageId>()
     var visibleDurations: [MessageId: Double] = [:]
@@ -60,15 +61,17 @@ final class Impl {
     var badge = 0
     var reloadCount = 0
     var pendingHoldBack = Set<MessageId>()
+    var pendingShuffled = false
     var pendingRebuilt: (() -> Void)?
     func startPrefetchTimer() {}
     func stopPrefetchTimer() {}
     func topUp(force: Bool) {}
     func observeVisibleMessages(_ ids: Set<MessageId>) { self.observedMessageIds = ids }
     func publishCurrentBadge() { self.badge = self.currentMessageIds.count - self.markedInCurrentView.count }
-    func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), rebuilt: (() -> Void)? = nil) {
+    func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), shuffled: Bool = false, rebuilt: (() -> Void)? = nil) {
         self.reloadCount += 1
         self.pendingHoldBack = holdBack
+        self.pendingShuffled = shuffled
         self.pendingRebuilt = rebuilt
     }
     func applyMessages(_ messages: [Message], updateType: EngineViewUpdateType, preserveCurrent: Bool) {
@@ -81,6 +84,7 @@ final class Impl {
     /// The reload's completion as installed, for a page Postbox returned.
     func completeReload(_ messages: [Message], updateType: EngineViewUpdateType = .Generic) {
         let holdBack = self.pendingHoldBack
+        let shuffled = self.pendingShuffled
         let expandIfEmpty = true
         let rebuilt = self.pendingRebuilt
         let _ = expandIfEmpty
@@ -103,8 +107,11 @@ def check(repo: Path, tg: Path, swiftc: str):
     if wall.count('rebuilt?()') != 1:
         raise RuntimeError('Wall: the rebuilt feed is no longer reported back exactly once')
     for marker in (
-        # Held-back posts are placed in the new feed already, so no page offers them.
+        # Held-back posts are placed in the new feed already, so no page offers them, and a
+        # Refresh draws its page rather than taking the same best posts every time.
         'self.placedIds = holdBack\n',
+        'collectPage(frontier: nil, span: self.windowSpan, shuffled: shuffled)',
+        'return shuffled ? score * Double.random(in: 0.35 ... 1.65) : score',
         'impl.refresh(rebuilt: { [weak self] in',
         'controller.chatDisplayNode.historyNode.scrollToEndOfHistory()',
         'controller.scrollToTop = { [weak contents] in',

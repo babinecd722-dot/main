@@ -58,6 +58,12 @@ private func aorusFilledHouseTabImage(color: UIColor) -> UIImage? {
     return result
 }
 
+/// A post's score for a page: as it ranks, or drawn at random around it for a Refresh.
+private func aorusWallPageScore(_ shuffled: Bool, _ message: Message, now: Int32) -> Double {
+    let score = aorusWallPostScore(message, now: now)
+    return shuffled ? score * Double.random(in: 0.35 ... 1.65) : score
+}
+
 /// Ranks a recommended post: engagement, damped by age.
 ///
 /// Reactions weigh far more than views — a view is passive, a reaction is a decision.
@@ -159,6 +165,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// Refresh holds these back from the feed it builds, so it opens on posts the reader
         /// has not just had in front of them; they stay unseen and can come back later.
         private var displayedInFeed = Set<MessageId>()
+        /// Every post that has been readable on screen since the app started, in any feed. A
+        /// Refresh holds all of them back, not only the last screen's: holding back the last
+        /// screen alone made two Refreshes trade the same two feeds back and forth.
+        private var shownThisSession = Set<MessageId>()
         private var loadDisposable: Disposable?
         private var loadMoreDisposable: Disposable?
         private var recommendationRequestDisposable: Disposable?
@@ -638,7 +648,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// anything on screen. `span` is how far below the frontier this page may reach; it
         /// widens when a page comes back empty, which is what keeps the feed going without
         /// dragging ancient posts up to the top.
-        private func collectPage(frontier: MessageIndex?, span: Int32) -> Signal<[Message], NoError> {
+        /// `shuffled` draws the page instead of taking the best posts as they rank: every post's
+        /// score is scaled by a random factor, so the posts a Refresh brings are a different
+        /// draw from the unread ones each time, still leaning towards the better ones.
+        private func collectPage(frontier: MessageIndex?, span: Int32, shuffled: Bool = false) -> Signal<[Message], NoError> {
             let accountId = self.accountId
             let recommendedPeerIds = self.recommendationsEnabled ? self.nextRecommendedScanWindow() : []
             let sourceGeneration = self.sourceGeneration
@@ -811,7 +824,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             if let groupKey = message.groupingKey {
                                 let existing = peerGroups[groupKey] ?? []
                                 peerGroups[groupKey] = existing + [message]
-                                let score = aorusWallPostScore(
+                                let score = aorusWallPageScore(shuffled, 
                                     groupCaptions[groupKey].map { aorusWallMessageWithText(from: $0, on: message) } ?? message,
                                     now: now
                                 )
@@ -829,7 +842,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                                     uniqueIds.insert(companion.id)
                                     message = aorusWallMessageWithText(from: companion, on: message)
                                 }
-                                collected.append((message, aorusWallPostScore(message, now: now)))
+                                collected.append((message, aorusWallPageScore(shuffled, message, now: now)))
                             }
                             if collected.count >= Impl.candidatesPerChannel {
                                 break
@@ -1341,7 +1354,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// is on screen, so it is reserved for opening the Wall and for the Refresh button —
         /// the one place the reader asks for a fresh start. Everything else extends the feed
         /// downwards instead, which cannot disturb the viewport.
-        func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), rebuilt: (() -> Void)? = nil) {
+        func reload(updateType: EngineViewUpdateType, expandIfEmpty: Bool = false, holdBack: Set<MessageId> = Set(), shuffled: Bool = false, rebuilt: (() -> Void)? = nil) {
             self.updateRecommendationsIfNeeded()
             self.loadDisposable?.dispose()
             self.loadMoreDisposable?.dispose()
@@ -1351,21 +1364,23 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.lastLoadMoreMarkedCount = 0
             // Posts held back count as already placed in this feed, so no page offers them.
             self.placedIds = holdBack
-            self.subscribedScanCursor = 0
-            self.recommendedScanCursor = 0
+            // A drawn page also starts its scan of the channels at a random place, so the
+            // channels that make up the first page differ from one Refresh to the next.
+            self.subscribedScanCursor = shuffled ? Int.random(in: 0 ..< 4096) : 0
+            self.recommendedScanCursor = shuffled ? Int.random(in: 0 ..< 4096) : 0
             self.windowSpan = Impl.initialWindowSpan
             self.searchingPromise.set(true)
-            self.loadDisposable = (self.collectPage(frontier: nil, span: self.windowSpan)
+            self.loadDisposable = (self.collectPage(frontier: nil, span: self.windowSpan, shuffled: shuffled)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
                 }
                 let messages = self.beginRebuiltFeed(messages)
                 if messages.isEmpty && !holdBack.isEmpty {
-                    // Nothing else to show: the posts that were on screen are the feed after all,
-                    // rather than an empty Wall.
+                    // Nothing else to show: what was held back is the feed after all, drawn
+                    // again, rather than an empty Wall.
                     self.loadDisposable = nil
-                    self.reload(updateType: updateType, expandIfEmpty: expandIfEmpty, rebuilt: rebuilt)
+                    self.reload(updateType: updateType, expandIfEmpty: expandIfEmpty, shuffled: shuffled, rebuilt: rebuilt)
                     return
                 }
                 self.applyMessages(messages, updateType: updateType, preserveCurrent: false)
@@ -1595,6 +1610,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.observeVisibleMessages(liveIds)
             for id in readableIds where self.currentMessages[id] != nil && !self.markedInCurrentView.contains(id) {
                 self.displayedInFeed.insert(id)
+                self.shownThisSession.insert(id)
             }
             guard let previousTimestamp = self.lastVisibilityTimestamp else {
                 self.lastVisibilityTimestamp = timestamp
@@ -1641,21 +1657,25 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             for id in ids where self.currentMessages[id] != nil {
                 self.markedInCurrentView.insert(id)
             }
+            // A read post is seen, which keeps it out of every feed; there is nothing left to
+            // hold back.
+            self.shownThisSession.subtract(ids)
             AorusWallSettingsStore.markSeen(ids, accountId: self.accountId)
             self.publishCurrentBadge()
         }
 
-        /// What Refresh keeps out of the feed it builds: the posts that were just on screen and
-        /// have not been read. They are not seen, only not the first thing shown again.
+        /// What Refresh keeps out of the feed it builds: everything on screen since the app
+        /// started, and the whole feed being replaced, shown or not. None of it is seen -- it
+        /// can come back later -- it is only not what the new feed is made of.
         func refreshHoldBack() -> Set<MessageId> {
-            return self.displayedInFeed.subtracting(self.markedInCurrentView)
+            return self.shownThisSession.union(self.currentMessageIds).subtracting(self.markedInCurrentView)
         }
 
-        /// Refresh is the single point where finished posts are cleared out. The new feed is
-        /// built from what the reader has not read -- new posts and those not read yet -- and
-        /// opens on posts that were not just on screen.
+        /// Refresh is the single point where finished posts are cleared out. The new feed is a
+        /// fresh draw from what the reader has not read -- new posts and those not read yet --
+        /// leaving out what was on screen and what the old feed held.
         func refresh(rebuilt: @escaping () -> Void) {
-            self.reload(updateType: .Generic, expandIfEmpty: true, holdBack: self.refreshHoldBack(), rebuilt: rebuilt)
+            self.reload(updateType: .Generic, expandIfEmpty: true, holdBack: self.refreshHoldBack(), shuffled: true, rebuilt: rebuilt)
         }
 
         /// Apply settings without rebuilding the current snapshot. Exclusions animate out

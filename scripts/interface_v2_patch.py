@@ -2728,12 +2728,14 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
     opens on a small one and offers no way back to the big one except dragging.
 
     And one rule holds over all of them. Telegram collapses the photo whenever the profile is laid
-    out in landscape, which is right -- a full-width photo does not fit -- and is reached without
-    the profile itself ever turning: a video opened from a post, a story or the media tab turns
-    the phone, and the profile behind it is laid out wide. Nothing turned it back, so a post was
-    enough to leave the profile on Telegram's small round photo. Every layout now restores it the
-    moment the profile is tall again and nothing in it wants the small header -- the same test
-    that guards the collapses above -- so no path, listed here or not, can leave it small.
+    out in landscape, because its full-width photo does not fit there. Interface 2.0 keeps it open
+    in landscape as well, at the height `_patch_landscape_profile` gives a wide screen: collapsing
+    left the profile on Telegram's small round photo, turning the phone back expanded it again in
+    the middle of the rotation, and iOS lays a backgrounded app out in the other orientation for
+    its snapshots, so a profile left in landscape collapsed and expanded behind the reader's back.
+    Every layout also restores the photo whenever nothing on the profile wants the small header --
+    the same test that guards the collapses above -- so no path, listed here or not, can leave it
+    small.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     text = _read(path, "PeerInfoScreen.swift")
@@ -2858,19 +2860,21 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
         "            self.updateNavigationExpansionPresentation(isExpanded: false, animated: true)\n"
         "        }\n",
-        "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height {\n"
+        "        // AorusGram: Interface 2.0 keeps the photo open on a wide screen too, at the\n"
+        "        // height the header gives it there. Telegram's collapse for landscape turned the\n"
+        "        // profile into its small round photo, and turning back expanded it again in the\n"
+        "        // middle of the rotation; and iOS lays a backgrounded app out in the other\n"
+        "        // orientation for its snapshots, so leaving the app in landscape collapsed and\n"
+        "        // expanded the header behind the reader's back, leaving it in pieces on return.\n"
+        "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {\n"
         "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
         "            self.updateNavigationExpansionPresentation(isExpanded: false, animated: true)\n"
-        "        } else if !self.headerNode.isAvatarExpanded, layout.size.width <= layout.size.height, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
-        "            // AorusGram: Interface 2.0 has no small-photo profile. The branch above\n"
-        "            // collapses the photo for a wide layout, and the profile is laid out wide\n"
-        "            // whenever something over it turns the phone -- a video opened from a post\n"
-        "            // does -- so the photo comes back the first time the profile is tall again.\n"
-        "            // Asked on every layout, which makes it the rule rather than one more\n"
-        "            // exception: whatever collapsed the photo, it does not stay collapsed while\n"
-        "            // nothing on the profile needs the small header. A photo deleted from the\n"
-        "            // gallery leaves the list empty until the peer catches up, and an empty list\n"
-        "            // has nothing to hold open.\n"
+        "        } else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
+        "            // AorusGram: Interface 2.0 has no small-photo profile. Asked on every layout,\n"
+        "            // which makes it the rule rather than one more exception: whatever collapsed\n"
+        "            // the photo, it does not stay collapsed while nothing on the profile needs the\n"
+        "            // small header. A photo deleted from the gallery leaves the list empty until\n"
+        "            // the peer catches up, and an empty list has nothing to hold open.\n"
         "            self.headerNode.updateIsAvatarExpanded(true, transition: transition)\n"
         "            self.updateNavigationExpansionPresentation(isExpanded: true, animated: transition.isAnimated)\n"
         "        }\n",
@@ -2878,6 +2882,98 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: patched avatar expansion")
+
+
+def _patch_landscape_profile(tg: Path) -> None:
+    """Lay the open photo out for a wide screen, and settle the profile on return.
+
+    Interface 2.0 keeps the photo open in landscape (`_patch_keep_avatar_expanded`). Telegram sizes
+    the open photo square, up to the screen's height less the 61 points it leaves for the page,
+    and adds the room for the name and the buttons under it -- which on a phone turned on its side
+    is taller than the screen, so the buttons and the page fell below its bottom edge. On a wide
+    screen the photo is capped so that the photo, the buttons under it and that same strip of page
+    all fit: a wide band of the photo with the name on it, the buttons and the start of the page,
+    as the tall profile has them. On a tall screen the cap is never reached and nothing changes.
+
+    And the profile is laid out once more, at once, when the app comes back to the foreground.
+    iOS lays a backgrounded app out in other orientations for its snapshots, and those layouts are
+    animated: one cut short by the app being suspended can leave the header between two of them.
+    The layout the screen actually has puts every piece back where it belongs.
+    """
+    header_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    header = _read(header_path, "PeerInfoHeaderNode.swift")
+    if "aorusWideHeaderControls" not in header:
+        header = _replace_once(
+            header,
+            "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n",
+            "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n"
+            "        // AorusGram: the photo stays open on a wide screen under Interface 2.0, capped so\n"
+            "        // that it, the name and buttons added under it below and a strip of the page fit\n"
+            "        // on the screen. A tall screen never reaches the cap.\n"
+            "        if AorusInterfaceV2Run.isEnabled && !self.isSettings && width > containerHeight {\n"
+            "            let aorusWideHeaderControls: CGFloat = self.isMyProfile ? 60.0 : 98.0\n"
+            "            expandedAvatarListHeight = min(expandedAvatarListHeight, max(160.0, containerHeight - expandedAvatarControlsHeight - aorusWideHeaderControls))\n"
+            "        }\n",
+            "wide header photo height",
+        )
+        header_path.write_text(header, encoding="utf-8")
+    screen_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    screen = _read(screen_path, "PeerInfoScreen.swift")
+    if "aorusForegroundObserver" not in screen:
+        # Beside the lines the plugin pass anchors on later, never across them.
+        screen = _replace_once(
+            screen,
+            "    private(set) var validLayout: (ContainerViewLayout, CGFloat)?\n",
+            "    private var aorusForegroundObserver: NSObjectProtocol?\n"
+            "    private(set) var validLayout: (ContainerViewLayout, CGFloat)?\n",
+            "foreground observer storage",
+        )
+        screen = _replace_once(
+            screen,
+            "        self.autoTranslateDisposable?.dispose()\n"
+            "    }\n"
+            "    \n"
+            "    override func didLoad() {\n",
+            "        self.autoTranslateDisposable?.dispose()\n"
+            "        if let aorusForegroundObserver = self.aorusForegroundObserver {\n"
+            "            NotificationCenter.default.removeObserver(aorusForegroundObserver)\n"
+            "        }\n"
+            "    }\n"
+            "    \n"
+            "    override func didLoad() {\n",
+            "foreground observer teardown",
+        )
+        screen = _replace_once(
+            screen,
+            "                return strongSelf.state.isEditing\n"
+            "            } else {\n"
+            "                return false\n"
+            "            }\n"
+            "        }\n"
+            "    }\n",
+            "                return strongSelf.state.isEditing\n"
+            "            } else {\n"
+            "                return false\n"
+            "            }\n"
+            "        }\n"
+            "        \n"
+            "        // AorusGram: back from the background, the profile is laid out at once at the\n"
+            "        // size it has. iOS lays a backgrounded app out in other orientations for its\n"
+            "        // snapshots, and an animated layout cut short by the suspension can leave the\n"
+            "        // header between two of them.\n"
+            "        if AorusInterfaceV2Run.isEnabled && !self.isSettings {\n"
+            "            self.aorusForegroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in\n"
+            "                guard let self, let (layout, navigationHeight) = self.validLayout else {\n"
+            "                    return\n"
+            "                }\n"
+            "                self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate)\n"
+            "            }\n"
+            "        }\n"
+            "    }\n",
+            "foreground settle",
+        )
+        screen_path.write_text(screen, encoding="utf-8")
+    print("InterfaceV2: profile laid out for a wide screen")
 
 
 def _patch_undo_glass(tg: Path) -> None:
@@ -7522,6 +7618,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_glass_placeholder_avatar(tg)
     _patch_avatar_expansion(tg)
     _patch_keep_avatar_expanded(tg)
+    _patch_landscape_profile(tg)
     _patch_overlay_palette(tg)
     _patch_static_avatar(tg)
     _patch_avatar_gallery_gesture(tg)

@@ -30625,6 +30625,9 @@ def main() -> None:
     # After every patch of the message nodes: it anchors on the side buttons and the deleted
     # dim the earlier ones add.
     patch_deleted_side_buttons(tg)
+    # After the side buttons are final: it moves the Wall test their flags start from.
+    from aorus_wall_round_video import patch_wall_round_video
+    patch_wall_round_video(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)
@@ -30671,6 +30674,9 @@ def main() -> None:
     from aorus_light_surfaces import patch_light_surfaces
     from aorus_tab_settings import patch_tab_settings
     patch_light_surfaces(tg)
+    # After Interface 2.0's posts block: it anchors on the grid layout and the glass that adds.
+    from aorus_posts_page_ink import patch_posts_page_ink
+    patch_posts_page_ink(tg)
     from aorus_qr_scan_light import patch_qr_scan_light
     patch_qr_scan_light(tg)
     patch_tab_settings(tg)

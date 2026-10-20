@@ -32,14 +32,22 @@ private var aorusAINavigationGlassStyle: NavigationBarGlassStyle {
     return .default
 }
 
-/// System Liquid Glass: the material iOS draws its own bars, buttons and fields with, and the
-/// one ChatGPT's chrome is made of — regular glass that lenses what passes under it and, on a
-/// control, answers the touch.
+/// Telegram's stock glass bar, for the classic interface, which keeps it.
+private func aorusAINavigationBarPresentationData(_ presentationData: PresentationData) -> NavigationBarPresentationData {
+    return NavigationBarPresentationData(
+        presentationData: presentationData,
+        style: .glass,
+        glassStyle: aorusAINavigationGlassStyle
+    )
+}
+
+/// System Liquid Glass in its clear style, the glass of Interface 2.0's toasts: it lenses what
+/// passes under it with no frosting of its own and, on a control, answers the touch.
 ///
-/// Telegram's glass view is tuned for capsules over a chat wallpaper: it holds what the glass
-/// sees to one fixed brightness on the light side, and over AorusAI's flat page that read as
-/// matte plates rather than glass. This is the effect alone, in the theme's appearance. Before
-/// iOS 26 there is no such glass, and Telegram's panel glass stands in for it.
+/// Regular glass frosts what it sees, and over AorusAI's flat page that read as matte plates.
+/// Telegram's glass view holds what the glass sees to one fixed brightness on the light side,
+/// which is matte again. This is the clear effect alone, untinted, in the theme's appearance.
+/// Before iOS 26 there is no such glass, and Telegram's clear glass stands in for it.
 final class AorusAIGlassView: UIView {
     private let effectView: UIVisualEffectView?
     private let fallbackView: GlassBackgroundView?
@@ -50,7 +58,7 @@ final class AorusAIGlassView: UIView {
     init(interactive: Bool) {
         self.isInteractiveGlass = interactive
         if #available(iOS 26.0, *) {
-            let effect = UIGlassEffect(style: .regular)
+            let effect = UIGlassEffect(style: .clear)
             effect.isInteractive = interactive
             let effectView = UIVisualEffectView(effect: effect)
             effectView.layer.cornerCurve = .continuous
@@ -83,7 +91,7 @@ final class AorusAIGlassView: UIView {
         }
         if let fallbackView {
             transition.setFrame(view: fallbackView, frame: bounds)
-            fallbackView.update(size: size, cornerRadius: cornerRadius, isDark: isDark, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: isInteractiveGlass, transition: transition)
+            fallbackView.update(size: size, cornerRadius: cornerRadius, isDark: isDark, tintColor: GlassBackgroundView.TintColor(kind: .clear), isInteractive: isInteractiveGlass, transition: transition)
         }
     }
 }
@@ -776,8 +784,9 @@ private final class AorusAIConversationListController: ViewController, UITableVi
     }
 
     private let context: AccountContext
-    private let presentationData: PresentationData
-    private let palette: AorusAIPalette
+    private var presentationData: PresentationData
+    private var palette: AorusAIPalette
+    private let presentationDataDisposable = MetaDisposable()
     private let accountId: Int64
     // A plain table, not `.insetGrouped`: the cards are drawn by
     // `AorusAIGroupBackgroundView` so their radius, hairline and separator inset are
@@ -828,33 +837,16 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         // input-panel control colour, the bar paints no background and no separator, and the
         // scroll-edge effect is the page colour over a progressive blur, so a row scrolling
         // up dissolves under the capsules instead of meeting a hard edge.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            presentationData: presentationData,
-            style: .glass,
-            glassStyle: aorusAINavigationGlassStyle
-        ))
+        //
+        // The classic interface only. Interface 2.0 draws its own glass row, and a hidden
+        // glass bar of Telegram's still shows its back capsule: the bar fades the buttons it
+        // keeps in its own container, not the glass ones, and a hidden bar lies at the top of
+        // the screen with no height, so that capsule sat above this screen's own back button.
+        super.init(navigationBarPresentationData: AorusOldInterface.isEnabled ? aorusAINavigationBarPresentationData(presentationData) : nil)
         self.title = "AorusAI"
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
-        // Telegram's navigation bar draws only `image` and `title` of a bar button item, so a
-        // system item such as `.add` renders as an empty tap area — which is why the button
-        // looked missing. The compose glyph is the one the chat list itself uses.
-        //
-        // Tinted with the colour the bar gives its own buttons, not with the palette's
-        // secondary. A glass bar takes that from `chat.inputPanel.panelControlColor`
-        // (ComponentsThemes), which is what the back chevron in the conversation is drawn in;
-        // `palette.secondary` is the list's secondary *text* colour, and next to a white
-        // chevron it read as a greyed-out, disabled button.
-        let composeColor = presentationData.theme.chat.inputPanel.panelControlColor
-        let composeImage = generateTintedImage(
-            image: PresentationResourcesRootController.navigationComposeIcon(presentationData.theme)
-                ?? UIImage(systemName: "square.and.pencil"),
-            color: composeColor
-        )
         if AorusOldInterface.isEnabled {
-            let composeItem = UIBarButtonItem(image: composeImage, style: .plain, target: self, action: #selector(createConversation))
-            composeItem.tintColor = composeColor
-            composeItem.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
-            self.navigationItem.rightBarButtonItem = composeItem
+            self.navigationItem.rightBarButtonItem = makeComposeItem(theme: presentationData.theme)
         } else {
             // Back, the title and new chat are system glass of this screen's own, as in the
             // conversation.
@@ -872,6 +864,11 @@ private final class AorusAIConversationListController: ViewController, UITableVi
             }
             topBar.trailingButton = composeButton
         }
+        presentationDataDisposable.set((context.sharedContext.presentationData
+        |> deliverOnMainQueue).start(next: { [weak self] presentationData in
+            guard let self, presentationData.theme !== self.presentationData.theme else { return }
+            self.updatePresentationData(presentationData)
+        }))
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -880,6 +877,54 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         if let observer { NotificationCenter.default.removeObserver(observer) }
         if let activeTurnsObserver { NotificationCenter.default.removeObserver(activeTurnsObserver) }
         profileNameDisposable.dispose()
+        presentationDataDisposable.dispose()
+    }
+
+    /// New chat in Telegram's classic bar.
+    ///
+    /// Telegram's navigation bar draws only `image` and `title` of a bar button item, so a
+    /// system item such as `.add` renders as an empty tap area — which is why the button
+    /// looked missing. The compose glyph is the one the chat list itself uses.
+    ///
+    /// Tinted with the colour the bar gives its own buttons, not with the palette's
+    /// secondary. A glass bar takes that from `chat.inputPanel.panelControlColor`
+    /// (ComponentsThemes), which is what the back chevron in the conversation is drawn in;
+    /// `palette.secondary` is the list's secondary *text* colour, and next to a white
+    /// chevron it read as a greyed-out, disabled button.
+    private func makeComposeItem(theme: PresentationTheme) -> UIBarButtonItem {
+        let composeColor = theme.chat.inputPanel.panelControlColor
+        let composeImage = generateTintedImage(
+            image: PresentationResourcesRootController.navigationComposeIcon(theme)
+                ?? UIImage(systemName: "square.and.pencil"),
+            color: composeColor
+        )
+        let composeItem = UIBarButtonItem(image: composeImage, style: .plain, target: self, action: #selector(createConversation))
+        composeItem.tintColor = composeColor
+        composeItem.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
+        return composeItem
+    }
+
+    /// The theme changed while the screen is open — the system appearance turned, or another
+    /// theme was picked — and everything drawn in the old colours is drawn again.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        self.palette = AorusAIPalette.resolve(presentationData.theme)
+        self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        if AorusOldInterface.isEnabled {
+            self.setNavigationBarPresentationData(aorusAINavigationBarPresentationData(presentationData), animated: false)
+            self.navigationItem.rightBarButtonItem = makeComposeItem(theme: presentationData.theme)
+        } else {
+            (topBar.titleView as? UILabel)?.textColor = presentationData.theme.rootController.navigationBar.primaryTextColor
+            topBar.configure(theme: presentationData.theme)
+        }
+        guard self.isNodeLoaded else { return }
+        self.displayNode.backgroundColor = palette.background
+        tableView.backgroundColor = palette.background
+        tableView.indicatorStyle = palette.isDark ? .white : .black
+        listHeader.configure(palette: palette)
+        emptyView.configure(palette: palette)
+        searchField.configure(palette: palette, placeholder: aorusAILocalized("Поиск по диалогам", "Search chats"))
+        tableView.reloadData()
     }
 
     override func loadDisplayNode() {
@@ -1625,8 +1670,9 @@ private final class AorusAIConversationListEmptyView: UIView {
 
 private final class AorusAIChatController: ViewController, UITableViewDataSource, UITableViewDelegate, UITextViewDelegate, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
     private let context: AccountContext
-    private let presentationData: PresentationData
-    private let palette: AorusAIPalette
+    private var presentationData: PresentationData
+    private var palette: AorusAIPalette
+    private let presentationDataDisposable = MetaDisposable()
     private let accountId: Int64
     private var conversation: AorusAIConversation
     private let initialPrompt: String?
@@ -1856,11 +1902,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // A chat is the exception, not the rule: `ChatController` passes `.clear`, which
         // switches the edge effect off, because it has a wallpaper behind its capsules and
         // does not need it. This screen is a flat page, so it takes the rule.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            presentationData: presentationData,
-            style: .glass,
-            glassStyle: aorusAINavigationGlassStyle
-        ))
+        //
+        // The classic interface only: Interface 2.0 draws its own glass row, and a hidden
+        // glass bar of Telegram's still shows its back capsule above this screen's own.
+        super.init(navigationBarPresentationData: AorusOldInterface.isEnabled ? aorusAINavigationBarPresentationData(presentationData) : nil)
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
         let titleView = AorusAINavigationTitleView(theme: presentationData.theme)
@@ -1874,12 +1919,44 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             topBar.titleView = titleView
         }
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        presentationDataDisposable.set((context.sharedContext.presentationData
+        |> deliverOnMainQueue).start(next: { [weak self] presentationData in
+            guard let self, presentationData.theme !== self.presentationData.theme else { return }
+            self.updatePresentationData(presentationData)
+        }))
+    }
+
+    /// The theme changed while the conversation is open — the system appearance turned, or
+    /// another theme was picked — and everything drawn in the old colours is drawn again: the
+    /// page, the glass, the input and every message.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        self.palette = AorusAIPalette.resolve(presentationData.theme)
+        self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        if AorusOldInterface.isEnabled {
+            self.setNavigationBarPresentationData(aorusAINavigationBarPresentationData(presentationData), animated: false)
+        }
+        headerView?.update(theme: presentationData.theme)
+        topBar.configure(theme: presentationData.theme)
+        guard self.isNodeLoaded else { return }
+        self.displayNode.backgroundColor = palette.plainBackground
+        tableView.backgroundColor = palette.plainBackground
+        scrollDownButton.configure(theme: presentationData.theme)
+        composer.configure(context: context, theme: presentationData.theme)
+        // A message cell keeps what it was drawn with and redraws only for a new theme, which
+        // this is.
+        tableView.reloadData()
+        // The scroll edges are drawn in the page colour.
+        if let layout = lastLayout {
+            applyLayout(layout, transition: .immediate)
+        }
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        presentationDataDisposable.dispose()
         pendingPersistWork?.cancel()
         pendingRenderWork?.cancel()
         quotaTimer?.invalidate()
@@ -2131,9 +2208,13 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // of both shows the conversation, as it does in a chat.
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: layout.size.height))
         // The text fades into the page where it passes under the input and below it, as it
-        // does under the capsules at the top.
-        let bottomEdgeTop = max(0.0, composerFrame.minY - 16.0)
-        let bottomBlurFrame = CGRect(x: 0.0, y: bottomEdgeTop, width: layout.size.width, height: max(0.0, layout.size.height - bottomEdgeTop))
+        // does under the capsules at the top: the same edge, mirrored, and up to the top of
+        // the input and no further, so the conversation above the input stays clear.
+        let bottomEdgeTop = max(0.0, composerFrame.minY)
+        // Under an open keyboard nothing shows to fade into, so the edge ends at the keyboard
+        // and its strongest part stays under the input instead of behind the keys.
+        let bottomEdgeBottom = keyboardHeight > 0.0 ? max(bottomEdgeTop, layout.size.height - keyboardHeight) : layout.size.height
+        let bottomBlurFrame = CGRect(x: 0.0, y: bottomEdgeTop, width: layout.size.width, height: max(0.0, bottomEdgeBottom - bottomEdgeTop))
         transition.updateFrame(view: bottomBlurView, frame: bottomBlurFrame)
         bottomBlurView.update(
             content: palette.plainBackground,

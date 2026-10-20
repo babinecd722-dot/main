@@ -2679,6 +2679,18 @@ def main() -> None:
         err.append("Wall: bubble component illegally depends on TelegramUI's concrete AorusWallChatContents type")
     if "contents.aorusIsWall" not in wall_bubble_text:
         err.append("Wall: bubble component does not use the shared Wall marker")
+    # A round video in the Wall carries the buttons of every post: no comment counts, a column
+    # clear of the circle, and transcription of its sound.
+    for marker in (
+        "// AorusGram: a round video in the Wall is transcribed",
+        "|| aorusIsWallRoundVideo) && aorusHasVoiceMedia))",
+        "shareButtonOffset = CGPoint(x: contentOrigin.x + 1.0 + aorusCircleWidth + 8.0, y: offset.y)",
+        "f.isVoice || (aorusInWall && f.isInstantVideo)",
+    ):
+        if marker not in wall_bubble_text:
+            err.append(f"Wall: a round video post shows Telegram's comment buttons — missing {marker}")
+    if "        var disablesComments = !hasInstantVideo\n        if case let .customChatContents(contents) = item.associatedData.subject, contents.aorusIsWall {\n            disablesComments = true\n" not in wall_bubble_text:
+        err.append("Wall: a round video post shows reply counts under its buttons")
     for marker in (
         "aorusWallExcludeSwipe",
         ".aorusWallExclude",
@@ -3300,6 +3312,11 @@ def main() -> None:
                 "self.aorusLayoutPostsBlock()",
                 "adjustForSmallCount = false\n                let aorusInset",
                 "import GlassBackgroundComponent",
+                # The album tabs, the empty state and the grid take this peer's page palette:
+                # the application theme was black ink on a dark avatar page in the light theme.
+                "let presentationData = self.aorusPagePresentationData(presentationData)",
+                "theme: aorusTabTheme,",
+                "let isDark = self.aorusPostsPageIsDark",
             ),
         ),
         # The header calls this with photo:/photoCount:, so a stale copy of the table here would
@@ -3679,14 +3696,25 @@ def main() -> None:
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift",
             (
-                # Whatever collapsed it, the photo is full width again on the next tall layout.
-                "layout.size.width <= layout.size.height, self.aorusKeepsAvatarExpandedNow",
+                # Whatever collapsed it, the photo is full width again on the next layout, and a
+                # wide layout no longer collapses it: landscape keeps the photo open.
+                "} else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {",
+                "layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {",
+                # Back from the background the profile is laid out at the size it has.
+                "self.aorusForegroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification",
                 # The pull is armed only from rest at the top.
                 "abs(scrollView.contentOffset.y) < 1.0",
                 # The gallery opens and closes onto a square photo, which stays until it is covered.
                 "sourceCorners: aorusSquareSource ? .none : .round",
                 "crossfadeContent: aorusSquareSource",
                 "aorusSquareSource ? Optional(shownEntry) : centralEntry",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
+            (
+                # The open photo fits a wide screen with its buttons and a strip of the page.
+                "expandedAvatarListHeight = min(expandedAvatarListHeight, max(160.0, containerHeight - expandedAvatarControlsHeight - aorusWideHeaderControls))",
             ),
         ),
         (
@@ -4048,9 +4076,18 @@ def main() -> None:
             # message whose pill was showing the same peer's photo.
             ("private func refreshAvatar()", "AorusAI: the share sheet no longer draws its avatar through the mention cache"),
             ("AorusAIMentionAvatarCache.shared.image(for: mention", "AorusAI: the share sheet's avatar is not asking the cache for a picture"),
+            # A hidden glass bar of Telegram's still shows its back capsule, a second arrow
+            # over the screen's own: Interface 2.0 builds no bar at all.
+            ("super.init(navigationBarPresentationData: AorusOldInterface.isEnabled ? aorusAINavigationBarPresentationData(presentationData) : nil)", "AorusAI: a hidden Telegram bar draws a second back arrow"),
+            # The glass of Interface 2.0's toasts, not frosted regular glass.
+            ("let effect = UIGlassEffect(style: .clear)", "AorusAI: the glass is frosted rather than clear"),
+            ("private func updatePresentationData(_ presentationData: PresentationData) {", "AorusAI: the screens keep the theme they opened with"),
+            ("presentationDataDisposable.set((context.sharedContext.presentationData", "AorusAI: the screens do not follow a theme change"),
         ):
             if marker not in ai_ui_text:
                 err.append(message)
+        if ai_ui_text.count("private func updatePresentationData(_ presentationData: PresentationData) {") != 2:
+            err.append("AorusAI: the list and the conversation must both follow a theme change")
 
     if not ai_context_menu.is_file():
         err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMessageContextMenu.swift")

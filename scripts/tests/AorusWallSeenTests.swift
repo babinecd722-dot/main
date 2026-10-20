@@ -46,11 +46,12 @@ wall.setVisible(false)
 expect(seen == ids([11]), "leaving the Wall does not turn what was on screen into views")
 wall.setVisible(true)
 
-// Refresh holds back what was just on screen and unread, and records none of it.
+// Refresh holds back the feed it replaces and records none of it.
 var rebuiltCalls = 0
 wall.refresh(rebuilt: { rebuiltCalls += 1 })
 expect(wall.reloadCount == 1, "Refresh rebuilds the feed")
-expect(wall.pendingHoldBack == ids([0, 1]), "Refresh holds back the posts just on screen and still unread")
+expect(wall.pendingShuffled, "Refresh draws its page")
+expect(wall.pendingHoldBack == Set(old.map(\.id)).subtracting(ids([11])), "Refresh holds back the whole feed it replaces, read posts aside")
 expect(seen == ids([11]), "Refresh marks nothing seen")
 
 // While the page is collected the reader finishes reading post 12.
@@ -69,11 +70,24 @@ expect(Set(wall.currentMessages.keys).isDisjoint(with: seen), "the new feed hold
 expect(wall.displayedInFeed.isEmpty, "the new feed starts with nothing on record as shown")
 expect(wall.badge == wall.currentMessageIds.count, "the new feed starts unread")
 
+// The next Refresh still holds back what the first feed put on screen, so two Refreshes do
+// not trade the same two feeds back and forth.
+let freshFeed = wall.currentMessageIds.reversed().compactMap { wall.currentMessages[$0] }
+wall.updateVisibleMessageIds([freshFeed[0].id], liveIds: [freshFeed[0].id], timestamp: time)
+time += 0.25
+wall.refresh(rebuilt: {})
+expect(wall.pendingHoldBack.isSuperset(of: ids([0, 1])), "posts on screen in an earlier feed stay held back")
+expect(wall.pendingHoldBack.contains(freshFeed[0].id) && wall.pendingHoldBack.isSuperset(of: Set(wall.currentMessageIds)), "and so do the current feed and what it put on screen")
+expect(!wall.pendingHoldBack.contains(old[11].id), "read posts need no holding back: they are seen")
+
 // Nothing but the held-back posts left: they make the feed rather than an empty Wall.
 wall.reload(updateType: .Generic, expandIfEmpty: true, holdBack: ids([0, 1]), rebuilt: {})
 let reloads = wall.reloadCount
 wall.completeReload([])
 expect(wall.reloadCount == reloads + 1 && wall.pendingHoldBack.isEmpty, "an empty page is asked for again without holding anything back")
+wall.reload(updateType: .Generic, expandIfEmpty: true, holdBack: ids([0, 1]), shuffled: true, rebuilt: {})
+wall.completeReload([])
+expect(wall.pendingHoldBack.isEmpty && wall.pendingShuffled, "the second draw is still a draw")
 
 // Media takes longer to look at than a line of text.
 let media = Impl()
