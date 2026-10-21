@@ -571,6 +571,71 @@ def patch_badge(tg: Path) -> None:
             return self.type == .phone && statusBarHeight >= 44.0 && (navigationHeight ?? 0.0) > 0.0
         }
         return false''')
+    shown = '''        if case let .unknown(_, statusBarHeight, navigationHeight, _) = self {
+            return self.type == .phone && statusBarHeight >= 44.0 && (navigationHeight ?? 0.0) > 0.0
+        }
+        return false
+    }
+'''
+    replace(path, shown, shown + BADGE_PLACEMENT)
+
+
+# The badge is drawn where the sensor housing covers it, so it shows only in screenshots and
+# recordings. Telegram places it for the notch, which reaches the top edge of the screen; the
+# Dynamic Island floats below that edge, and the badge's top showed above it.
+BADGE_PLACEMENT = '''
+    /// How far below the top of the screen the Dynamic Island begins, in the points of the standard
+    /// display zoom, for each phone that has one. Every generation that thinned the bezel moved the
+    /// island further down. It is a fact of the hardware, so it is looked up by the model rather than
+    /// by the screen profile, which a larger display zoom can resolve to an older phone's. Nil for a
+    /// phone with a notch and for a model this table does not know yet.
+    static func appBadgeIslandTop(modelIdentifier: String?) -> CGFloat? {
+        switch modelIdentifier {
+        case "iPhone15,2", "iPhone15,3", "iPhone15,4", "iPhone15,5", "iPhone16,1", "iPhone16,2", "iPhone17,3", "iPhone17,4":
+            // iPhone 14 Pro and 14 Pro Max, 15 and 15 Plus, 15 Pro and 15 Pro Max, 16 and 16 Plus.
+            return 11.0
+        case "iPhone17,1", "iPhone17,2", "iPhone18,1", "iPhone18,2", "iPhone18,3":
+            // iPhone 16 Pro and 16 Pro Max, 17 Pro and 17 Pro Max, 17.
+            return 14.0
+        case "iPhone18,4":
+            // iPhone Air.
+            return 20.0
+        default:
+            return nil
+        }
+    }
+
+    /// Where the top of an app badge `badgeHeight` tall goes, in the window's points.
+    ///
+    /// Under a notch the badge keeps Telegram's place. In a Dynamic Island it is centred: the island
+    /// is a 37⅓pt capsule and the badge a 22pt one, which leaves it room on every side, at every
+    /// display zoom. `zoom` is how many times larger than standard the display draws a point -- the
+    /// screen's native scale over its scale -- and the island is that many times smaller in points.
+    /// A phone the table does not know is placed from the safe area, which every island phone ends
+    /// 10⅔pt below the island; one whose safe area ends where a notch's does has a notch.
+    func appBadgeOriginY(badgeHeight: CGFloat, safeAreaTop: CGFloat, zoom: CGFloat, modelIdentifier: String?) -> CGFloat {
+        let islandHeight: CGFloat = 37.0 + 1.0 / 3.0
+        let islandToSafeArea: CGFloat = 10.0 + 2.0 / 3.0
+        let zoom = max(1.0, zoom)
+        let islandCenter: CGFloat
+        if let islandTop = Self.appBadgeIslandTop(modelIdentifier: modelIdentifier) {
+            islandCenter = (islandTop + islandHeight / 2.0) / zoom
+        } else if self.hasDynamicIsland || safeAreaTop * zoom >= 54.0 {
+            islandCenter = safeAreaTop - (islandToSafeArea + islandHeight / 2.0) / zoom
+        } else {
+            return 5.0
+        }
+        return islandCenter - badgeHeight / 2.0
+    }
+
+    /// The app badge's frame in a portrait window `windowWidth` wide whose safe area begins
+    /// `safeAreaTop` below its top.
+    public func appBadgeFrame(imageSize: CGSize, windowWidth: CGFloat, safeAreaTop: CGFloat) -> CGRect {
+        let screen = UIScreen.main
+        let originY = self.appBadgeOriginY(badgeHeight: imageSize.height, safeAreaTop: safeAreaTop, zoom: screen.nativeScale / screen.scale, modelIdentifier: DeviceMetrics.currentModelIdentifier)
+        return CGRect(origin: CGPoint(x: floorToScreenPixels((windowWidth - imageSize.width) / 2.0), y: floorToScreenPixels(originY)), size: imageSize)
+    }
+'''
 
 
 def verify_round_video(tg: Path) -> list[str]:
@@ -592,7 +657,7 @@ def verify_round_video(tg: Path) -> list[str]:
         'TelegramCore/Sources/State/PendingMessageManager.swift': ['aorusRoundVideoRecordingSignal(round: round', 'activity: .recordingInstantVideo, aorusRoundVideoRecording: true', 'aorusRoundVideoUploadSignal(originalUploadSignal, round: round, queue: strongSelf.queue)', 'context.aorusRecordingDisposable.dispose()'],
         'TelegramCore/Sources/State/ManagedLocalInputActivities.swift': ['aorusRoundVideoRecording && activity == .recordingInstantVideo', 'aorusGhostActive && !aorusPublishRecording', 'TelegramUser, !aorusPublishRecording'],
         'TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode/Sources/ChatMessageInteractiveInstantVideoNode.swift': ['countdown.update(deadline: round.deadline, videoFrame: displayVideoFrame)'],
-        'Display/Source/DeviceMetrics.swift': ['if self.hasTopNotch || self.hasDynamicIsland { return true }'],
+        'Display/Source/DeviceMetrics.swift': ['if self.hasTopNotch || self.hasDynamicIsland { return true }', 'static func appBadgeIslandTop(modelIdentifier: String?) -> CGFloat?', 'public func appBadgeFrame(imageSize: CGSize, windowWidth: CGFloat, safeAreaTop: CGFloat) -> CGRect'],
     }
     errors = []
     repo = Path(__file__).resolve().parent.parent

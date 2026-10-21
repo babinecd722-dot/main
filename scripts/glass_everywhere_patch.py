@@ -459,8 +459,151 @@ def _patch_action_sheet(tg: Path) -> None:
     print("GlassEverywhere: styled the action sheet")
 
 
+# MARK: - What the liquid morph leaves behind
+
+_LENS_HALO_MARK = "aorusMenuHaloHold"
+
+_LENS_HALO_HELPERS = '''
+    // AorusGram: the morph takes a pane's effect view and draws the glass and what it holds, but
+    // the style's shadow and glow are laid beside that view (GlassBackgroundView.aorusHoldHalo):
+    // left alone, the menu's hung at its full size while the menu grew out of the button and
+    // shrank back into it, and the button's around the place the morph had emptied. Both are
+    // held out of sight while the morph has their panes.
+    private static func aorusGlassPane(holding view: UIView) -> GlassBackgroundView? {
+        var current: UIView? = view
+        for _ in 0 ..< 4 {
+            guard let candidate = current else {
+                break
+            }
+            if let pane = candidate as? GlassBackgroundView {
+                return pane
+            }
+            current = candidate.superview
+        }
+        var level: [UIView] = [view]
+        for _ in 0 ..< 3 {
+            level = level.flatMap { $0.subviews }
+            if let pane = level.first(where: { $0 is GlassBackgroundView }) as? GlassBackgroundView {
+                return pane
+            }
+        }
+        return nil
+    }
+
+    /// Holds both halos for an opening; answers the opening's token.
+    private func aorusHoldHalos(preview: UIView, source: UIView) -> Int {
+        self.aorusMorphToken += 1
+        let token = self.aorusMorphToken
+        self.aorusMenuHaloHold = self.backgroundView.aorusHoldHalo()
+        // The button stays hidden for as long as its menu is up, and its halo with it.
+        if self.aorusSourceHaloHold == nil {
+            self.aorusSourceHaloHold = (LensTransitionContainer.aorusGlassPane(holding: preview) ?? LensTransitionContainer.aorusGlassPane(holding: source))?.aorusHoldHalo()
+        }
+        // The menu stands still after about 0.75 s; UIKit reports the opening over only once every
+        // spring has settled, well after that, and its glow comes back with the menu standing.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            self?.aorusReleaseMenuHalo(token: token)
+        }
+        return token
+    }
+
+    private func aorusReleaseMenuHalo(token: Int) {
+        guard self.aorusMorphToken == token else {
+            return
+        }
+        self.aorusMenuHaloHold = nil
+    }
+
+'''
+
+
+def _patch_lens_halo(tg: Path) -> None:
+    path = tg / "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift"
+    text = _read(path, "LensTransitionContainer.swift")
+    if _LENS_HALO_MARK in text:
+        print("GlassEverywhere: the menu morph already holds the halos")
+        return
+    if "LiquidMorphTransition()" not in text:
+        print("GlassEverywhere: no liquid menu morph in this Telegram")
+        return
+    text = _replace_once(
+        text,
+        "    private var sourceLease: ContextMenuSourceLease?\n",
+        "    private var sourceLease: ContextMenuSourceLease?\n"
+        "    private var aorusMenuHaloHold: AnyObject?\n"
+        "    private var aorusSourceHaloHold: AnyObject?\n"
+        "    private var aorusMorphToken = 0\n",
+        "lens halo state",
+    )
+    text = _replace_once(
+        text,
+        "        self.morph = morph\n"
+        "        self.isPresenting = true\n"
+        "        if !morph.animate(from: source, to: menu,",
+        "        self.morph = morph\n"
+        "        self.isPresenting = true\n"
+        "        let aorusToken = self.aorusHoldHalos(preview: previewView, source: sourceView)\n"
+        "        if !morph.animate(from: source, to: menu,",
+        "lens opening halos",
+    )
+    text = _replace_once(
+        text,
+        "            guard let self, self.isPresenting else { return }\n"
+        "            self.isPresenting = false\n",
+        "            guard let self, self.isPresenting else { return }\n"
+        "            self.isPresenting = false\n"
+        "            self.aorusReleaseMenuHalo(token: aorusToken)\n",
+        "lens opened halo",
+    )
+    text = _replace_once(
+        text,
+        "            self.restoreSourceViews()\n"
+        "            self.fadeIn(alongsideAnimations: alongsideAnimations)\n"
+        "        }\n"
+        "    }\n",
+        "            self.restoreSourceViews()\n"
+        "            self.aorusMenuHaloHold = nil\n"
+        "            self.aorusSourceHaloHold = nil\n"
+        "            self.fadeIn(alongsideAnimations: alongsideAnimations)\n"
+        "        }\n"
+        "    }\n",
+        "lens refused opening halos",
+    )
+    text = _replace_once(
+        text,
+        "            let menu = self.makeMenuPreview()\n"
+        "            if morph.animate(from: menu, to: destination,",
+        "            let menu = self.makeMenuPreview()\n"
+        "            // AorusGram: the menu's halo stays out of sight while it shrinks into the button.\n"
+        "            self.aorusMorphToken += 1\n"
+        "            self.aorusMenuHaloHold = self.backgroundView.aorusHoldHalo()\n"
+        "            if morph.animate(from: menu, to: destination,",
+        "lens closing halo",
+    )
+    text = _replace_once(
+        text,
+        "    private func finishDismissal() {\n"
+        "        self.sourceVisibilityAssertion = nil\n",
+        "    private func finishDismissal() {\n"
+        "        self.sourceVisibilityAssertion = nil\n"
+        "        // AorusGram: the button is back, and its halo with it.\n"
+        "        self.aorusSourceHaloHold = nil\n"
+        "        self.aorusMenuHaloHold = nil\n",
+        "lens dismissed halos",
+    )
+    text = _replace_once(
+        text,
+        "    private func makeMenuPreview() -> UITargetedPreview {\n",
+        _LENS_HALO_HELPERS + "    private func makeMenuPreview() -> UITargetedPreview {\n",
+        "lens halo helpers",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("GlassEverywhere: the menu morph holds the glass halos it would leave behind")
+
+
 def patch_glass_everywhere(tg: Path) -> None:
     _patch_lens_effect_view(tg)
     _patch_lens_container(tg)
+    _patch_lens_halo(tg)
     _patch_tap_menu(tg)
     _patch_action_sheet(tg)

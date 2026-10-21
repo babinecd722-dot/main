@@ -20178,6 +20178,46 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
     private var aorusObservesStyle: Bool = false
     private var aorusDecorationView: AorusGlassDecorationView?
     private var aorusHaloView: AorusGlassHaloView?
+    private var aorusHaloHolds = 0
+
+    /// One hold on a pane's halo; the halo is out of sight while any is kept.
+    public final class AorusHaloHold {
+        private let release: () -> Void
+
+        fileprivate init(release: @escaping () -> Void) {
+            self.release = release
+        }
+
+        deinit {
+            self.release()
+        }
+    }
+
+    /// UIKit's liquid morph -- a header's single-button capsule growing into its menu and back --
+    /// takes the pane's effect view and draws the glass and what the pane holds itself. The shadow
+    /// and glow are laid beside that view, not in it, so they stayed where the pane stood: the
+    /// menu's at its full size from the moment it began to grow, the button's around the empty
+    /// place it left. Whoever hands a pane to the morph keeps them out of sight with this, and
+    /// they fade back in when the last hold is let go.
+    public func aorusHoldHalo() -> AorusHaloHold {
+        self.aorusHaloHolds += 1
+        if let view = self.aorusHaloView {
+            view.layer.removeAnimation(forKey: "opacity")
+            view.alpha = 0.0
+        }
+        return AorusHaloHold(release: { [weak self] in
+            guard let self else {
+                return
+            }
+            self.aorusHaloHolds = max(0, self.aorusHaloHolds - 1)
+            if self.aorusHaloHolds == 0, let view = self.aorusHaloView {
+                view.alpha = 1.0
+                if view.window != nil {
+                    ComponentTransition.easeInOut(duration: 0.2).animateAlpha(view: view, from: 0.0, to: 1.0)
+                }
+            }
+        })
+    }
 
     func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {
         self.aorusUpdate(AorusGlassRequest(size: size, shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: isInteractive, isVisible: isVisible), transition: transition, styleChanged: false)
@@ -20296,7 +20336,9 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
             let viewTransition: ComponentTransition = appears ? .immediate : transition
             viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
             view.update(style: style, outlines: outlines, transition: appears ? .immediate : drawTransition, styleChanged: styleChanged && !appears)
-            if appears && animated {
+            // Out of sight while the morph has the pane (`aorusHoldHalo`).
+            view.alpha = self.aorusHaloHolds > 0 ? 0.0 : 1.0
+            if appears && animated && self.aorusHaloHolds == 0 {
                 fade.animateAlpha(view: view, from: 0.0, to: 1.0)
             }
         } else if let view = self.aorusHaloView {
@@ -23798,9 +23840,10 @@ def patch_app_badge(tg: Path) -> None:
     physical file is:
         submodules/TelegramUI/Images.xcassets/Components/AppBadge.imageset/AppBadge@3x.png
 
-    We simply swap that PNG for ours (279×66 px @3x = 93×22 pt).  WindowContent
-    already handles portrait-only display, 0.4s appear delay, showAppBadge
-    device check, y=5 centering — we inherit all of that for free.
+    We simply swap that PNG for ours (274×66 px @3x, about 91×22 pt).  WindowContent
+    already handles portrait-only display, the 0.4s appear delay and the showAppBadge
+    device check; where the badge goes is patch_app_badge_switcher's, which centres it
+    in the Dynamic Island instead of Telegram's place under a notch.
     """
     src_png = Path(__file__).parent.parent / "patches" / "assets" / "AppBadge@3x.png"
     if not src_png.is_file():
@@ -23915,13 +23958,22 @@ def patch_app_badge_switcher(tg: Path) -> None:
         "        self.badgeView.image = Window1.aorusAppBadgeImage()\n"
         "        self.updateBadgeVisibility()\n"
         "        if let image = self.badgeView.image {\n"
-        "            self.badgeView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0), y: 5.0), size: image.size)\n"
+        "            self.badgeView.frame = self.aorusAppBadgeFrame(image.size)\n"
         "        }\n"
+        "    }\n"
+        "    // Inside the sensor housing, the island's or the notch's, wherever this phone has it.\n"
+        "    private func aorusAppBadgeFrame(_ size: CGSize) -> CGRect {\n"
+        "        return self.deviceMetrics.appBadgeFrame(imageSize: size, windowWidth: self.windowLayout.size.width, safeAreaTop: self.hostView.systemSafeAreaInsets.top)\n"
         "    }\n"
         "    \n"
     )
     if "aorusReloadAppBadge" not in t and methods_anchor in t:
         t = t.replace(methods_anchor, methods_new + methods_anchor, 1)
+
+    # (c2) The layout pass places the badge the same way.
+    layout_frame = "                    self.badgeView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0), y: 5.0), size: image.size)\n"
+    if layout_frame in t:
+        t = t.replace(layout_frame, "                    self.badgeView.frame = self.aorusAppBadgeFrame(image.size)\n", 1)
 
     # (d) Register the live-reload observer at the end of init.
     reg_marker = (

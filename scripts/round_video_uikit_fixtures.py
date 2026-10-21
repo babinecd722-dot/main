@@ -17,7 +17,7 @@ def declaration(text: str, prefix: str) -> str:
 def badge_source(tg: Path) -> str:
     text = (tg / 'submodules/Display/Source/DeviceMetrics.swift').read_text()
     cases = text[text.index('    case iPhone4'):text.index('    public static let performance')]
-    props = '\n'.join(declaration(text, prefix) for prefix in ['    public var type: DeviceType', '    public var hasTopNotch: Bool', '    public var hasDynamicIsland: Bool', '    public var showAppBadge: Bool'])
+    props = '\n'.join(declaration(text, prefix) for prefix in ['    public var type: DeviceType', '    public var hasTopNotch: Bool', '    public var hasDynamicIsland: Bool', '    public var showAppBadge: Bool', '    static func appBadgeIslandTop(', '    func appBadgeOriginY('])
     return 'import UIKit\npublic enum DeviceType { case phone; case tablet }\npublic enum AorusBadgeMetrics {\n' + cases + props + '\n}\n'
 
 

@@ -538,6 +538,16 @@ def main() -> None:
             if marker not in badge_text:
                 err.append(f"Badges: signed snapshot registry is missing {marker}")
 
+    window_content = tg / "submodules" / "Display" / "Source" / "WindowContent.swift"
+    if window_content.is_file():
+        window_text = window_content.read_text(encoding="utf-8")
+        # Both places that set the app badge's frame -- the layout pass and the live badge
+        # switch -- put it in the sensor housing; Telegram's own y = 5 shows above an island.
+        if window_text.count("self.badgeView.frame = self.aorusAppBadgeFrame(image.size)") != 2:
+            err.append("AppBadge: both badge frames must come from aorusAppBadgeFrame")
+        if "y: 5.0), size: image.size)" in window_text:
+            err.append("AppBadge: a badge frame still uses the notch's fixed place")
+
     animated_background = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusAnimatedProfileBackground.swift"
     if animated_background.is_file():
         animated_background_text = animated_background.read_text(encoding="utf-8")
@@ -4366,6 +4376,14 @@ def main() -> None:
         ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)"),
         ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.contentsView.layer"),
         ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "private lazy var backgroundView = GlassBackgroundView()"),
+        # UIKit's liquid morph draws the glass of a header button and its menu itself; the
+        # style's shadow and glow beside that glass are held out of sight while it does, or they
+        # hang where the panes stood as glowing frames.
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "public func aorusHoldHalo() -> AorusHaloHold"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "view.alpha = self.aorusHaloHolds > 0 ? 0.0 : 1.0"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "let aorusToken = self.aorusHoldHalos(preview: previewView, source: sourceView)"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "self.aorusMenuHaloHold = self.backgroundView.aorusHoldHalo()"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "        self.aorusSourceHaloHold = nil\n        self.aorusMenuHaloHold = nil\n"),
         ("submodules/Display/Source/ContextMenuContainerNode.swift", "self.aorusSurface.attach(host: self.containerNode.view"),
         ("submodules/Display/Source/ContextMenuContainerNode.swift", "aorusPath = outline.copy(using: &shift) ?? outline"),
         ("submodules/Display/Source/ActionSheetItemGroupNode.swift", "self.aorusUpdateSurface(clippingNodeFrame: clippingNodeFrame"),
