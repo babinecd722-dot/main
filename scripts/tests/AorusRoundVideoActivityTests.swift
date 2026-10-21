@@ -10,18 +10,23 @@ import SwiftSignalKit
     static func main() {
         let peerId = PeerId(42)
         let overrideKey = "aorusgram_ghost_peer_override_42"
-        let ghostKey = "aorusgram_ghost_peer_42"
+        let legacyKey = "aorusgram_ghost_peer_42"
         let globalKey = "aorusgram_ghost_mode"
+        let buttonKey = "aorusgram_ghost_chat_button"
         defer {
-            for key in [overrideKey, ghostKey, globalKey] { UserDefaults.standard.removeObject(forKey: key) }
+            for key in [overrideKey, legacyKey, globalKey, buttonKey] { UserDefaults.standard.removeObject(forKey: key) }
         }
         let timestamp = Int32(Date().timeIntervalSince1970)
         let presences: [TelegramUserPresence?] = [nil, .init(status: .none), .init(status: .lastWeek), .init(status: .lastMonth), .init(status: .recently), .init(status: .present(timestamp - 3600)), .init(status: .present(timestamp + 600))]
-        for global in [false, true] { for perPeer in [false, true] { for override in [nil, 0, 1] as [Int?] {
+        // Ghost Mode hides activity in every chat but the ones the chat ghost turned it off for,
+        // and those only while the ghost's switch is on (it is unless turned off). The old
+        // per-chat key and a positive override no longer turn it on without Ghost Mode.
+        for global in [false, true] { for button in [nil, false, true] as [Bool?] { for legacy in [false, true] { for override in [nil, -1, 0, 1] as [Int?] {
             UserDefaults.standard.set(global, forKey: globalKey)
-            UserDefaults.standard.set(perPeer, forKey: ghostKey)
+            if let button { UserDefaults.standard.set(button, forKey: buttonKey) } else { UserDefaults.standard.removeObject(forKey: buttonKey) }
+            UserDefaults.standard.set(legacy, forKey: legacyKey)
             if let override { UserDefaults.standard.set(override, forKey: overrideKey) } else { UserDefaults.standard.removeObject(forKey: overrideKey) }
-            let hidden = override.map { $0 > 0 } ?? (global || perPeer)
+            let hidden = global && !((button ?? true) && (override ?? 0) < 0)
             for presence in presences { for force in [false, true] {
                 let network = Network()
                 let signal = requestActivity(postbox: Postbox(peer: TelegramUser(), presence: presence), network: network, accountPeerId: PeerId(1), peerId: peerId, threadId: 123, activity: .recordingInstantVideo, aorusRoundVideoRecording: force)
@@ -43,7 +48,7 @@ import SwiftSignalKit
             let normal = requestActivity(postbox: Postbox(peer: TelegramUser(), presence: .init(status: .present(timestamp + 600))), network: ordinary, accountPeerId: PeerId(1), peerId: peerId, threadId: nil, activity: .typingText, aorusRoundVideoRecording: true).start()
             expect(ordinary.requests.count == (hidden ? 0 : 1), "explicit recording cannot override hiding for ordinary typing")
             normal.dispose()
-        } } }
+        } } } }
         for peer in [nil, TelegramChannel(.broadcast), TelegramSecretChat()] as [AnyObject?] {
             let network = Network()
             let disposable = requestActivity(postbox: Postbox(peer: peer), network: network, accountPeerId: PeerId(1), peerId: peerId, threadId: nil, activity: .recordingInstantVideo, aorusRoundVideoRecording: true).start()
