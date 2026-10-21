@@ -36,7 +36,8 @@ enum AorusPluginGenerateText {
 /// together with it, so it rises once to its place and stays there — no stop at half the screen
 /// and then a second jump to the top.
 final class AorusPluginGenerateController: UIViewController, UITextViewDelegate {
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let languageCode: String
     private let onDraft: (AorusPluginMarketDraft) -> Void
 
@@ -78,6 +79,32 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
             sheet.prefersScrollingExpandsWhenScrolledToEdge = false
             sheet.preferredCornerRadius = 28
         }
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            if self.isViewLoaded {
+                self.applyTheme()
+            }
+        })
+    }
+
+    /// Every colour the sheet is drawn in; what is typed and where the request stands are kept.
+    private func applyTheme() {
+        overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
+        view.backgroundColor = theme.list.blocksBackgroundColor
+        let accent = theme.list.itemAccentColor
+        glyph.tintColor = accent
+        titleLabel.textColor = theme.list.itemPrimaryTextColor
+        subtitleLabel.textColor = theme.list.itemSecondaryTextColor
+        field.backgroundColor = theme.list.itemBlocksBackgroundColor
+        field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
+        textView.textColor = theme.list.itemPrimaryTextColor
+        textView.tintColor = accent
+        placeholder.textColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.7)
+        sendButton.tintColor = accent
+        spinner.color = accent
+        errorLabel.textColor = theme.list.itemDestructiveColor
+        updateSendState()
     }
 
     /// How tall the sheet's content is at the width it will be shown at.

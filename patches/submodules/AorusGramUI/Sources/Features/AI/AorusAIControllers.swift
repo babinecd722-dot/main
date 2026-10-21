@@ -8272,8 +8272,9 @@ private final class AorusAIScopeRowView: UIControl {
 /// range is set apart at the end: it is a different kind of answer, not a bigger number.
 private final class AorusAIShareScopeController: UIViewController {
     private let context: AccountContext
-    private let palette: AorusAIPalette
-    private let theme: PresentationTheme
+    private var palette: AorusAIPalette
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let username: String?
     private let explanation: String?
     private let options: [AorusAIPermissionOption]
@@ -8352,6 +8353,33 @@ private final class AorusAIShareScopeController: UIViewController {
         self.modalPresentationStyle = .overFullScreen
         // No `modalTransitionStyle`: this sheet is presented and dismissed un-animated and
         // animates itself, so UIKit's transition would only add a beat before or after it.
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            self.palette = AorusAIPalette.resolve(presentationData.theme)
+            if self.isViewLoaded {
+                self.applyTheme()
+            }
+        })
+    }
+
+    /// The sheet in another theme, still waiting for the same answer.
+    private func applyTheme() {
+        card.backgroundColor = palette.elevated
+        grabber.backgroundColor = palette.separator
+        titleLabel.textColor = palette.label
+        peerLabel.textColor = palette.secondary
+        bodyLabel.textColor = palette.secondary
+        rowsContainer.backgroundColor = palette.fill
+        for row in rows {
+            row.removeFromSuperview()
+        }
+        rows = []
+        buildRows()
+        cancelButton.setTitleColor(palette.label, for: .normal)
+        cancelButton.configure(fill: palette.controlFill, highlighted: palette.controlFillHighlighted)
+        refreshAvatar()
+        view.setNeedsLayout()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -8656,7 +8684,8 @@ private final class AorusAIShareScopeController: UIViewController {
 /// Cancel and a tap on the dimming each call exactly one callback exactly once, so a
 /// suspended turn can never be stranded by a dismissed sheet.
 private final class AorusAIPeriodPickerController: UIViewController {
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let strings: PresentationStrings
     private let onCancel: () -> Void
     private let onSelect: (Date, Date) -> Void
@@ -8697,9 +8726,31 @@ private final class AorusAIPeriodPickerController: UIViewController {
         super.init(nibName: nil, bundle: nil)
         self.modalPresentationStyle = .overFullScreen
         self.modalTransitionStyle = .crossDissolve
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            if self.isViewLoaded {
+                self.applyTheme()
+            }
+        })
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// The dates chosen so far stay; only the colours change.
+    private func applyTheme() {
+        let palette = AorusAIPalette.resolve(theme)
+        card.backgroundColor = palette.elevated
+        card.layer.borderColor = palette.separator.cgColor
+        titleLabel.textColor = palette.label
+        subtitleLabel.textColor = palette.secondary
+        fromLabel.textColor = palette.label
+        toLabel.textColor = palette.label
+        fromPicker.tintColor = palette.accent
+        toPicker.tintColor = palette.accent
+        cancelButton.tintColor = palette.accent
+        doneButton.tintColor = palette.accent
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()

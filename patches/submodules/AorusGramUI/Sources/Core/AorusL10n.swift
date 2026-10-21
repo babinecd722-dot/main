@@ -329,6 +329,7 @@ public struct AorusL10n {
 
     // MARK: Settings — rows
     public var ghostMode: String { t("Режим призрака", "Ghost Mode") }
+    public var ghostChatButton: String { t("Кнопка призрака в чатах", "Ghost Button in Chats") }
     public var deletedMessages: String { t("Удалённые сообщения", "Deleted Messages") }
     public var editedMessages: String { t("Изменённые сообщения", "Edited Messages") }
     public var clearDeletedCache: String { t("Очистить кэш", "Clear Cache") }

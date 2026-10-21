@@ -143,10 +143,10 @@ public func aorusAutoFormatController(context: AccountContext, onChange: ((Strin
         commit(style)
     })
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
         |> deliverOnMainQueue
-        |> map { selected -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        |> map { selected, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let entries = aorusAutoFormatEntries(selected: selected, theme: presentationData.theme, strings: presentationData.strings)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),

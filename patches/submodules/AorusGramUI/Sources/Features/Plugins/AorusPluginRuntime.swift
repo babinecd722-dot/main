@@ -3484,7 +3484,8 @@ private enum AorusPluginFeatureBroker {
     }
 
     private static let definitions: [Definition] = [
-        Definition("ghostMode", "privacy"), Definition("blockReadReceipts", "privacy"),
+        Definition("ghostMode", "privacy"), Definition("ghostChatButton", "privacy"),
+        Definition("blockReadReceipts", "privacy"),
         Definition("hideTyping", "privacy"), Definition("antiScreenshot", "privacy"),
         Definition("saveDeletedMessages", "messages"), Definition("saveEditedMessages", "messages"),
         Definition("antiSpamEnabled", "messages"), Definition("translator", "messages"),
@@ -3545,6 +3546,7 @@ private enum AorusPluginFeatureBroker {
         let bool = strictBool(value)
         switch id {
         case "ghostMode": guard let bool else { return typeError() }; manager.ghostMode = bool
+        case "ghostChatButton": guard let bool else { return typeError() }; manager.ghostChatButton = bool
         case "blockReadReceipts": guard let bool else { return typeError() }; manager.blockReadReceipts = bool
         case "hideTyping": guard let bool else { return typeError() }; manager.hideTyping = bool
         case "antiScreenshot": guard let bool else { return typeError() }; manager.antiScreenshot = bool
@@ -3622,6 +3624,7 @@ private enum AorusPluginFeatureBroker {
     private static func value(for id: String, manager: AorusGramManager) -> Any? {
         switch id {
         case "ghostMode": return manager.ghostMode
+        case "ghostChatButton": return manager.ghostChatButton
         case "blockReadReceipts": return manager.blockReadReceipts
         case "hideTyping": return manager.hideTyping
         case "antiScreenshot": return manager.antiScreenshot

@@ -215,6 +215,13 @@ private final class RGBProgressView: UIView {
         layer.addSublayer(gradient)
     }
 
+    // The track is a layer, which keeps the colour it was given: drawn again in the look the
+    // screen has turned to.
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        track.backgroundColor = SubscriptionStyle.primaryText.withAlphaComponent(0.12).cgColor
+    }
+
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func layoutSubviews() {

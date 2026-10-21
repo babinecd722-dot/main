@@ -29,6 +29,7 @@ import AorusGram
 // (`navigator.setAppBadge`) or a count at the start of its title — becomes the tab's badge.
 final class AorusPluginWebPageController: ViewController {
     private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let initialURL: URL
     private let openTelegramLink: (URL) -> Void
     private let events = AorusPluginWebPageEvents()
@@ -118,6 +119,15 @@ final class AorusPluginWebPageController: ViewController {
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         self.events.controller = self
         self.badgeHandler.controller = self
+        // A page opened over the app follows the theme by itself; a tab's bar is drawn by the
+        // tab bar's own screen, which hands the page its theme as well.
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            if !self.isTab {
+                self.aorusUpdateChrome(presentationData)
+            }
+            self.updatePresentationData(presentationData)
+        })
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -150,6 +160,16 @@ final class AorusPluginWebPageController: ViewController {
             webView.backgroundColor = pageBackground
             webView.scrollView.backgroundColor = pageBackground
             webView.overrideUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
+        }
+        if let errorView {
+            // Drawn in the old colours: one in the new ones takes its place, where it stood.
+            let replacement = AorusPluginWebPageErrorView(theme: presentationData.theme) { [weak self] in
+                self?.reloadPage()
+            }
+            replacement.frame = errorView.frame
+            displayNode.view.insertSubview(replacement, aboveSubview: errorView)
+            errorView.removeFromSuperview()
+            self.errorView = replacement
         }
     }
 

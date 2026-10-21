@@ -68,6 +68,16 @@ func run() { First.View.offset(wrong: 1) }
 """)
         self.assertTrue(any("does not match" in failure for failure in failures))
 
+    def test_inherited_extension_method_reaches_type_with_nested_types(self):
+        self.assertEqual(self.failures("""
+class ViewController { }
+extension ViewController { func chrome(_ value: Int) {} }
+class Screen: ViewController, Delegate {
+ enum Mode { case first }
+ func update() { chrome(1) }
+}
+"""), [])
+
 
 if __name__ == "__main__":
     unittest.main()

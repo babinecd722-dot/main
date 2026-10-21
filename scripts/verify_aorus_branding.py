@@ -3843,6 +3843,30 @@ def main() -> None:
         # as the ink inside it does. Toasts and the share sheet stay clear glass in both themes:
         # a frosted or tinted pane there is the matte look Interface 2.0 does not have.
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("func aorusGhostIconColor(_ theme: PresentationTheme) -> UIColor {", "ctx.setBlendMode(.clear)")),
+        # The ghost beside a chat's avatar is there only while Ghost Mode and its own switch are on,
+        # comes and goes animated, and stands for one rule shared with the TelegramCore guards:
+        # Ghost Mode, less the chats it turned off while it is in use (docs/ghost-mode.md).
+        ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", (
+            "func aorusGhostChatButtonIsShown() -> Bool {",
+            "return !(aorusGhostChatButtonIsShown() && aorusGhostPeerIsExcluded(peerId: peerId))",
+        )),
+        ("submodules/TelegramUI/Sources/ChatController.swift", (
+            "return self.ghostPeerId != nil && aorusGhostChatButtonIsShown()",
+            "self.requestNavigationLayout?(transition)",
+            "transition.updateFrame(node: self.avatarNode, frame: self.avatarFrame)",
+            "UserDefaults.standard.set(-1, forKey: overrideKey)",
+        )),
+        ("submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift", (
+            "self?.navigationBar?.requestContainerLayout?(transition)",
+            "theme: presentationInterfaceState.theme, transition: transition, action:",
+        )),
+        ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        # AorusGram's own screens follow the app's theme as it changes, from the shared context the
+        # app hands AorusLiveTheme as its first account context is made (docs/appearance.md).
+        ("submodules/TelegramUI/Sources/AccountContext.swift", ("AorusLiveTheme.attach(sharedContext)",)),
+        ("submodules/AorusGramUI/Sources/UI/AorusLiveTheme.swift", ("static func follow(_ current: @escaping () -> PresentationTheme?, _ update: @escaping (PresentationData) -> Void) -> AorusLiveThemeSubscription",)),
         ("submodules/UndoUI/Sources/UndoOverlayControllerNode.swift", ("isDark: true,\n                tintColor: GlassBackgroundView.TintColor(kind: .clear),",)),
         ("submodules/ShareController/Sources/ShareControllerNode.swift", ("let tintColor = GlassBackgroundView.TintColor(kind: .clear)",)),
         # The QR scanner follows the app theme around the camera picture.

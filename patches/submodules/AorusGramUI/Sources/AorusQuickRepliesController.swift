@@ -655,10 +655,10 @@ public func aorusQuickRepliesController(context: AccountContext) -> ViewControll
         }
     )
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
         |> deliverOnMainQueue
-        |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             // The derived theme: these rows are our own ListViewItems and take a PresentationTheme
             // directly, so they do not reach the glass one through ItemListPresentationData.
             let entries = qrEntries(state: state, theme: presentationData.theme.aorusGlassListTheme)

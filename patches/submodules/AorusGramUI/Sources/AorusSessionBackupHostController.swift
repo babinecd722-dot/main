@@ -15,7 +15,8 @@ import PresentationDataUtils
 @available(iOS 13.0, *)
 final class AorusSessionBackupHostController: ViewController {
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private var hostingController: UIViewController?
 
     init(context: AccountContext) {
@@ -29,6 +30,22 @@ final class AorusSessionBackupHostController: ViewController {
         let lang = AorusLang.resolve(self.presentationData.strings.baseLanguageCode)
         self.title = aorusL("Бэкап аккаунтов", "Account Backup", lang)
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    /// The list is SwiftUI's and follows the appearance it is given; the bar and the page around
+    /// it are ours.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        let theme = presentationData.theme
+        self.statusBar.statusBarStyle = theme.rootController.statusBarStyle.style
+        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
+        guard self.isNodeLoaded else { return }
+        self.displayNode.backgroundColor = theme.list.blocksBackgroundColor
+        self.hostingController?.overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
+        self.hostingController?.view.tintColor = theme.list.itemAccentColor
     }
 
     required init(coder aDecoder: NSCoder) {

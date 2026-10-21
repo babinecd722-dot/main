@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Display
 
 // Root-level subscription gate.
 //
@@ -69,6 +70,14 @@ final class LicenseGate {
     func start() {
         guard !started else { return }
         started = true
+        // The theme turned while a licence window is up -- the system appearance, or the night
+        // theme at its hour. Each screen redraws itself; the windows and the bars above them
+        // are the gate's.
+        NotificationCenter.default.addObserver(
+            forName: AorusAppearanceRecord.changedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.applyAppearanceToWindows()
+        }
         guard LicenseKeyProvider.isProvisioned, AorusBuildKeyProvider.isProvisioned else {
             setFeatureAccess(active: false)
             DispatchQueue.main.async { [weak self] in self?.showConnection() }
@@ -549,6 +558,19 @@ final class LicenseGate {
         nav.navigationBar.titleTextAttributes = [.foregroundColor: SubscriptionStyle.primaryText]
         nav.view.backgroundColor = SubscriptionStyle.background
         return nav
+    }
+
+    /// Both windows and their bars in the look the app is drawn in now.
+    private func applyAppearanceToWindows() {
+        for window in [lockWindow, modalWindow].compactMap({ $0 }) {
+            window.backgroundColor = SubscriptionStyle.background
+            window.overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
+            guard let nav = window.rootViewController as? UINavigationController else { continue }
+            nav.overrideUserInterfaceStyle = SubscriptionStyle.interfaceStyle
+            nav.navigationBar.titleTextAttributes = [.foregroundColor: SubscriptionStyle.primaryText]
+            nav.view.backgroundColor = SubscriptionStyle.background
+            nav.setNeedsStatusBarAppearanceUpdate()
+        }
     }
 
     private func activeScene() -> UIWindowScene? {

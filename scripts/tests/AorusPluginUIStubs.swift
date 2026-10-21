@@ -205,6 +205,20 @@ public enum ViewControllerNavigationPresentation {
 open class ViewControllerTracingNode: ASDisplayNode {
 }
 
+// MARK: - AorusLiveTheme (AorusGramUI/Sources/UI/AorusLiveTheme.swift)
+
+final class AorusLiveThemeSubscription {}
+
+enum AorusLiveTheme {
+    static func follow(_ current: @escaping () -> PresentationTheme?, _ update: @escaping (PresentationData) -> Void) -> AorusLiveThemeSubscription {
+        return AorusLiveThemeSubscription()
+    }
+}
+
+extension ViewController {
+    func aorusUpdateChrome(_ presentationData: PresentationData) {}
+}
+
 open class NavigationController: UINavigationController {
     public func pushViewController(_ controller: ViewController) {}
 }

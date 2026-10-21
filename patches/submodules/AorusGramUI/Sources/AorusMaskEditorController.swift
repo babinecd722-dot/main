@@ -835,7 +835,8 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
 }
 
 final class AorusMaskEditorController: ViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIScrollViewDelegate {
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let onSaved: (AorusCustomMaskRecord) -> Void
     private let canvas: AorusMaskCanvasView
     private let canvasScrollView = UIScrollView()
@@ -870,10 +871,45 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             action: #selector(self.savePressed)
         )
         self.navigationItem.rightBarButtonItem?.tintColor = self.presentationData.theme.list.itemAccentColor
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
     }
 
     required init(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    /// The editor in another theme, with the drawing, the tool and the brush exactly as they were.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        let theme = presentationData.theme
+        self.statusBar.statusBarStyle = theme.rootController.statusBarStyle.style
+        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
+        self.navigationItem.rightBarButtonItem?.tintColor = theme.list.itemAccentColor
+        guard self.isNodeLoaded else { return }
+        self.displayNode.backgroundColor = theme.list.blocksBackgroundColor
+        self.canvas.guideAccentColor = theme.list.itemAccentColor
+        self.toolsView.backgroundColor = theme.list.itemBlocksBackgroundColor
+        for button in [self.layerButton, self.drawButton, self.eraseButton, self.undoButton, self.addButton, self.clearButton] {
+            button.tintColor = theme.list.itemPrimaryTextColor
+            button.setTitleColor(theme.list.itemPrimaryTextColor, for: .normal)
+            button.backgroundColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.10)
+        }
+        self.clearButton.tintColor = theme.list.itemDestructiveColor
+        // The tool in use is lit as `selectTool` lights it, without choosing it again: choosing
+        // a tool lets go of the text or photo being moved.
+        let toolButtons: [(UIButton, AorusMaskTool)] = [(self.layerButton, .pickLayer), (self.drawButton, .draw), (self.eraseButton, .erase)]
+        for (button, buttonTool) in toolButtons where buttonTool == self.canvas.tool {
+            button.backgroundColor = theme.list.itemAccentColor.withAlphaComponent(0.22)
+            button.tintColor = theme.list.itemAccentColor
+        }
+        self.widthSlider.minimumTrackTintColor = theme.list.itemAccentColor
+        self.widthPreview.layer.borderColor = self.aorusSwatchBorderColor.cgColor
+        for button in self.colorButtons {
+            let isSelected = button.layer.borderWidth > 2.0
+            button.layer.borderColor = isSelected ? theme.list.itemAccentColor.cgColor : self.aorusSwatchBorderColor.cgColor
+        }
     }
 
     override func loadDisplayNode() {

@@ -196,7 +196,8 @@ public final class AorusClipboardHistory {
 private final class AorusClipboardListController: UITableViewController {
     private var items: [String]
     private let isRu: Bool
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let onInsert: (String, Bool) -> Void
 
     init(items: [String], isRu: Bool, theme: PresentationTheme, onInsert: @escaping (String, Bool) -> Void) {
@@ -205,6 +206,23 @@ private final class AorusClipboardListController: UITableViewController {
         self.theme = theme
         self.onInsert = onInsert
         super.init(style: .plain)
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            guard self.isViewLoaded else { return }
+            self.applyTheme()
+        })
+    }
+
+    /// The history in another theme, its bar with it; scrolled where it was.
+    private func applyTheme() {
+        self.view.backgroundColor = theme.list.plainBackgroundColor
+        self.tableView.backgroundColor = theme.list.plainBackgroundColor
+        self.tableView.separatorColor = theme.list.itemPlainSeparatorColor
+        if let navigationBar = self.navigationController?.navigationBar {
+            aorusStyleClipboardBar(navigationBar, theme: theme)
+        }
+        self.tableView.reloadData()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -311,6 +329,17 @@ private final class AorusClipboardListController: UITableViewController {
     }
 }
 
+/// The history's bar in the theme's navigation colours.
+private func aorusStyleClipboardBar(_ navigationBar: UINavigationBar, theme: PresentationTheme) {
+    let appearance = UINavigationBarAppearance()
+    appearance.configureWithOpaqueBackground()
+    appearance.backgroundColor = theme.rootController.navigationBar.opaqueBackgroundColor
+    appearance.titleTextAttributes = [.foregroundColor: theme.rootController.navigationBar.primaryTextColor]
+    navigationBar.standardAppearance = appearance
+    navigationBar.scrollEdgeAppearance = appearance
+    navigationBar.tintColor = theme.rootController.navigationBar.accentTextColor
+}
+
 /// Present the clipboard history over `parent`. `onInsert(text, replacingAll)` is invoked
 /// with the chosen entry after the sheet dismisses.
 public func aorusPresentClipboardHistory(context: AccountContext, parent: UIViewController, onInsert: @escaping (String, Bool) -> Void) {
@@ -335,14 +364,7 @@ public func aorusPresentClipboardHistory(context: AccountContext, parent: UIView
 
     let listController = AorusClipboardListController(items: items, isRu: isRu, theme: theme, onInsert: onInsert)
     let nav = UINavigationController(rootViewController: listController)
-
-    let appearance = UINavigationBarAppearance()
-    appearance.configureWithOpaqueBackground()
-    appearance.backgroundColor = theme.rootController.navigationBar.opaqueBackgroundColor
-    appearance.titleTextAttributes = [.foregroundColor: theme.rootController.navigationBar.primaryTextColor]
-    nav.navigationBar.standardAppearance = appearance
-    nav.navigationBar.scrollEdgeAppearance = appearance
-    nav.navigationBar.tintColor = theme.rootController.navigationBar.accentTextColor
+    aorusStyleClipboardBar(nav.navigationBar, theme: theme)
     nav.modalPresentationStyle = .formSheet
 
     parent.present(nav, animated: true)

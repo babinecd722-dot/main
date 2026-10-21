@@ -815,10 +815,10 @@ private func aorusAddCustomDeviceController(
         }
     )
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
     |> deliverOnMainQueue
-    |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
             title: .text(aorusL("Своё устройство", "Custom Device")),
@@ -1000,10 +1000,10 @@ public func aorusDeviceSpoofController(
         }
     )
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
     |> deliverOnMainQueue
-    |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
             title: .text(aorusL("Девайс-спуф", "Device Spoof")),

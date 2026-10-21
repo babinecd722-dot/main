@@ -743,10 +743,10 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         controller.present(picker, animated: true)
     })
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
         |> deliverOnMainQueue
-        |> map { selectedId -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        |> map { selectedId, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             // The derived theme: these rows are our own ListViewItems and take a PresentationTheme
             // directly, so they do not reach the glass one through ItemListPresentationData.
             let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme.aorusGlassListTheme, highlightFontBlock: highlightFontBlock)

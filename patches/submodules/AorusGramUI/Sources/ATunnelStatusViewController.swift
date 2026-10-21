@@ -237,6 +237,13 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     private var animatedWidth: CGFloat = 0
     private var isCompleted = false
 
+    /// The banner in another theme; its animation keeps running.
+    func update(palette: ATunnelPalette) {
+        backgroundGradient.colors = [palette.background.cgColor, palette.background.cgColor]
+        gridLayer.strokeColor = palette.grid.cgColor
+        titleLabel.textColor = palette.primaryText
+    }
+
     init(title: String, palette: ATunnelPalette) {
         super.init(frame: .zero)
 
@@ -645,8 +652,9 @@ private final class ATunnelFlowView: UIView {
 
 final class ATunnelStatusViewController: UIViewController {
 
-    private let theme: PresentationTheme
-    private let palette: ATunnelPalette
+    private var theme: PresentationTheme
+    private var palette: ATunnelPalette
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let isRu: Bool
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
 
@@ -680,6 +688,36 @@ final class ATunnelStatusViewController: UIViewController {
         self.isRu  = isRu
         super.init(nibName: nil, bundle: nil)
         title = "ATunnel"
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            self.palette = ATunnelPalette(theme: presentationData.theme)
+            if self.isViewLoaded {
+                self.applyTheme()
+            }
+        })
+    }
+
+    /// The page in another theme. The servers are drawn again from what is known about them,
+    /// and the duck keeps going.
+    private func applyTheme() {
+        overrideUserInterfaceStyle = palette.interfaceStyle
+        navigationController?.overrideUserInterfaceStyle = palette.interfaceStyle
+        view.backgroundColor = palette.background
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.titleTextAttributes = [.foregroundColor: palette.primaryText]
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        titleLabel.textColor = palette.primaryText
+        subtitleLabel.textColor = palette.subtitleText
+        serversSectionLabel.textColor = palette.sectionText
+        callsSectionLabel.textColor = palette.sectionText
+        callCard.backgroundColor = palette.card
+        callTitleLabel.textColor = palette.primaryText
+        updatedLabel.textColor = palette.footerText
+        buildServerCards()
+        applyData()
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -1197,8 +1235,9 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 
     var onDismiss: (() -> Void)?
 
-    private let theme: PresentationTheme
-    private let palette: ATunnelPalette
+    private var theme: PresentationTheme
+    private var palette: ATunnelPalette
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let isRu:  Bool
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
 
@@ -1232,6 +1271,22 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         self.theme = theme; self.palette = ATunnelPalette(theme: theme); self.isRu = isRu
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            self.palette = ATunnelPalette(theme: presentationData.theme)
+            guard self.isViewLoaded else { return }
+            self.view.backgroundColor = self.palette.background
+            self.overrideUserInterfaceStyle = self.palette.interfaceStyle
+            self.diagnosticsBanner.update(palette: self.palette)
+            self.subtitleLabel.textColor = self.palette.detailText
+            for row in self.stepRows {
+                row.update(palette: self.palette)
+            }
+            self.resultCard.backgroundColor = self.palette.card
+            self.resultTitle.textColor = self.palette.primaryText
+            self.resultBody.textColor = self.palette.detailText
+        })
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -1475,6 +1530,13 @@ private final class DiagStepRow: UIView {
     private let titleLbl  = UILabel()
     private let indicator = UIActivityIndicatorView(style: .medium)
     private let stateIcon = UIImageView()
+    private let sep = UIView()
+
+    /// The row in another theme, in whatever state the check it stands for is in.
+    func update(palette: ATunnelPalette) {
+        titleLbl.textColor = palette.primaryText
+        sep.backgroundColor = palette.separator
+    }
 
     init(title: String, sfSymbol: String, accentColor: UIColor, palette: ATunnelPalette) {
         super.init(frame: .zero)
@@ -1507,7 +1569,6 @@ private final class DiagStepRow: UIView {
         stateIcon.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stateIcon)
 
-        let sep = UIView()
         sep.backgroundColor = palette.separator
         sep.translatesAutoresizingMaskIntoConstraints = false
         addSubview(sep)

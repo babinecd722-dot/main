@@ -499,10 +499,10 @@ private func accountBackupControllerLegacy(context: AccountContext) -> ViewContr
         }
     )
 
-    let signal = statePromise.get()
+    // The theme the app is in, as it changes: the list is drawn again the moment it does.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
         |> deliverOnMainQueue
-        |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let l10n = BackupL10n(lang: AorusLang.resolve(presentationData.strings.baseLanguageCode))
             // The derived theme: the action icons below are tinted from theme.list directly rather
             // than from the ItemListPresentationData the rows carry, so they would keep the stock

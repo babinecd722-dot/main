@@ -291,6 +291,7 @@ private enum AorusSection: Int32 {
 
 private struct AorusState: Equatable {
     var ghostMode: Bool
+    var ghostChatButton: Bool
     var blockReadReceipts: Bool
     var hideTyping: Bool
     var saveDeletedMessages: Bool
@@ -428,6 +429,7 @@ private final class AorusArguments {
 private enum AorusEntry: ItemListNodeEntry {
     case privacyHeader(PresentationTheme, String)
     case ghostMode(PresentationTheme, String, Bool)
+    case ghostChatButton(PresentationTheme, String, Bool)
     case saveDeletedMessages(PresentationTheme, String, Bool)
     case saveEditedMessages(PresentationTheme, String, Bool)
     case clearDeletedCache(PresentationTheme, String)
@@ -529,7 +531,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
+        case .privacyHeader, .ghostMode, .ghostChatButton, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
             return AorusSection.privacy.rawValue
         case .aiHeader, .autoReply:
             return AorusSection.ai.rawValue
@@ -579,6 +581,7 @@ private enum AorusEntry: ItemListNodeEntry {
         switch self {
         case .privacyHeader:        return 0
         case .ghostMode:            return 1
+        case .ghostChatButton:      return 2
         case .saveDeletedMessages:  return 4
         case .saveEditedMessages:   return 5
         case .clearDeletedCache:    return 6
@@ -694,6 +697,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .privacyHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .ghostMode(lt, ls, lv):
             if case let .ghostMode(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .ghostChatButton(lt, ls, lv):
+            if case let .ghostChatButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .saveDeletedMessages(lt, ls, lv):
             if case let .saveDeletedMessages(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .saveEditedMessages(lt, ls, lv):
@@ -879,6 +884,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .ghostMode(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ghostMode, $0) })
+        case let .ghostChatButton(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ghostChatButton, $0) })
         case let .saveDeletedMessages(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.saveDeletedMessages, $0) })
         case let .saveEditedMessages(_, title, value):
@@ -1202,6 +1209,15 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
     }
     entries.sort()
 
+    // The ghost beside a chat's avatar exists only while Ghost Mode is on, so its switch does too:
+    // it slides in under Ghost Mode as that is turned on and out as it is turned off, with its
+    // value kept for the next time.
+    if state.ghostMode, let idx = entries.firstIndex(where: {
+        if case .ghostMode = $0 { return true }; return false
+    }) {
+        entries.insert(.ghostChatButton(theme, l10n.ghostChatButton, state.ghostChatButton), at: idx + 1)
+    }
+
     if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
         if case .antiSpam = $0 { return true }; return false
     }) {
@@ -1295,6 +1311,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
 
     let initialState = AorusState(
         ghostMode:          mgr.ghostMode,
+        ghostChatButton:    mgr.ghostChatButton,
         blockReadReceipts:  mgr.blockReadReceipts,
         hideTyping:         mgr.hideTyping,
         saveDeletedMessages: mgr.saveDeletedMessages,
@@ -1373,6 +1390,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             // Persist to managers based on which key changed
             let s = stateValue.with { $0 }
             mgr.ghostMode           = s.ghostMode
+            mgr.ghostChatButton     = s.ghostChatButton
             mgr.blockReadReceipts   = s.blockReadReceipts
             mgr.hideTyping          = s.hideTyping
             mgr.saveDeletedMessages = s.saveDeletedMessages

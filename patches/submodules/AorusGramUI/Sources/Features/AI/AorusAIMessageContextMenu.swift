@@ -55,8 +55,9 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
     private let context: AccountContext
     private weak var targetNavigationController: NavigationController?
     private let reference: AorusAIReferencedMessage
-    private let presentationData: PresentationData
-    private let palette: AorusAIPalette
+    private var presentationData: PresentationData
+    private var palette: AorusAIPalette
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let groups: [AorusAIMessageMenu.Group]
     private let languageCode: String
 
@@ -81,6 +82,27 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         self.segments = UISegmentedControl(items: groups.map { $0.title ?? aorusAILocalized("Действия", "Actions") })
         aorusApplyAppFont(to: self.segments)
         super.init(nibName: nil, bundle: nil)
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.presentationData = presentationData
+            self.palette = AorusAIPalette.resolve(presentationData.theme)
+            if self.isViewLoaded {
+                self.applyTheme()
+            }
+        })
+    }
+
+    /// The sheet in another theme, on the same tab and the same message.
+    private func applyTheme() {
+        view.backgroundColor = palette.background
+        titleLabel.textColor = palette.label
+        closeButton.tintColor = palette.secondary
+        closeButton.backgroundColor = palette.fill
+        segments.setTitleTextAttributes([.foregroundColor: palette.secondary], for: .normal)
+        tableView.separatorColor = aorusAIGlassBorder(palette: palette)
+        newChatButton.tintColor = palette.accent
+        newChatButton.backgroundColor = palette.accentSoft
+        tableView.reloadData()
     }
 
     required init?(coder: NSCoder) { fatalError() }

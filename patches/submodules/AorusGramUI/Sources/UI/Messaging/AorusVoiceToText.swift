@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Speech
 import AVFoundation
+import TelegramPresentationData
 
 // AorusGram "Voice → Text" (dictation) for the chat input.
 //
@@ -41,8 +42,10 @@ public enum AorusVoiceToText {
 public final class AorusVoiceOnboardingController: UIViewController {
     private let isRu: Bool
     private let accent: UIColor
-    private let isDark: Bool
+    private var isDark: Bool
     private let onContinue: () -> Void
+    private var followedTheme: PresentationTheme?
+    private var themeSubscription: AorusLiveThemeSubscription?
 
     /// `isDark` follows the chat's theme: the sheet is the dark design over a dark chat and its
     /// light counterpart over a light one.
@@ -58,6 +61,19 @@ public final class AorusVoiceOnboardingController: UIViewController {
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = 30.0
         }
+        // Opened in the chat's light or dark; it turns with the app's theme from then on.
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.followedTheme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.followedTheme = presentationData.theme
+            let isDark = presentationData.theme.overallDarkAppearance
+            guard isDark != self.isDark else { return }
+            self.isDark = isDark
+            guard self.isViewLoaded else { return }
+            for subview in self.view.subviews {
+                subview.removeFromSuperview()
+            }
+            self.buildContent()
+        })
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -118,6 +134,11 @@ public final class AorusVoiceOnboardingController: UIViewController {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        self.buildContent()
+    }
+
+    /// The sheet, drawn in the light or dark it is in now.
+    private func buildContent() {
         self.overrideUserInterfaceStyle = self.isDark ? .dark : .light
         self.view.backgroundColor = self.isDark ? UIColor(white: 0.09, alpha: 1.0) : .white
 

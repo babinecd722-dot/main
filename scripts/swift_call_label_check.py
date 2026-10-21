@@ -237,7 +237,9 @@ def collect(paths):
         for match in TYPE_PARENTS.finditer(code):
             inherited = [piece.strip().split("<")[0].strip()
                          for piece in match.group(2).split(",")]
-            brace = code.find("{", match.end())
+            # The pattern ends on the body's own brace. Searching on from there finds the next
+            # one -- a nested type's, in a type that has one -- and its parents went to that.
+            brace = match.end() - 1
             owner = next((name for start, _, name in spans if start == brace), match.group(1))
             parents.setdefault(owner, set()).update(name for name in inherited if name)
         for match in FUNC_DECL.finditer(code):

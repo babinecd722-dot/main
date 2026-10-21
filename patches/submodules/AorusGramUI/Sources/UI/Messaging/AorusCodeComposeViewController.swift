@@ -28,7 +28,8 @@ public final class AorusCodeComposeViewController: UIViewController {
     private let isRu: Bool
     // AorusGram theme so this sheet matches the app (dark + accent) instead of
     // following the system light/dark appearance and a hardcoded orange accent.
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
 
     // MARK: - Views
 
@@ -46,6 +47,7 @@ public final class AorusCodeComposeViewController: UIViewController {
     private let secretPlaceholder = UILabel()
     private let hintLabel = UILabel()
     private let sendButton = UIButton(type: .custom)
+    private let separator = UIView()
 
     private var scrollViewBottomConstraint: NSLayoutConstraint!
 
@@ -58,6 +60,35 @@ public final class AorusCodeComposeViewController: UIViewController {
         self.isRu = AorusLang.current == .ru
         self.theme = context.sharedContext.currentPresentationData.with { $0 }.theme
         super.init(nibName: nil, bundle: nil)
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            guard self.isViewLoaded else { return }
+            self.applyTheme()
+        })
+    }
+
+    /// The sheet in another theme, with both texts kept as they were typed.
+    private func applyTheme() {
+        overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
+        view.backgroundColor = theme.list.blocksBackgroundColor
+        view.tintColor = theme.list.itemAccentColor
+        titleLabel.textColor = theme.list.itemPrimaryTextColor
+        cancelButton.setTitleColor(theme.list.itemAccentColor, for: .normal)
+        separator.backgroundColor = theme.list.itemBlocksSeparatorColor
+        coverCard.backgroundColor = theme.list.itemBlocksBackgroundColor
+        coverHeaderLabel.textColor = theme.list.itemSecondaryTextColor
+        secretCard.backgroundColor = theme.list.itemBlocksBackgroundColor
+        secretHeaderLabel.textColor = theme.list.itemAccentColor
+        for textView in [coverTextView, secretTextView] {
+            textView.textColor = theme.list.itemPrimaryTextColor
+            textView.tintColor = theme.list.itemAccentColor
+            textView.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
+        }
+        coverPlaceholder.textColor = theme.list.itemPlaceholderTextColor
+        secretPlaceholder.textColor = theme.list.itemPlaceholderTextColor
+        hintLabel.textColor = theme.list.itemSecondaryTextColor
+        updateSendEnabled()
     }
 
     @available(*, unavailable)
@@ -109,7 +140,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         view.addSubview(cancelButton)
 
         // Separator
-        let sep = UIView()
+        let sep = self.separator
         sep.backgroundColor = theme.list.itemBlocksSeparatorColor
         view.addSubview(sep)
 

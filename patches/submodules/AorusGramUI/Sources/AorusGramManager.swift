@@ -32,6 +32,10 @@ public final class AorusGramManager {
     // MARK: - Feature flags
 
     public var ghostMode: Bool        = false { didSet { save() } }
+    // The ghost beside a chat's avatar, which turns Ghost Mode off for that chat alone. Only
+    // offered while Ghost Mode is on. Off, every chat follows Ghost Mode and the chats turned
+    // off from the button are kept, so turning it back on finds them as they were left.
+    public var ghostChatButton: Bool  = true  { didSet { save() } }
     public var blockReadReceipts: Bool = true  { didSet { save() } }
     public var hideTyping: Bool        = true  { didSet { save() } }
     public var saveDeletedMessages: Bool = true { didSet { save() } }
@@ -126,6 +130,7 @@ public final class AorusGramManager {
     private func mirrorFlatKeys() {
         let ud = UserDefaults.standard
         ud.set(effective(ghostMode),           forKey: "aorusgram_ghost_mode")
+        ud.set(ghostChatButton,                forKey: "aorusgram_ghost_chat_button")
         ud.set(effective(saveDeletedMessages), forKey: "aorusgram_feature_deleted_messages")
         ud.set(effective(saveEditedMessages),  forKey: "aorusgram_feature_edited_messages")
         ud.set(effective(antiScreenshot),      forKey: "aorusgram_feature_anti_screenshot")
@@ -167,6 +172,7 @@ public final class AorusGramManager {
         defer { mirrorFlatKeys() }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
+        ghostChatButton     = d["ghostChatButton"]     as? Bool ?? true
         blockReadReceipts   = d["blockReadReceipts"]   as? Bool ?? true
         hideTyping          = d["hideTyping"]          as? Bool ?? true
         saveDeletedMessages = d["saveDeletedMessages"] as? Bool ?? true
@@ -228,6 +234,7 @@ public final class AorusGramManager {
     private func save() {
         UserDefaults.standard.set([
             "ghostMode":           ghostMode,
+            "ghostChatButton":     ghostChatButton,
             "blockReadReceipts":   blockReadReceipts,
             "hideTyping":          hideTyping,
             "saveDeletedMessages": saveDeletedMessages,

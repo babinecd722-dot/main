@@ -934,17 +934,19 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
 
     let textField = UITextField()
     var onChange: ((String) -> Void)?
+    private let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)))
+    private let placeholder: String
 
     var text: String { textField.text ?? "" }
 
     init(theme: PresentationTheme, placeholder: String) {
+        self.placeholder = placeholder
         super.init(frame: .zero)
         backgroundColor = theme.list.itemBlocksBackgroundColor
         layer.cornerRadius = Self.height / 2
         layer.cornerCurve = .continuous
         // The magnifier is the field's own leading view, so a touch on it, as anywhere on the
         // capsule, is a touch on the field.
-        let iconView = UIImageView(image: UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)))
         iconView.tintColor = theme.list.itemSecondaryTextColor
         iconView.contentMode = .center
         iconView.frame = CGRect(x: 10, y: 0, width: 24, height: Self.height)
@@ -977,6 +979,19 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
         textField.frame = CGRect(x: 0, y: 0, width: max(0, bounds.width - 6), height: bounds.height)
     }
 
+    /// The same field in another theme, with what was typed in it kept.
+    func update(theme: PresentationTheme) {
+        backgroundColor = theme.list.itemBlocksBackgroundColor
+        iconView.tintColor = theme.list.itemSecondaryTextColor
+        textField.textColor = theme.list.itemPrimaryTextColor
+        textField.tintColor = theme.list.itemAccentColor
+        textField.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
+        textField.attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [
+            .foregroundColor: theme.list.itemPlaceholderTextColor,
+            .font: aorusUIFont(17),
+        ])
+    }
+
     @objc private func changed() { onChange?(text) }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
@@ -1000,7 +1015,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         case loaded
     }
 
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let refresh = UIRefreshControl()
     private let spinner = UIActivityIndicatorView(style: .medium)
@@ -1122,6 +1137,23 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         if let statsObserver { NotificationCenter.default.removeObserver(statsObserver) }
         if let storeObserver { NotificationCenter.default.removeObserver(storeObserver) }
         if let removedObserver { NotificationCenter.default.removeObserver(removedObserver) }
+    }
+
+    /// The Market in another theme: the list keeps where it is scrolled to, what is typed in the
+    /// search and the order it is sorted in.
+    func update(theme: PresentationTheme) {
+        self.theme = theme
+        backgroundColor = theme.list.blocksBackgroundColor
+        tableView.backgroundColor = theme.list.blocksBackgroundColor
+        tableView.separatorColor = theme.list.itemBlocksSeparatorColor
+        searchField.update(theme: theme)
+        noResults.textColor = theme.list.itemSecondaryTextColor
+        spinner.color = theme.list.itemSecondaryTextColor
+        messageTitle.textColor = theme.list.itemPrimaryTextColor
+        messageBody.textColor = theme.list.itemSecondaryTextColor
+        retryButton.tintColor = theme.list.itemAccentColor
+        updateFilters()
+        tableView.reloadData()
     }
 
     /// Brings the rows on screen up to date where they are: a pill changes what it says with a
@@ -1448,7 +1480,7 @@ final class AorusPluginGlassCircleButton: UIControl {
     private let content = UIView()
     private let glass: UIView & AorusPluginGlassBackground
     private let glyph = UIImageView()
-    private let isDark: Bool
+    private var isDark: Bool
     private var isCollapsed = false
 
     init(glass: UIView & AorusPluginGlassBackground, symbol: String, pointSize: CGFloat, weight: UIImage.SymbolWeight, tint: UIColor, isDark: Bool, shadow: Bool) {
@@ -1489,6 +1521,14 @@ final class AorusPluginGlassCircleButton: UIControl {
         glass.updateGlass(size: local.size, cornerRadius: local.height / 2, isDark: isDark)
         glyph.frame = local
         if content.layer.shadowOpacity > 0 { content.layer.shadowPath = UIBezierPath(ovalIn: local).cgPath }
+    }
+
+    /// The button in another theme: its glyph, its glass and the shadow under it.
+    func update(tint: UIColor, isDark: Bool) {
+        self.isDark = isDark
+        glyph.tintColor = tint
+        if content.layer.shadowOpacity > 0 { content.layer.shadowOpacity = isDark ? 0.32 : 0.12 }
+        setNeedsLayout()
     }
 
     /// Puts the button away, shrinking and fading where it stands, or brings it back.
@@ -1631,7 +1671,13 @@ final class AorusPluginMarketCell: UITableViewCell {
 /// far the page is scrolled.
 final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDelegate {
     private var card: AorusPluginMarketCard
-    private let theme: PresentationTheme
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
+    /// The plugin's icon once it has come, and the colour the header is washed with from it, so
+    /// the sheet drawn again in another theme does not start from the placeholder.
+    private var loadedIcon: UIImage?
+    private var iconWash: UIColor?
+    private var isDescriptionExpanded = false
     private let host: AorusPluginMarketHost
     /// Opens a plugin of one's own in its Appearance, after the sheet has closed.
     var onOpenOwn: ((AorusPluginManifest) -> Void)?
@@ -1677,6 +1723,43 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
             sheetPresentationController?.prefersGrabberVisible = true
             sheetPresentationController?.preferredCornerRadius = 28
         }
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            self?.updateTheme(presentationData.theme)
+        })
+    }
+
+    /// The sheet in another theme. Its sections are built again in the new colours, scrolled
+    /// where they were and with the description as open as it was; the bar, the close button
+    /// and the rating are recoloured where they stand.
+    private func updateTheme(_ theme: PresentationTheme) {
+        self.theme = theme
+        guard isViewLoaded else { return }
+        overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
+        view.backgroundColor = theme.list.blocksBackgroundColor
+        updateHeaderWash()
+        let offset = scrollView.contentOffset
+        for section in content.arrangedSubviews {
+            content.removeArrangedSubview(section)
+            section.removeFromSuperview()
+        }
+        buildHeader()
+        buildDescription()
+        buildAuthor()
+        buildPermissions()
+        captionLabel.textColor = theme.list.itemSecondaryTextColor
+        closeButton?.update(tint: theme.list.itemPrimaryTextColor.withAlphaComponent(0.72), isDark: theme.overallDarkAppearance)
+        applyState()
+        updateRating(animated: false)
+        view.layoutIfNeeded()
+        scrollView.contentOffset = offset
+    }
+
+    private func updateHeaderWash() {
+        if let iconWash {
+            headerWash.colors = [iconWash.withAlphaComponent(0.38).cgColor, theme.list.blocksBackgroundColor.withAlphaComponent(0).cgColor]
+        } else {
+            headerWash.colors = [theme.list.itemAccentColor.withAlphaComponent(0.22).cgColor, theme.list.blocksBackgroundColor.withAlphaComponent(0).cgColor]
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1686,7 +1769,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
         view.backgroundColor = theme.list.blocksBackgroundColor
 
-        headerWash.colors = [theme.list.itemAccentColor.withAlphaComponent(0.22).cgColor, theme.list.blocksBackgroundColor.withAlphaComponent(0).cgColor]
+        updateHeaderWash()
         headerWash.locations = [0, 1]
         view.layer.addSublayer(headerWash)
 
@@ -1871,7 +1954,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         iconView.layer.cornerCurve = .continuous
         iconView.clipsToBounds = true
         iconView.contentMode = .scaleAspectFill
-        iconView.image = AorusPluginMarketDrawing.placeholder(id: card.id, side: 256)
+        iconView.image = loadedIcon ?? AorusPluginMarketDrawing.placeholder(id: card.id, side: 256)
         iconView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             iconView.widthAnchor.constraint(equalToConstant: 124),
@@ -1925,12 +2008,14 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         ])
         content.addArrangedSubview(padded(header, top: 44, bottom: 4, sides: 24))
 
-        if card.hasIcon {
+        if card.hasIcon, loadedIcon == nil {
             AorusPluginMarketClient.shared.icon(id: card.id) { [weak self] image in
                 guard let self, let image else { return }
+                self.loadedIcon = image
                 UIView.transition(with: self.iconView, duration: 0.25, options: .transitionCrossDissolve, animations: { self.iconView.image = image })
                 if let average = AorusPluginMarketDrawing.averageColor(of: image) {
-                    self.headerWash.colors = [average.withAlphaComponent(0.38).cgColor, self.theme.list.blocksBackgroundColor.withAlphaComponent(0).cgColor]
+                    self.iconWash = average
+                    self.updateHeaderWash()
                 }
             }
         }
@@ -1959,6 +2044,10 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
             context: nil
         )
         moreButton.isHidden = measured.height <= descriptionLabel.font.lineHeight * 5 + 1
+        if isDescriptionExpanded {
+            descriptionLabel.numberOfLines = 0
+            moreButton.isHidden = true
+        }
         stack.addArrangedSubview(descriptionLabel)
         stack.addArrangedSubview(moreButton)
         descriptionLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -1966,6 +2055,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     }
 
     @objc private func expandDescription() {
+        isDescriptionExpanded = true
         UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut], animations: {
             self.descriptionLabel.numberOfLines = 0
             self.moreButton.isHidden = true
@@ -2263,7 +2353,8 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 /// opens the plugin's Appearance, where the description, version and code are changed and the
 /// next version is published from.
 final class AorusPluginMarketMineController: ViewController, UITableViewDataSource, UITableViewDelegate {
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var owned: [AorusPluginMarketOwnedPlugin]
     private let banner = UILabel()
@@ -2278,6 +2369,21 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = AorusPluginMarketText.myPlugins
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        let theme = presentationData.theme
+        displayNode.backgroundColor = theme.list.blocksBackgroundColor
+        tableView.backgroundColor = theme.list.blocksBackgroundColor
+        tableView.separatorColor = theme.list.itemBlocksSeparatorColor
+        banner.textColor = theme.list.itemDestructiveColor
+        tableView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

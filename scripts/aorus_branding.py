@@ -2033,6 +2033,17 @@ def patch_block_ads(tg: Path) -> None:
         print("BlockAds: activate() anchor not found (upstream drift) — skipped gracefully")
 
 
+# Whether Ghost Mode holds this peer's typing, read receipts and story views back. The same rule
+# as `aorusGhostIsActive` beside the chat's avatar, which cannot be called from TelegramCore:
+# Ghost Mode, less the chats the ghost beside a chat's avatar turned it off for while that ghost
+# is in use. With the ghost's switch off the chats it turned off are kept but not in force, and
+# with Ghost Mode off nothing is held back anywhere.
+_AORUS_GHOST_ACTIVE_SWIFT = (
+    "    let aorusGhostExcluded = ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_chat_button\") as? Bool) ?? true) && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber)?.intValue ?? 0) < 0\n"
+    "    let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded\n"
+)
+
+
 def patch_ghost_mode_hide_typing(tg: Path) -> None:
     """Hide the 'typing...' indicator from peers when Ghost Mode is on.
 
@@ -2067,8 +2078,7 @@ def patch_ghost_mode_hide_typing(tg: Path) -> None:
 
     guard = (
         sentinel + "\n"
-        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
-        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        + _AORUS_GHOST_ACTIVE_SWIFT +
         "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }\n"
@@ -2294,8 +2304,7 @@ def patch_ghost_mode_block_read(tg: Path) -> None:
     guard = (
         anchor + "\n"
         "    " + sentinel + "\n"
-        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
-        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        + _AORUS_GHOST_ACTIVE_SWIFT +
         "    if aorusGhostActive {\n"
         "        return Signal { _ in ActionDisposable {} }\n"
         "    }"
@@ -16261,8 +16270,7 @@ def patch_ghost_mode_stealth_stories(tg: Path) -> None:
         return
     inject = anchor + "\n" + (
         "    " + sentinel + "\n"
-        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
-        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        + _AORUS_GHOST_ACTIVE_SWIFT +
         "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }"
@@ -16328,10 +16336,6 @@ def patch_per_chat_ghost_mode(tg: Path) -> None:
         helper = r'''
 
 // AorusGram: per-chat ghost navigation button
-private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
-    return "aorusgram_ghost_peer_\(peerId.toInt64())"
-}
-
 func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
     // One of AorusGram's own icons: a plugin's icons replace or style it like Telegram's.
     return AorusPluginIconValues.own(aorusGhostIconDrawn(active: active, color: color), named: "AorusGram/Header/Ghost")
@@ -16396,19 +16400,23 @@ private func aorusGhostPeerOverrideKey(_ peerId: PeerId) -> String {
     return "aorusgram_ghost_peer_override_\(peerId.toInt64())"
 }
 
-private func aorusGhostPeerOverride(peerId: PeerId) -> Int? {
-    if let value = UserDefaults.standard.object(forKey: aorusGhostPeerOverrideKey(peerId)) as? NSNumber {
-        let intValue = value.intValue
-        if intValue > 0 {
-            return 1
-        } else if intValue < 0 {
-            return -1
-        }
+// The ghost beside a chat's avatar is in the chats only while Ghost Mode is on and its switch
+// under Ghost Mode is, which it is unless it has been turned off.
+func aorusGhostChatButtonIsShown() -> Bool {
+    guard UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") else {
+        return false
     }
-    if UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId)) {
-        return 1
+    return (UserDefaults.standard.object(forKey: "aorusgram_ghost_chat_button") as? Bool) ?? true
+}
+
+// A chat the ghost turned Ghost Mode off for. Kept whatever the switch says, so turning the
+// switch back on finds every chat as it was left; while the switch is off it is not in force,
+// and the chat follows Ghost Mode like every other.
+private func aorusGhostPeerIsExcluded(peerId: PeerId) -> Bool {
+    guard let value = UserDefaults.standard.object(forKey: aorusGhostPeerOverrideKey(peerId)) as? NSNumber else {
+        return false
     }
-    return nil
+    return value.intValue < 0
 }
 
 func aorusGhostPeerIdForChatInterfaceState(_ presentationInterfaceState: ChatPresentationInterfaceState) -> PeerId? {
@@ -16436,11 +16444,13 @@ func aorusGhostPeerIdForChatInterfaceState(_ presentationInterfaceState: ChatPre
     return peerId
 }
 
+// The same rule as the guards in TelegramCore that hold back typing, read receipts and story
+// views: Ghost Mode, less the chats the ghost turned it off for while the ghost is in use.
 func aorusGhostIsActive(peerId: PeerId) -> Bool {
-    if let override = aorusGhostPeerOverride(peerId: peerId) {
-        return override > 0
+    guard UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") else {
+        return false
     }
-    return UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode")
+    return !(aorusGhostChatButtonIsShown() && aorusGhostPeerIsExcluded(peerId: peerId))
 }
 '''
         if insert_after in t:
@@ -16471,7 +16481,10 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
             "        // AorusGram: update embedded ghost/avatar capsule\n"
             "        if let aorusGhostAvatarNode = self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
             "            let aorusGhostPeerId = aorusGhostPeerIdForChatInterfaceState(presentationInterfaceState)\n"
-            "            aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: presentationInterfaceState.theme, action: { [weak self] peerId, buttonNode in\n"
+            "            aorusGhostAvatarNode.requestNavigationLayout = { [weak self] transition in\n"
+            "                self?.navigationBar?.requestContainerLayout?(transition)\n"
+            "            }\n"
+            "            aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: presentationInterfaceState.theme, transition: transition, action: { [weak self] peerId, buttonNode in\n"
             "                self?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)\n"
             "            })\n"
             "        }\n"
@@ -16482,7 +16495,10 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
             "    // AorusGram: update embedded ghost/avatar capsule\n"
             "    if let aorusGhostAvatarNode = selfController.chatInfoNavigationButton?.buttonItem.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
             "        let aorusGhostPeerId = aorusGhostPeerIdForChatInterfaceState(updatedChatPresentationInterfaceState)\n"
-            "        aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: updatedChatPresentationInterfaceState.theme, action: { [weak selfController] peerId, buttonNode in\n"
+            "        aorusGhostAvatarNode.requestNavigationLayout = { [weak selfController] transition in\n"
+            "            selfController?.navigationBar?.requestContainerLayout?(transition)\n"
+            "        }\n"
+            "        aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: updatedChatPresentationInterfaceState.theme, transition: transition, action: { [weak selfController] peerId, buttonNode in\n"
             "            selfController?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)\n"
             "        })\n"
             "    }\n"
@@ -16514,18 +16530,44 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     private var glassView: GlassBackgroundView?
     private let ghostButtonNode: ASButtonNode
     private var ghostPeerId: PeerId?
+    private var ghostTheme: PresentationTheme?
     private var ghostAction: ((PeerId, ASButtonNode) -> Void)?
     private var ghostVisible: Bool = false
+    private var ghostIcon: (active: Bool, color: UIColor)?
+    private var ghostVisibilityPending = false
+    private var glassApplied: (size: CGSize, visible: Bool, isDark: Bool)?
     private var isDarkAppearance: Bool = true
+    private var settingsObservers: [NSObjectProtocol] = []
+    // Lays the chat's navigation bar out again, so it takes this node's new width with the same
+    // transition the ghost comes and goes with.
+    var requestNavigationLayout: ((ContainedViewLayoutTransition) -> Void)?
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
         self.ghostButtonNode = ASButtonNode()
         super.init()
         self.isOpaque = false
+        self.ghostButtonNode.isHidden = true
+        self.ghostButtonNode.isUserInteractionEnabled = false
         self.addSubnode(self.ghostButtonNode)
         self.addSubnode(self.avatarNode)
         self.ghostButtonNode.addTarget(self, action: #selector(self.ghostPressed), forControlEvents: .touchUpInside)
+        // Ghost Mode, the ghost's own switch and the chats the ghost is turned off for all live
+        // in the settings, which say when they change: a chat already open takes them up there
+        // and then, rather than at its next state update.
+        // A Siri shortcut turns Ghost Mode on and off without going through the settings, and
+        // says so under a name of its own.
+        self.settingsObservers = ["aorusgram_settings_changed", "aorusgram_ghost_mode_changed"].map { name in
+            NotificationCenter.default.addObserver(forName: NSNotification.Name(name), object: nil, queue: .main) { [weak self] _ in
+                self?.applyGhost(transition: .animated(duration: 0.4, curve: .spring))
+            }
+        }
+    }
+
+    deinit {
+        for observer in self.settingsObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     override func didLoad() {
@@ -16541,18 +16583,99 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         self.setNeedsLayout()
     }
 
-    func updateGhost(peerId: PeerId?, theme: PresentationTheme, action: @escaping (PeerId, ASButtonNode) -> Void) {
+    func updateGhost(peerId: PeerId?, theme: PresentationTheme, transition: ContainedViewLayoutTransition, action: @escaping (PeerId, ASButtonNode) -> Void) {
         self.ghostPeerId = peerId
+        self.ghostTheme = theme
         self.ghostAction = action
-        let isVisible = peerId != nil
-        let isActive = peerId.flatMap { aorusGhostIsActive(peerId: $0) } ?? false
-        self.ghostVisible = isVisible
-        self.ghostButtonNode.isHidden = !isVisible
         self.isDarkAppearance = theme.overallDarkAppearance
-        self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: aorusGhostIconColor(theme)), for: [])
-        self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
+        self.applyGhost(transition: transition)
+    }
+
+    private var wantsGhost: Bool {
+        return self.ghostPeerId != nil && aorusGhostChatButtonIsShown()
+    }
+
+    private func applyGhost(transition: ContainedViewLayoutTransition) {
+        guard let theme = self.ghostTheme else {
+            return
+        }
+        let isActive = self.ghostPeerId.flatMap { aorusGhostIsActive(peerId: $0) } ?? false
+        let color = aorusGhostIconColor(theme)
+        if self.ghostIcon?.active != isActive || self.ghostIcon?.color != color {
+            let isFirst = self.ghostIcon == nil
+            self.ghostIcon = (isActive, color)
+            let image = aorusGhostIconImage(active: isActive, color: color)
+            if !isFirst, transition.isAnimated, self.ghostVisible {
+                UIView.transition(with: self.ghostButtonNode.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                    self.ghostButtonNode.setImage(image, for: [])
+                })
+            } else {
+                self.ghostButtonNode.setImage(image, for: [])
+            }
+            self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
+        }
+        guard self.wantsGhost != self.ghostVisible else {
+            return
+        }
+        // Not yet laid out: the bar measures it as it is about to be drawn.
+        if self.bounds.width.isZero {
+            self.setGhostVisible(self.wantsGhost, transition: .immediate)
+            return
+        }
+        // Later in the same turn of the run loop, together with the bar: the avatar moves across
+        // the node while the bar moves the node the other way, and the two only cancel out --
+        // the avatar staying exactly where it is -- if they start together. It also keeps the
+        // chat's layout out of the middle of the state update that asked for this.
+        guard !self.ghostVisibilityPending else {
+            return
+        }
+        self.ghostVisibilityPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            self.ghostVisibilityPending = false
+            guard self.wantsGhost != self.ghostVisible else {
+                return
+            }
+            self.setGhostVisible(self.wantsGhost, transition: transition)
+            self.requestNavigationLayout?(transition)
+        }
+    }
+
+    private func setGhostVisible(_ isVisible: Bool, transition: ContainedViewLayoutTransition) {
+        self.ghostVisible = isVisible
+        self.ghostButtonNode.isUserInteractionEnabled = isVisible
         self.invalidateCalculatedLayout()
-        self.setNeedsLayout()
+        transition.updateFrame(node: self.avatarNode, frame: self.avatarFrame)
+        self.updateGlass(size: self.ghostSize, transition: transition)
+        if isVisible {
+            self.ghostButtonNode.frame = self.ghostFrame
+            self.ghostButtonNode.isHidden = false
+            if transition.isAnimated {
+                // Out from behind the avatar as the capsule opens.
+                self.ghostButtonNode.alpha = 0.0
+                self.ghostButtonNode.layer.transform = CATransform3DMakeScale(0.5, 0.5, 1.0)
+                transition.updateAlpha(node: self.ghostButtonNode, alpha: 1.0)
+                transition.updateTransformScale(node: self.ghostButtonNode, scale: 1.0)
+            } else {
+                self.ghostButtonNode.alpha = 1.0
+                self.ghostButtonNode.layer.transform = CATransform3DIdentity
+            }
+        } else if transition.isAnimated {
+            // Back in behind the avatar as the capsule closes, and only then hidden.
+            transition.updateAlpha(node: self.ghostButtonNode, alpha: 0.0, completion: { [weak self] _ in
+                guard let self, !self.ghostVisible else {
+                    return
+                }
+                self.ghostButtonNode.isHidden = true
+                self.ghostButtonNode.alpha = 1.0
+                self.ghostButtonNode.layer.transform = CATransform3DIdentity
+            })
+            transition.updateTransformScale(node: self.ghostButtonNode, scale: 0.5)
+        } else {
+            self.ghostButtonNode.isHidden = true
+        }
     }
 
     @objc private func ghostPressed() {
@@ -16574,28 +16697,50 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         })
     }
 
-    override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
+    private var ghostSize: CGSize {
         return self.ghostVisible ? CGSize(width: 84.0, height: 44.0) : CGSize(width: 44.0, height: 44.0)
+    }
+
+    private var avatarFrame: CGRect {
+        return CGRect(x: self.ghostVisible ? 40.0 : 0.0, y: 0.0, width: 44.0, height: 44.0)
+    }
+
+    private var ghostFrame: CGRect {
+        return CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
+    }
+
+    override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
+        return self.ghostSize
+    }
+
+    private func updateGlass(size: CGSize, transition: ContainedViewLayoutTransition) {
+        guard let glassView = self.glassView else {
+            return
+        }
+        let aorusGlassOn = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && ((UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true)
+        // Interface 2.0 shows the avatar and the ghost badge bare: this node carries a pill of
+        // its own on top of the navigation bar's right-hand pane, so hiding only that one would
+        // leave this capsule behind them. The back button's pane is a different view and keeps
+        // its own tablet.
+        let aorusHidesNavCapsule = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && AorusInterfaceV2Run.isEnabled
+        let isVisible = self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule
+        // A layout that only repeats what an animated change already set leaves that change to run.
+        if let glassApplied = self.glassApplied, glassApplied.size == size, glassApplied.visible == isVisible, glassApplied.isDark == self.isDarkAppearance {
+            return
+        }
+        self.glassApplied = (size, isVisible, self.isDarkAppearance)
+        transition.updateFrame(view: glassView, frame: CGRect(origin: .zero, size: size))
+        glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: isVisible, transition: ComponentTransition(transition))
     }
 
     override func layout() {
         super.layout()
-        let size = self.calculatedSize
-        if let glassView = self.glassView {
-            glassView.frame = CGRect(origin: .zero, size: size)
-            let aorusGlassOn = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && ((UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true)
-            // Interface 2.0 shows the avatar and the ghost badge bare: this node carries a pill of
-            // its own on top of the navigation bar's right-hand pane, so hiding only that one would
-            // leave this capsule behind them. The back button's pane is a different view and keeps
-            // its own tablet.
-            let aorusHidesNavCapsule = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && AorusInterfaceV2Run.isEnabled
-            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule, transition: .immediate)
-        }
+        // Each subnode in the place this state puts it. While the ghost comes or goes these are
+        // the places its animation is already heading for, so they leave it running.
+        self.updateGlass(size: self.ghostSize, transition: .immediate)
+        self.avatarNode.frame = self.avatarFrame
         if self.ghostVisible {
-            self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
-            self.avatarNode.frame = CGRect(x: 40.0, y: 0.0, width: 44.0, height: 44.0)
-        } else {
-            self.avatarNode.frame = CGRect(x: 0.0, y: 0.0, width: 44.0, height: 44.0)
+            self.ghostButtonNode.frame = self.ghostFrame
         }
     }
 }
@@ -16655,35 +16800,20 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
         injection = anchor + r'''
 
     // AorusGram: per-chat ghost toggle action
+    // The ghost is only there while Ghost Mode is on, so it has one thing to do: turn Ghost Mode
+    // off for this chat, or back on. What it turned off is kept in the settings; the ghost redraws
+    // from them when they say they have changed.
     func aorusGhostPeerButtonPressed(peerId: PeerId, buttonNode: ASButtonNode) {
-        let legacyKey = "aorusgram_ghost_peer_\(peerId.toInt64())"
         let overrideKey = "aorusgram_ghost_peer_override_\(peerId.toInt64())"
-        let globalValue = UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode")
-        let currentValue = aorusGhostIsActive(peerId: peerId)
-        if globalValue {
-            if currentValue {
-                UserDefaults.standard.set(-1, forKey: overrideKey)
-                UserDefaults.standard.removeObject(forKey: legacyKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: overrideKey)
-                UserDefaults.standard.removeObject(forKey: legacyKey)
-            }
+        // Before the ghost stood in for Ghost Mode a chat could be turned on by itself too; that
+        // key has no meaning any more.
+        UserDefaults.standard.removeObject(forKey: "aorusgram_ghost_peer_\(peerId.toInt64())")
+        if aorusGhostIsActive(peerId: peerId) {
+            UserDefaults.standard.set(-1, forKey: overrideKey)
         } else {
-            if currentValue {
-                UserDefaults.standard.removeObject(forKey: overrideKey)
-                UserDefaults.standard.removeObject(forKey: legacyKey)
-            } else {
-                UserDefaults.standard.set(1, forKey: overrideKey)
-                UserDefaults.standard.removeObject(forKey: legacyKey)
-            }
+            UserDefaults.standard.removeObject(forKey: overrideKey)
         }
-        let updatedValue = aorusGhostIsActive(peerId: peerId)
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
-        if let image = aorusGhostIconImage(active: updatedValue, color: aorusGhostIconColor(self.presentationInterfaceState.theme)) {
-            UIView.transition(with: buttonNode.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
-                buttonNode.setImage(image, for: [])
-            })
-        }
         self.updateChatPresentationInterfaceState(animated: true, interactive: false, { $0 })
     }
 '''
@@ -30681,6 +30811,8 @@ def main() -> None:
     patch_qr_scan_light(tg)
     from aorus_bot_button_ink import patch_bot_button_ink
     patch_bot_button_ink(tg)
+    from aorus_live_theme import patch_live_theme
+    patch_live_theme(tg)
     patch_tab_settings(tg)
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)

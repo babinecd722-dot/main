@@ -80,7 +80,9 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
 
     private var snapshot: AorusAIWorkTrailSnapshot
     private let source: () -> AorusAIWorkTrailSnapshot?
-    private let palette: AorusAIPalette
+    private var palette: AorusAIPalette
+    private var theme: PresentationTheme
+    private var themeSubscription: AorusLiveThemeSubscription?
 
     private var phases: [AorusAIWorkPhase] { return snapshot.phases }
     private var isRunning: Bool { return snapshot.isRunning }
@@ -99,8 +101,18 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         self.snapshot = snapshot
         self.source = source
         self.palette = AorusAIPalette.resolve(theme)
+        self.theme = theme
         super.init(nibName: nil, bundle: nil)
         rebuildRows()
+        self.themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            self.theme = presentationData.theme
+            self.palette = AorusAIPalette.resolve(presentationData.theme)
+            guard self.isViewLoaded else { return }
+            self.view.backgroundColor = self.palette.background
+            self.titleLabel.textColor = self.palette.label
+            self.tableView.reloadData()
+        })
     }
 
     required init?(coder: NSCoder) { preconditionFailure("AorusAIWorkTrailController is not built from a coder") }

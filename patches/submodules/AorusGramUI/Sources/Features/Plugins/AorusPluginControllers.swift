@@ -97,7 +97,8 @@ private enum AorusPluginUIString {
 
 private final class AorusPluginsListController: ViewController, UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate {
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let emptyView = AorusPluginsEmptyView()
     private var manifests: [AorusPluginManifest] = []
@@ -128,6 +129,27 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         modeSwitch.onChange = { [weak self] index in self?.showMarket(index == 1) }
         self.modeSwitch = modeSwitch
         navigationItem.titleView = modeSwitch
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    /// The theme changed while the plugins are open -- the system appearance turned, or another
+    /// theme was picked -- and everything drawn in the old colours is drawn again, the Market
+    /// with it if it has been opened, each where it stands.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        let theme = presentationData.theme
+        modeSwitch?.update(theme: theme)
+        marketView?.update(theme: theme)
+        createButton?.update(tint: theme.list.itemAccentColor, isDark: theme.overallDarkAppearance)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = theme.list.blocksBackgroundColor
+        tableView.backgroundColor = theme.list.blocksBackgroundColor
+        tableView.separatorColor = theme.list.itemBlocksSeparatorColor
+        emptyView.configure(theme: theme)
+        tableView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -435,7 +457,8 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
 
 private final class AorusPluginDetailController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var observer: NSObjectProtocol?
@@ -446,10 +469,22 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = record.manifest.name
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.reloadData()
+    }
 
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
@@ -661,7 +696,8 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     }
 
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let mode: Mode
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
@@ -684,6 +720,18 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         self.isLoadingStatus = record.manifest.market?.isOwn == true
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = mode == .management ? record.manifest.name : AorusPluginUIString.configure.text
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1112,7 +1160,8 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
 }
 
 private final class AorusPluginLongTextController: ViewController {
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let textView = UITextView()
     private let saved: (String) -> Void
     private let maxLength: Int
@@ -1125,6 +1174,21 @@ private final class AorusPluginLongTextController: ViewController {
         self.title = title
         textView.text = text
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: AorusPluginUIString.save.text, style: .done, target: self, action: #selector(save))
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    /// What is being typed stays, and so does the cursor; only the colours change. The keyboard
+    /// follows the app's appearance by itself.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        textView.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        textView.textColor = presentationData.theme.list.itemPrimaryTextColor
+        textView.tintColor = presentationData.theme.list.itemAccentColor
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1163,7 +1227,8 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
         case colors(icon: String)
     }
 
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let mode: Mode
     private var selected: String
     private let changed: (String) -> Void
@@ -1194,6 +1259,17 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
                 action: #selector(chooseCustomColor)
             )
         }
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        collectionView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1364,7 +1440,8 @@ private final class AorusPluginPickerCell: UICollectionViewCell {
 
 private final class AorusPluginEditorController: ViewController, UITextViewDelegate {
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
     private let editor = UITextView()
     private let gutter = AorusPluginLineGutter()
@@ -1420,6 +1497,36 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
             aiButton,
             UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(editMetadata))
         ]
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    /// The code in another theme, with the text, the cursor, the scroll position and the undo
+    /// history exactly as they were: only the page, the gutter, the console and the colours of
+    /// the code are drawn again.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.overallDarkAppearance)
+        guard isNodeLoaded else { return }
+        applyEditorColors()
+        historyControl?.update(theme: presentationData.theme)
+        updateHistoryControl(animated: false)
+        highlight()
+        gutter.setNeedsDisplay()
+    }
+
+    private func applyEditorColors() {
+        let dark = presentationData.theme.overallDarkAppearance
+        let background = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
+        displayNode.backgroundColor = background
+        gutter.configure(dark: dark)
+        currentLineBand.backgroundColor = AorusPluginLineGutter.bandColor(dark: dark)
+        console.backgroundColor = background
+        console.textColor = dark ? UIColor(white: 0.86, alpha: 1) : .darkText
+        console.layer.borderColor = UIColor.separator.resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light)).cgColor
+        editorTools.backgroundColor = dark ? UIColor(white: 0.12, alpha: 0.94) : UIColor(white: 1, alpha: 0.96)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -2146,9 +2253,9 @@ private final class AorusPluginHistoryControl: UIView {
     let redoButton = UIButton(type: .custom)
     private let glass: UIView & AorusPluginGlassBackground
     private let divider = UIView()
-    private let isDark: Bool
-    private let lit: UIColor
-    private let unlit: UIColor
+    private var isDark: Bool
+    private var lit: UIColor
+    private var unlit: UIColor
 
     init(glass: UIView & AorusPluginGlassBackground, theme: PresentationTheme) {
         self.glass = glass
@@ -2192,6 +2299,16 @@ private final class AorusPluginHistoryControl: UIView {
         layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: bounds.height / 2).cgPath
     }
 
+    /// The arrows in another theme. Which of them is lit is the editor's to say again.
+    func update(theme: PresentationTheme) {
+        isDark = theme.overallDarkAppearance
+        lit = theme.list.itemAccentColor
+        unlit = theme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
+        divider.backgroundColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
+        layer.shadowOpacity = isDark ? 0.35 : 0.12
+        setNeedsLayout()
+    }
+
     func update(canUndo: Bool, canRedo: Bool, animated: Bool) {
         let change = {
             self.undoButton.tintColor = canUndo ? self.lit : self.unlit
@@ -2216,7 +2333,8 @@ private final class AorusPluginHistoryControl: UIView {
 }
 
 private final class AorusPluginSettingsController: ViewController, UITableViewDataSource, UITableViewDelegate {
-    private let context: AccountContext; private let presentationData: PresentationData; private let record: AorusPluginRecord
+    private let context: AccountContext; private var presentationData: PresentationData; private let record: AorusPluginRecord
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = UITableView(frame: .zero, style: .insetGrouped); private var fields: [AorusPluginSettingField] = []; private var values: [String: AorusPluginJSONValue]
     private let emptyLabel = UILabel()
     private var schemaSandbox: AorusPluginSandbox?
@@ -2224,7 +2342,20 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
     private var valuesObserver: NSObjectProtocol?
     private var licenseObserver: NSObjectProtocol?
     private var colorPickerDelegate: AnyObject?
-    init(context: AccountContext, record: AorusPluginRecord) { self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }; self.values = AorusPluginStore.shared.settings(for: record.manifest.id); super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.settings.text; fields = AorusPluginRuntimeManager.shared.settingsSchema(id: record.manifest.id) }
+    init(context: AccountContext, record: AorusPluginRecord) { self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }; self.values = AorusPluginStore.shared.settings(for: record.manifest.id); super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.settings.text; fields = AorusPluginRuntimeManager.shared.settingsSchema(id: record.manifest.id)
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        tableView.reloadData()
+    }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit {
         if let schemaObserver { NotificationCenter.default.removeObserver(schemaObserver) }
@@ -2481,7 +2612,8 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
 
 private final class AorusPluginPermissionsController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private let context: AccountContext
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let requested: Set<AorusPluginPermission>
@@ -2496,6 +2628,18 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
         self.granted = state.sourceDigest == AorusPluginStore.sourceDigest(record.source) ? state.granted : []
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = AorusPluginUIString.permissions.text
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -2561,8 +2705,20 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
 }
 
 private final class AorusPluginDocsController: ViewController {
-    private let presentationData: PresentationData; private let textView = UITextView()
-    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text }
+    private var presentationData: PresentationData; private let textView = UITextView()
+    private var themeSubscription: AorusLiveThemeSubscription?
+    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        textView.textColor = presentationData.theme.list.itemPrimaryTextColor
+    }
     @objc private func exportDocumentation() {
         aorusPluginExportText(AorusPluginTextExport.documentation(AorusPluginDocumentation.text), name: "Plugins_Documentation.md", from: self, anchor: navigationItem.rightBarButtonItem)
     }
@@ -3495,6 +3651,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private let pluginId: String
     private var page: AorusPluginUIPage
     private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var integrationObserver: NSObjectProtocol?
     /// The page is the root of a tab in the bottom bar. A tab whose page the plugin withdraws
@@ -3522,6 +3679,15 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = page.title
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        // A page opened over the app follows the theme by itself; a tab's bar is drawn by the
+        // tab bar's own screen, which hands the page its theme as well.
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            guard let self else { return }
+            if !self.isTab {
+                self.aorusUpdateChrome(presentationData)
+            }
+            self.updatePresentationData(presentationData)
+        })
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -4172,7 +4338,8 @@ private final class AorusPluginBadgeView: UIView {
 /// one that was never granted anything is to read the source and guess.
 private final class AorusPluginDiagnosticsController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private let record: AorusPluginRecord
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var rows: [(String, String, Bool)] = []
 
@@ -4181,6 +4348,18 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = AorusPluginUIString.diagnostics.text
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
+    }
+
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.reloadData()
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -4283,7 +4462,8 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
 /// logged about it, and it keeps updating while the screen is open.
 private final class AorusPluginConsoleController: ViewController {
     private let record: AorusPluginRecord
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
+    private var themeSubscription: AorusLiveThemeSubscription?
     private let textView = UITextView()
     private let emptyLabel = UILabel()
     private var timer: Timer?
@@ -4301,11 +4481,26 @@ private final class AorusPluginConsoleController: ViewController {
         export.accessibilityLabel = AorusPluginUIString.export.text
         // Display lays these out from left to right, including its glass navigation bar.
         navigationItem.rightBarButtonItems = [export, clear]
+        themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
+            self?.updatePresentationData(presentationData)
+        })
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     deinit { timer?.invalidate() }
+
+    /// The log in another theme: the page, and every entry drawn again in its new colours.
+    private func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        aorusUpdateChrome(presentationData)
+        guard isNodeLoaded else { return }
+        let dark = presentationData.theme.overallDarkAppearance
+        displayNode.backgroundColor = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1.0) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1.0)
+        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        shownEntries = nil
+        refresh()
+    }
 
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
