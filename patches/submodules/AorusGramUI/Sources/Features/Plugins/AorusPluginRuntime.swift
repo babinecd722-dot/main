@@ -3498,7 +3498,7 @@ private enum AorusPluginFeatureBroker {
         Definition("deviceMicrophone", "media"), Definition("voiceTwinEnabled", "media"),
         Definition("voiceTwinPreset", "media", "select", options: ["anonymous", "male", "female", "robot", "child"]),
         Definition("videoMasksEnabled", "media"),
-        Definition("videoMaskPreset", "media", "select", options: ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat"]),
+        Definition("videoMaskPreset", "media", "select", options: ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", "blur"]),
         Definition("callRecording", "calls"),
         Definition("glassUI", "interface"), Definition("amoledMode", "interface"),
         Definition("profileReportButton", "interface"), Definition("squareAvatars", "interface"),
@@ -3603,7 +3603,7 @@ private enum AorusPluginFeatureBroker {
             guard let text = value as? String, ["anonymous", "male", "female", "robot", "child"].contains(text) else { return typeError() }
             manager.voiceTwinPreset = text
         case "videoMaskPreset":
-            let allowed = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat"] + AorusCustomMaskStore.records(isRussian: false).map(\.presetKey)
+            let allowed = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", "blur"] + AorusCustomMaskStore.records(isRussian: false).map(\.presetKey)
             guard let text = value as? String, allowed.contains(text) else { return typeError() }
             manager.videoMaskPreset = text
         default:

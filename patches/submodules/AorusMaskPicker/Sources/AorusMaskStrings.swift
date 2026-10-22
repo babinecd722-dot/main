@@ -3,7 +3,7 @@ import Foundation
 // GENERATED from AorusL10nTable.swift — do not hand-edit.
 //
 // The picker is a leaf module and cannot import AorusGramUI, so it carries its own copy
-// of the nine strings it shows. That copy is generated from the same phrase book the rest
+// of the strings it shows. That copy is generated from the same phrase book the rest
 // of the client uses, and scripts/verify_aorus_branding.py re-checks the two agree, so the
 // duplication cannot quietly drift.
 //
@@ -44,6 +44,7 @@ enum AorusMaskStrings {
         "chrome": "Liquid Chrome",
         "aurora": "Aurora",
         "neonCat": "Neon Cat",
+        "blur": "Blur",
         "custom": "My Mask",
     ]
 
@@ -57,6 +58,7 @@ enum AorusMaskStrings {
         "chrome": "Жидкий хром",
         "aurora": "Аврора",
         "neonCat": "Неон-кот",
+        "blur": "Размытие",
         "custom": "Моя маска",
     ]
 
@@ -107,6 +109,7 @@ enum AorusMaskStrings {
         "chrome": "كروم سائل",
         "aurora": "شفق",
         "neonCat": "قط نيون",
+        "blur": "تمويه",
         "custom": "قناعي",
     ]
 
@@ -120,6 +123,7 @@ enum AorusMaskStrings {
         "chrome": "Вадкі хром",
         "aurora": "Аўрора",
         "neonCat": "Неон-кот",
+        "blur": "Размыццё",
         "custom": "Мая маска",
     ]
 
@@ -133,6 +137,7 @@ enum AorusMaskStrings {
         "chrome": "Crom líquid",
         "aurora": "Aurora",
         "neonCat": "Gat de neó",
+        "blur": "Desenfocament",
         "custom": "La meva màscara",
     ]
 
@@ -146,6 +151,7 @@ enum AorusMaskStrings {
         "chrome": "Tekutý chrom",
         "aurora": "Polární záře",
         "neonCat": "Neonová kočka",
+        "blur": "Rozmazání",
         "custom": "Moje maska",
     ]
 
@@ -159,6 +165,7 @@ enum AorusMaskStrings {
         "chrome": "Flüssigchrom",
         "aurora": "Aurora",
         "neonCat": "Neonkatze",
+        "blur": "Weichzeichner",
         "custom": "Meine Maske",
     ]
 
@@ -172,6 +179,7 @@ enum AorusMaskStrings {
         "chrome": "Cromo líquido",
         "aurora": "Aurora",
         "neonCat": "Gato neón",
+        "blur": "Desenfoque",
         "custom": "Mi máscara",
     ]
 
@@ -185,6 +193,7 @@ enum AorusMaskStrings {
         "chrome": "کروم مایع",
         "aurora": "شفق",
         "neonCat": "گربهٔ نئونی",
+        "blur": "محو",
         "custom": "ماسک من",
     ]
 
@@ -198,6 +207,7 @@ enum AorusMaskStrings {
         "chrome": "Nestemäinen kromi",
         "aurora": "Revontuli",
         "neonCat": "Neonkissa",
+        "blur": "Sumennus",
         "custom": "Oma naamio",
     ]
 
@@ -211,6 +221,7 @@ enum AorusMaskStrings {
         "chrome": "Chrome liquide",
         "aurora": "Aurore",
         "neonCat": "Chat néon",
+        "blur": "Flou",
         "custom": "Mon masque",
     ]
 
@@ -224,6 +235,7 @@ enum AorusMaskStrings {
         "chrome": "כרום נוזלי",
         "aurora": "זוהר קוטבי",
         "neonCat": "חתול ניאון",
+        "blur": "טשטוש",
         "custom": "המסכה שלי",
     ]
 
@@ -237,6 +249,7 @@ enum AorusMaskStrings {
         "chrome": "Tekući krom",
         "aurora": "Polarna svjetlost",
         "neonCat": "Neonska mačka",
+        "blur": "Zamućenje",
         "custom": "Moja maska",
     ]
 
@@ -250,6 +263,7 @@ enum AorusMaskStrings {
         "chrome": "Folyékony króm",
         "aurora": "Sarki fény",
         "neonCat": "Neonmacska",
+        "blur": "Elmosás",
         "custom": "A maszkom",
     ]
 
@@ -263,6 +277,7 @@ enum AorusMaskStrings {
         "chrome": "Krom cair",
         "aurora": "Aurora",
         "neonCat": "Kucing neon",
+        "blur": "Buram",
         "custom": "Topengku",
     ]
 
@@ -276,6 +291,7 @@ enum AorusMaskStrings {
         "chrome": "Cromo liquido",
         "aurora": "Aurora",
         "neonCat": "Gatto al neon",
+        "blur": "Sfocatura",
         "custom": "La mia maschera",
     ]
 
@@ -289,6 +305,7 @@ enum AorusMaskStrings {
         "chrome": "リキッドクローム",
         "aurora": "オーロラ",
         "neonCat": "ネオンキャット",
+        "blur": "ぼかし",
         "custom": "マイマスク",
     ]
 
@@ -302,6 +319,7 @@ enum AorusMaskStrings {
         "chrome": "Сұйық хром",
         "aurora": "Аврора",
         "neonCat": "Неон мысық",
+        "blur": "Бұлыңғырлау",
         "custom": "Менің маскам",
     ]
 
@@ -315,6 +333,7 @@ enum AorusMaskStrings {
         "chrome": "리퀴드 크롬",
         "aurora": "오로라",
         "neonCat": "네온 고양이",
+        "blur": "흐림",
         "custom": "내 마스크",
     ]
 
@@ -328,6 +347,7 @@ enum AorusMaskStrings {
         "chrome": "Krom cair",
         "aurora": "Aurora",
         "neonCat": "Kucing neon",
+        "blur": "Kabur",
         "custom": "Topeng saya",
     ]
 
@@ -341,6 +361,7 @@ enum AorusMaskStrings {
         "chrome": "Flytende krom",
         "aurora": "Nordlys",
         "neonCat": "Neonkatt",
+        "blur": "Uskarphet",
         "custom": "Min maske",
     ]
 
@@ -354,6 +375,7 @@ enum AorusMaskStrings {
         "chrome": "Vloeibaar chroom",
         "aurora": "Aurora",
         "neonCat": "Neonkat",
+        "blur": "Vervaging",
         "custom": "Mijn masker",
     ]
 
@@ -367,6 +389,7 @@ enum AorusMaskStrings {
         "chrome": "Płynny chrom",
         "aurora": "Zorza",
         "neonCat": "Neonowy kot",
+        "blur": "Rozmycie",
         "custom": "Moja maska",
     ]
 
@@ -380,6 +403,7 @@ enum AorusMaskStrings {
         "chrome": "Cromo líquido",
         "aurora": "Aurora",
         "neonCat": "Gato neon",
+        "blur": "Desfoque",
         "custom": "Minha máscara",
     ]
 
@@ -393,6 +417,7 @@ enum AorusMaskStrings {
         "chrome": "Crom lichid",
         "aurora": "Auroră",
         "neonCat": "Pisică neon",
+        "blur": "Estompare",
         "custom": "Masca mea",
     ]
 
@@ -406,6 +431,7 @@ enum AorusMaskStrings {
         "chrome": "Tekutý chróm",
         "aurora": "Polárna žiara",
         "neonCat": "Neónová mačka",
+        "blur": "Rozmazanie",
         "custom": "Moja maska",
     ]
 
@@ -419,6 +445,7 @@ enum AorusMaskStrings {
         "chrome": "Течни хром",
         "aurora": "Поларна светлост",
         "neonCat": "Неонска мачка",
+        "blur": "Замућење",
         "custom": "Моја маска",
     ]
 
@@ -432,6 +459,7 @@ enum AorusMaskStrings {
         "chrome": "Flytande krom",
         "aurora": "Norrsken",
         "neonCat": "Neonkatt",
+        "blur": "Oskärpa",
         "custom": "Min mask",
     ]
 
@@ -445,6 +473,7 @@ enum AorusMaskStrings {
         "chrome": "Sıvı krom",
         "aurora": "Aurora",
         "neonCat": "Neon kedi",
+        "blur": "Bulanıklaştırma",
         "custom": "Maskem",
     ]
 
@@ -458,6 +487,7 @@ enum AorusMaskStrings {
         "chrome": "Рідкий хром",
         "aurora": "Аврора",
         "neonCat": "Неон-кіт",
+        "blur": "Розмиття",
         "custom": "Моя маска",
     ]
 
@@ -471,6 +501,7 @@ enum AorusMaskStrings {
         "chrome": "Suyuq xrom",
         "aurora": "Aurora",
         "neonCat": "Neon mushuk",
+        "blur": "Xiralashtirish",
         "custom": "Mening niqobim",
     ]
 
@@ -484,6 +515,7 @@ enum AorusMaskStrings {
         "chrome": "Crom lỏng",
         "aurora": "Cực quang",
         "neonCat": "Mèo neon",
+        "blur": "Làm mờ",
         "custom": "Mặt nạ của tôi",
     ]
 
@@ -497,6 +529,7 @@ enum AorusMaskStrings {
         "chrome": "液态铬",
         "aurora": "极光",
         "neonCat": "霓虹猫",
+        "blur": "模糊",
         "custom": "我的面具",
     ]
 
@@ -510,6 +543,7 @@ enum AorusMaskStrings {
         "chrome": "液態鉻",
         "aurora": "極光",
         "neonCat": "霓虹貓",
+        "blur": "模糊",
         "custom": "我的面具",
     ]
 

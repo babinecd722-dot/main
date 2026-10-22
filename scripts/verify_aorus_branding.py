@@ -659,7 +659,7 @@ def main() -> None:
         if "private let detectionContext" not in mask_text or "self.detectionContext.createCGImage" not in mask_text:
             err.append("VideoMasks: Vision proxy generation can still block outgoing camera delivery")
         detection_schedule_start = mask_text.find("if snapshot.needsDetection {")
-        pose_guard_start = mask_text.find("guard let pose = snapshot.pose", detection_schedule_start)
+        pose_guard_start = mask_text.find("guard let tracked = snapshot.pose", detection_schedule_start)
         if detection_schedule_start == -1 or pose_guard_start == -1 or "makeDetectionFrame" in mask_text[detection_schedule_start:pose_guard_start]:
             err.append("VideoMasks: Vision proxy work still runs synchronously in the capture callback")
         if "private let poolLock" not in mask_text or "isPlausible" not in mask_text or "FrameGeometry" not in mask_text:
@@ -674,13 +674,25 @@ def main() -> None:
             err.append("VideoMasks: Vision must own an immutable camera-frame snapshot")
         if "roundVideoBack" not in mask_text or "roundVideoFront" not in mask_text or "publishesPreview" not in mask_text:
             err.append("VideoMasks: front and rear round-video streams are not isolated")
-        if "CIPerspectiveTransform" not in mask_text or "observation.yaw" not in mask_text or "landmarks?.leftEye" not in mask_text:
+        if "CIPerspectiveTransform" not in mask_text or "AorusFaceGeometry.solvePose(input, frameSize:" not in mask_text or "landmarks?.leftEye" not in mask_text:
             err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
+        # The pose is solved from the eyes, the nose and the mouth and carried forward between
+        # readings; the blur preset blurs the face rather than drawing over it.
+        for marker, message in (
+            ("request.constellation = .constellation76Points", "VideoMasks: landmarks are read from the coarse constellation"),
+            ("AorusFaceGeometry.extrapolate(tracked.pose, velocity: snapshot.velocity", "VideoMasks: the mask is drawn where the face was, not where it is"),
+            ("reading.pose.pitch = measuredPitch - ", "VideoMasks: a constant nod draws every mask as a trapezoid"),
+            ("if snapshot.preset == Self.blurPreset {", "VideoMasks: the blur preset is not composited"),
+            ("private static func blurringFace(in image: CIImage, pose: AorusFacePose) -> CIImage", "VideoMasks: the face blur is missing"),
+            ('let hold: CFTimeInterval = self.lastPreset == Self.blurPreset ? 2.5 : 0.9', "VideoMasks: a blurred face is shown again the moment tracking falters"),
+        ):
+            if marker not in mask_text:
+                err.append(message)
         if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:
             err.append("VideoMasks: PNG asset/custom-mask loading is incomplete")
         if 'Self.customPreset + ":"' not in mask_text or "customMaskURL(for preset:" not in mask_text:
             err.append("VideoMasks: named custom-mask loading is incomplete")
-        if "Vision's face box can end above the visible jaw" not in mask_text:
+        if "verticalStretch: AorusFaceGeometry.verticalStretch(chinDrop: pose.chinDrop)" not in mask_text:
             err.append("VideoMasks: full-face mask coverage geometry is missing")
         if ".cropped(to: image.extent)" not in mask_text:
             err.append("VideoMasks: transformed masks can expand the frame and produce black borders")
@@ -701,8 +713,12 @@ def main() -> None:
             err.append("VideoMasks: local preview reintroduces delayed/rasterized tracking")
         if "self.isOpaque = false" not in overlay_text or "self.imageView.isOpaque = false" not in overlay_text:
             err.append("VideoMasks: local call overlay can render transparent pixels as black")
-        if "self.imageView.layer.transform = CATransform3DIdentity" not in overlay_text or "CATransform3DRotate" in overlay_text:
+        if "target.layer.transform = CATransform3DIdentity" not in overlay_text or "CATransform3DRotate" in overlay_text:
             err.append("VideoMasks: local call overlay can freeze the native preview through 3D flattening")
+        if 'if let values = info["quad"] as? [NSNumber], values.count == 8 {' not in overlay_text:
+            err.append("VideoMasks: the local preview is not laid on the compositor's corners")
+        if "private final class AorusFaceBlurPreviewView: UIView" not in overlay_text:
+            err.append("VideoMasks: the local preview shows no blur for the blur preset")
 
     camera_output = tg / "submodules" / "Camera" / "CameraLegacy" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file():
@@ -2059,7 +2075,7 @@ def main() -> None:
         if "if case .BlockQuote = entities[i].type {" in entities_text:
             err.append("BlockQuote: the upstream merge pass still stops at the first quote")
 
-    # The picker is a leaf module and carries its own copy of the nine strings it shows,
+    # The picker is a leaf module and carries its own copy of the strings it shows,
     # generated from AorusL10nTable. Re-check the two agree: a translation fixed in the main
     # phrase book but not regenerated here would leave the call screen showing the old wording,
     # and nothing else in the build would notice.
@@ -2071,7 +2087,7 @@ def main() -> None:
         wanted = {
             "_button": "Mask", "skull": "Crystal Skull", "cyber": "Cyber Visor",
             "oni": "Oni Mask", "phantom": "Phantom", "chrome": "Liquid Chrome",
-            "aurora": "Aurora", "neonCat": "Neon Cat", "custom": "My Mask",
+            "aurora": "Aurora", "neonCat": "Neon Cat", "blur": "Blur", "custom": "My Mask",
         }
         raw_codes = {"zhHans": "zh-hans", "zhHant": "zh-hant"}
         picker_tables = {
@@ -4150,6 +4166,17 @@ def main() -> None:
             ("super.init(navigationBarPresentationData: AorusOldInterface.isEnabled ? aorusAINavigationBarPresentationData(presentationData) : nil)", "AorusAI: a hidden Telegram bar draws a second back arrow"),
             # The glass of Interface 2.0's toasts, not frosted regular glass.
             ("let effect = UIGlassEffect(style: .clear)", "AorusAI: the glass is frosted rather than clear"),
+            # The old interface has no glass: the system's is never made there, the title is the
+            # bar's own text, the composer is 12.0's input panel, the button over the thread is
+            # 12.0's, the user's turn is a flat card and the dialogs are Telegram's own.
+            ("if #available(iOS 26.0, *), !AorusOldInterface.isEnabled {", "AorusAI: the old interface still makes the system's glass"),
+            ("private func layoutClassicTitle(hasStatus: Bool, transition: ComponentTransition)", "AorusAI: the old interface's title sits in a capsule"),
+            ("private func updateClassicLayout(size: CGSize, panel: BlurredBackgroundView, transition: ContainedViewLayoutTransition)", "AorusAI: the old interface's composer is not 12.0's input panel"),
+            ("composer.classicPanelExtension = max(0.0, layout.size.height - composerFrame.maxY)", "AorusAI: the old interface's input panel stops short of the screen's edge"),
+            ("classicRing.image = PresentationResourcesChat.chatHistoryNavigationButtonBackground(theme)", "AorusAI: the old interface's scroll button is not 12.0's"),
+            ("bubble.backgroundColor = isUser && bubbleGlass == nil ? palette.controlFill : .clear", "AorusAI: the old interface's own turn is drawn in glass"),
+            ("topBlurView.isHidden = AorusOldInterface.isEnabled", "AorusAI: the old interface draws the newer scroll edges"),
+            ("private func aorusAIPresentDialog(", "AorusAI: the old interface asks in UIKit's glass dialogs"),
             # The bubble's pane is laid out in the bubble's own pass, where its size is final: from
             # the cell it took the previous pass's size, half a pane under a message just sent.
             ("bubble.onLayout = { [weak self] size in", "AorusAI: a sent message's pane is sized from the layout before"),

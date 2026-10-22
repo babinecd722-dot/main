@@ -6,11 +6,13 @@ import Vision
 
 /// Real-time face-mask compositor shared by round videos and outgoing calls.
 ///
-/// Vision landmarks anchor the artwork to the eyes, while yaw, pitch and roll
-/// produce a perspective quad. Detection is throttled, but the pose is retained
-/// and smoothed between detections so short occlusions do not make the mask fall
-/// off the face. Processing is fail-open: callers use the original frame on any
-/// unsupported input or transient failure.
+/// Vision's landmarks are solved into a head pose (AorusFaceGeometry): the pupils place,
+/// size and tilt the artwork, the corners of the eyes, the nose and the mouth turn it, and
+/// the artwork is drawn as a plane through the eyes seen in perspective. Detection is
+/// throttled, but the pose is retained, smoothed and carried forward between detections so
+/// the mask keeps up with a moving face and short occlusions do not make it fall off.
+/// The blur preset blurs the face instead of covering it. Processing is fail-open: callers
+/// use the original frame on any unsupported input or transient failure.
 @objcMembers
 public final class AorusVideoMaskProcessor: NSObject {
     public static let shared = AorusVideoMaskProcessor()
@@ -40,26 +42,22 @@ public final class AorusVideoMaskProcessor: NSObject {
         return (defaults.string(forKey: Self.presetKey) ?? "skull") != Self.offPreset
     }
 
+    /// The preset that blurs the face rather than drawing over it. It has no artwork.
+    public static let blurPreset = "blur"
+
     public static var supportedPresets: [String] {
-        return ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", Self.customPreset]
+        return ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", Self.blurPreset, Self.customPreset]
     }
 
     private struct FacePose {
+        /// Vision's box round the face, for telling one face from another.
         var face: CGRect
-        var leftEye: CGPoint
-        var rightEye: CGPoint
-        var nose: CGPoint
-        var mouth: CGPoint
-        var roll: CGFloat
-        var yaw: CGFloat
-        var pitch: CGFloat
-
-        var eyeMidpoint: CGPoint {
-            return CGPoint(x: (leftEye.x + rightEye.x) * 0.5, y: (leftEye.y + rightEye.y) * 0.5)
-        }
+        var pose: AorusFacePose
+        /// When the frame it was read from was taken.
+        var time: CFTimeInterval
 
         var eyeDistance: CGFloat {
-            return hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y)
+            return self.pose.apparentPupilDistance
         }
     }
 
@@ -68,6 +66,8 @@ public final class AorusVideoMaskProcessor: NSObject {
     /// frame into the outgoing video.
     private struct RenderSnapshot {
         let pose: FacePose?
+        let velocity: AorusFaceVelocity
+        let pitchBaseline: CGFloat
         let template: CIImage?
         let preset: String
         let generation: UInt
@@ -106,6 +106,10 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var detectionInFlight = false
     private var trackingGeneration: UInt = 0
     private var smoothedPose: FacePose?
+    private var poseVelocity = AorusFaceVelocity.zero
+    /// The nod the face holds, followed slowly: what a person's proportions, or a camera held
+    /// below the face, read as a constant nod, which would draw every mask as a trapezoid.
+    private var pitchBaseline: CGFloat?
     private var missedDetections = 0
     private var lastSuccessfulDetectionTime: CFTimeInterval = 0.0
     private var frameGeometry: FrameGeometry?
@@ -183,6 +187,8 @@ public final class AorusVideoMaskProcessor: NSObject {
     private func resetTrackingLocked(clearGeometry: Bool) {
         self.trackingGeneration &+= 1
         self.smoothedPose = nil
+        self.poseVelocity = .zero
+        self.pitchBaseline = nil
         self.missedDetections = 0
         self.lastSuccessfulDetectionTime = 0.0
         self.lastDetectionTime = 0.0
@@ -363,11 +369,13 @@ public final class AorusVideoMaskProcessor: NSObject {
             // the inactive stream's relaxed cadence.
             self.lastDetectionTime = 0.0
         }
+        // As often as Vision keeps up with while the face is on screen: every reading is a
+        // frame less for the mask to be carried forward over.
         let interval: CFTimeInterval
         if self.smoothedPose == nil {
             interval = 0.05
         } else {
-            interval = realtimeTracking ? 0.066 : 0.18
+            interval = realtimeTracking ? 0.04 : 0.18
         }
         let needsDetection = !self.detectionInFlight && now - self.lastDetectionTime >= interval
         if needsDetection {
@@ -376,6 +384,8 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
         snapshot = RenderSnapshot(
             pose: self.smoothedPose,
+            velocity: self.poseVelocity,
+            pitchBaseline: self.pitchBaseline ?? 0.0,
             template: self.template(for: preset),
             preset: preset,
             generation: self.trackingGeneration,
@@ -393,28 +403,40 @@ public final class AorusVideoMaskProcessor: NSObject {
                 generation: snapshot.generation,
                 previous: snapshot.pose,
                 preset: snapshot.preset,
-                mirrored: mirrored
+                mirrored: mirrored,
+                time: now,
+                pitchBaseline: snapshot.pitchBaseline
             )
         }
 
-        guard let pose = snapshot.pose,
-              pose.face.width > 4.0,
-              pose.face.height > 4.0,
-              let template = snapshot.template else {
+        guard let tracked = snapshot.pose,
+              tracked.face.width > 4.0,
+              tracked.face.height > 4.0 else {
             return nil
         }
+        // The pose was read from a frame already behind this one; it is carried forward to
+        // this frame as it was moving, so the mask does not trail a moving face.
+        let pose = AorusFaceGeometry.extrapolate(tracked.pose, velocity: snapshot.velocity, elapsed: CGFloat(now - tracked.time))
 
-        let quad = self.destinationQuad(for: pose, preset: snapshot.preset)
-        let mask = template.applyingFilter("CIPerspectiveTransform", parameters: [
-            "inputTopLeft": CIVector(cgPoint: quad.topLeft),
-            "inputTopRight": CIVector(cgPoint: quad.topRight),
-            "inputBottomRight": CIVector(cgPoint: quad.bottomRight),
-            "inputBottomLeft": CIVector(cgPoint: quad.bottomLeft)
-        ])
-        // A close face can push the transformed artwork outside the camera
-        // extent. Crop before restoring orientation so the union extent cannot
-        // shift the frame and expose black borders.
-        let composited = mask.composited(over: image).cropped(to: image.extent)
+        let composited: CIImage
+        if snapshot.preset == Self.blurPreset {
+            composited = Self.blurringFace(in: image, pose: pose)
+        } else {
+            guard let template = snapshot.template else {
+                return nil
+            }
+            let quad = Self.destinationQuad(for: pose, preset: snapshot.preset, frameSize: image.extent.size)
+            let mask = template.applyingFilter("CIPerspectiveTransform", parameters: [
+                "inputTopLeft": CIVector(cgPoint: quad.topLeft),
+                "inputTopRight": CIVector(cgPoint: quad.topRight),
+                "inputBottomRight": CIVector(cgPoint: quad.bottomRight),
+                "inputBottomLeft": CIVector(cgPoint: quad.bottomLeft)
+            ])
+            // A close face can push the transformed artwork outside the camera
+            // extent. Crop before restoring orientation so the union extent cannot
+            // shift the frame and expose black borders.
+            composited = mask.composited(over: image).cropped(to: image.extent)
+        }
         let restored = composited.oriented(Self.inverse(orientation))
         let normalized = restored.transformed(by: CGAffineTransform(translationX: -restored.extent.minX, y: -restored.extent.minY))
 
@@ -497,7 +519,8 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     private func makeDetectionFrame(from image: CIImage) -> DetectionFrame? {
         let longestSide = max(image.extent.width, image.extent.height)
-        let scale = min(1.0, 420.0 / max(longestSide, 1.0))
+        // Large enough for the corners of the eyes and the lips to be placed to a point or two.
+        let scale = min(1.0, 540.0 / max(longestSide, 1.0))
         var proxy = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         proxy = proxy.transformed(by: CGAffineTransform(translationX: -proxy.extent.minX, y: -proxy.extent.minY))
         guard let snapshot = self.detectionContext.createCGImage(proxy, from: proxy.extent) else {
@@ -511,8 +534,17 @@ public final class AorusVideoMaskProcessor: NSObject {
         generation: UInt,
         previous: FacePose?,
         preset: String,
-        mirrored: Bool
+        mirrored: Bool,
+        time: CFTimeInterval,
+        pitchBaseline: CGFloat
     ) {
+        // The solve starts from where the face was, in the nod it actually read, not the one
+        // left after the baseline was taken off.
+        let seed = previous.map { previous -> FacePose in
+            var seed = previous
+            seed.pose.pitch += max(-0.35, min(0.35, pitchBaseline))
+            return seed
+        }
         self.detectionQueue.async { [weak self] in
             guard let self else { return }
             let result: (FacePose?, CGRect)? = autoreleasepool {
@@ -520,7 +552,7 @@ public final class AorusVideoMaskProcessor: NSObject {
                     return nil
                 }
                 return (
-                    self.detectPose(in: frame.image, sourceExtent: frame.sourceExtent, previous: previous),
+                    self.detectPose(in: frame.image, sourceExtent: frame.sourceExtent, previous: seed, time: time),
                     frame.sourceExtent
                 )
             }
@@ -538,8 +570,13 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
     }
 
-    private func detectPose(in image: CGImage, sourceExtent: CGRect, previous: FacePose?) -> FacePose? {
+    private func detectPose(in image: CGImage, sourceExtent: CGRect, previous: FacePose?, time: CFTimeInterval) -> FacePose? {
         let request = VNDetectFaceLandmarksRequest()
+        if #available(iOS 13.0, *) {
+            // The denser constellation outlines the eyes, the nose and the lips more closely,
+            // and it is their corners the turn of the head is read from.
+            request.constellation = .constellation76Points
+        }
         let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
         do {
             try handler.perform([request])
@@ -573,84 +610,113 @@ public final class AorusVideoMaskProcessor: NSObject {
             height: box.height * extent.height
         )
         let landmarks = observation.landmarks
-        let fallbackLeft = CGPoint(x: face.minX + face.width * 0.33, y: face.minY + face.height * 0.62)
-        let fallbackRight = CGPoint(x: face.minX + face.width * 0.67, y: face.minY + face.height * 0.62)
-        var eyePoints = [
-            self.center(of: landmarks?.leftEye, in: face) ?? fallbackLeft,
-            self.center(of: landmarks?.rightEye, in: face) ?? fallbackRight
-        ].sorted(by: { $0.x < $1.x })
-        if eyePoints.count != 2 {
-            eyePoints = [fallbackLeft, fallbackRight]
-        }
-        let detectedNose = self.center(of: landmarks?.nose, in: face)
-        let detectedMouth = self.center(of: landmarks?.outerLips, in: face)
-        let nose = detectedNose
-            ?? CGPoint(x: face.midX, y: face.minY + face.height * 0.46)
-        let mouth = detectedMouth
-            ?? CGPoint(x: face.midX, y: face.minY + face.height * 0.27)
-        let landmarkRoll = atan2(eyePoints[1].y - eyePoints[0].y, eyePoints[1].x - eyePoints[0].x)
-        let visionRoll = CGFloat(truncating: observation.roll ?? 0.0)
-        let roll = abs(landmarkRoll) < 0.8 ? landmarkRoll : visionRoll
 
-        let eyeMidpoint = CGPoint(
-            x: (eyePoints[0].x + eyePoints[1].x) * 0.5,
-            y: (eyePoints[0].y + eyePoints[1].y) * 0.5
-        )
-        let eyeDistance = max(hypot(eyePoints[1].x - eyePoints[0].x, eyePoints[1].y - eyePoints[0].y), face.width * 0.22)
-        let landmarkYaw = detectedNose.map {
-            Self.clamp(($0.x - eyeMidpoint.x) / (eyeDistance * 0.42), min: -1.0, max: 1.0)
-        }
-        let visionYaw = observation.yaw.map {
-            Self.clamp(CGFloat(truncating: $0) / 0.72, min: -1.0, max: 1.0)
-        }
-        let yaw: CGFloat
-        if let visionYaw, let landmarkYaw {
-            yaw = Self.mix(landmarkYaw, visionYaw, factor: 0.68)
-        } else {
-            yaw = visionYaw ?? landmarkYaw ?? 0.0
-        }
-
-        // The pitch observation is unavailable on older supported iOS versions.
-        // The eye-to-nose ratio gives a stable fallback and also catches brief
-        // Vision pose dropouts without tying the mask to a neutral head angle.
-        let landmarkPitch = detectedNose.map {
-            let eyeToNose = (eyeMidpoint.y - $0.y) / eyeDistance
-            return Self.clamp((eyeToNose - 0.47) / 0.22, min: -1.0, max: 1.0)
-        }
-        var visionPitch: CGFloat?
-        if #available(iOS 15.0, *) {
-            visionPitch = observation.pitch.map {
-                Self.clamp(CGFloat(truncating: $0) / 0.65, min: -1.0, max: 1.0)
+        // The pupils, or the middle of each eye where Vision marks no pupil, or, with no eyes
+        // found at all, where the eyes of a face this box frames usually are.
+        let eyeRegions = [self.points(of: landmarks?.leftEye, in: face), self.points(of: landmarks?.rightEye, in: face)]
+        let pupilPoints = [self.center(of: landmarks?.leftPupil, in: face), self.center(of: landmarks?.rightPupil, in: face)]
+        var pupils: [CGPoint] = []
+        for index in 0 ..< 2 {
+            if let pupil = pupilPoints[index] ?? Self.centroid(of: eyeRegions[index]) {
+                pupils.append(pupil)
             }
         }
-        let pitch: CGFloat
-        if let visionPitch, let landmarkPitch {
-            pitch = Self.mix(landmarkPitch, visionPitch, factor: 0.72)
-        } else {
-            pitch = visionPitch ?? landmarkPitch ?? 0.0
+        if pupils.count != 2 || hypot(pupils[1].x - pupils[0].x, pupils[1].y - pupils[0].y) < face.width * 0.15 {
+            pupils = [
+                CGPoint(x: face.minX + face.width * 0.33, y: face.minY + face.height * 0.62),
+                CGPoint(x: face.minX + face.width * 0.67, y: face.minY + face.height * 0.62)
+            ]
         }
-        return FacePose(
-            face: face,
-            leftEye: eyePoints[0],
-            rightEye: eyePoints[1],
-            nose: nose,
-            mouth: mouth,
-            roll: roll,
-            yaw: yaw,
-            pitch: pitch
-        )
+        pupils.sort(by: { $0.x < $1.x })
+
+        var input = AorusFaceLandmarks(leftPupil: pupils[0], rightPupil: pupils[1])
+        let middle = CGPoint(x: (pupils[0].x + pupils[1].x) * 0.5, y: (pupils[0].y + pupils[1].y) * 0.5)
+        let distance = max(hypot(pupils[1].x - pupils[0].x, pupils[1].y - pupils[0].y), 1.0)
+        let axis = CGPoint(x: (pupils[1].x - pupils[0].x) / distance, y: (pupils[1].y - pupils[0].y) / distance)
+        func along(_ point: CGPoint) -> CGFloat {
+            return (point.x - middle.x) * axis.x + (point.y - middle.y) * axis.y
+        }
+        func up(_ point: CGPoint) -> CGFloat {
+            return -(point.x - middle.x) * axis.y + (point.y - middle.y) * axis.x
+        }
+        // The corners of each eye are its outline's ends along the line through the pupils;
+        // which eye is which is told by the side of the face it is on.
+        for region in eyeRegions where region.count >= 4 {
+            let positions = region.map(along)
+            guard let first = positions.indices.min(by: { positions[$0] < positions[$1] }),
+                  let last = positions.indices.max(by: { positions[$0] < positions[$1] }) else {
+                continue
+            }
+            let side = positions.reduce(0.0, +) / CGFloat(positions.count)
+            if side < 0.0 {
+                input.leftEyeOuter = region[first]
+                input.leftEyeInner = region[last]
+            } else {
+                input.rightEyeInner = region[first]
+                input.rightEyeOuter = region[last]
+            }
+        }
+        if let nose = Self.centroid(of: self.points(of: landmarks?.nose, in: face)), up(nose) < 0.0 {
+            input.nose = nose
+        }
+        let lips = self.points(of: landmarks?.outerLips, in: face)
+        if lips.count >= 4 {
+            let positions = lips.map(along)
+            if let first = positions.indices.min(by: { positions[$0] < positions[$1] }),
+               let last = positions.indices.max(by: { positions[$0] < positions[$1] }),
+               up(lips[first]) < 0.0, up(lips[last]) < 0.0 {
+                input.mouthLeft = lips[first]
+                input.mouthRight = lips[last]
+            }
+        }
+        let contour = self.points(of: landmarks?.faceContour, in: face)
+        if contour.count >= 5, let chin = contour.min(by: { up($0) < up($1) }), up(chin) < -distance * 0.8 {
+            input.chin = chin
+        }
+
+        guard let pose = AorusFaceGeometry.solvePose(input, frameSize: sourceExtent.size, previous: previous?.pose) else {
+            return nil
+        }
+        return FacePose(face: face, pose: pose, time: time)
     }
 
     private func applyDetectedPose(_ detected: FacePose, extent: CGRect, preset: String, mirrored: Bool) {
-        self.smoothedPose = self.smoothedPose.map { previous in
-            let movement = hypot(
-                detected.eyeMidpoint.x - previous.eyeMidpoint.x,
-                detected.eyeMidpoint.y - previous.eyeMidpoint.y
-            ) / max(detected.eyeDistance, 1.0)
-            let rotation = abs(detected.roll - previous.roll) + abs(detected.yaw - previous.yaw) * 0.35
-            let factor = Self.clamp(0.44 + movement * 0.72 + rotation * 0.28, min: 0.44, max: 0.82)
-            return self.mix(previous, detected, factor: factor)
-        } ?? detected
+        var reading = detected
+        // The nod is read against the one the face holds: proportions that differ from the
+        // average head, or a camera held below the chin, would otherwise draw every mask as a
+        // trapezoid. A real nod is quicker than the baseline and still shows.
+        let measuredPitch = reading.pose.pitch
+        if let baseline = self.pitchBaseline, let previous = self.smoothedPose {
+            let interval = CGFloat(max(0.0, min(0.5, reading.time - previous.time)))
+            self.pitchBaseline = baseline + (measuredPitch - baseline) * min(1.0, interval / 3.0)
+        } else {
+            self.pitchBaseline = measuredPitch
+        }
+        reading.pose.pitch = measuredPitch - max(-0.35, min(0.35, self.pitchBaseline ?? 0.0))
+
+        if let previous = self.smoothedPose {
+            let factor = AorusFaceGeometry.smoothingFactor(previous: previous.pose, next: reading.pose)
+            let pose = AorusFaceGeometry.mix(previous.pose, reading.pose, factor: factor)
+            self.poseVelocity = AorusFaceVelocity.measure(
+                from: previous.pose,
+                to: pose,
+                interval: CGFloat(reading.time - previous.time),
+                previous: self.poseVelocity
+            )
+            self.smoothedPose = FacePose(
+                face: CGRect(
+                    x: Self.mix(previous.face.minX, reading.face.minX, factor: factor),
+                    y: Self.mix(previous.face.minY, reading.face.minY, factor: factor),
+                    width: Self.mix(previous.face.width, reading.face.width, factor: factor),
+                    height: Self.mix(previous.face.height, reading.face.height, factor: factor)
+                ),
+                pose: pose,
+                time: reading.time
+            )
+        } else {
+            self.smoothedPose = reading
+            self.poseVelocity = .zero
+        }
         self.missedDetections = 0
         self.lastSuccessfulDetectionTime = CACurrentMediaTime()
         if let pose = self.smoothedPose, self.publishesPreview {
@@ -673,22 +739,35 @@ public final class AorusVideoMaskProcessor: NSObject {
             && eyeRatio > 0.42 && eyeRatio < 2.35
     }
 
+    private func points(of region: VNFaceLandmarkRegion2D?, in face: CGRect) -> [CGPoint] {
+        guard let region, region.pointCount > 0 else { return [] }
+        return region.normalizedPoints.map { point in
+            CGPoint(x: face.minX + CGFloat(point.x) * face.width, y: face.minY + CGFloat(point.y) * face.height)
+        }
+    }
+
     private func center(of region: VNFaceLandmarkRegion2D?, in face: CGRect) -> CGPoint? {
-        guard let region, region.pointCount > 0 else { return nil }
+        return Self.centroid(of: self.points(of: region, in: face))
+    }
+
+    private static func centroid(of points: [CGPoint]) -> CGPoint? {
+        guard !points.isEmpty else { return nil }
         var x: CGFloat = 0.0
         var y: CGFloat = 0.0
-        for point in region.normalizedPoints {
-            x += CGFloat(point.x)
-            y += CGFloat(point.y)
+        for point in points {
+            x += point.x
+            y += point.y
         }
-        let divisor = CGFloat(region.pointCount)
-        return CGPoint(x: face.minX + x / divisor * face.width, y: face.minY + y / divisor * face.height)
+        return CGPoint(x: x / CGFloat(points.count), y: y / CGFloat(points.count))
     }
 
     private func registerMiss() {
         self.missedDetections += 1
         let elapsed = CACurrentMediaTime() - self.lastSuccessfulDetectionTime
-        if self.missedDetections >= 14 && elapsed >= 0.9 {
+        // A blur is there to hide the face: it stays where the face was for longer than a
+        // mask does, so a face turned away for a moment is not shown when it turns back.
+        let hold: CFTimeInterval = self.lastPreset == Self.blurPreset ? 2.5 : 0.9
+        if self.missedDetections >= 14 && elapsed >= hold {
             self.smoothedPose = nil
             // The inactive round-video camera keeps a low-rate tracker warm. It
             // must not hide the overlay published by the camera on screen.
@@ -700,77 +779,83 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
     }
 
-    private typealias Quad = (topLeft: CGPoint, topRight: CGPoint, bottomRight: CGPoint, bottomLeft: CGPoint)
-
-    private func destinationQuad(for pose: FacePose, preset: String) -> Quad {
-        let eyeDistance = max(pose.eyeDistance, pose.face.width * 0.30)
+    /// How each artwork's eye openings sit in it. The artworks are drawn with their eyes a
+    /// third of their width apart; the cat's and the oni's reach wider round the face, and
+    /// each family's eye line is where its eye openings actually are.
+    private static func artworkLayout(for preset: String) -> AorusMaskArtworkLayout {
         let widthFactor: CGFloat = preset == "neonCat" || preset == "oni" ? 1.06 : 1.0
-        // Vision's face box can end above the visible jaw. Size from both the
-        // box and inter-eye distance, with enough bleed to cover cheeks and chin.
-        let width = max(pose.face.width * 1.38, eyeDistance / 0.33) * widthFactor
-        let heightFactor: CGFloat
+        let aspect: CGFloat
         switch preset {
         case "oni":
-            heightFactor = 1.24
+            aspect = 1.24
         case "neonCat", "phantom":
-            heightFactor = 1.20
+            aspect = 1.20
         default:
-            heightFactor = 1.18
+            aspect = 1.18
         }
-        let height = width * heightFactor
-        // Artwork eye openings are not vertically centered. Anchor each family
-        // to its actual eye line instead of pushing the rendered eyes below the
-        // detected landmarks.
-        let eyeAnchorY: CGFloat
+        let eyeLine: CGFloat
         switch preset {
         case "oni":
-            eyeAnchorY = 0.53
+            eyeLine = 0.53
         case "neonCat":
-            eyeAnchorY = 0.51
+            eyeLine = 0.51
         case "skull", "cyber", "phantom", "chrome", "aurora":
-            eyeAnchorY = 0.545
+            eyeLine = 0.545
         default:
-            eyeAnchorY = 0.55
+            eyeLine = 0.55
         }
-        let eyeMid = pose.eyeMidpoint
-        let originX = eyeMid.x - width * 0.5
-        let originY = eyeMid.y - height * eyeAnchorY
-        var topLeft = CGPoint(x: originX, y: originY + height)
-        var topRight = CGPoint(x: originX + width, y: originY + height)
-        var bottomRight = CGPoint(x: originX + width, y: originY)
-        var bottomLeft = CGPoint(x: originX, y: originY)
+        return AorusMaskArtworkLayout(width: widthFactor / 0.33, aspect: aspect, eyeLine: eyeLine)
+    }
 
-        let yaw = Self.clamp(pose.yaw, min: -1.0, max: 1.0)
-        let yawAmount = abs(yaw) * width * 0.19
-        if yaw > 0.0 {
-            topLeft.x += yawAmount
-            bottomLeft.x += yawAmount * 0.72
-            topRight.x += yawAmount * 0.08
-            bottomRight.x += yawAmount * 0.08
-        } else if yaw < 0.0 {
-            topRight.x -= yawAmount
-            bottomRight.x -= yawAmount * 0.72
-            topLeft.x -= yawAmount * 0.08
-            bottomLeft.x -= yawAmount * 0.08
+    private static func destinationQuad(for pose: AorusFacePose, preset: String, frameSize: CGSize) -> AorusFaceQuad {
+        return AorusFaceGeometry.maskQuad(
+            pose: pose,
+            layout: Self.artworkLayout(for: preset),
+            frameSize: frameSize,
+            verticalStretch: AorusFaceGeometry.verticalStretch(chinDrop: pose.chinDrop)
+        )
+    }
+
+    /// The frame with the face blurred: forehead to chin and cheek to cheek, fully inside
+    /// and fading out over the last part of the outline, so no edge shows. The blur grows with
+    /// the face, strong enough that a face close to the camera is as unrecognisable as one
+    /// far from it.
+    private static func blurringFace(in image: CIImage, pose: AorusFacePose) -> CIImage {
+        let ellipse = AorusFaceGeometry.faceEllipse(pose: pose, frameSize: image.extent.size)
+        let region = ellipse.quad.boundingBox.insetBy(dx: -2.0, dy: -2.0).intersection(image.extent)
+        guard !region.isNull, region.width > 1.0, region.height > 1.0 else {
+            return image
         }
-
-        let pitchAmount = abs(pose.pitch) * height * 0.12
-        if pose.pitch > 0.0 {
-            bottomLeft.y += pitchAmount
-            bottomRight.y += pitchAmount
-        } else if pose.pitch < 0.0 {
-            topLeft.y -= pitchAmount
-            topRight.y -= pitchAmount
+        let radius = max(12.0, pose.apparentPupilDistance * 0.3)
+        // Only the region and what the blur reaches into it are blurred, clamped at the
+        // frame's edges so a face at the edge does not blur towards black.
+        let source = image.cropped(to: region.insetBy(dx: -radius * 3.0, dy: -radius * 3.0)).clampedToExtent()
+        let blurred = source.applyingGaussianBlur(sigma: Double(radius)).cropped(to: region)
+        let disc = CIFilter(name: "CIRadialGradient", parameters: [
+            "inputCenter": CIVector(x: 0.0, y: 0.0),
+            "inputRadius0": AorusFaceGeometry.blurCore,
+            "inputRadius1": 1.0,
+            "inputColor0": CIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0),
+            "inputColor1": CIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        ])?.outputImage
+        guard let disc else {
+            // No feathering to be had: the region is blurred whole rather than not at all.
+            return blurred.composited(over: image).cropped(to: image.extent)
         }
-
-        topLeft = Self.rotate(topLeft, around: eyeMid, angle: pose.roll)
-        topRight = Self.rotate(topRight, around: eyeMid, angle: pose.roll)
-        bottomRight = Self.rotate(bottomRight, around: eyeMid, angle: pose.roll)
-        bottomLeft = Self.rotate(bottomLeft, around: eyeMid, angle: pose.roll)
-        return (topLeft, topRight, bottomRight, bottomLeft)
+        let onFace = CGAffineTransform(scaleX: ellipse.radiusX, y: ellipse.radiusY)
+            .concatenating(CGAffineTransform(rotationAngle: ellipse.angle))
+            .concatenating(CGAffineTransform(translationX: ellipse.center.x, y: ellipse.center.y))
+        let mask = disc.transformed(by: onFace).cropped(to: region)
+        return blurred.applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: image,
+            kCIInputMaskImageKey: mask
+        ]).cropped(to: image.extent)
     }
 
     private func template(for preset: String) -> CIImage? {
+        if preset == Self.blurPreset {
+            return nil
+        }
         if let url = Self.customMaskURL(for: preset) {
             let date = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
             if date != self.customMaskModificationDates[preset] {
@@ -826,26 +911,42 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     private func publishPreview(pose: FacePose, extent: CGRect, preset: String, mirrored: Bool) {
-        let quad = self.destinationQuad(for: pose, preset: preset)
-        let xs = [quad.topLeft.x, quad.topRight.x, quad.bottomRight.x, quad.bottomLeft.x]
-        let ys = [quad.topLeft.y, quad.topRight.y, quad.bottomRight.y, quad.bottomLeft.y]
-        guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return }
+        // The preview draws over the camera's own layer: it is given the corners the frame
+        // compositor draws to -- the mask's, or the blurred region's -- in the frame's share,
+        // top down, so it lays its picture on the same four points.
+        let isBlur = preset == Self.blurPreset
+        let quad = isBlur
+            ? AorusFaceGeometry.faceEllipse(pose: pose.pose, frameSize: extent.size).quad
+            : Self.destinationQuad(for: pose.pose, preset: preset, frameSize: extent.size)
+        let width = max(extent.width, 1.0)
+        let height = max(extent.height, 1.0)
+        var corners: [NSNumber] = []
+        for corner in quad.corners {
+            corners.append(NSNumber(value: Double((corner.x - extent.minX) / width)))
+            corners.append(NSNumber(value: Double(1.0 - (corner.y - extent.minY) / height)))
+        }
+        let box = quad.boundingBox
         let rect = CGRect(
-            x: minX / extent.width,
-            y: 1.0 - maxY / extent.height,
-            width: (maxX - minX) / extent.width,
-            height: (maxY - minY) / extent.height
+            x: (box.minX - extent.minX) / width,
+            y: 1.0 - (box.maxY - extent.minY) / height,
+            width: box.width / width,
+            height: box.height / height
         )
         let aspect = extent.width / max(extent.height, 1.0)
+        let blurRadius = max(12.0, pose.pose.apparentPupilDistance * 0.3) / width
+        let face = pose.pose
         DispatchQueue.main.async {
             NotificationCenter.default.post(
                 name: .aorusVideoMaskPreviewUpdated,
                 object: nil,
                 userInfo: [
                     "rect": NSValue(cgRect: rect),
-                    "roll": NSNumber(value: Double(pose.roll)),
-                    "yaw": NSNumber(value: Double(pose.yaw)),
-                    "pitch": NSNumber(value: Double(pose.pitch)),
+                    "quad": corners,
+                    "blur": isBlur,
+                    "blurRadius": NSNumber(value: Double(blurRadius)),
+                    "roll": NSNumber(value: Double(face.roll)),
+                    "yaw": NSNumber(value: Double(face.yaw)),
+                    "pitch": NSNumber(value: Double(face.pitch)),
                     "preset": preset,
                     "mirrored": mirrored,
                     "aspect": NSNumber(value: Double(aspect))
@@ -886,42 +987,8 @@ public final class AorusVideoMaskProcessor: NSObject {
         return output
     }
 
-    private func mix(_ previous: FacePose, _ next: FacePose, factor: CGFloat) -> FacePose {
-        return FacePose(
-            face: CGRect(
-                x: Self.mix(previous.face.minX, next.face.minX, factor: factor),
-                y: Self.mix(previous.face.minY, next.face.minY, factor: factor),
-                width: Self.mix(previous.face.width, next.face.width, factor: factor),
-                height: Self.mix(previous.face.height, next.face.height, factor: factor)
-            ),
-            leftEye: Self.mix(previous.leftEye, next.leftEye, factor: factor),
-            rightEye: Self.mix(previous.rightEye, next.rightEye, factor: factor),
-            nose: Self.mix(previous.nose, next.nose, factor: factor),
-            mouth: Self.mix(previous.mouth, next.mouth, factor: factor),
-            roll: Self.mix(previous.roll, next.roll, factor: factor),
-            yaw: Self.mix(previous.yaw, next.yaw, factor: factor),
-            pitch: Self.mix(previous.pitch, next.pitch, factor: factor)
-        )
-    }
-
     private static func mix(_ a: CGFloat, _ b: CGFloat, factor: CGFloat) -> CGFloat {
         return a + (b - a) * factor
-    }
-
-    private static func mix(_ a: CGPoint, _ b: CGPoint, factor: CGFloat) -> CGPoint {
-        return CGPoint(x: mix(a.x, b.x, factor: factor), y: mix(a.y, b.y, factor: factor))
-    }
-
-    private static func clamp(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
-        return Swift.max(min, Swift.min(max, value))
-    }
-
-    private static func rotate(_ point: CGPoint, around center: CGPoint, angle: CGFloat) -> CGPoint {
-        let dx = point.x - center.x
-        let dy = point.y - center.y
-        let c = cos(angle)
-        let s = sin(angle)
-        return CGPoint(x: center.x + dx * c - dy * s, y: center.y + dx * s + dy * c)
     }
 
     private static func inverse(_ orientation: CGImagePropertyOrientation) -> CGImagePropertyOrientation {

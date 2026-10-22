@@ -348,7 +348,8 @@ private func masksEntries(state: MasksState, theme: PresentationTheme, l10n: Aor
             ("neonCat", l10n.videoMaskNeonCat),
             ("chrome", l10n.videoMaskChrome),
             ("oni", l10n.videoMaskOni),
-            ("aurora", l10n.videoMaskAurora)
+            ("aurora", l10n.videoMaskAurora),
+            ("blur", l10n.videoMaskBlur)
         ]
         for (index, preset) in presets.enumerated() {
             entries.append(.preset(theme, index, 10 + Int32(index), preset.0, preset.1, state.preset == preset.0, false))

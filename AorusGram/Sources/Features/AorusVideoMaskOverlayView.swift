@@ -2,16 +2,24 @@ import Foundation
 import UIKit
 
 /// Lightweight local-preview companion for the real frame compositor.
-/// It reuses the compositor's cached artwork and only animates one image layer;
-/// no Vision or Core Image work is duplicated on the main thread.
+/// It reuses the compositor's cached artwork and only lays one view over the
+/// camera's own layer; no Vision or Core Image work is duplicated on the main thread.
+///
+/// The compositor sends the four corners it draws the artwork to, and the artwork is laid on
+/// them: the corners' parallelogram, turned and leaned with the face, in one affine transform.
+/// A perspective CATransform3D would make Core Animation flatten the live camera surface and
+/// can leave a frozen snapshot while a face is tracked; the outgoing frame keeps the full
+/// perspective in the compositor. The blur is a blur of what the camera layer shows, over the
+/// same region the compositor blurs.
 @objcMembers
 public final class AorusVideoMaskOverlayView: UIView {
     private let imageView = UIImageView()
+    private let blurView = AorusFaceBlurPreviewView()
     private var frameAspect: CGFloat = 1.0
-    private var normalizedRect = CGRect.zero
-    private var roll: CGFloat = 0.0
-    private var yaw: CGFloat = 0.0
-    private var pitch: CGFloat = 0.0
+    /// The corners in the frame's share, top down: top left, top right, bottom right, bottom left.
+    private var corners: [CGPoint] = []
+    private var blurRadius: CGFloat = 0.0
+    private var isBlur = false
     private var mirrored = false
     private var preset = ""
     private var observers: [NSObjectProtocol] = []
@@ -29,6 +37,9 @@ public final class AorusVideoMaskOverlayView: UIView {
         self.imageView.backgroundColor = .clear
         self.imageView.layer.allowsEdgeAntialiasing = true
         self.imageView.layer.shouldRasterize = false
+        self.imageView.alpha = 0.0
+        self.blurView.alpha = 0.0
+        self.addSubview(self.blurView)
         self.addSubview(self.imageView)
 
         self.observers.append(NotificationCenter.default.addObserver(
@@ -74,7 +85,7 @@ public final class AorusVideoMaskOverlayView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
-        self.updateMaskFrame(animated: false)
+        self.updateMaskFrame()
     }
 
     public func refreshEnabledState() {
@@ -89,37 +100,58 @@ public final class AorusVideoMaskOverlayView: UIView {
         guard AorusLicenseAccess.isAllowed,
               UserDefaults.standard.bool(forKey: AorusVideoMaskProcessor.enabledKey),
               let info = notification.userInfo,
-              let rect = (info["rect"] as? NSValue)?.cgRectValue,
               let preset = info["preset"] as? String else {
             self.setMaskHidden(true, animated: false)
             return
         }
 
-        if self.preset != preset || self.imageView.image == nil {
+        let isBlur = (info["blur"] as? Bool) ?? false
+        if isBlur {
+            self.imageView.image = nil
+        } else if self.preset != preset || self.imageView.image == nil {
             guard let image = AorusVideoMaskProcessor.shared.previewImage(for: preset) else {
                 self.setMaskHidden(true, animated: false)
                 return
             }
-            self.preset = preset
             self.imageView.image = image
         }
+        self.preset = preset
+        if isBlur != self.isBlur {
+            self.isBlur = isBlur
+            self.imageView.alpha = 0.0
+            self.blurView.alpha = 0.0
+        }
 
-        self.normalizedRect = rect
-        self.frameAspect = CGFloat((info["aspect"] as? NSNumber)?.doubleValue ?? 1.0)
-        self.roll = CGFloat((info["roll"] as? NSNumber)?.doubleValue ?? 0.0)
-        self.yaw = CGFloat((info["yaw"] as? NSNumber)?.doubleValue ?? 0.0)
-        self.pitch = CGFloat((info["pitch"] as? NSNumber)?.doubleValue ?? 0.0)
-        self.mirrored = (info["mirrored"] as? Bool) ?? false
-        self.setMaskHidden(false, animated: self.imageView.alpha < 0.01)
-        // FacePose is already smoothed in the processor. A second UIView
-        // animation here makes the local mask trail behind the outgoing frame.
-        self.updateMaskFrame(animated: false)
-    }
-
-    private func updateMaskFrame(animated: Bool) {
-        guard self.bounds.width > 1.0, self.bounds.height > 1.0, self.normalizedRect.width > 0.0 else {
+        if let values = info["quad"] as? [NSNumber], values.count == 8 {
+            self.corners = stride(from: 0, to: 8, by: 2).map { index in
+                CGPoint(x: CGFloat(values[index].doubleValue), y: CGFloat(values[index + 1].doubleValue))
+            }
+        } else if let rect = (info["rect"] as? NSValue)?.cgRectValue {
+            self.corners = [
+                CGPoint(x: rect.minX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.minY),
+                CGPoint(x: rect.maxX, y: rect.maxY),
+                CGPoint(x: rect.minX, y: rect.maxY)
+            ]
+        } else {
+            self.setMaskHidden(true, animated: false)
             return
         }
+        self.frameAspect = CGFloat((info["aspect"] as? NSNumber)?.doubleValue ?? 1.0)
+        self.blurRadius = CGFloat((info["blurRadius"] as? NSNumber)?.doubleValue ?? 0.0)
+        self.mirrored = (info["mirrored"] as? Bool) ?? false
+        let shown: UIView = self.isBlur ? self.blurView : self.imageView
+        self.setMaskHidden(false, animated: shown.alpha < 0.01)
+        // The pose is already smoothed and carried forward in the processor. A second
+        // UIView animation here would make the local mask trail behind the outgoing frame.
+        self.updateMaskFrame()
+    }
+
+    private func updateMaskFrame() {
+        guard self.bounds.width > 1.0, self.bounds.height > 1.0, self.corners.count == 4 else {
+            return
+        }
+        // The frame fills the view as the camera layer fills it, cropped to its aspect.
         let sourceSize = CGSize(width: max(self.frameAspect, 0.01), height: 1.0)
         let scale = max(self.bounds.width / sourceSize.width, self.bounds.height / sourceSize.height)
         let renderedSize = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
@@ -127,56 +159,54 @@ public final class AorusVideoMaskOverlayView: UIView {
             x: (self.bounds.width - renderedSize.width) * 0.5,
             y: (self.bounds.height - renderedSize.height) * 0.5
         )
-        var rect = self.normalizedRect
-        if self.mirrored {
-            rect.origin.x = 1.0 - rect.maxX
+        let points = self.corners.map { corner -> CGPoint in
+            let x = self.mirrored ? 1.0 - corner.x : corner.x
+            return CGPoint(x: origin.x + x * renderedSize.width, y: origin.y + corner.y * renderedSize.height)
         }
-        let targetFrame = CGRect(
-            x: origin.x + rect.minX * renderedSize.width,
-            y: origin.y + rect.minY * renderedSize.height,
-            width: rect.width * renderedSize.width,
-            height: rect.height * renderedSize.height
+        // The parallelogram nearest the four corners: its middle, and its two sides as the
+        // averages of the opposite edges. A mirrored preview mirrors the artwork with it.
+        let center = CGPoint(
+            x: (points[0].x + points[1].x + points[2].x + points[3].x) * 0.25,
+            y: (points[0].y + points[1].y + points[2].y + points[3].y) * 0.25
         )
-        let updates = {
-            self.imageView.bounds = CGRect(origin: .zero, size: targetFrame.size)
-            self.imageView.center = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
-            // Keep the local mask in the same 2D compositor as the native
-            // AVCaptureVideoPreviewLayer. A perspective CATransform3D forces
-            // Core Animation to flatten the live camera surface and can leave
-            // a frozen snapshot while a face is tracked. The outgoing frame
-            // retains the full perspective transform in the CI compositor.
-            var transform = CGAffineTransform.identity
-            if self.mirrored {
-                transform = transform.scaledBy(x: -1.0, y: 1.0)
-            }
-            transform = transform.rotated(by: self.mirrored ? self.roll : -self.roll)
-            let displayedYaw = self.mirrored ? -self.yaw : self.yaw
-            let horizontalScale = max(0.82, 1.0 - abs(displayedYaw) * 0.16)
-            let verticalScale = max(0.88, 1.0 - abs(self.pitch) * 0.10)
-            transform = transform
-                .translatedBy(
-                    x: displayedYaw * targetFrame.width * 0.035,
-                    y: -self.pitch * targetFrame.height * 0.025
-                )
-                .scaledBy(x: horizontalScale, y: verticalScale)
-            self.imageView.layer.transform = CATransform3DIdentity
-            self.imageView.transform = transform
+        let across = CGPoint(
+            x: ((points[1].x - points[0].x) + (points[2].x - points[3].x)) * 0.5,
+            y: ((points[1].y - points[0].y) + (points[2].y - points[3].y)) * 0.5
+        )
+        let down = CGPoint(
+            x: ((points[3].x - points[0].x) + (points[2].x - points[1].x)) * 0.5,
+            y: ((points[3].y - points[0].y) + (points[2].y - points[1].y)) * 0.5
+        )
+        let width = hypot(across.x, across.y)
+        let height = hypot(down.x, down.y)
+        guard width > 1.0, height > 1.0, width.isFinite, height.isFinite else {
+            return
         }
-        if animated {
-            UIView.animate(
-                withDuration: 0.11,
-                delay: 0.0,
-                options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut],
-                animations: updates
-            )
-        } else {
-            UIView.performWithoutAnimation(updates)
+        let transform = CGAffineTransform(
+            a: across.x / width,
+            b: across.y / width,
+            c: down.x / height,
+            d: down.y / height,
+            tx: 0.0,
+            ty: 0.0
+        )
+        let target: UIView = self.isBlur ? self.blurView : self.imageView
+        UIView.performWithoutAnimation {
+            target.transform = .identity
+            target.bounds = CGRect(origin: .zero, size: CGSize(width: width, height: height))
+            target.center = center
+            target.layer.transform = CATransform3DIdentity
+            target.transform = transform
+            if self.isBlur {
+                self.blurView.setRadius(self.blurRadius * renderedSize.width)
+            }
         }
     }
 
     private func setMaskHidden(_ hidden: Bool, animated: Bool) {
         let updates = {
-            self.imageView.alpha = hidden ? 0.0 : 1.0
+            self.imageView.alpha = !hidden && !self.isBlur ? 1.0 : 0.0
+            self.blurView.alpha = !hidden && self.isBlur ? 1.0 : 0.0
         }
         if animated {
             UIView.animate(withDuration: 0.16, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: updates)
@@ -184,6 +214,80 @@ public final class AorusVideoMaskOverlayView: UIView {
             updates()
         }
     }
+}
+
+/// A blur of what lies behind it, as round as the face and fading out at its edge.
+///
+/// The system's blur with its tint and its colour boost taken off and its radius set, as
+/// Telegram's own blurred panels take theirs, so it blurs what the camera shows without
+/// greying or brightening it.
+private final class AorusFaceBlurPreviewView: UIView {
+    private let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
+    private let featherView = UIImageView(image: AorusFaceBlurPreviewView.featherImage)
+    private var appliedRadius: CGFloat = 0.0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isUserInteractionEnabled = false
+        self.backgroundColor = .clear
+        for subview in self.effectView.subviews where subview.description.contains("VisualEffectSubview") {
+            subview.isHidden = true
+        }
+        self.featherView.contentMode = .scaleToFill
+        self.effectView.mask = self.featherView
+        self.addSubview(self.effectView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.effectView.frame = self.bounds
+        self.featherView.frame = self.effectView.bounds
+    }
+
+    func setRadius(_ radius: CGFloat) {
+        let radius = max(4.0, min(radius, 60.0))
+        guard abs(radius - self.appliedRadius) > max(1.0, self.appliedRadius * 0.15) else {
+            return
+        }
+        guard let backdrop = self.effectView.layer.sublayers?.first, let filters = backdrop.filters else {
+            return
+        }
+        self.appliedRadius = radius
+        backdrop.backgroundColor = nil
+        backdrop.isOpaque = false
+        backdrop.filters = filters.filter { filter in
+            guard let filter = filter as? NSObject else {
+                return true
+            }
+            guard String(describing: filter) == "gaussianBlur" else {
+                return false
+            }
+            filter.setValue(radius as NSNumber, forKey: "inputRadius")
+            return true
+        }
+    }
+
+    /// Opaque within the blur's core and fading to nothing at the edge, as the compositor
+    /// feathers its blur.
+    private static let featherImage: UIImage? = {
+        let size = CGSize(width: 128.0, height: 128.0)
+        let colors = [UIColor.white.cgColor, UIColor.white.cgColor, UIColor.white.withAlphaComponent(0.0).cgColor] as CFArray
+        let locations: [CGFloat] = [0.0, AorusFaceGeometry.blurCore, 1.0]
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: locations) else {
+            return nil
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+            context.cgContext.drawRadialGradient(gradient, startCenter: center, startRadius: 0.0, endCenter: center, endRadius: size.width * 0.5, options: [])
+        }
+    }()
 }
 
 /// C ABI factory keeps the overlay object linked into the static Swift library

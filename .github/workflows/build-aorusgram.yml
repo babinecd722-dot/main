@@ -184,6 +184,14 @@ jobs:
             aorusgram/scripts/tests/AorusAIRevealTests.swift \
             -o /tmp/aorus-ai-preflight/reveal-tests
           /tmp/aorus-ai-preflight/reveal-tests
+          # The geometry the face masks are drawn with: faces posed and seen through the
+          # camera have to be read back, the mask kept on the pupils and the blur over the face.
+          swiftc \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            aorusgram/AorusGram/Sources/Features/AorusFaceGeometry.swift \
+            aorusgram/scripts/tests/AorusFaceGeometryTests.swift \
+            -o /tmp/aorus-ai-preflight/face-geometry-tests
+          /tmp/aorus-ai-preflight/face-geometry-tests
           # The fraction typesetter draws with UIKit, so it is type-checked against the iOS
           # SDK the app actually deploys to rather than run. Availability is enforced here —
           # the module itself is built with checking disabled, so this is the only place a
@@ -221,6 +229,18 @@ jobs:
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
             -target arm64-apple-ios13.0 \
             aorusgram/scripts/tests/AorusUIKitApiProbe.swift
+          # The mask compositor and its camera preview: Vision, Core Image and UIKit over the
+          # face geometry, type-checked against the SDK as the module builds them, so a wrong
+          # name fails here rather than an hour into the build.
+          swiftc -typecheck \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -target arm64-apple-ios13.0 \
+            -Xfrontend -disable-availability-checking \
+            aorusgram/AorusGram/Sources/Features/AorusFaceGeometry.swift \
+            aorusgram/AorusGram/Sources/Features/AorusVideoMaskProcessor.swift \
+            aorusgram/AorusGram/Sources/Features/AorusVideoMaskOverlayView.swift \
+            aorusgram/scripts/tests/AorusVideoMaskStubs.swift
           # The backup manager imports nothing but Foundation, CryptoKit and Security — it is
           # deliberately reachable from neither module's translation table — so it can be
           # type-checked here in seconds instead of an hour into the Bazel build.

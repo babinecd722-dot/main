@@ -7,6 +7,7 @@ import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
 import AccountContext
+import PresentationDataUtils
 import SwiftSignalKit
 import AorusGram
 import UndoUI
@@ -48,6 +49,9 @@ private func aorusAINavigationBarPresentationData(_ presentationData: Presentati
 /// Telegram's glass view holds what the glass sees to one fixed brightness on the light side,
 /// which is matte again. This is the clear effect alone, untinted, in the theme's appearance.
 /// Before iOS 26 there is no such glass, and Telegram's clear glass stands in for it.
+///
+/// The old interface has no glass at all: there Telegram's glass view is drawn as a 12.0 panel,
+/// so it stands in on every system, and the system's own glass is never made.
 final class AorusAIGlassView: UIView {
     private let effectView: UIVisualEffectView?
     private let fallbackView: GlassBackgroundView?
@@ -57,7 +61,7 @@ final class AorusAIGlassView: UIView {
 
     init(interactive: Bool) {
         self.isInteractiveGlass = interactive
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), !AorusOldInterface.isEnabled {
             let effect = UIGlassEffect(style: .clear)
             effect.isInteractive = interactive
             let effectView = UIVisualEffectView(effect: effect)
@@ -241,6 +245,79 @@ private func aorusAIPresentActionSheet(_ controller: UIAlertController, from pre
         popover.permittedArrowDirections = []
     }
     presenter.present(controller, animated: true)
+}
+
+/// One button of an AorusAI dialog.
+private struct AorusAIDialogAction {
+    let title: String
+    let isCancel: Bool
+    let action: () -> Void
+
+    init(title: String, isCancel: Bool = false, action: @escaping () -> Void = {}) {
+        self.title = title
+        self.isCancel = isCancel
+        self.action = action
+    }
+}
+
+/// Asks with an alert, or with a sheet of choices, from `presenter`.
+///
+/// UIKit's alert and action sheet are made of the system's glass on iOS 26, so the old
+/// interface asks in Telegram's own alert and sheet instead, which it draws as 12.0 did.
+/// Interface 2.0 keeps UIKit's. A sheet closed by a tap outside it runs its cancel action, as
+/// UIKit's does, so a turn waiting on the answer is never left without one.
+private func aorusAIPresentDialog(context: AccountContext, title: String?, message: String?, actions: [AorusAIDialogAction], asSheet: Bool, from presenter: UIViewController) {
+    if AorusOldInterface.isEnabled, let presenter = presenter as? ViewController {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        if asSheet {
+            let sheet = ActionSheetController(presentationData: presentationData)
+            var header: [ActionSheetItem] = []
+            let text = [title, message].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+            if !text.isEmpty {
+                header.append(ActionSheetTextItem(title: text, parseMarkdown: false))
+            }
+            let choices = actions.filter { !$0.isCancel }.map { item in
+                ActionSheetButtonItem(title: item.title, color: .accent, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
+                    item.action()
+                }) as ActionSheetItem
+            }
+            let cancel = actions.first(where: { $0.isCancel })
+            var groups = [ActionSheetItemGroup(items: header + choices)]
+            if let cancel {
+                groups.append(ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: cancel.title, color: .accent, font: .bold, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                        cancel.action()
+                    })
+                ]))
+                sheet.dismissed = { cancelled in
+                    if cancelled {
+                        cancel.action()
+                    }
+                }
+            }
+            sheet.setItemGroups(groups)
+            presenter.present(sheet, in: .window(.root))
+        } else {
+            let alert = textAlertController(context: context, title: title, text: message ?? "", actions: actions.map { item in
+                TextAlertAction(type: item.isCancel ? .genericAction : .defaultAction, title: item.title, action: item.action)
+            })
+            presenter.present(alert, in: .window(.root))
+        }
+        return
+    }
+    let controller = UIAlertController(title: title, message: message, preferredStyle: asSheet ? .actionSheet : .alert)
+    for item in actions {
+        controller.addAction(UIAlertAction(title: item.title, style: item.isCancel ? .cancel : .default, handler: { _ in
+            item.action()
+        }))
+    }
+    if asSheet {
+        aorusAIPresentActionSheet(controller, from: presenter)
+    } else {
+        presenter.present(controller, animated: true)
+    }
 }
 
 /// Presents a UIKit controller over a navigation controller.
@@ -550,15 +627,17 @@ private func aorusAIPresentCustomHistoryCount(context: AccountContext, navigatio
         // An unparsable value is a mistake, not a request for a default: say so and
         // ask again instead of quietly analysing some other number of messages.
         guard let parsed = Int(raw), parsed > 0 else {
-            let invalid = UIAlertController(
+            guard let presenter = navigationController.topViewController else { return }
+            aorusAIPresentDialog(
+                context: context,
                 title: aorusAILocalized("Некорректное количество", "Invalid count"),
                 message: aorusAILocalized("Введите число от 1 до \(limit).", "Enter a number between 1 and \(limit)."),
-                preferredStyle: .alert
+                actions: [AorusAIDialogAction(title: presentationData.strings.Common_OK, action: {
+                    aorusAIPresentCustomHistoryCount(context: context, navigationController: navigationController, reference: reference)
+                })],
+                asSheet: false,
+                from: presenter
             )
-            invalid.addAction(UIAlertAction(title: presentationData.strings.Common_OK, style: .default, handler: { _ in
-                aorusAIPresentCustomHistoryCount(context: context, navigationController: navigationController, reference: reference)
-            }))
-            aorusAIPresent(invalid, from: navigationController)
             return
         }
         aorusAIPrepareHistoryAnalysis(context: context, navigationController: navigationController, reference: reference, count: min(limit, parsed))
@@ -746,16 +825,18 @@ private func aorusAIPrepareHistoryAnalysis(context: AccountContext, navigationCo
     let signal = aorusAIChatTranscript(context: context, peerId: PeerId(reference.peerId), namespace: reference.messageNamespace, count: requested)
     let _ = (signal |> deliverOnMainQueue).start(next: { transcript in
         guard transcript.messageCount > 0 else {
-            let empty = UIAlertController(
+            guard let presenter = navigationController.topViewController else { return }
+            aorusAIPresentDialog(
+                context: context,
                 title: aorusAILocalized("Нет сообщений для анализа", "Nothing to analyze"),
                 message: aorusAILocalized(
                     "В этой переписке нет текстовых сообщений, которые можно передать AorusAI.",
                     "This chat has no text messages that could be shared with AorusAI."
                 ),
-                preferredStyle: .alert
+                actions: [AorusAIDialogAction(title: presentationData.strings.Common_OK)],
+                asSheet: false,
+                from: presenter
             )
-            empty.addAction(UIAlertAction(title: presentationData.strings.Common_OK, style: .default))
-            aorusAIPresent(empty, from: navigationController)
             return
         }
         // No second dialog. The amount was chosen a moment ago, in a sheet that said what
@@ -2202,6 +2283,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         let composerHeight = composer.requiredHeight(width: layout.size.width)
         let composerFrame = CGRect(x: 0, y: layout.size.height - bottomInset - composerHeight, width: layout.size.width, height: composerHeight)
         transition.updateFrame(view: composer, frame: composerFrame)
+        // The classic panel reaches the bottom of the screen: under the home indicator, and
+        // under the keyboard, whose top corners iOS 26 rounds -- ended at the keyboard, the
+        // panel left those corners open onto the page behind them.
+        composer.classicPanelExtension = max(0.0, layout.size.height - composerFrame.maxY)
         composer.updateLayout(size: composerFrame.size, transition: transition)
         // The list runs the full height of the screen and is inset at both ends, so messages
         // pass beneath the capsules at the top and beneath the input at the bottom: the glass
@@ -2216,6 +2301,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         let bottomEdgeBottom = keyboardHeight > 0.0 ? max(bottomEdgeTop, layout.size.height - keyboardHeight) : layout.size.height
         let bottomBlurFrame = CGRect(x: 0.0, y: bottomEdgeTop, width: layout.size.width, height: max(0.0, bottomEdgeBottom - bottomEdgeTop))
         transition.updateFrame(view: bottomBlurView, frame: bottomBlurFrame)
+        // Neither edge is drawn under the old interface: there the classic bar and the panel
+        // are the screen's edges, each over its own blur and with its own hairline, as in a
+        // 12.0 chat, and a scroll edge melting into them is the newer design's.
+        topBlurView.isHidden = AorusOldInterface.isEnabled
+        bottomBlurView.isHidden = AorusOldInterface.isEnabled
         bottomBlurView.update(
             content: palette.plainBackground,
             blur: true,
@@ -3401,14 +3491,21 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         if let label = request.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
             message += "\n\n" + String(label.prefix(300))
         }
-        let sheet = UIAlertController(title: aorusAILocalized("Разрешить доступ?", "Allow access?"), message: message, preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(title: aorusAILocalized("Разрешить", "Allow"), style: .default, handler: { [weak self] _ in
-            self?.executeProfileTool(request)
-        }))
-        sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: { [weak self] _ in
-            self?.submit(toolResult: .denied(tool: request.tool, requestId: request.requestId, username: request.username))
-        }))
-        aorusAIPresentActionSheet(sheet, from: self)
+        aorusAIPresentDialog(
+            context: context,
+            title: aorusAILocalized("Разрешить доступ?", "Allow access?"),
+            message: message,
+            actions: [
+                AorusAIDialogAction(title: aorusAILocalized("Разрешить", "Allow"), action: { [weak self] in
+                    self?.executeProfileTool(request)
+                }),
+                AorusAIDialogAction(title: presentationData.strings.Common_Cancel, isCancel: true, action: { [weak self] in
+                    self?.submit(toolResult: .denied(tool: request.tool, requestId: request.requestId, username: request.username))
+                })
+            ],
+            asSheet: true,
+            from: self
+        )
     }
 
     /// §4: resolves the handle through the already authenticated Telegram session — no
@@ -4712,17 +4809,20 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// a future change to the text renderer might start producing.
     private func presentExternalLink(_ url: URL) {
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
-        let sheet = UIAlertController(
+        aorusAIPresentDialog(
+            context: context,
             title: aorusAILocalized("Открыть ссылку?", "Open this link?"),
             message: String(url.absoluteString.prefix(300)),
-            preferredStyle: .actionSheet
+            actions: [
+                AorusAIDialogAction(title: aorusAILocalized("Открыть", "Open"), action: { [weak self] in
+                    guard let self else { return }
+                    self.context.sharedContext.applicationBindings.openUrl(url.absoluteString)
+                }),
+                AorusAIDialogAction(title: presentationData.strings.Common_Cancel, isCancel: true)
+            ],
+            asSheet: true,
+            from: self
         )
-        sheet.addAction(UIAlertAction(title: aorusAILocalized("Открыть", "Open"), style: .default, handler: { [weak self] _ in
-            guard let self else { return }
-            self.context.sharedContext.applicationBindings.openUrl(url.absoluteString)
-        }))
-        sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
-        aorusAIPresentActionSheet(sheet, from: self)
     }
 
     private func openPeer(_ peerId: PeerId) {
@@ -4800,15 +4900,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         if error == .artifactExpired || error == .artifactGone {
             markArtifactExpired(artifactId: artifact.artifactId)
         }
-        let alert = UIAlertController(title: aorusAILocalized("Не удалось открыть файл", "Couldn't open file"), message: AorusAIFormat.errorText(error), preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+        var actions = [AorusAIDialogAction(title: presentationData.strings.Common_Cancel, isCancel: true)]
         let isPermanent = error == .artifactExpired || error == .artifactGone || error == .artifactNotOwned
         if !isPermanent {
-            alert.addAction(UIAlertAction(title: aorusAILocalized("Повторить", "Retry"), style: .default, handler: { [weak self] _ in
+            actions.append(AorusAIDialogAction(title: aorusAILocalized("Повторить", "Retry"), action: { [weak self] in
                 self?.toggleArtifact(artifact)
             }))
         }
-        present(alert, animated: true)
+        aorusAIPresentDialog(context: context, title: aorusAILocalized("Не удалось открыть файл", "Couldn't open file"), message: AorusAIFormat.errorText(error), actions: actions, asSheet: false, from: self)
     }
 
     private func markArtifactExpired(artifactId: String) {
@@ -4833,9 +4932,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // then, and the same text is already on the bubble, so the alert is simply skipped
         // instead of being thrown at a detached controller.
         guard self.view.window != nil else { return }
-        let alert = UIAlertController(title: "AorusAI", message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: presentationData.strings.Common_OK, style: .default))
-        present(alert, animated: true)
+        aorusAIPresentDialog(context: context, title: "AorusAI", message: message, actions: [AorusAIDialogAction(title: presentationData.strings.Common_OK)], asSheet: false, from: self)
     }
 
     private func presentCopiedFeedback() {
@@ -4867,8 +4964,21 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
 private final class AorusAIComposerView: UIView {
     let textView = AorusAIMentionTextView.make()
+    /// Under the old interface the composer is 12.0's input panel rather than a capsule of
+    /// glass: a full-width panel in the panel colour over its blur, with the hairline along its
+    /// top; on it the message field, outlined by the theme's hairline and rounded as 12.0's is;
+    /// the microphone inside the field at its right end, where 12.0 kept the field's own
+    /// buttons; and send on the panel beside the field, where 12.0's send button stood.
+    private let isClassic = AorusOldInterface.isEnabled
     private let container = UIView()
-    private let containerGlass = AorusAIGlassView(interactive: true)
+    private let containerGlass: AorusAIGlassView?
+    private let classicPanel: BlurredBackgroundView?
+    private let classicSeparator = UIView()
+    /// The field's outline, behind everything in it, as the glass is behind the capsule's.
+    private let classicField = UIView()
+    /// How far below the composer the classic panel carries on: down to the bottom of the
+    /// screen, under the home indicator or the keyboard. Set by the controller.
+    var classicPanelExtension: CGFloat = 0.0
     private let placeholder = UILabel()
     private let referenceView = UIView()
     private let referenceLine = UIView()
@@ -4999,12 +5109,37 @@ private final class AorusAIComposerView: UIView {
     }
 
     override init(frame: CGRect) {
+        if AorusOldInterface.isEnabled {
+            self.containerGlass = nil
+            self.classicPanel = BlurredBackgroundView(color: nil)
+        } else {
+            self.containerGlass = AorusAIGlassView(interactive: true)
+            self.classicPanel = nil
+        }
         super.init(frame: frame)
+        if let classicPanel {
+            classicPanel.isUserInteractionEnabled = false
+            classicSeparator.isUserInteractionEnabled = false
+            addSubview(classicPanel)
+            addSubview(classicSeparator)
+        }
         addSubview(container)
         // A tap anywhere on the capsule is a tap on the input, as it is in every messenger.
-        containerGlass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusInput)))
-        container.addSubview(containerGlass)
-        [referenceView, dictationWave, dictationCancel, textView, dictationButton, sendButton].forEach { container.addSubview($0) }
+        if let containerGlass {
+            containerGlass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusInput)))
+            container.addSubview(containerGlass)
+        } else {
+            classicField.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusInput)))
+            container.addSubview(classicField)
+        }
+        [referenceView, dictationWave, dictationCancel, textView, dictationButton].forEach { container.addSubview($0) }
+        // On the classic panel send stands beside the field, outside it, and has to be the
+        // panel's own subview to be touched there.
+        if isClassic {
+            addSubview(sendButton)
+        } else {
+            container.addSubview(sendButton)
+        }
         referenceView.addSubview(referenceLine)
         referenceView.addSubview(referenceLabel)
         referenceView.addSubview(referenceClose)
@@ -5056,6 +5191,15 @@ private final class AorusAIComposerView: UIView {
         // plate: the conversation runs under it, and the glass shows it.
         backgroundColor = .clear
         container.backgroundColor = .clear
+        if let classicPanel {
+            let inputPanel = theme.chat.inputPanel
+            classicPanel.updateColor(color: inputPanel.panelBackgroundColor, transition: .immediate)
+            classicSeparator.backgroundColor = inputPanel.panelSeparatorColor
+            classicField.backgroundColor = inputPanel.inputBackgroundColor
+            classicField.layer.borderWidth = UIScreenPixel
+            classicField.layer.borderColor = inputPanel.inputStrokeColor.cgColor
+            classicField.layer.cornerCurve = .circular
+        }
         textView.textColor = palette.label
         textView.tintColor = palette.accent
         textView.keyboardAppearance = palette.isDark ? .dark : .light
@@ -5092,6 +5236,11 @@ private final class AorusAIComposerView: UIView {
     /// as one piece.
     func updateLayout(size: CGSize, transition: ContainedViewLayoutTransition) {
         laidOutSize = size
+        if let classicPanel {
+            updateClassicLayout(size: size, panel: classicPanel, transition: transition)
+            return
+        }
+        guard let containerGlass else { return }
         let containerFrame = CGRect(x: Self.sideInset, y: 0.0, width: max(0.0, size.width - Self.sideInset * 2.0), height: max(0.0, size.height - Self.bottomGap))
         transition.updateFrame(view: container, frame: containerFrame)
         let width = containerFrame.width
@@ -5137,6 +5286,68 @@ private final class AorusAIComposerView: UIView {
         transition.updateFrame(view: dictationWave, frame: waveFrame)
     }
 
+    /// 12.0's input panel. The field is the container, so everything the capsule held keeps
+    /// its place in it; only send moves out of it, onto the panel.
+    private func updateClassicLayout(size: CGSize, panel: BlurredBackgroundView, transition: ContainedViewLayoutTransition) {
+        let panelFrame = CGRect(x: 0.0, y: 0.0, width: size.width, height: size.height + max(0.0, classicPanelExtension))
+        transition.updateFrame(view: panel, frame: panelFrame)
+        panel.update(size: panelFrame.size, transition: transition)
+        transition.updateFrame(view: classicSeparator, frame: CGRect(x: 0.0, y: 0.0, width: size.width, height: UIScreenPixel))
+
+        let buttonSize = Self.classicButtonSize
+        let fieldWidth = max(0.0, size.width - Self.classicSideInset - Self.classicSendGap - buttonSize - Self.classicSideInset)
+        let fieldFrame = CGRect(x: Self.classicSideInset, y: Self.classicPanelInset, width: fieldWidth, height: max(0.0, size.height - Self.classicPanelInset * 2.0))
+        transition.updateFrame(view: container, frame: fieldFrame)
+        transition.updateFrame(view: classicField, frame: CGRect(origin: CGPoint(), size: fieldFrame.size))
+        classicField.layer.cornerRadius = Self.classicFieldMinimumHeight / 2.0
+        let width = fieldFrame.width
+        let height = fieldFrame.height
+
+        // Send and the microphone stay by the last line, as 12.0's buttons did when the field
+        // grew: send on the panel, the microphone inside the field's right end.
+        let buttonY = max(0.0, height - Self.classicButtonInset - buttonSize)
+        let sendFrame = CGRect(x: fieldFrame.maxX + Self.classicSendGap, y: fieldFrame.minY + buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: sendButton, frame: sendFrame)
+        sendButton.layer.cornerRadius = buttonSize / 2.0
+        let microphoneFrame = CGRect(x: max(0.0, width - Self.classicButtonInset - buttonSize), y: buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: dictationButton, frame: microphoneFrame)
+        dictationButton.layer.cornerRadius = buttonSize / 2.0
+
+        let referenceHeight: CGFloat = reference == nil ? 0.0 : 32.0
+        transition.updateFrame(view: referenceView, frame: CGRect(x: 13.0, y: 4.0, width: max(0.0, width - 26.0), height: referenceHeight))
+        referenceLine.frame = CGRect(x: 0, y: 5, width: 2, height: max(0, referenceHeight - 10))
+        referenceLine.layer.cornerRadius = 1
+        referenceLabel.frame = CGRect(x: 9, y: 5, width: max(0, width - 26.0 - 39.0), height: max(0, referenceHeight - 10))
+        referenceClose.frame = CGRect(x: max(0, width - 26.0 - 27.0), y: 3, width: 26, height: 26)
+
+        let inputTop = Self.classicVerticalPadding + (reference == nil ? 0.0 : Self.classicReferenceExtra)
+        let textFrame = CGRect(x: Self.classicTextLeading, y: inputTop, width: max(0.0, microphoneFrame.minX - 2.0 - Self.classicTextLeading), height: max(0.0, height - inputTop - Self.classicVerticalPadding))
+        transition.updateFrame(view: textView, frame: textFrame)
+        placeholder.frame = CGRect(x: 0, y: 2, width: textFrame.width, height: 21)
+
+        let cancelFrame = CGRect(x: Self.classicButtonInset, y: buttonY, width: buttonSize, height: buttonSize)
+        transition.updateFrame(view: dictationCancel, frame: cancelFrame)
+        dictationCancel.layer.cornerRadius = buttonSize / 2.0
+        let waveLeft = cancelFrame.maxX + 6.0
+        let waveFrame = CGRect(x: waveLeft, y: buttonY + floor((buttonSize - Self.waveHeight) / 2.0), width: max(0.0, microphoneFrame.minX - 10.0 - waveLeft), height: Self.waveHeight)
+        transition.updateFrame(view: dictationWave, frame: waveFrame)
+    }
+
+    /// 12.0's metrics: the field 6 points inside the panel above and below, one round button
+    /// tall with a point to spare either side of it, and rounded by half that however many
+    /// lines it grows to.
+    private static let classicPanelInset: CGFloat = 6.0
+    private static let classicSideInset: CGFloat = 8.0
+    private static let classicSendGap: CGFloat = 6.0
+    private static let classicButtonSize: CGFloat = 34.0
+    private static let classicButtonInset: CGFloat = 1.0
+    private static let classicFieldMinimumHeight: CGFloat = classicButtonSize + classicButtonInset * 2.0
+    private static let classicFieldMaximumHeight: CGFloat = 172.0
+    private static let classicTextLeading: CGFloat = 13.0
+    private static let classicVerticalPadding: CGFloat = 6.0
+    /// What a quoted message adds above the text inside the field.
+    private static let classicReferenceExtra: CGFloat = 34.0
+
     private static let sideInset: CGFloat = 12.0
     private static let bottomGap: CGFloat = 8.0
     private static let minimumHeight: CGFloat = 48.0
@@ -5152,6 +5363,9 @@ private final class AorusAIComposerView: UIView {
     private static let waveHeight: CGFloat = 28.0
 
     func requiredHeight(width: CGFloat) -> CGFloat {
+        if isClassic {
+            return requiredClassicHeight(width: width)
+        }
         let extra: CGFloat = reference == nil ? 0.0 : Self.referenceExtra
         if isDictating {
             // One row while the microphone is open: the text is not on screen to measure,
@@ -5164,6 +5378,21 @@ private final class AorusAIComposerView: UIView {
         let measured = textView.sizeThatFits(CGSize(width: available, height: 1000.0)).height
         let containerHeight = min(Self.maximumHeight, max(Self.minimumHeight + extra, ceil(measured) + Self.verticalPadding * 2.0 + extra))
         return containerHeight + Self.bottomGap
+    }
+
+    /// The classic panel's height: the field and the panel's inset above and below it.
+    private func requiredClassicHeight(width: CGFloat) -> CGFloat {
+        let extra: CGFloat = reference == nil ? 0.0 : Self.classicReferenceExtra
+        if isDictating {
+            return Self.classicFieldMinimumHeight + extra + Self.classicPanelInset * 2.0
+        }
+        // The width `updateClassicLayout` gives the text: the field, less its leading inset
+        // and the microphone at its right end.
+        let fieldWidth = width - Self.classicSideInset * 2.0 - Self.classicSendGap - Self.classicButtonSize
+        let available = max(60.0, fieldWidth - Self.classicTextLeading - Self.classicButtonInset - Self.classicButtonSize - 2.0)
+        let measured = textView.sizeThatFits(CGSize(width: available, height: 1000.0)).height
+        let fieldHeight = min(Self.classicFieldMaximumHeight, max(Self.classicFieldMinimumHeight + extra, ceil(measured) + Self.classicVerticalPadding * 2.0 + extra))
+        return fieldHeight + Self.classicPanelInset * 2.0
     }
 
     func invalidateHeight() {
@@ -5757,7 +5986,8 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// message, produced the right one. That is the "message appears cut off until I type
     /// something" report.
     private let bubble = AorusAIBubbleView()
-    private let bubbleGlass = AorusAIGlassView(interactive: false)
+    /// None under the old interface, which draws the user's turn as a flat card.
+    private let bubbleGlass: AorusAIGlassView? = AorusOldInterface.isEnabled ? nil : AorusAIGlassView(interactive: false)
     private let bodyStack = UIStackView()
     private let statusLabel = UILabel()
     private let workTrail = AorusAIWorkTrailView()
@@ -5964,7 +6194,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// The pane follows the bubble, from the bubble's own layout pass: the bubble hugs its text
     /// and only knows its size once the stack around it has laid it out.
     private func layoutBubbleGlass(size: CGSize) {
-        guard !bubbleGlass.isHidden, bubbleGlass.superview === bubble, size.width > 0.0, size.height > 0.0 else { return }
+        guard let bubbleGlass, !bubbleGlass.isHidden, bubbleGlass.superview === bubble, size.width > 0.0, size.height > 0.0 else { return }
         bubbleGlass.frame = CGRect(origin: CGPoint(), size: size)
         bubbleGlass.update(
             size: size,
@@ -6173,15 +6403,20 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         // question and the field it was typed in are visibly the same material. The
         // assistant's turn stays bare text: two panes facing each other would make the
         // thread a column of boxes.
-        bubble.backgroundColor = .clear
-        if isUser {
-            if bubbleGlass.superview !== bubble {
-                bubbleGlass.isUserInteractionEnabled = false
-                bubble.insertSubview(bubbleGlass, at: 0)
+        //
+        // The old interface has no glass: there the user's turn is a flat card in the shade a
+        // control takes on the page, the way a question sits in any chat drawn without it.
+        bubble.backgroundColor = isUser && bubbleGlass == nil ? palette.controlFill : .clear
+        if let bubbleGlass {
+            if isUser {
+                if bubbleGlass.superview !== bubble {
+                    bubbleGlass.isUserInteractionEnabled = false
+                    bubble.insertSubview(bubbleGlass, at: 0)
+                }
+                bubbleGlass.isHidden = false
+            } else {
+                bubbleGlass.isHidden = true
             }
-            bubbleGlass.isHidden = false
-        } else {
-            bubbleGlass.isHidden = true
         }
         // A reused cell can keep its bubble's size and so get no layout pass of its own: the
         // pane is laid out again for the message and theme it now shows.
@@ -6519,26 +6754,49 @@ private final class AorusAITypingIndicatorView: UIView {
 /// It appears once the newest text is out of sight, above the input in the middle, the way
 /// the chat apps people already know put it, and it goes as soon as the newest text is back.
 private final class AorusAIScrollDownButton: UIView {
-    static let size: CGFloat = 40.0
+    /// 12.0's button over a chat is 38 points across.
+    static let size: CGFloat = AorusOldInterface.isEnabled ? 38.0 : 40.0
 
     private let content = UIView()
-    private let glass = AorusAIGlassView(interactive: true)
+    private let glass: AorusAIGlassView?
+    /// The old interface's button, as 12.0 drew it over a chat: the input panel's colour over
+    /// its blur, the theme's hairline ring round it and its chevron.
+    private let classicBackground: BlurredBackgroundView?
+    private let classicRing: UIImageView?
     private let icon = UIImageView()
     private var isDark = false
     private(set) var isShown = false
     var onPress: (() -> Void)?
 
     override init(frame: CGRect) {
+        if AorusOldInterface.isEnabled {
+            self.glass = nil
+            self.classicBackground = BlurredBackgroundView(color: nil)
+            self.classicRing = UIImageView()
+        } else {
+            self.glass = AorusAIGlassView(interactive: true)
+            self.classicBackground = nil
+            self.classicRing = nil
+        }
         super.init(frame: frame)
-        icon.image = UIImage(systemName: "arrow.down")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .semibold))
         icon.contentMode = .center
         icon.isUserInteractionEnabled = false
-        // Telegram's own interactive glass, tapped the way its glass buttons are: the
-        // recogniser is on the glass, so the press is the glass's own.
-        glass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
         addSubview(content)
-        content.addSubview(glass)
-        glass.contentView.addSubview(icon)
+        if let glass {
+            icon.image = UIImage(systemName: "arrow.down")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .semibold))
+            // Telegram's own interactive glass, tapped the way its glass buttons are: the
+            // recogniser is on the glass, so the press is the glass's own.
+            glass.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
+            content.addSubview(glass)
+            glass.contentView.addSubview(icon)
+        } else if let classicBackground, let classicRing {
+            classicBackground.isUserInteractionEnabled = false
+            classicRing.isUserInteractionEnabled = false
+            content.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
+            content.addSubview(classicBackground)
+            content.addSubview(classicRing)
+            content.addSubview(icon)
+        }
         // Hidden until there is somewhere to go back to. The scale is on an inner view, so
         // the frame the controller sets is never a transformed one.
         content.alpha = 0.0
@@ -6553,7 +6811,14 @@ private final class AorusAIScrollDownButton: UIView {
 
     func configure(theme: PresentationTheme) {
         isDark = theme.overallDarkAppearance
-        icon.tintColor = AorusAIPalette.resolve(theme).label
+        if let classicBackground, let classicRing {
+            classicBackground.updateColor(color: theme.chat.inputPanel.panelBackgroundColor, transition: .immediate)
+            classicRing.image = PresentationResourcesChat.chatHistoryNavigationButtonBackground(theme)
+            icon.image = PresentationResourcesChat.chatHistoryNavigationButtonImage(theme)
+            icon.tintColor = theme.chat.historyNavigation.foregroundColor
+        } else {
+            icon.tintColor = AorusAIPalette.resolve(theme).label
+        }
         setNeedsLayout()
     }
 
@@ -6561,8 +6826,15 @@ private final class AorusAIScrollDownButton: UIView {
         super.layoutSubviews()
         content.bounds = CGRect(origin: CGPoint(), size: bounds.size)
         content.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        glass.frame = content.bounds
-        glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, transition: .immediate)
+        if let glass {
+            glass.frame = content.bounds
+            glass.update(size: bounds.size, cornerRadius: bounds.height / 2.0, isDark: isDark, transition: .immediate)
+        }
+        if let classicBackground, let classicRing {
+            classicBackground.frame = content.bounds
+            classicBackground.update(size: bounds.size, cornerRadius: bounds.height / 2.0, transition: .immediate)
+            classicRing.frame = content.bounds
+        }
         icon.frame = CGRect(origin: CGPoint(), size: bounds.size)
     }
 
@@ -6611,27 +6883,35 @@ private final class AorusAIScrollDownButton: UIView {
 /// The same glass and the same height as the back button beside it, so the bar reads as one
 /// row of capsules. The capsule follows its text: when the status line appears, changes or
 /// goes, it widens or narrows and the name moves, in one spring.
+///
+/// Under the old interface there is no capsule: the title is the bar's own text, as a chat's
+/// is in 12.0 -- the name in the bar's 17-point semibold, centred, and under it what the
+/// assistant is doing, in the accent the bar says "typing" in.
 private final class AorusAINavigationTitleView: UIView {
     private static let height: CGFloat = 44.0
     private static let horizontalPadding: CGFloat = 16.0
     private static let maximumWidth: CGFloat = 260.0
 
-    private let glassView = AorusAIGlassView(interactive: false)
+    private let isClassic = AorusOldInterface.isEnabled
+    private let glassView: AorusAIGlassView?
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
     private var isDarkAppearance = false
 
     init(theme: PresentationTheme) {
+        self.glassView = AorusOldInterface.isEnabled ? nil : AorusAIGlassView(interactive: false)
         super.init(frame: .zero)
-        glassView.isUserInteractionEnabled = false
+        glassView?.isUserInteractionEnabled = false
         titleLabel.text = "AorusAI"
-        titleLabel.font = aorusUIFont(16.0, .semibold)
+        titleLabel.font = isClassic ? aorusUIFont(17.0, .semibold) : aorusUIFont(16.0, .semibold)
         titleLabel.textAlignment = .center
-        statusLabel.font = aorusUIFont(12.0, .regular)
+        statusLabel.font = isClassic ? aorusUIFont(13.0, .regular) : aorusUIFont(12.0, .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.alpha = 0.0
-        addSubview(glassView)
+        if let glassView {
+            addSubview(glassView)
+        }
         addSubview(titleLabel)
         addSubview(statusLabel)
         isAccessibilityElement = true
@@ -6645,7 +6925,7 @@ private final class AorusAINavigationTitleView: UIView {
         isDarkAppearance = theme.overallDarkAppearance
         let palette = AorusAIPalette.resolve(theme)
         titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
-        statusLabel.textColor = palette.secondary
+        statusLabel.textColor = isClassic ? theme.rootController.navigationBar.accentTextColor : palette.secondary
         setNeedsLayout()
     }
 
@@ -6674,6 +6954,11 @@ private final class AorusAINavigationTitleView: UIView {
         guard bounds.width > 0.0, bounds.height > 0.0 else { return }
         let status = statusLabel.text ?? ""
         let hasStatus = !status.isEmpty
+        if isClassic {
+            layoutClassicTitle(hasStatus: hasStatus, transition: transition)
+            return
+        }
+        guard let glassView else { return }
         let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width)
         let statusWidth = hasStatus ? ceil(statusLabel.sizeThatFits(CGSize(width: Self.maximumWidth, height: Self.height)).width) : 0.0
         let width = min(bounds.width, Self.maximumWidth, max(128.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
@@ -6686,6 +6971,18 @@ private final class AorusAINavigationTitleView: UIView {
         let titleY = hasStatus ? frame.minY + 5.0 : frame.minY + floor((height - titleHeight) / 2.0)
         transition.setFrame(view: titleLabel, frame: CGRect(x: frame.minX + Self.horizontalPadding, y: titleY, width: max(0.0, width - Self.horizontalPadding * 2.0), height: titleHeight))
         transition.setFrame(view: statusLabel, frame: CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 24.0, width: max(0.0, width - Self.horizontalPadding * 2.0), height: 15.0))
+        transition.setAlpha(view: statusLabel, alpha: hasStatus ? 1.0 : 0.0)
+    }
+
+    /// 12.0's chat title: the name alone in the middle of the bar, or the name and the line
+    /// under it centred as one block, with no space between them.
+    private func layoutClassicTitle(hasStatus: Bool, transition: ComponentTransition) {
+        let width = bounds.width
+        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: width, height: bounds.height)).height)
+        let statusHeight = hasStatus ? ceil(statusLabel.sizeThatFits(CGSize(width: width, height: bounds.height)).height) : 0.0
+        let titleY = floor((bounds.height - titleHeight - statusHeight) / 2.0)
+        transition.setFrame(view: titleLabel, frame: CGRect(x: 0.0, y: titleY, width: width, height: titleHeight))
+        transition.setFrame(view: statusLabel, frame: CGRect(x: 0.0, y: titleY + titleHeight, width: width, height: max(statusHeight, ceil(statusLabel.font.lineHeight))))
         transition.setAlpha(view: statusLabel, alpha: hasStatus ? 1.0 : 0.0)
     }
 }

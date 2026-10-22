@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """Generate AorusMaskStrings.swift for the leaf picker module from the main phrase book.
 
-The picker cannot import AorusGramUI, so it needs its own copy of nine strings. Generating
-that copy from AorusL10nTable rather than hand-writing it means the two cannot drift, and
-the verifier re-checks the agreement on every build.
+The picker cannot import AorusGramUI, so it needs its own copy of the strings it shows.
+Generating that copy from AorusL10nTable rather than hand-writing it means the two cannot
+drift, and the verifier re-checks the agreement on every build.
 """
 import re, sys, pathlib
 
@@ -22,6 +22,7 @@ WANTED = {
     'chrome':   'Liquid Chrome',
     'aurora':   'Aurora',
     'neonCat':  'Neon Cat',
+    'blur':     'Blur',
     'custom':   'My Mask',
 }
 
@@ -53,7 +54,7 @@ lines = [
     '// GENERATED from AorusL10nTable.swift — do not hand-edit.',
     '//',
     '// The picker is a leaf module and cannot import AorusGramUI, so it carries its own copy',
-    '// of the nine strings it shows. That copy is generated from the same phrase book the rest',
+    '// of the strings it shows. That copy is generated from the same phrase book the rest',
     '// of the client uses, and scripts/verify_aorus_branding.py re-checks the two agree, so the',
     '// duplication cannot quietly drift.',
     '//',

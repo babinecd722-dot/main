@@ -3333,16 +3333,14 @@ def _patch_message_field(tg: Path) -> None:
             text,
             "        transition.updateFrame(node: self.inputPanelBackgroundNode, frame: apparentInputBackgroundFrame, beginWithCurrentState: true)\n",
             "        if AorusOldInterface.isEnabled {\n"
-            "            // The classic panel goes on under the home indicator, as 12.0's did, when nothing\n"
-            "            // else is there. A keyboard -- the system's, the sticker keyboard, a bot's -- lies\n"
-            "            // beneath this background, and the panel ends where it begins: carried down to the\n"
-            "            // screen's edge, it covered the sticker keyboard and left an empty panel in its place.\n"
+            "            // The classic panel goes on to the screen's edge, as 12.0's did: under the home\n"
+            "            // indicator, and under the system's keyboard, whose top corners iOS 26 rounds --\n"
+            "            // ended at the keyboard, the panel left those corners open onto the black behind\n"
+            "            // them. Telegram's own keyboard -- the sticker keyboard, a bot's buttons -- lies\n"
+            "            // beneath this background and draws its own, so over it the panel ends where it\n"
+            "            // begins: carried down, it covered the sticker keyboard and left an empty panel.\n"
             "            var aorusPanelFrame = apparentInputBackgroundFrame\n"
-            "            if cleanInsets.bottom < insets.bottom {\n"
-            "                if case .regular = layout.metrics.widthClass, insets.bottom < 88.0 {\n"
-            "                    aorusPanelFrame.size.height += insets.bottom\n"
-            "                }\n"
-            "            } else {\n"
+            "            if inputNodeHeightAndOverflow == nil {\n"
             "                aorusPanelFrame.size.height = max(aorusPanelFrame.height, layout.size.height - aorusPanelFrame.minY)\n"
             "            }\n"
             "            transition.updateFrame(node: self.inputPanelBackgroundNode, frame: aorusPanelFrame, beginWithCurrentState: true)\n"
@@ -3543,8 +3541,9 @@ def verify_old_interface(tg: Path) -> list[str]:
         "submodules/TelegramUI/Sources/ChatControllerNode.swift": [
             "self.inputPanelBackgroundNode.update(size: aorusPanelFrame.size, transition: transition)",
             "self.inputPanelBackgroundNode.addSubnode(self.aorusInputPanelSeparatorNode)",
-            # The panel ends where a keyboard begins: the sticker keyboard lies beneath it.
-            "            if cleanInsets.bottom < insets.bottom {\n                if case .regular = layout.metrics.widthClass, insets.bottom < 88.0 {\n                    aorusPanelFrame.size.height += insets.bottom\n",
+            # The panel reaches the screen's edge under the system's keyboard, whose corners are
+            # round, and ends where Telegram's own keyboard begins: the sticker keyboard lies beneath it.
+            "            if inputNodeHeightAndOverflow == nil {\n                aorusPanelFrame.size.height = max(aorusPanelFrame.height, layout.size.height - aorusPanelFrame.minY)\n            }\n",
         ],
         "submodules/TelegramUI/Components/ChatEntityKeyboardInputNode/Sources/ChatEntityKeyboardInputNode.swift": [
             "self.clippingView.layer.cornerRadius = AorusOldInterface.isEnabled ? 0.0 : keyboardCornerRadius",

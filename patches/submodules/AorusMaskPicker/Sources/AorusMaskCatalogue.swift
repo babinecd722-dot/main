@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CoreImage
 
 // The list of masks the picker offers, and how each one is resolved to a thumbnail.
 //
@@ -34,7 +35,9 @@ public enum AorusMaskCatalogue {
     public static let offKey = "none"
 
     /// Built-in presets, in the order AorusVideoMaskProcessor declares them.
-    static let presetKeys = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat"]
+    static let presetKeys = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", blurKey]
+    /// Mirrors AorusVideoMaskProcessor.blurPreset — the face blurred rather than covered.
+    static let blurKey = "blur"
 
     /// Caption under the call button that opens the strip.
     public static var buttonTitle: String {
@@ -130,6 +133,8 @@ public enum AorusMaskCatalogue {
         let image: UIImage?
         if let url = customImageURL(for: key) {
             image = UIImage(contentsOfFile: url.path)
+        } else if key == blurKey {
+            image = blurThumbnail()
         } else {
             image = bundledPresetImage(named: key)
         }
@@ -140,6 +145,38 @@ public enum AorusMaskCatalogue {
         customStamps[key] = stamp
         cacheLock.unlock()
         return image
+    }
+
+    /// The blur has no artwork: its circle shows a face, blurred as the face in the video is.
+    private static func blurThumbnail() -> UIImage? {
+        guard #available(iOS 13.0, *) else { return nil }
+        let configuration = UIImage.SymbolConfiguration(pointSize: 92.0, weight: .regular)
+        guard let symbol = (UIImage(systemName: "face.smiling", withConfiguration: configuration)
+            ?? UIImage(systemName: "person.fill", withConfiguration: configuration))?
+            .withTintColor(.white, renderingMode: .alwaysOriginal) else {
+            return nil
+        }
+        let size = CGSize(width: 160.0, height: 160.0)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = false
+        let sharp = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            let symbolSize = symbol.size
+            symbol.draw(in: CGRect(
+                x: (size.width - symbolSize.width) / 2.0,
+                y: (size.height - symbolSize.height) / 2.0,
+                width: symbolSize.width,
+                height: symbolSize.height
+            ))
+        }
+        guard let input = CIImage(image: sharp) else {
+            return sharp
+        }
+        let blurred = input.clampedToExtent().applyingGaussianBlur(sigma: 6.0).cropped(to: input.extent)
+        guard let output = CIContext(options: [.cacheIntermediates: false]).createCGImage(blurred, from: input.extent) else {
+            return sharp
+        }
+        return UIImage(cgImage: output)
     }
 
     // MARK: - Items
