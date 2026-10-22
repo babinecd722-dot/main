@@ -114,7 +114,9 @@ def _stories(tg: Path) -> None:
             "                    foreground: AorusOldInterface.isEnabled ? self.presentationData.theme.list.itemPrimaryTextColor.withMultipliedAlpha(0.8) : self.presentationData.theme.list.itemPrimaryTextColor, // " + MARK + "\n"
             "                    selection: self.presentationData.theme.list.itemPrimaryTextColor.withMultipliedAlpha(0.05),\n"
             "                    normal: AorusOldInterface.isEnabled ? nil : self.presentationData.theme.list.itemPrimaryTextColor,\n"
-            "                    simple: !AorusOldInterface.isEnabled\n",
+            # Every album in the same ink, as the gift collections beside them: 12.0 dimmed the
+            # ones not chosen, and its own albums read as greyed out next to All Stories.
+            "                    simple: true\n",
             "albums colour",
         ),
         (

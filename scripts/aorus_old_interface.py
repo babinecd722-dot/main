@@ -3005,6 +3005,35 @@ def _patch_classic_keyboard_panel(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _patch_classic_keyboard_background(tg: Path) -> None:
+    # The emoji, sticker and GIF keyboard as 12.0 laid it under the message panel: square, the
+    # panel's own colour carried straight down. 12.9.2 floats it as a sheet rounded by 30 points
+    # with a glass rim along its top, which under the flat classic panel left the wallpaper
+    # showing in its two corners and a highlight with no glass to belong to.
+    path = tg / "submodules/TelegramUI/Components/ChatEntityKeyboardInputNode/Sources/ChatEntityKeyboardInputNode.swift"
+    text = _read(path)
+    if not _imports_display(text):
+        raise RuntimeError("OldInterface: ChatEntityKeyboardInputNode.swift does not import Display")
+    edits = (
+        ("        self.clippingView.layer.cornerRadius = keyboardCornerRadius\n",
+         "        self.clippingView.layer.cornerRadius = AorusOldInterface.isEnabled ? 0.0 : keyboardCornerRadius // " + MARK + "\n",
+         "keyboard clipping corners"),
+        ("            if backgroundChromeView.image == nil {\n",
+         "            backgroundChromeView.isHidden = AorusOldInterface.isEnabled // " + MARK + ": no glass rim\n"
+         "            if backgroundChromeView.image == nil {\n",
+         "keyboard glass rim"),
+        ("                backgroundTintView.image = generateStretchableFilledCircleImage(diameter: keyboardCornerRadius * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate)\n",
+         "                backgroundTintView.image = generateStretchableFilledCircleImage(diameter: AorusOldInterface.isEnabled ? 2.0 : keyboardCornerRadius * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate) // " + MARK + "\n",
+         "keyboard tint corners"),
+        ("            backgroundView.update(size: backgroundFrame.size, cornerRadius: keyboardCornerRadius, maskedCorners: [.layerMinXMinYCorner, .layerMaxXMinYCorner], transition: transition)\n",
+         "            backgroundView.update(size: backgroundFrame.size, cornerRadius: AorusOldInterface.isEnabled ? 0.0 : keyboardCornerRadius, maskedCorners: [.layerMinXMinYCorner, .layerMaxXMinYCorner], transition: transition) // " + MARK + "\n",
+         "keyboard background corners"),
+    )
+    for old, new, label in edits:
+        text = _edit(text, old, new, label)
+    path.write_text(text, encoding="utf-8")
+
+
 _ROUNDED_LIST_WIDTH_FILES = (
     "ItemListUI/Sources/ItemListItem.swift",
     "ItemListUI/Sources/ItemListControllerNode.swift",
@@ -3304,9 +3333,18 @@ def _patch_message_field(tg: Path) -> None:
             text,
             "        transition.updateFrame(node: self.inputPanelBackgroundNode, frame: apparentInputBackgroundFrame, beginWithCurrentState: true)\n",
             "        if AorusOldInterface.isEnabled {\n"
-            "            // The classic panel reaches the bottom edge of the screen, under the home indicator.\n"
+            "            // The classic panel goes on under the home indicator, as 12.0's did, when nothing\n"
+            "            // else is there. A keyboard -- the system's, the sticker keyboard, a bot's -- lies\n"
+            "            // beneath this background, and the panel ends where it begins: carried down to the\n"
+            "            // screen's edge, it covered the sticker keyboard and left an empty panel in its place.\n"
             "            var aorusPanelFrame = apparentInputBackgroundFrame\n"
-            "            aorusPanelFrame.size.height = max(aorusPanelFrame.height, layout.size.height - aorusPanelFrame.minY)\n"
+            "            if cleanInsets.bottom < insets.bottom {\n"
+            "                if case .regular = layout.metrics.widthClass, insets.bottom < 88.0 {\n"
+            "                    aorusPanelFrame.size.height += insets.bottom\n"
+            "                }\n"
+            "            } else {\n"
+            "                aorusPanelFrame.size.height = max(aorusPanelFrame.height, layout.size.height - aorusPanelFrame.minY)\n"
+            "            }\n"
             "            transition.updateFrame(node: self.inputPanelBackgroundNode, frame: aorusPanelFrame, beginWithCurrentState: true)\n"
             "            self.inputPanelBackgroundNode.update(size: aorusPanelFrame.size, transition: transition)\n"
             "            transition.updateFrame(node: self.aorusInputPanelSeparatorNode, frame: CGRect(origin: CGPoint(), size: CGSize(width: aorusPanelFrame.width, height: UIScreenPixel)))\n"
@@ -3408,6 +3446,7 @@ def patch_old_interface(tg: Path) -> None:
     _patch_classic_profile(tg)
     _patch_classic_gallery(tg)
     _patch_classic_keyboard_panel(tg)
+    _patch_classic_keyboard_background(tg)
     from aorus_classic_components import patch_classic_components
     patch_classic_components(tg)
     from aorus_classic_layout import patch_classic_layout
@@ -3504,6 +3543,13 @@ def verify_old_interface(tg: Path) -> list[str]:
         "submodules/TelegramUI/Sources/ChatControllerNode.swift": [
             "self.inputPanelBackgroundNode.update(size: aorusPanelFrame.size, transition: transition)",
             "self.inputPanelBackgroundNode.addSubnode(self.aorusInputPanelSeparatorNode)",
+            # The panel ends where a keyboard begins: the sticker keyboard lies beneath it.
+            "            if cleanInsets.bottom < insets.bottom {\n                if case .regular = layout.metrics.widthClass, insets.bottom < 88.0 {\n                    aorusPanelFrame.size.height += insets.bottom\n",
+        ],
+        "submodules/TelegramUI/Components/ChatEntityKeyboardInputNode/Sources/ChatEntityKeyboardInputNode.swift": [
+            "self.clippingView.layer.cornerRadius = AorusOldInterface.isEnabled ? 0.0 : keyboardCornerRadius",
+            "backgroundChromeView.isHidden = AorusOldInterface.isEnabled",
+            "cornerRadius: AorusOldInterface.isEnabled ? 0.0 : keyboardCornerRadius, maskedCorners:",
         ],
         "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift": [
             "color: interfaceState.theme.chat.inputPanel.inputBackgroundColor)) : defaultGlassTintColor",

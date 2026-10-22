@@ -92,7 +92,7 @@ def patch_posts_page_ink(tg: Path) -> None:
                     foreground: AorusOldInterface.isEnabled ? self.presentationData.theme.list.itemPrimaryTextColor.withMultipliedAlpha(0.8) : self.presentationData.theme.list.itemPrimaryTextColor, // AorusGram: old interface
                     selection: self.presentationData.theme.list.itemPrimaryTextColor.withMultipliedAlpha(0.05),
                     normal: AorusOldInterface.isEnabled ? nil : self.presentationData.theme.list.itemPrimaryTextColor,
-                    simple: !AorusOldInterface.isEnabled
+                    simple: true
                 ),
                 theme: self.presentationData.theme,
 ''', '''        // AorusGram: the page's palette, which the last layout derived.
@@ -104,7 +104,7 @@ def patch_posts_page_ink(tg: Path) -> None:
                     foreground: AorusOldInterface.isEnabled ? aorusTabTheme.list.itemPrimaryTextColor.withMultipliedAlpha(0.8) : aorusTabTheme.list.itemPrimaryTextColor, // AorusGram: old interface
                     selection: aorusTabTheme.list.itemPrimaryTextColor.withMultipliedAlpha(0.05),
                     normal: AorusOldInterface.isEnabled ? nil : aorusTabTheme.list.itemPrimaryTextColor,
-                    simple: !AorusOldInterface.isEnabled
+                    simple: true
                 ),
                 theme: aorusTabTheme,
 ''', 'posts album tabs ink')
