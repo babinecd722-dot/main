@@ -349,6 +349,12 @@ def main() -> None:
             err.append("ComposerTranslator: automatic source or English target defaults are missing")
         if "localizedName(for code:" not in toolbar_text or "localizedString(forLanguageCode:" not in toolbar_text:
             err.append("ComposerTranslator: full localized language names are missing")
+        # The old interface draws the row without glass, in the message field's own colours.
+        if "if let classic {" not in toolbar_text or ".environment(\\.aorusToolbarClassicColors, AorusOldInterface.isEnabled ? self.model.classicColors : nil)" not in toolbar_text:
+            err.append("FormattingPanel: the old interface still draws the row in glass")
+        panel_source = formatting_toolbar.parent / "ChatTextInputPanelNode.swift"
+        if panel_source.is_file() and "model.updateClassicColors(fill: inputPanel.inputBackgroundColor" not in panel_source.read_text(encoding="utf-8"):
+            err.append("FormattingPanel: the old interface's row is not given the theme's field colours")
     else:
         err.append("FormattingPanel: AorusInputToolbar.swift is missing")
 

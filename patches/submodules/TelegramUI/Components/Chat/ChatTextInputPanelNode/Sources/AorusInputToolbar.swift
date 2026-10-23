@@ -14,6 +14,9 @@ import AorusGramUI
 //   * applying a format without a selection formats the whole input and restores
 //     the caret instead of leaving the text highlighted (handled on the panel-node
 //     side).
+// Under the old interface there is no glass: the buttons are flat circles in the colours
+// of 12.0's message field, on the panel the row sits in, and the translator's fields are
+// drawn the same way.
 
 final class AorusFormattingToolbarModel: ObservableObject {
     // Whether the current input has text that can be formatted.
@@ -27,6 +30,9 @@ final class AorusFormattingToolbarModel: ObservableObject {
     @Published var isTranslating: Bool = false
     @Published var translationFailed: Bool = false
     @Published var themeAccentColor: UIColor
+    /// The old interface's colours for the row, from the theme's message field; nil until the
+    /// panel has said what they are, and always nil outside the old interface.
+    @Published private(set) var classicColors: AorusToolbarClassicColors?
 
     let interfaceLanguageCode: String
 
@@ -48,6 +54,13 @@ final class AorusFormattingToolbarModel: ObservableObject {
         let storedTarget = UserDefaults.standard.string(forKey: Self.targetLanguageKey) ?? "en"
         self.sourceLanguageCode = AorusTranslationLanguage.isSupported(storedSource, allowAutomatic: true) ? storedSource : "auto"
         self.targetLanguageCode = AorusTranslationLanguage.isSupported(storedTarget, allowAutomatic: false) ? storedTarget : "en"
+    }
+
+    func updateClassicColors(fill: UIColor, stroke: UIColor, text: UIColor, control: UIColor) {
+        let colors = AorusToolbarClassicColors(fill: fill, stroke: stroke, text: text, control: control)
+        if self.classicColors != colors {
+            self.classicColors = colors
+        }
     }
 
     func setSourceLanguage(_ code: String) {
@@ -155,6 +168,31 @@ struct AorusFormattingToolbarView: View {
         }
         .accentColor(Color(self.model.themeAccentColor))
         .background(Color(UIColor.clear))
+        .environment(\.aorusToolbarClassicColors, AorusOldInterface.isEnabled ? self.model.classicColors : nil)
+    }
+
+    /// The glyphs' ink. Under the old interface the row is on the theme's own panel, so it
+    /// takes the theme's text and control colours rather than the system's, which follow the
+    /// device's appearance and not the theme's.
+    private var ink: Color {
+        if AorusOldInterface.isEnabled, let classic = self.model.classicColors {
+            return Color(classic.text)
+        }
+        return Color.primary
+    }
+
+    private var dimmedInk: Color {
+        if AorusOldInterface.isEnabled, let classic = self.model.classicColors {
+            return Color(classic.control).opacity(0.5)
+        }
+        return Color.secondary.opacity(0.45)
+    }
+
+    private var secondaryInk: Color {
+        if AorusOldInterface.isEnabled, let classic = self.model.classicColors {
+            return Color(classic.control)
+        }
+        return Color.secondary
     }
 
     private var formattingToolbar: some View {
@@ -163,7 +201,7 @@ struct AorusFormattingToolbarView: View {
                 // New line — always available.
                 Button(action: onNewLine) {
                     AorusToolbarSymbol(name: "return")
-                        .foregroundColor(Color.primary)
+                        .foregroundColor(self.ink)
                 }
                 .buttonStyle(AorusToolbarButtonStyle())
 
@@ -213,7 +251,7 @@ struct AorusFormattingToolbarView: View {
                 Button(action: self.swapLanguages) {
                     AorusToolbarSymbol(name: "arrow.left.arrow.right", size: 17, weight: .semibold)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Color.secondary)
+                        .foregroundColor(self.secondaryInk)
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(PlainButtonStyle())
@@ -223,10 +261,7 @@ struct AorusFormattingToolbarView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 44)
-            .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground).opacity(0.94))
-            )
+            .background(AorusToolbarFieldBackground())
 
             HStack(spacing: 9) {
                 translationGlyph(size: 18)
@@ -243,6 +278,7 @@ struct AorusFormattingToolbarView: View {
                     )
                 )
                 .font(.system(size: 16))
+                .foregroundColor(self.ink)
                 .autocapitalization(.sentences)
                 .disableAutocorrection(false)
 
@@ -261,17 +297,14 @@ struct AorusFormattingToolbarView: View {
                         self.translateCurrentText()
                     }) {
                         AorusToolbarSymbol(name: "xmark.circle.fill")
-                            .foregroundColor(Color.secondary.opacity(0.75))
+                            .foregroundColor(self.secondaryInk.opacity(0.75))
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
             }
             .padding(.horizontal, 12)
             .frame(height: 42)
-            .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground).opacity(0.94))
-            )
+            .background(AorusToolbarFieldBackground())
         }
         .padding(.horizontal, 8)
     }
@@ -285,9 +318,9 @@ struct AorusFormattingToolbarView: View {
                     .minimumScaleFactor(0.75)
                 AorusToolbarSymbol(name: "chevron.down", size: 10, weight: .bold)
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(Color.secondary)
+                    .foregroundColor(self.secondaryInk)
             }
-            .foregroundColor(Color.primary)
+            .foregroundColor(self.ink)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
@@ -297,7 +330,7 @@ struct AorusFormattingToolbarView: View {
     private func translatorButton() -> some View {
         Button(action: self.onTranslator) {
             translationGlyph(size: 21)
-                .foregroundColor(self.model.isTranslatorExpanded ? Color(self.model.themeAccentColor) : Color.primary)
+                .foregroundColor(self.model.isTranslatorExpanded ? Color(self.model.themeAccentColor) : self.ink)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .accessibility(label: Text(aorusL("Переводчик", "Translator")))
@@ -342,7 +375,7 @@ struct AorusFormattingToolbarView: View {
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: { if self.model.canFormat { action() } }) {
             AorusToolbarSymbol(name: systemName)
-                .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
+                .foregroundColor(self.model.canFormat ? self.ink : self.dimmedInk)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
@@ -351,7 +384,7 @@ struct AorusFormattingToolbarView: View {
     private func clearFormattingButton() -> some View {
         Button(action: { if self.model.canClearFormatting { self.onClearFormatting() } }) {
             AorusToolbarSymbol(name: "pencil.slash")
-                .foregroundColor(self.model.canClearFormatting ? Color.primary : Color.secondary.opacity(0.45))
+                .foregroundColor(self.model.canClearFormatting ? self.ink : self.dimmedInk)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canClearFormatting)
@@ -361,7 +394,7 @@ struct AorusFormattingToolbarView: View {
     private func monospaceButton() -> some View {
         Button(action: { if self.model.canFormat { self.onMonospace() } }) {
             AorusToolbarMonospace()
-            .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
+            .foregroundColor(self.model.canFormat ? self.ink : self.dimmedInk)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
@@ -376,7 +409,7 @@ struct AorusFormattingToolbarView: View {
                     AorusToolbarSymbol(name: "doc.on.clipboard")
                 }
             }
-            .foregroundColor(Color.primary)
+            .foregroundColor(self.ink)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .accessibility(label: Text("Clipboard"))
@@ -395,7 +428,7 @@ struct AorusFormattingToolbarView: View {
                     AorusToolbarSymbol(name: "person.crop.circle.badge.questionmark")
                 }
             }
-            .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
+            .foregroundColor(self.model.canFormat ? self.ink : self.dimmedInk)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
@@ -631,14 +664,74 @@ private struct AorusToolbarScrollOverflow: ViewModifier {
     }
 }
 
+/// The colours the old interface draws the row in: those of 12.0's message field.
+struct AorusToolbarClassicColors: Equatable {
+    let fill: UIColor
+    let stroke: UIColor
+    /// The glyph of a button that can act, and of one that cannot.
+    let text: UIColor
+    let control: UIColor
+
+    static func ==(lhs: AorusToolbarClassicColors, rhs: AorusToolbarClassicColors) -> Bool {
+        return lhs.fill.isEqual(rhs.fill) && lhs.stroke.isEqual(rhs.stroke) && lhs.text.isEqual(rhs.text) && lhs.control.isEqual(rhs.control)
+    }
+}
+
+private struct AorusToolbarClassicColorsKey: EnvironmentKey {
+    static let defaultValue: AorusToolbarClassicColors? = nil
+}
+
+private extension EnvironmentValues {
+    var aorusToolbarClassicColors: AorusToolbarClassicColors? {
+        get { self[AorusToolbarClassicColorsKey.self] }
+        set { self[AorusToolbarClassicColorsKey.self] = newValue }
+    }
+}
+
+/// The translator's fields: under the old interface the message field's fill and hairline,
+/// otherwise the system's secondary surface.
+private struct AorusToolbarFieldBackground: View {
+    @Environment(\.aorusToolbarClassicColors) private var classic
+
+    var body: some View {
+        if let classic {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color(classic.fill))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .stroke(Color(classic.stroke), lineWidth: 1.0 / UIScreen.main.scale)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color(UIColor.secondarySystemBackground).opacity(0.94))
+        }
+    }
+}
+
 private struct AorusGlass: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.aorusToolbarClassicColors) private var classic
     @ObservedObject private var glassEffects = AorusGlassEffectsPreference.shared
 
     var body: some View {
+        if let classic {
+            // 12.0 had no glass: a flat circle in the message field's fill with its hairline,
+            // and no shadow, sitting on the panel like the field beside it.
+            Circle()
+                .fill(Color(classic.fill))
+                .overlay(
+                    Circle()
+                        .stroke(Color(classic.stroke), lineWidth: 1.0 / UIScreen.main.scale)
+                )
+        } else {
+            self.glass
+        }
+    }
+
+    private var glass: some View {
         let isDark = colorScheme == .dark
 
-        Group {
+        return Group {
             if glassEffects.isEnabled {
                 if #available(iOS 15.0, *) {
                     Circle()
