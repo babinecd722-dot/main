@@ -16,6 +16,7 @@ import LocalizedPeerData
 import ComponentFlow
 import GlassBackgroundComponent
 import EdgeEffect
+import ContextUI
 
 // AorusAI owns a large, self-contained vocabulary. Route it through the shared AorusGram
 // language resolver so Russian stays first-class and every other Telegram language follows
@@ -126,8 +127,14 @@ final class AorusAIGlassIconButton: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(theme: PresentationTheme) {
-        isDark = theme.overallDarkAppearance
-        icon.tintColor = AorusAIPalette.resolve(theme).label
+        configure(iconColor: AorusAIPalette.resolve(theme).label, isDark: theme.overallDarkAppearance)
+    }
+
+    /// For a button that stands on something other than the page: the cross over the dark
+    /// cover of message editing is white on dark glass in every theme.
+    func configure(iconColor: UIColor, isDark: Bool) {
+        self.isDark = isDark
+        icon.tintColor = iconColor
         setNeedsLayout()
     }
 
@@ -1079,13 +1086,23 @@ private final class AorusAIConversationListController: ViewController, UITableVi
             TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)
         ) |> deliverOnMainQueue).start(next: { [weak self] peer in
             guard let self else { return }
-            let name = peer?.displayTitle(strings: self.presentationData.strings, displayOrder: self.presentationData.nameDisplayOrder)
+            // The first name: a greeting, and above all one written as a line of code,
+            // reads as `print("Hello, Ivan")`, not with the surname after it.
+            let name = peer?.compactDisplayTitle
             self.listHeader.setDisplayName(name)
             // The greeting just grew by a name, which can turn it into two lines.
             self.updateTableAccessories()
         }))
         reload()
         self.displayNodeDidLoad()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Back on the list after a while, or in another part of the day: a fresh line.
+        if listHeader.rerollIfStale() {
+            updateTableAccessories()
+        }
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -1316,13 +1333,21 @@ private final class AorusAIConversationListHeaderView: UIView {
     private let greetingLabel = UILabel()
     private let subtitleLabel = UILabel()
     private var displayName: String?
+    /// The line on screen, kept while the screen is open: the name arriving later fills it in
+    /// rather than drawing another one. Replaced by `rerollIfStale()`.
+    private var greeting = AorusAIGreetings.pick(hasName: false)
+    private var greetingPickedAt = Date()
+    private var greetingSlot = AorusAIGreetings.timeSlot()
+    /// Whether the line was picked before the name was known. The first name to arrive
+    /// may then pick again among the lines that use it, once, before anyone has read it.
+    private var greetingAwaitsName = true
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         greetingLabel.font = aorusAITitleFont(size: 26.0, weight: .semibold)
-        // "Добрый вечер, " plus a full display name does not fit one 26pt line on a
-        // narrow phone. It used to be squeezed into a fixed 32pt frame, which is what put
-        // the text outside the header; it wraps to a second line instead.
+        // A long line plus a full name does not fit one 26pt line on a narrow phone. It used
+        // to be squeezed into a fixed 32pt frame, which is what put the text outside the
+        // header; it wraps to a second line instead.
         greetingLabel.numberOfLines = 2
         greetingLabel.lineBreakMode = .byTruncatingTail
         subtitleLabel.font = aorusUIFont(15.0, .regular)
@@ -1343,7 +1368,37 @@ private final class AorusAIConversationListHeaderView: UIView {
     func setDisplayName(_ name: String?) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         displayName = trimmed?.isEmpty == false ? trimmed : nil
+        // The name lands a moment after the screen is built, before the line has been read:
+        // the pick is made again once, with the lines that address the user by name in it.
+        if greetingAwaitsName, displayName != nil, Date().timeIntervalSince(greetingPickedAt) < 1.5 {
+            greetingAwaitsName = false
+            greeting = AorusAIGreetings.pick(hasName: true)
+        }
         refreshGreeting()
+    }
+
+    /// A new line for a screen shown again after a while, or in another part of the day: a
+    /// morning greeting is not left standing into the evening. Returns whether the text
+    /// changed, so the caller can size the header again.
+    @discardableResult
+    func rerollIfStale(now: Date = Date()) -> Bool {
+        let slot = AorusAIGreetings.timeSlot(at: now)
+        guard slot != greetingSlot || now.timeIntervalSince(greetingPickedAt) > 15.0 * 60.0 else {
+            return false
+        }
+        greeting = AorusAIGreetings.pick(at: now, hasName: displayName != nil)
+        greetingPickedAt = now
+        greetingSlot = slot
+        greetingAwaitsName = false
+        let previous = greetingLabel.text
+        refreshGreeting()
+        guard greetingLabel.text != previous else { return false }
+        // The new line comes in as the old one fades, rather than being swapped under the eye.
+        let transition = CATransition()
+        transition.type = .fade
+        transition.duration = 0.25
+        greetingLabel.layer.add(transition, forKey: "greeting")
+        return true
     }
 
     /// The height the current text needs at `width`. A table header view is positioned by
@@ -1371,16 +1426,7 @@ private final class AorusAIConversationListHeaderView: UIView {
     }
 
     private func refreshGreeting() {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let greeting: String
-        if hour < 12 {
-            greeting = aorusAILocalized("Доброе утро", "Good morning")
-        } else if hour < 18 {
-            greeting = aorusAILocalized("Добрый день", "Good afternoon")
-        } else {
-            greeting = aorusAILocalized("Добрый вечер", "Good evening")
-        }
-        greetingLabel.text = displayName.map { "\(greeting), \($0)" } ?? greeting
+        greetingLabel.text = greeting.text(name: displayName)
         greetingLabel.accessibilityLabel = greetingLabel.text
         setNeedsLayout()
     }
@@ -1905,6 +1951,26 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// written into the input the user just decided not to dictate into.
     private var dictationCancelled = false
     private var headerView: AorusAINavigationTitleView?
+    /// The sent message being edited, while it is.
+    private var editingMessageId: UUID?
+    /// What the input held before editing began — the reader's own draft and the message
+    /// they were quoting — given back when the edit is cancelled or sent.
+    private var editStash: (draft: String, reference: AorusAIReferencedMessage?)?
+    private var editOverlay: AorusAIEditOverlayView?
+    /// Reads an answer aloud, with its panel at the top of the screen. Made the first time an
+    /// answer is read: a speech synthesizer is not built for every conversation opened.
+    private var readAloudInstance: AorusAIReadAloudController?
+    private var readAloud: AorusAIReadAloudController {
+        if let readAloudInstance {
+            return readAloudInstance
+        }
+        let instance = AorusAIReadAloudController(host: self)
+        instance.update(theme: presentationData.theme)
+        readAloudInstance = instance
+        return instance
+    }
+    /// The PDF of this conversation being shared, with its preview over the share sheet.
+    private var conversationShare: AorusAIConversationShare?
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let composer = AorusAIComposerView()
@@ -2019,6 +2085,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         }
         headerView?.update(theme: presentationData.theme)
         topBar.configure(theme: presentationData.theme)
+        editOverlay?.configure(theme: presentationData.theme)
+        readAloudInstance?.update(theme: presentationData.theme)
         guard self.isNodeLoaded else { return }
         self.displayNode.backgroundColor = palette.plainBackground
         tableView.backgroundColor = palette.plainBackground
@@ -2156,6 +2224,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        // Leaving the screen leaves an edit unfinished, and the draft is what it was before.
+        cancelEditing(animated: false)
+        readAloudInstance?.stop()
         conversation.draft = composer.text
         persist(force: true)
         // The window is still attached at this point, which is the only moment the floating
@@ -2288,6 +2359,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // panel left those corners open onto the page behind them.
         composer.classicPanelExtension = max(0.0, layout.size.height - composerFrame.maxY)
         composer.updateLayout(size: composerFrame.size, transition: transition)
+        // The strip the screen's own bar takes: where editing puts its title and its cross,
+        // and where the reading panel hangs from.
+        let statusBarHeight = layout.statusBarHeight ?? 0.0
+        let headerFrame = CGRect(x: 0.0, y: statusBarHeight, width: layout.size.width, height: max(44.0, top - statusBarHeight))
+        if let editOverlay {
+            transition.updateFrame(view: editOverlay, frame: CGRect(origin: CGPoint(), size: layout.size))
+            editOverlay.update(size: layout.size, headerFrame: headerFrame, coverBottom: composerFrame.minY, sideInset: max(layout.safeInsets.left, layout.safeInsets.right))
+        }
+        readAloudInstance?.layout(in: layout.size, below: top, sideInset: max(layout.safeInsets.left, layout.safeInsets.right), transition: transition)
         // The list runs the full height of the screen and is inset at both ends, so messages
         // pass beneath the capsules at the top and beneath the input at the bottom: the glass
         // of both shows the conversation, as it does in a chat.
@@ -2348,10 +2428,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             transition: .immediate
         )
         let underInput = max(0.0, layout.size.height - composerFrame.minY)
-        tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: underInput + 8.0, right: 0.0)
+        // The reading panel, while it is up, takes its own height off the top of the list.
+        let readingInset = readAloudInstance?.contentInset ?? 0.0
+        tableView.contentInset = UIEdgeInsets(top: top + 8.0 + readingInset, left: 0.0, bottom: underInput + 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.
-        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0.0, bottom: underInput, right: 0.0)
+        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top + readingInset, left: 0.0, bottom: underInput, right: 0.0)
         // Changing the insets moves the content under the reader. A list following the
         // newest message stays on it — which is where a chat always is when the keyboard
         // opens or the input grows — and one the reader scrolled up keeps its place against
@@ -2390,7 +2472,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     @objc private func appDidEnterBackground() {
-        conversation.draft = composer.text
+        conversation.draft = editingMessageId == nil ? composer.text : (editStash?.draft ?? "")
         persist(force: true)
         if dictation.isActive { dictation.stop() }
         // The turn is no longer killed on the way out. The app is given the documented
@@ -2489,8 +2571,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // `composer.text` — not `textView.text` — because the input draws resolved handles
         // as avatars, and the draft has to be the handles the user actually typed.
         let source = composer.text
-        conversation.draft = source
-        conversation.updatedAt = Date()
+        // The text of a message being edited is not the draft: the draft is what the reader
+        // had typed before, and is given back when they are done.
+        if editingMessageId == nil {
+            conversation.draft = source
+            conversation.updatedAt = Date()
+        }
         composer.invalidateHeight()
         resolveDraftEntities(in: source)
         if let layout = lastLayout { applyLayout(layout, transition: .immediate) }
@@ -2534,6 +2620,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private func send() {
         if dictation.isActive { dictation.stop() }
+        // While a sent message is being edited, send saves the edit.
+        if editingMessageId != nil {
+            commitEdit()
+            return
+        }
         let text = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         send(displayText: text, requestText: text)
@@ -4651,7 +4742,239 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // finished while it was held has no later delta to carry it.
         cell.onReaderReleased = { [weak self] id in self?.flushHeldMessage(id: id) }
         cell.onOpenWorkTrail = { [weak self] in self?.presentWorkTrail(messageId: message.id) }
+        cell.onUserMenu = { [weak self, weak cell] gesture in
+            guard let self, let cell else {
+                gesture.cancel()
+                return
+            }
+            self.presentUserMessageMenu(messageId: message.id, cell: cell, gesture: gesture)
+        }
+        cell.onShare = { [weak self] sourceView in self?.shareConversation(from: sourceView) }
+        cell.onMore = { [weak self] sourceView in self?.presentAnswerMenu(messageId: message.id, sourceView: sourceView) }
         return cell
+    }
+
+    // MARK: - Message menus
+
+    /// The menu of the user's own message: when it was sent, then copy, edit and select text.
+    private func presentUserMessageMenu(messageId: UUID, cell: AorusAIMessageCell, gesture: ContextGesture) {
+        guard editingMessageId == nil,
+              let message = conversation.messages.first(where: { $0.id == messageId }),
+              message.role == .user,
+              let container = cell.makeContextExtraction() else {
+            gesture.cancel()
+            return
+        }
+        var items: [ContextMenuItem] = [
+            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt)),
+            .separator
+        ]
+        items.append(AorusAIContextMenuItems.action(aorusAILocalized("Копировать", "Copy"), bundleIcon: "Chat/Context Menu/Copy") { [weak self] in
+            UIPasteboard.general.string = message.rawText
+            self?.presentCopiedFeedback()
+        })
+        items.append(AorusAIContextMenuItems.action(aorusAILocalized("Редактировать", "Edit"), bundleIcon: "Chat/Context Menu/Edit") { [weak self] in
+            self?.beginEditing(messageId: messageId)
+        })
+        items.append(AorusAIContextMenuItems.action(aorusAILocalized("Выбрать текст", "Select Text"), symbol: "character.cursor.ibeam") { [weak self] in
+            self?.beginSelectingText(messageId: messageId)
+        })
+        let controller = makeContextController(
+            context: context,
+            presentationData: presentationData,
+            source: .extracted(AorusAIExtractedBubbleSource(container: container)),
+            items: .single(ContextController.Items(content: .list(items))),
+            recognizer: nil,
+            gesture: gesture
+        )
+        // The bubble comes back when its picture has been put back; this is the net under
+        // that, for a menu closed some other way.
+        controller.dismissed = { [weak cell, weak container] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                guard let cell, let container, container.superview != nil, !container.isExtractedToContextPreview else { return }
+                cell.endContextExtraction()
+            }
+        }
+        presentInGlobalOverlay(controller)
+    }
+
+    /// The menu behind the "more" button under an answer: when it was written, then reading it
+    /// aloud and, for the last answer, asking for it again.
+    private func presentAnswerMenu(messageId: UUID, sourceView: UIView) {
+        guard let index = conversation.messages.firstIndex(where: { $0.id == messageId }) else { return }
+        let message = conversation.messages[index]
+        guard message.role == .assistant else { return }
+        var items: [ContextMenuItem] = [
+            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt)),
+            .separator
+        ]
+        if readAloudInstance?.isReading(messageId: messageId) == true {
+            items.append(AorusAIContextMenuItems.action(aorusAILocalized("Остановить чтение", "Stop Reading"), bundleIcon: "Chat/Context Menu/SoundOff") { [weak self] in
+                self?.readAloudInstance?.stop()
+            })
+        } else {
+            items.append(AorusAIContextMenuItems.action(aorusAILocalized("Читать вслух", "Read Aloud"), bundleIcon: "Chat/Context Menu/SoundOn") { [weak self] in
+                guard let self else { return }
+                self.readAloud.read(messageId: messageId, text: AorusAIMarkdown.spokenText(message.rawText), theme: self.presentationData.theme)
+            })
+        }
+        let canRetry = index == conversation.messages.count - 1
+            && (message.state == .failed || message.state == .complete)
+            && !isTurnLive
+        if canRetry {
+            items.append(AorusAIContextMenuItems.action(aorusAILocalized("Повторить", "Retry"), bundleIcon: "Chat/Context Menu/Reload") { [weak self] in
+                self?.retry(messageId: messageId)
+            })
+        }
+        let controller = makeContextController(
+            context: context,
+            presentationData: presentationData,
+            source: .reference(AorusAIReferenceSource(view: sourceView)),
+            items: .single(ContextController.Items(content: .list(items))),
+            recognizer: nil,
+            gesture: nil
+        )
+        presentInGlobalOverlay(controller)
+    }
+
+    /// The conversation as a PDF, through the system share sheet, with its first slide shown
+    /// over the sheet. One at a time: a second tap while the first is being made does nothing.
+    private func shareConversation(from sourceView: UIView) {
+        guard conversationShare == nil, !conversation.messages.isEmpty else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        let share = AorusAIConversationShare(presenter: self)
+        share.onFinish = { [weak self, weak share] in
+            guard let self, self.conversationShare === share else { return }
+            self.conversationShare = nil
+        }
+        conversationShare = share
+        share.start(conversation: conversation, theme: presentationData.theme, sourceView: sourceView)
+    }
+
+    private func beginSelectingText(messageId: UUID) {
+        guard let row = conversation.messages.firstIndex(where: { $0.id == messageId }),
+              let cell = tableView.cellForRow(at: IndexPath(row: row, section: 0)) as? AorusAIMessageCell else { return }
+        cell.beginTextSelection()
+    }
+
+    // MARK: - Editing a sent message
+
+    /// Puts a sent message back into the input. Sending it then takes the conversation back
+    /// to that message — it and everything after it are replaced by the edited question and
+    /// a new answer to it — as ChatGPT does.
+    private func beginEditing(messageId: UUID) {
+        guard editingMessageId == nil,
+              let message = conversation.messages.first(where: { $0.id == messageId }),
+              message.role == .user else { return }
+        // An answer still arriving belongs to the conversation that is about to be rewound.
+        if isTurnLive {
+            stopGeneration()
+        }
+        if dictation.isActive {
+            cancelDictation()
+        }
+        editStash = (draft: composer.text, reference: pendingReference)
+        editingMessageId = messageId
+        composer.isEditingMessage = true
+        composer.text = message.rawText
+        resolveDraftEntities(in: message.rawText)
+        pendingReference = message.referencedMessage
+        composer.reference = message.referencedMessage
+
+        let overlay = AorusAIEditOverlayView()
+        overlay.configure(theme: presentationData.theme)
+        overlay.onCancel = { [weak self] in
+            self?.cancelEditing(animated: true)
+        }
+        overlay.onTapBackground = { [weak self] in
+            self?.composer.textView.resignFirstResponder()
+        }
+        // Over everything, the screen's own bar included, and under the input alone.
+        displayNode.view.addSubview(overlay)
+        displayNode.view.bringSubviewToFront(composer)
+        editOverlay = overlay
+        if let layout = lastLayout {
+            applyLayout(layout, transition: .immediate)
+        }
+        overlay.animateIn()
+        updateComposer()
+        composer.textView.becomeFirstResponder()
+        let end = composer.textView.endOfDocument
+        composer.textView.selectedTextRange = composer.textView.textRange(from: end, to: end)
+    }
+
+    /// Leaves editing without changing anything: the input gets back what it held before.
+    private func cancelEditing(animated: Bool) {
+        guard editingMessageId != nil else { return }
+        let stash = editStash
+        finishEditing(animated: animated)
+        composer.text = stash?.draft ?? ""
+        resolveDraftEntities(in: composer.text)
+        pendingReference = stash?.reference
+        composer.reference = stash?.reference
+        conversation.draft = composer.text
+        if animated {
+            composer.textView.resignFirstResponder()
+        }
+        updateComposer()
+    }
+
+    private func finishEditing(animated: Bool) {
+        editingMessageId = nil
+        editStash = nil
+        composer.isEditingMessage = false
+        guard let overlay = editOverlay else { return }
+        editOverlay = nil
+        if animated {
+            overlay.animateOut {
+                overlay.removeFromSuperview()
+            }
+        } else {
+            overlay.removeFromSuperview()
+        }
+    }
+
+    /// Sends the edited message in place of the original.
+    ///
+    /// Every reason a send could be refused is checked before anything is removed, as a retry
+    /// does: a send refused on a live quota must not have thrown the conversation away first.
+    private func commitEdit() {
+        guard let messageId = editingMessageId else { return }
+        let text = composer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isTurnLive else { return }
+        if let resetAt = conversation.quotaResetAt, resetAt > Date() {
+            updateComposer()
+            return
+        }
+        let stash = editStash
+        let reference = pendingReference
+        finishEditing(animated: true)
+        if let index = conversation.messages.firstIndex(where: { $0.id == messageId }) {
+            let removed = Set(conversation.messages[index...].map { $0.id })
+            if let reading = readAloudInstance?.messageId, removed.contains(reading) {
+                readAloudInstance?.stop()
+            }
+            conversation.messages.removeSubrange(index...)
+            pruneMeasuredHeights()
+            tableView.reloadData()
+        }
+        pendingReference = reference
+        composer.reference = reference
+        send(displayText: text, requestText: text)
+        // What the reader had typed before they started editing is theirs, and comes back.
+        if let stash {
+            if !stash.draft.isEmpty {
+                composer.text = stash.draft
+                resolveDraftEntities(in: stash.draft)
+                conversation.draft = stash.draft
+            }
+            if let previous = stash.reference {
+                pendingReference = previous
+                composer.reference = previous
+            }
+            updateComposer()
+            persist(force: true)
+        }
     }
 
     /// What a row turned out to be, once the table had actually laid it out.
@@ -5073,6 +5396,15 @@ private final class AorusAIComposerView: UIView {
     }
     var isGenerating = false { didSet { refreshButton(); refreshDictationButton() } }
     var canSend = false { didSet { refreshButton() } }
+    /// While a sent message is being edited, send saves the edit, and says so with a check in
+    /// place of the arrow, as Telegram's own input does.
+    var isEditingMessage = false {
+        didSet {
+            guard oldValue != isEditingMessage else { return }
+            refreshButton()
+        }
+    }
+    private let saveEditIcon = UIImage(systemName: "checkmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .bold))
     /// While this is on, the capsule holds the dictation row: the cross, the wave, the
     /// square and send. What was heard is written into the input when the run ends.
     var isDictating = false {
@@ -5466,6 +5798,11 @@ private final class AorusAIComposerView: UIView {
             isEnabled = true
             isFilled = true
             sendButton.accessibilityLabel = aorusAILocalized("Остановить", "Stop")
+        } else if isEditingMessage {
+            image = saveEditIcon
+            isEnabled = canSend
+            isFilled = canSend
+            sendButton.accessibilityLabel = aorusAILocalized("Сохранить", "Save")
         } else {
             image = sendIcon
             isEnabled = canSend
@@ -5991,13 +6328,35 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     private let bodyStack = UIStackView()
     private let statusLabel = UILabel()
     private let workTrail = AorusAIWorkTrailView()
+    /// Under an answer: copy, share as a PDF, and the menu with reading aloud and retrying.
+    /// Glyphs only, in a grey a step lighter than the hint text, so the row is there when it
+    /// is looked for and quiet when it is not.
     private let assistantActions = UIStackView()
     private let copyButton = UIButton(type: .system)
-    private let regenerateButton = UIButton(type: .system)
+    private let shareButton = UIButton(type: .system)
+    private let moreButton = UIButton(type: .system)
+    private var copyResetWork: DispatchWorkItem?
     private let retryButton = UIButton(type: .system)
     private let typingIndicator = AorusAITypingIndicatorView()
     /// Raised when the reader taps the work-trail line, which opens it as a sheet.
     var onOpenWorkTrail: (() -> Void)?
+    /// Telegram's own long press on the user's message: the bubble shrinks under the finger
+    /// and the message's menu opens when it is held.
+    private let contextGesture = ContextGesture(target: nil, action: nil)
+    /// A tap on a link in the user's own message. Their text is not selectable until they ask
+    /// for it, which also stops a text view from handling the tap itself.
+    private let userLinkTap = UITapGestureRecognizer()
+    private var isUserMessage = false
+    /// Set while the reader is selecting text in their own message after "Select text".
+    private(set) var isSelectingText = false
+    /// Whether the selection for "Select text" has been laid down. Before it is, the caret
+    /// the text view starts with is not the reader letting go.
+    private var hasPlacedReaderSelection = false
+    /// The picture of the bubble lifted into the menu, while it is out.
+    private weak var activeExtraction: ContextExtractedContentContainingView?
+    var onUserMenu: ((ContextGesture) -> Void)?
+    var onShare: ((UIView) -> Void)?
+    var onMore: ((UIView) -> Void)?
 
     /// A turn is still working until it stops streaming.
     private func configureWorkTrail(message: AorusAIMessage, theme: PresentationTheme) {
@@ -6099,6 +6458,30 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         bubble.onLayout = { [weak self] size in
             self?.layoutBubbleGlass(size: size)
         }
+        // Only the user's own message has this menu; an answer's text stays selectable as it
+        // was, with its own row of actions under it.
+        contextGesture.isEnabled = false
+        contextGesture.shouldBegin = { [weak self] _ in
+            guard let self else { return false }
+            return self.isUserMessage && !self.isSelectingText && self.activeExtraction == nil
+        }
+        contextGesture.activationProgress = { [weak self] progress, transition in
+            self?.applyPressProgress(progress, transition: transition)
+        }
+        contextGesture.activated = { [weak self] gesture, _ in
+            guard let self, let handler = self.onUserMenu else {
+                gesture.cancel()
+                return
+            }
+            handler(gesture)
+        }
+        bubble.addGestureRecognizer(contextGesture)
+        userLinkTap.addTarget(self, action: #selector(userBubbleTapped(_:)))
+        // It only looks for a link under the finger; a tap on a person's pill still reaches the
+        // pill's own recogniser.
+        userLinkTap.cancelsTouchesInView = false
+        userLinkTap.isEnabled = false
+        bubble.addGestureRecognizer(userLinkTap)
         // The design puts the progress line *above* the answer — "Читаю профиль диалога…"
         // is what the turn is doing before the text it produces, not a footnote under it.
         statusLabel.font = aorusUIFont(13.0, .semibold)
@@ -6114,30 +6497,30 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         noticeCard.onRetry = { [weak self] in self?.onRetry?() }
         contentStack.addArrangedSubview(noticeCard)
         assistantActions.axis = .horizontal
-        assistantActions.spacing = 4
+        assistantActions.spacing = 2
         assistantActions.alignment = .center
-        copyButton.setTitle(aorusAILocalized("Копировать", "Copy"), for: .normal)
-        regenerateButton.setTitle(aorusAILocalized("Ещё раз", "Again"), for: .normal)
-        // A 12pt glyph next to the 13pt title. `UIImage(systemName:)` with no configuration
-        // renders at the body text style — a 17pt glyph, which made the row half again as
-        // tall as the design draws it.
-        let actionSymbol = UIImage.SymbolConfiguration(pointSize: 12.0, weight: .medium)
-        copyButton.setImage(UIImage(systemName: "doc.on.doc", withConfiguration: actionSymbol), for: .normal)
-        regenerateButton.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: actionSymbol), for: .normal)
-        for button in [copyButton, regenerateButton] {
-            button.titleLabel?.font = aorusUIFont(13.0)
-            button.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -4.0, bottom: 0.0, right: 4.0)
-            button.contentEdgeInsets = UIEdgeInsets(top: 5.0, left: 10.0, bottom: 5.0, right: 8.0)
-            button.layer.cornerRadius = 8.0
-            button.layer.cornerCurve = .continuous
+        // Glyphs alone, light and of one weight. `UIImage(systemName:)` with no configuration
+        // renders at the body text style — a 17pt glyph, which made the row half again as tall
+        // as the design draws it.
+        copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
+        shareButton.setImage(Self.actionGlyph("square.and.arrow.up"), for: .normal)
+        moreButton.setImage(Self.actionGlyph("ellipsis"), for: .normal)
+        copyButton.accessibilityLabel = aorusAILocalized("Копировать", "Copy")
+        shareButton.accessibilityLabel = aorusAILocalized("Поделиться", "Share")
+        moreButton.accessibilityLabel = aorusAILocalized("Ещё", "More")
+        for button in [copyButton, shareButton, moreButton] {
+            // A 32pt square to touch around a 15pt glyph; the first glyph's left edge sits on
+            // the answer's text edge, so the row starts where the answer does.
+            button.contentEdgeInsets = UIEdgeInsets(top: 7.0, left: 8.0, bottom: 7.0, right: 8.0)
+            button.adjustsImageWhenHighlighted = true
             // `contentStack` stretches this row to the full body width, and a horizontal
             // stack with the default `.fill` distribution hands all of that width to its
-            // buttons — which is why both of them were as wide as half the screen. Making
-            // them hug their titles and letting the trailing spacer absorb the remainder
-            // leaves two compact chips at the leading edge, as in the design.
+            // buttons. They hug their glyphs and the trailing spacer takes the remainder.
             button.setContentHuggingPriority(.required, for: .horizontal)
             assistantActions.addArrangedSubview(button)
         }
+        assistantActions.layoutMargins = UIEdgeInsets(top: 0.0, left: -8.0, bottom: 0.0, right: 0.0)
+        assistantActions.isLayoutMarginsRelativeArrangement = true
         let actionsSpacer = UIView()
         actionsSpacer.setContentHuggingPriority(UILayoutPriority(1.0), for: .horizontal)
         actionsSpacer.setContentCompressionResistancePriority(UILayoutPriority(1.0), for: .horizontal)
@@ -6146,7 +6529,8 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         // height is pinned to keep the layout unambiguous.
         actionsSpacer.heightAnchor.constraint(equalToConstant: 0.0).isActive = true
         copyButton.addTarget(self, action: #selector(copyAssistant), for: .touchUpInside)
-        regenerateButton.addTarget(self, action: #selector(retry), for: .touchUpInside)
+        shareButton.addTarget(self, action: #selector(shareAssistant), for: .touchUpInside)
+        moreButton.addTarget(self, action: #selector(moreAssistant), for: .touchUpInside)
         assistantActions.isHidden = true
         contentStack.addArrangedSubview(assistantActions)
         retryButton.setTitle(aorusAILocalized("Повторить", "Retry"), for: .normal)
@@ -6266,7 +6650,201 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         configuredMessageId = nil
         copyText = ""
         onOpenLink = nil; onArtifact = nil; onCopy = nil; onRetry = nil; onReaderReleased = nil
+        onUserMenu = nil; onShare = nil; onMore = nil
         lastSelectionLength = 0
+        endTextSelection()
+        contextGesture.cancel()
+        endContextExtraction()
+        bubble.transform = .identity
+        resetCopyGlyph()
+    }
+
+    // MARK: The user's own message
+
+    /// The bubble shrinks under a holding finger, as a message in a Telegram chat does, by the
+    /// same amount: fifteen points across, never below seventy per cent.
+    private func applyPressProgress(_ progress: CGFloat, transition: ContextGestureTransition) {
+        let width = max(1.0, bubble.bounds.width)
+        let minimumScale = max(0.7, (width - 15.0) / width)
+        let scale = 1.0 - (1.0 - minimumScale) * progress
+        switch transition {
+        case .begin, .update:
+            bubble.transform = CGAffineTransform(scaleX: scale, y: scale)
+        case .ended:
+            UIView.animate(withDuration: 0.2, delay: 0.0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.bubble.transform = CGAffineTransform(scaleX: scale, y: scale)
+            }
+        }
+    }
+
+    /// A picture of the bubble, standing exactly where the bubble stands, for the menu to lift.
+    ///
+    /// The bubble is a row's self-sized content and cannot leave the row, so its picture goes
+    /// instead and the bubble itself is hidden until the picture is put back.
+    func makeContextExtraction() -> ContextExtractedContentContainingView? {
+        guard isUserMessage, activeExtraction == nil else { return nil }
+        bubble.layer.removeAllAnimations()
+        UIView.performWithoutAnimation {
+            bubble.transform = .identity
+        }
+        let frame = bubble.convert(bubble.bounds, to: contentView)
+        guard frame.width > 1.0, frame.height > 1.0 else { return nil }
+        let picture: UIView
+        if let replica = bubble.snapshotView(afterScreenUpdates: false) {
+            picture = replica
+        } else {
+            let format = UIGraphicsImageRendererFormat()
+            format.opaque = false
+            let image = UIGraphicsImageRenderer(bounds: bubble.bounds, format: format).image { _ in
+                bubble.drawHierarchy(in: bubble.bounds, afterScreenUpdates: false)
+            }
+            picture = UIImageView(image: image)
+        }
+        let container = ContextExtractedContentContainingView(frame: frame)
+        container.contentView.frame = container.bounds
+        container.contentRect = container.bounds
+        picture.frame = container.contentView.bounds
+        container.contentView.addSubview(picture)
+        contentView.addSubview(container)
+        bubble.alpha = 0.0
+        container.isExtractedToContextPreviewUpdated = { [weak self, weak container] isExtracted in
+            guard !isExtracted, let self, let container, self.activeExtraction === container else { return }
+            self.endContextExtraction()
+        }
+        activeExtraction = container
+        return container
+    }
+
+    /// The bubble back in place of its picture. Called when the menu has put the picture back,
+    /// and as a safety net once it has closed.
+    func endContextExtraction() {
+        if let container = activeExtraction {
+            activeExtraction = nil
+            container.removeFromSuperview()
+        }
+        bubble.alpha = 1.0
+    }
+
+    /// The system's own selection over the user's message: handles round all of it and the
+    /// edit menu above it — Copy, Look Up, Translate, Share.
+    func beginTextSelection() {
+        guard isUserMessage else { return }
+        var target: AorusAIMentionTextView?
+        for slot in slots {
+            if case let .text(view) = slot {
+                target = view
+                break
+            }
+        }
+        guard let view = target, view.textStorage.length > 0 else { return }
+        isSelectingText = true
+        hasPlacedReaderSelection = false
+        view.isSelectable = true
+        view.onResignFirstResponder = { [weak self] in
+            self?.endTextSelection()
+        }
+        guard view.becomeFirstResponder() else {
+            endTextSelection()
+            return
+        }
+        view.selectedRange = NSRange(location: 0, length: view.textStorage.length)
+        hasPlacedReaderSelection = true
+        // On the next pass, once the handles are up and the selection has a place to point at.
+        DispatchQueue.main.async { [weak self, weak view] in
+            guard let self, let view, self.isSelectingText else { return }
+            self.presentEditMenu(over: view)
+        }
+    }
+
+    func endTextSelection() {
+        guard isSelectingText else { return }
+        isSelectingText = false
+        hasPlacedReaderSelection = false
+        for slot in slots {
+            guard case let .text(view) = slot else { continue }
+            view.onResignFirstResponder = nil
+            if view.isFirstResponder {
+                view.resignFirstResponder()
+            }
+            view.selectedRange = NSRange(location: 0, length: 0)
+            view.isSelectable = !isUserMessage
+        }
+    }
+
+    private func presentEditMenu(over view: UITextView) {
+        var anchor = view.bounds
+        if let range = view.selectedTextRange {
+            let first = view.firstRect(for: range)
+            if !first.isNull, !first.isInfinite, first.width > 0.0 {
+                anchor = first
+            }
+        }
+        if #available(iOS 16.0, *), let interaction = view.interactions.compactMap({ $0 as? UIEditMenuInteraction }).first {
+            interaction.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: CGPoint(x: anchor.midX, y: anchor.minY)))
+        } else {
+            UIMenuController.shared.showMenu(from: view, rect: anchor)
+        }
+    }
+
+    /// A link in the user's own message, opened by a tap as a link in an answer is.
+    @objc private func userBubbleTapped(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended, isUserMessage, !isSelectingText else { return }
+        for slot in slots {
+            guard case let .text(view) = slot else { continue }
+            let point = recognizer.location(in: view)
+            guard view.bounds.contains(point), let url = Self.link(in: view, at: point) else { continue }
+            onOpenLink?(url)
+            return
+        }
+    }
+
+    private static func link(in view: UITextView, at point: CGPoint) -> URL? {
+        let storage = view.textStorage
+        guard storage.length > 0 else { return nil }
+        let location = CGPoint(x: point.x - view.textContainerInset.left, y: point.y - view.textContainerInset.top)
+        let manager = view.layoutManager
+        let glyph = manager.glyphIndex(for: location, in: view.textContainer)
+        let rect = manager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: view.textContainer)
+        guard rect.insetBy(dx: -3.0, dy: -3.0).contains(location) else { return nil }
+        let index = manager.characterIndexForGlyph(at: glyph)
+        guard index < storage.length else { return nil }
+        switch storage.attribute(.link, at: index, effectiveRange: nil) {
+        case let url as URL:
+            return url
+        case let string as String:
+            return URL(string: string)
+        default:
+            return nil
+        }
+    }
+
+    // MARK: The row under an answer
+
+    private static func actionGlyph(_ name: String) -> UIImage? {
+        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular))
+    }
+
+    /// The copy glyph turns into a check for a moment, so the press is answered where it was
+    /// made.
+    private func showCopiedGlyph() {
+        copyResetWork?.cancel()
+        UIView.transition(with: copyButton, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+            self.copyButton.setImage(Self.actionGlyph("checkmark"), for: .normal)
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            UIView.transition(with: self.copyButton, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                self.copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
+            }
+        }
+        copyResetWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
+    }
+
+    private func resetCopyGlyph() {
+        copyResetWork?.cancel()
+        copyResetWork = nil
+        copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
     }
 
     /// Streaming path (§27): keeps the existing view tree and only pushes the text that
@@ -6329,7 +6907,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         statusLabel.isHidden = workTrailTitle == nil
         configureWorkTrail(message: message, theme: theme)
         copyText = message.rawText
-        assistantActions.isHidden = !(message.role == .assistant && message.state == .complete && canRetry && !message.rawText.isEmpty)
+        assistantActions.isHidden = !Self.showsActions(message)
         retryButton.isHidden = !(message.state == .failed && canRetry)
         applyNotice(message: message, theme: theme, canRetry: canRetry)
         applyStreamCaret(message: message, palette: AorusAIPalette.resolve(theme))
@@ -6390,6 +6968,16 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         slots.removeAll()
         slotValues.removeAll()
         let isUser = message.role == .user
+        // A reload of the row whose picture is up in the menu keeps the bubble hidden: the
+        // picture is still where the bubble would be.
+        if configuredMessageId != message.id {
+            endTextSelection()
+            endContextExtraction()
+        }
+        isSelectingText = false
+        isUserMessage = isUser
+        contextGesture.isEnabled = isUser
+        userLinkTap.isEnabled = isUser
         contentStack.alignment = isUser ? .trailing : .leading
         bubbleWidthConstraint?.isActive = false
         // A user bubble hugs its text; an assistant turn takes the full column, so code
@@ -6468,6 +7056,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 let view = AorusAIMentionTextView.make()
                 view.backgroundColor = .clear
                 view.isEditable = false
+                // The user's own message is held for its menu, not for a selection; "Select
+                // text" in that menu makes it selectable for as long as the reader needs.
+                view.isSelectable = !isUser
                 view.isScrollEnabled = false
                 view.textContainerInset = .zero
                 view.textContainer.lineFragmentPadding = 0
@@ -6532,14 +7123,14 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         configureWorkTrail(message: message, theme: theme)
         retryButton.tintColor = palette.accent
         copyText = message.rawText
-        // Flat text buttons, as in the design: no pill behind them, the tint carries the
-        // affordance and the row stays quiet under the answer.
-        for button in [copyButton, regenerateButton] {
-            button.tintColor = palette.tertiary
-            button.setTitleColor(palette.tertiary, for: .normal)
+        // Bare glyphs: no pill behind them, and a grey lighter than the hint text — mixed into
+        // the page rather than laid over it, so it is the same grey in any theme.
+        let actionTint = AorusAIPalette.mix(palette.label, into: palette.plainBackground, amount: palette.isDark ? 0.64 : 0.45)
+        for button in [copyButton, shareButton, moreButton] {
+            button.tintColor = actionTint
             button.backgroundColor = .clear
         }
-        assistantActions.isHidden = !(message.role == .assistant && message.state == .complete && canRetry && !message.rawText.isEmpty)
+        assistantActions.isHidden = !Self.showsActions(message)
         retryButton.isHidden = !(message.state == .failed && canRetry)
         applyNotice(message: message, theme: theme, canRetry: canRetry)
         applyStreamCaret(message: message, palette: palette)
@@ -6656,6 +7247,14 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         let length = textView.selectedRange.length
         let released = self.lastSelectionLength > 0 && length == 0
         self.lastSelectionLength = length
+        // A selection the reader asked for in their own message ends when they let all of it
+        // go — a tap elsewhere in the text — and the message is held for its menu again.
+        if released, isSelectingText, hasPlacedReaderSelection {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isSelectingText, !self.isReaderHolding else { return }
+                self.endTextSelection()
+            }
+        }
         guard released, !self.isReaderHolding else { return }
         guard let id = self.configuredMessageId else { return }
         self.onReaderReleased?(id)
@@ -6678,12 +7277,25 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         return false
     }
 
+    /// An answer that has finished — or was stopped with something written — carries its row,
+    /// every one of them and not only the last: any answer can be copied, shared or read out.
+    private static func showsActions(_ message: AorusAIMessage) -> Bool {
+        guard message.role == .assistant, message.state == .complete || message.state == .cancelled else {
+            return false
+        }
+        return !message.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     @objc private func retry() { onRetry?() }
     @objc private func copyAssistant() {
         guard !copyText.isEmpty else { return }
         UIPasteboard.general.string = copyText
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        showCopiedGlyph()
         onCopy?()
     }
+    @objc private func shareAssistant() { onShare?(shareButton) }
+    @objc private func moreAssistant() { onMore?(moreButton) }
 }
 
 /// Three dots that breathe while a turn is on the wire. UIKit keyframe animations only,
@@ -7709,7 +8321,7 @@ private final class AorusAIArtifactCard: UIControl {
     @objc private func open() { onOpen?() }
 }
 
-private struct AorusAIMarkdownTable: Equatable {
+struct AorusAIMarkdownTable: Equatable {
     enum Alignment: Equatable {
         case leading
         case center
@@ -7732,7 +8344,7 @@ private struct AorusAIMarkdownTable: Equatable {
     var columnCount: Int { headers.count }
 }
 
-private enum AorusAIMarkdownBlock {
+enum AorusAIMarkdownBlock {
     case text(String)
     case code(String?, String)
     case quote(String)
@@ -7740,7 +8352,7 @@ private enum AorusAIMarkdownBlock {
     case separator
 }
 
-private enum AorusAIMarkdown {
+enum AorusAIMarkdown {
     static func blocks(_ source: String) -> [AorusAIMarkdownBlock] {
         var result: [AorusAIMarkdownBlock] = []
         guard source.contains("```") else {

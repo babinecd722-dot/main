@@ -192,6 +192,14 @@ jobs:
             aorusgram/scripts/tests/AorusFaceGeometryTests.swift \
             -o /tmp/aorus-ai-preflight/face-geometry-tests
           /tmp/aorus-ai-preflight/face-geometry-tests
+          # The AorusAI greetings: every line drawn at every part of the day, in both
+          # languages, with the user's name and without it.
+          swiftc \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/AI/AorusAIGreetings.swift \
+            aorusgram/scripts/tests/AorusAIGreetingsTests.swift \
+            -o /tmp/aorus-ai-preflight/greetings-tests
+          /tmp/aorus-ai-preflight/greetings-tests
           # The fraction typesetter draws with UIKit, so it is type-checked against the iOS
           # SDK the app actually deploys to rather than run. Availability is enforced here —
           # the module itself is built with checking disabled, so this is the only place a
@@ -228,7 +236,8 @@ jobs:
           swiftc -typecheck -warnings-as-errors \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
             -target arm64-apple-ios13.0 \
-            aorusgram/scripts/tests/AorusUIKitApiProbe.swift
+            aorusgram/scripts/tests/AorusUIKitApiProbe.swift \
+            aorusgram/scripts/tests/AorusAIChatToolsProbe.swift
           # The mask compositor and its camera preview: Vision, Core Image and UIKit over the
           # face geometry, type-checked against the SDK as the module builds them, so a wrong
           # name fails here rather than an hour into the build.
@@ -1475,6 +1484,16 @@ jobs:
           echo "=== Signing identities (informational) ==="
           security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null || true
 
+      # The one piece of AorusGram code that ships as text is the plugin prelude: JavaScript
+      # inside a Swift string, carried into the binary byte for byte and parsed every time a
+      # plugin starts. The copy that is built loses its comments, blank lines and indentation;
+      # the repository keeps them. Swift's own comments need nothing done: the compiler drops
+      # them. The stripped prelude must be the same program — same tokens, the same Node
+      # checks as the prelude preflight, and the string Swift compiles it into — or the step
+      # fails.
+      - name: Strip comments from the shipped prelude
+        run: python3 aorusgram/scripts/strip_shipped_comments.py prelude telegram-ios aorusgram
+
       - name: Build release_arm64 (device, no extensions; unsigned via disable_legacy_signing)
         working-directory: telegram-ios
         run: |
@@ -1576,6 +1595,13 @@ jobs:
           fi
 
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
+
+      # The bundled JavaScript, CSS and HTML and any text .strings table lose their comments
+      # inside the finished IPA, licence notices kept; a file that cannot be read with full
+      # confidence ships as it came. Then the whole IPA is searched for sentences that are
+      # comments in the AorusGram sources and in the prelude, and any one found fails the build.
+      - name: Strip comments from the IPA
+        run: python3 aorusgram/scripts/strip_shipped_comments.py ipa "$RUNNER_TEMP/AorusGram-unsigned.ipa" aorusgram
 
       - name: Verify release IPA
         run: python3 aorusgram/scripts/ipa_check.py "$RUNNER_TEMP/AorusGram-unsigned.ipa" --build "$GITHUB_RUN_NUMBER"

@@ -4193,6 +4193,32 @@ def main() -> None:
                 err.append(message)
         if ai_ui_text.count("private func updatePresentationData(_ presentationData: PresentationData) {") != 2:
             err.append("AorusAI: the list and the conversation must both follow a theme change")
+        # The message tools: the user's message held into Telegram's own menu, edited in place
+        # or selected; the row under an answer with copy, the PDF and the menu that reads
+        # aloud and retries; and a greeting drawn from the pool, by the first name.
+        ai_dir = ai_ui.parent
+        ai_tools_text = ai_ui_text
+        for name in ("AorusAIMessageMenus.swift", "AorusAIReadAloud.swift", "AorusAIConversationShare.swift", "AorusAIGreetings.swift"):
+            path = ai_dir / name
+            if not path.is_file():
+                err.append(f"AorusAI: missing {name}")
+            else:
+                ai_tools_text += path.read_text(encoding="utf-8")
+        for marker, message in (
+            ("source: .extracted(AorusAIExtractedBubbleSource(container: container))", "AorusAI: the user's message does not lift into Telegram's menu"),
+            ("AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt))", "AorusAI: a message's menu does not say when it was sent"),
+            ("private func commitEdit() {", "AorusAI: an edited message is not sent in place of the original"),
+            ("final class AorusAIEditOverlayView: UIView {", "AorusAI: editing has no cover with its title and cross"),
+            ("func beginTextSelection() {", "AorusAI: the user's message cannot be selected"),
+            ("source: .reference(AorusAIReferenceSource(view: sourceView))", "AorusAI: an answer's \"more\" menu is missing"),
+            ("final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {", "AorusAI: answers cannot be read aloud"),
+            ("enum AorusAIConversationPDF {", "AorusAI: a conversation cannot be shared as a PDF"),
+            ("sheet.largestUndimmedDetentIdentifier = .medium", "AorusAI: the share sheet dims the slide above it"),
+            ("listHeader.setDisplayName(name)", "AorusAI: the greeting does not know the user's name"),
+            ("greeting.text(name: displayName)", "AorusAI: the greeting is not drawn from the pool"),
+        ):
+            if marker not in ai_tools_text:
+                err.append(message)
 
     if not ai_context_menu.is_file():
         err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMessageContextMenu.swift")

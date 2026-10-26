@@ -1138,10 +1138,17 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         }
     }
 
+    /// Told when the view stops being first responder: a selection in the user's own message
+    /// ends there, and the message goes back to being held for its menu.
+    var onResignFirstResponder: (() -> Void)?
+
     @discardableResult
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
         aorusUpdateFormulaHighlight()
+        if resigned {
+            onResignFirstResponder?()
+        }
         return resigned
     }
 
