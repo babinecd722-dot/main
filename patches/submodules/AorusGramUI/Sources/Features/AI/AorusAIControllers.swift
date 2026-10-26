@@ -1099,7 +1099,8 @@ private final class AorusAIConversationListController: ViewController, UITableVi
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Back on the list after a while, or in another part of the day: a fresh line.
+        // Back on the list in another part of the day: the line for it. Within the same part
+        // of the day the line stays as it was.
         if listHeader.rerollIfStale() {
             updateTableAccessories()
         }
@@ -1332,15 +1333,12 @@ private final class AorusAIConversationListHeaderView: UIView {
 
     private let greetingLabel = UILabel()
     private let subtitleLabel = UILabel()
-    private var displayName: String?
-    /// The line on screen, kept while the screen is open: the name arriving later fills it in
-    /// rather than drawing another one. Replaced by `rerollIfStale()`.
-    private var greeting = AorusAIGreetings.pick(hasName: false)
-    private var greetingPickedAt = Date()
-    private var greetingSlot = AorusAIGreetings.timeSlot()
-    /// Whether the line was picked before the name was known. The first name to arrive
-    /// may then pick again among the lines that use it, once, before anyone has read it.
-    private var greetingAwaitsName = true
+    /// The name the line was last shown with, until the account's own arrives: the same line
+    /// is drawn whole from the first frame instead of growing a name a moment later.
+    private var displayName: String? = AorusAIGreetings.lastName
+    /// The line for this part of the day. Opening the screen again shows the same one; the
+    /// next part of the day brings another (`rerollIfStale()`).
+    private var greeting = AorusAIGreetings.greeting(name: AorusAIGreetings.lastName)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1368,28 +1366,22 @@ private final class AorusAIConversationListHeaderView: UIView {
     func setDisplayName(_ name: String?) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         displayName = trimmed?.isEmpty == false ? trimmed : nil
-        // The name lands a moment after the screen is built, before the line has been read:
-        // the pick is made again once, with the lines that address the user by name in it.
-        if greetingAwaitsName, displayName != nil, Date().timeIntervalSince(greetingPickedAt) < 1.5 {
-            greetingAwaitsName = false
-            greeting = AorusAIGreetings.pick(hasName: true)
-        }
+        // A line picked a moment ago, before the name was known, may be picked again once
+        // with the lines that use it; otherwise it is the same line, now with the name.
+        greeting = AorusAIGreetings.greeting(name: displayName)
         refreshGreeting()
     }
 
-    /// A new line for a screen shown again after a while, or in another part of the day: a
-    /// morning greeting is not left standing into the evening. Returns whether the text
-    /// changed, so the caller can size the header again.
+    /// The line for a screen shown again in another part of the day: a morning greeting is
+    /// not left standing into the evening, and within the same part of the day nothing
+    /// changes. Returns whether the text changed, so the caller can size the header again.
     @discardableResult
     func rerollIfStale(now: Date = Date()) -> Bool {
-        let slot = AorusAIGreetings.timeSlot(at: now)
-        guard slot != greetingSlot || now.timeIntervalSince(greetingPickedAt) > 15.0 * 60.0 else {
+        let next = AorusAIGreetings.greeting(at: now, name: displayName)
+        guard next != greeting else {
             return false
         }
-        greeting = AorusAIGreetings.pick(at: now, hasName: displayName != nil)
-        greetingPickedAt = now
-        greetingSlot = slot
-        greetingAwaitsName = false
+        greeting = next
         let previous = greetingLabel.text
         refreshGreeting()
         guard greetingLabel.text != previous else { return false }
@@ -2226,7 +2218,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         super.viewWillDisappear(animated)
         // Leaving the screen leaves an edit unfinished, and the draft is what it was before.
         cancelEditing(animated: false)
-        readAloudInstance?.stop()
+        // The voice stops at once; the screen is going, so it is not laid out again for the
+        // panel that leaves with it.
+        readAloudInstance?.stop(relayout: false)
         conversation.draft = composer.text
         persist(force: true)
         // The window is still attached at this point, which is the only moment the floating
@@ -6509,9 +6503,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         shareButton.accessibilityLabel = aorusAILocalized("Поделиться", "Share")
         moreButton.accessibilityLabel = aorusAILocalized("Ещё", "More")
         for button in [copyButton, shareButton, moreButton] {
-            // A 32pt square to touch around a 15pt glyph; the first glyph's left edge sits on
+            // A 32pt square to touch around a 13pt glyph; the first glyph's left edge sits on
             // the answer's text edge, so the row starts where the answer does.
-            button.contentEdgeInsets = UIEdgeInsets(top: 7.0, left: 8.0, bottom: 7.0, right: 8.0)
+            button.contentEdgeInsets = UIEdgeInsets(top: 9.0, left: 9.0, bottom: 9.0, right: 9.0)
             button.adjustsImageWhenHighlighted = true
             // `contentStack` stretches this row to the full body width, and a horizontal
             // stack with the default `.fill` distribution hands all of that width to its
@@ -6519,7 +6513,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             button.setContentHuggingPriority(.required, for: .horizontal)
             assistantActions.addArrangedSubview(button)
         }
-        assistantActions.layoutMargins = UIEdgeInsets(top: 0.0, left: -8.0, bottom: 0.0, right: 0.0)
+        assistantActions.layoutMargins = UIEdgeInsets(top: 0.0, left: -9.0, bottom: 0.0, right: 0.0)
         assistantActions.isLayoutMarginsRelativeArrangement = true
         let actionsSpacer = UIView()
         actionsSpacer.setContentHuggingPriority(UILayoutPriority(1.0), for: .horizontal)
@@ -6820,8 +6814,10 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
 
     // MARK: The row under an answer
 
+    /// The glyphs are set small, below the answer's text, so the row reads as a quiet margin of
+    /// the answer rather than as buttons of their own.
     private static func actionGlyph(_ name: String) -> UIImage? {
-        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular))
+        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13.0, weight: .medium, scale: .small))
     }
 
     /// The copy glyph turns into a check for a moment, so the press is answered where it was

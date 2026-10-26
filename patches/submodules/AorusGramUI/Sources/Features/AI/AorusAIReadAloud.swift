@@ -11,24 +11,37 @@ extension AorusAIMarkdown {
     /// An answer as it is meant to be heard: the markdown rendered away, so emphasis is not
     /// read out as asterisks; a table read row by row, each value with its column; drawn
     /// formulas, which have no spoken form, left out.
+    ///
+    /// What a voice can only spell is not given to it. A program read symbol by symbol is
+    /// noise, so the listener is told one is there; a list marker, a checkbox or an emoji is
+    /// dropped; an address is read as the site it leads to.
     static func spokenText(_ source: String) -> String {
         var parts: [String] = []
         for block in blocks(source) {
             switch block {
             case let .text(value), let .quote(value):
                 let rendered = attributed(value, color: .black, accent: .black).string
-                parts.append(rendered)
-            case let .code(_, code):
-                parts.append(code)
+                let lines = rendered.components(separatedBy: .newlines).map(spokenLine).filter { !$0.isEmpty }
+                if !lines.isEmpty {
+                    parts.append(lines.joined(separator: "\n"))
+                }
+            case .code:
+                parts.append(aorusAILocalized("Фрагмент кода.", "Code sample."))
             case let .table(table):
                 var rows: [String] = []
                 for row in table.rows {
                     var cells: [String] = []
                     for (index, value) in row.enumerated() {
-                        let header = index < table.headers.count ? table.headers[index] : ""
-                        cells.append(header.isEmpty ? value : "\(header): \(value)")
+                        let header = index < table.headers.count ? spokenLine(table.headers[index]) : ""
+                        let spoken = spokenLine(value)
+                        if spoken.isEmpty {
+                            continue
+                        }
+                        cells.append(header.isEmpty ? spoken : "\(header): \(spoken)")
                     }
-                    rows.append(cells.joined(separator: ", ") + ".")
+                    if !cells.isEmpty {
+                        rows.append(cells.joined(separator: ", ") + ".")
+                    }
                 }
                 parts.append(rows.joined(separator: "\n"))
             case .separator:
@@ -37,20 +50,51 @@ extension AorusAIMarkdown {
         }
         return parts
             .joined(separator: "\n\n")
-            .replacingOccurrences(of: "\u{FFFC}", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func spokenLine(_ line: String) -> String {
+        var value = line.replacingOccurrences(of: "\u{FFFC}", with: "")
+        if let marker = try? NSRegularExpression(pattern: #"^\s*(?:[-–—•◦▪*+]|☐|☑\x{FE0E}?)\s+"#) {
+            value = marker.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: "")
+        }
+        if let address = try? NSRegularExpression(pattern: #"https?://(?:www\.)?([^/\s]+)\S*"#, options: [.caseInsensitive]) {
+            value = address.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: "$1")
+        }
+        var scalars = String.UnicodeScalarView()
+        for scalar in value.unicodeScalars {
+            let properties = scalar.properties
+            // The pictographs, and what joins and colours them. Digits, `#` and `*` count as
+            // emoji too and stay.
+            if properties.isEmojiPresentation || (properties.isEmoji && scalar.value >= 0x1F000) {
+                continue
+            }
+            if scalar.value == 0xFE0F || scalar.value == 0x200D || scalar.value == 0x20E3 {
+                continue
+            }
+            scalars.append(scalar)
+        }
+        value = String(scalars)
+        if let spaces = try? NSRegularExpression(pattern: #"[ \t]{2,}"#) {
+            value = spaces.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: " ")
+        }
+        return value.trimmingCharacters(in: .whitespaces)
     }
 }
 
 /// Reads an answer aloud with the system's own voices, and shows the panel that controls it
 /// at the top of the screen.
 ///
-/// The voice is the best one installed for the language the answer is written in — a
-/// premium or enhanced voice when the reader has downloaded one. Speed is the voice's own
-/// speaking rate rather than a time-stretch of a recording, so a faster reading still sounds
-/// like speech. The system voice cannot be wound like a recording, so fifteen seconds back
-/// or forward is fifteen seconds of this answer at the pace this voice has been reading it,
-/// started again from the nearest word.
+/// The voice is the best natural one installed for the language the answer is written in — a
+/// premium or enhanced voice when the reader has downloaded one, else the one the system
+/// speaks that language with; the robotic voices made for screen readers and the novelty
+/// voices are never used. Speed is the voice's own speaking rate rather than a time-stretch of
+/// a recording, so a faster reading still sounds like speech. The system voice cannot be wound
+/// like a recording, so fifteen seconds back or forward is fifteen seconds of this answer at
+/// the pace this voice has been reading it, started again from the nearest word.
+///
+/// A reading that reaches the end stays on the panel with how long it lasted, and play turns
+/// into the button that reads it again from the start; only the cross takes it away.
 final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     private enum State {
         case idle
@@ -58,14 +102,24 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         case loading
         case playing
         case paused
+        /// Read to the end. The panel shows the whole time and offers to read it again.
+        case finished
     }
 
     /// The speeds the speed button steps through, starting at normal.
     private static let speeds: [Float] = [1.0, 1.25, 1.5, 2.0, 0.75]
     private static let skipInterval: TimeInterval = 15.0
+    /// Where the audio session is let go. Deactivating waits on the media server, and on the
+    /// main thread it stalled the screen it was leaving.
+    private static let sessionQueue = DispatchQueue(label: "aorusgram.ai.read-aloud.session", qos: .userInitiated)
 
     private weak var host: ViewController?
-    private let synthesizer = AVSpeechSynthesizer()
+    /// The voice speaking now. Every start has a synthesizer of its own: one asked to speak
+    /// straight after it was stopped could throw the new words away with the old ones, and a
+    /// skip then ended the reading instead of moving it.
+    private var synthesizer: AVSpeechSynthesizer?
+    /// Stopped voices, kept for a moment while they let go of the output.
+    private var retired: [AVSpeechSynthesizer] = []
     private var panel: AorusAIReadAloudPanel?
     private var theme: PresentationTheme?
     private var state: State = .idle
@@ -86,10 +140,14 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     private var positionAtUtteranceStart: TimeInterval = 0.0
     private var playedInUtterance: TimeInterval = 0.0
     private var playingSince: CFTimeInterval?
+    /// How long the whole answer took, once it has been read to the end.
+    private var duration: TimeInterval?
     /// How many characters a second this voice reads, per speed, learned as it reads.
     private var charactersPerSecond: [Int: Double] = [:]
     private var timer: Foundation.Timer?
-    private var didActivateSession = false
+    private var sessionActive = false
+    /// Moved on by every activation, so a release still waiting to run gives way to it.
+    private var sessionGeneration = 0
     private var observers: [NSObjectProtocol] = []
     private var layoutSize: CGSize = .zero
     private var layoutTop: CGFloat = 0.0
@@ -98,15 +156,19 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     init(host: ViewController) {
         self.host = host
         super.init()
-        synthesizer.delegate = self
     }
 
     deinit {
         timer?.invalidate()
         observers.forEach { NotificationCenter.default.removeObserver($0) }
-        synthesizer.stopSpeaking(at: .immediate)
-        if didActivateSession {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if let synthesizer {
+            synthesizer.delegate = nil
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        if sessionActive {
+            Self.sessionQueue.async {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
     }
 
@@ -130,12 +192,13 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     func read(messageId: UUID, text: String, theme: PresentationTheme) {
         let spoken = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !spoken.isEmpty else { return }
-        stopSpeech()
+        retireSynthesizer()
         self.theme = theme
         self.messageId = messageId
         self.text = spoken as NSString
         self.voice = Self.voice(for: spoken)
         self.pendingStart = nil
+        self.duration = nil
         self.positionAtUtteranceStart = 0.0
         self.playedInUtterance = 0.0
         self.playingSince = nil
@@ -145,29 +208,40 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         speak(from: 0)
     }
 
-    func stop() {
+    /// Ends the reading and takes the panel away. A screen being left passes `relayout: false`:
+    /// it is going, and laying it out again under the transition only made the transition
+    /// stutter.
+    func stop(relayout: Bool = true) {
         guard state != .idle else { return }
-        stopSpeech()
+        retireSynthesizer()
         state = .idle
         messageId = nil
         pendingStart = nil
+        duration = nil
         timer?.invalidate()
         timer = nil
-        hidePanel()
-        deactivateSession()
+        hidePanel(relayout: relayout)
+        releaseSession()
     }
 
-    private func stopSpeech() {
+    private func retireSynthesizer() {
         currentUtterance = nil
+        guard let synthesizer else { return }
+        self.synthesizer = nil
+        synthesizer.delegate = nil
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
+        }
+        retired.append(synthesizer)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.retired.removeAll { $0 === synthesizer }
         }
     }
 
     private func togglePlayback() {
         switch state {
         case .playing:
-            if synthesizer.pauseSpeaking(at: .immediate) {
+            if synthesizer?.pauseSpeaking(at: .immediate) == true {
                 notePaused()
             }
         case .paused:
@@ -175,22 +249,43 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
             if let start = pendingStart {
                 pendingStart = nil
                 speak(from: start)
-            } else if synthesizer.isPaused {
+            } else if let synthesizer, synthesizer.isPaused {
                 synthesizer.continueSpeaking()
             } else {
+                positionAtUtteranceStart = position
                 speak(from: spokenLocation)
             }
+        case .finished:
+            replay(from: 0, position: 0.0)
         case .idle, .loading:
             break
         }
     }
 
+    /// Reads a finished answer again, from the start or from a place before its end.
+    private func replay(from location: Int, position: TimeInterval) {
+        activateSession()
+        duration = nil
+        pendingStart = nil
+        positionAtUtteranceStart = position
+        playedInUtterance = 0.0
+        playingSince = nil
+        state = .loading
+        panel?.setState(.loading)
+        panel?.setTime(position)
+        speak(from: location)
+    }
+
     private func speak(from location: Int) {
         let start = max(0, min(location, text.length))
         guard start < text.length else {
-            stop()
+            finish(after: nil)
             return
         }
+        retireSynthesizer()
+        let synthesizer = AVSpeechSynthesizer()
+        synthesizer.delegate = self
+        self.synthesizer = synthesizer
         let utterance = AVSpeechUtterance(string: text.substring(from: start))
         utterance.voice = voice
         utterance.rate = Self.rate(for: Self.speeds[speedIndex])
@@ -208,19 +303,40 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         guard state != .idle else { return }
         speedIndex = (speedIndex + 1) % Self.speeds.count
         panel?.setSpeed(Self.speeds[speedIndex])
-        // A rate belongs to an utterance, so the reading goes on from the current word with
-        // the new one.
-        restart(from: spokenLocation, position: position)
+        switch state {
+        case .playing, .paused, .loading:
+            // A rate belongs to an utterance, so the reading goes on from the current word
+            // with the new one.
+            restart(from: pendingStart ?? spokenLocation, position: position)
+        case .finished, .idle:
+            break
+        }
     }
 
     private func skip(by seconds: TimeInterval) {
-        guard state == .playing || state == .paused || state == .loading else { return }
-        let rate = charactersPerSecond[speedIndex] ?? (14.0 * Double(Self.speeds[speedIndex]))
+        let rate = max(1.0, charactersPerSecond[speedIndex] ?? (14.0 * Double(Self.speeds[speedIndex])))
+        switch state {
+        case .idle:
+            return
+        case .finished:
+            // Back from the end reads its last seconds again; there is nothing ahead.
+            guard seconds < 0.0, let duration else { return }
+            let target = text.length - Int((-seconds * rate).rounded())
+            if target <= 0 {
+                replay(from: 0, position: 0.0)
+            } else {
+                replay(from: Self.wordStart(in: text, near: target), position: max(0.0, duration + seconds))
+            }
+            return
+        case .playing, .paused, .loading:
+            break
+        }
         let current = pendingStart ?? spokenLocation
         let target = current + Int((seconds * rate).rounded())
         if target >= text.length - 1 {
-            // Past the end: the reading is over.
-            stop()
+            // Past the end: the reading is over, and the time it would have taken is what the
+            // panel keeps.
+            finish(after: position + Double(max(0, text.length - current)) / rate)
             return
         }
         if target <= 0 {
@@ -228,7 +344,7 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
             return
         }
         let snapped = Self.wordStart(in: text, near: target)
-        let moved = Double(snapped - current) / max(rate, 1.0)
+        let moved = Double(snapped - current) / rate
         restart(from: snapped, position: max(0.0, position + moved))
     }
 
@@ -236,22 +352,44 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     /// stays paused and starts there when it is resumed.
     private func restart(from location: Int, position: TimeInterval) {
         let wasPaused = state == .paused
-        stopSpeech()
+        retireSynthesizer()
         positionAtUtteranceStart = position
         playedInUtterance = 0.0
         playingSince = nil
         spokenLocation = location
         utteranceStart = location
+        panel?.setTime(position)
         if wasPaused {
             pendingStart = location
-            panel?.setTime(position)
         } else {
             pendingStart = nil
             speak(from: location)
         }
     }
 
+    /// The end of the answer: the voice is let go, and the panel stays with the whole time
+    /// and a button that reads it again.
+    private func finish(after estimatedDuration: TimeInterval?) {
+        if let playingSince {
+            playedInUtterance += CACurrentMediaTime() - playingSince
+        }
+        playingSince = nil
+        retireSynthesizer()
+        pendingStart = nil
+        let total = estimatedDuration ?? position
+        duration = total
+        state = .finished
+        timer?.invalidate()
+        timer = nil
+        panel?.setState(.finished)
+        panel?.setTime(total)
+        releaseSession()
+    }
+
     private var position: TimeInterval {
+        if let duration {
+            return duration
+        }
         var played = playedInUtterance
         if let playingSince {
             played += CACurrentMediaTime() - playingSince
@@ -281,8 +419,12 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: AVSpeechSynthesizerDelegate
 
+    private func isCurrent(_ synthesizer: AVSpeechSynthesizer, _ utterance: AVSpeechUtterance) -> Bool {
+        return synthesizer === self.synthesizer && utterance === currentUtterance
+    }
+
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        guard utterance === currentUtterance else { return }
+        guard isCurrent(synthesizer, utterance) else { return }
         playingSince = CACurrentMediaTime()
         state = .playing
         panel?.setState(.playing)
@@ -290,19 +432,20 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
-        guard utterance === currentUtterance, state == .playing else { return }
+        guard isCurrent(synthesizer, utterance), state == .playing else { return }
         notePaused()
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {
-        guard utterance === currentUtterance else { return }
+        guard isCurrent(synthesizer, utterance) else { return }
         playingSince = CACurrentMediaTime()
         state = .playing
         panel?.setState(.playing)
+        startTimer()
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
-        guard utterance === currentUtterance else { return }
+        guard isCurrent(synthesizer, utterance) else { return }
         spokenLocation = utteranceStart + characterRange.location
         // The pace this voice keeps at this speed, from what it has read so far.
         var played = playedInUtterance
@@ -321,45 +464,71 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        guard utterance === currentUtterance else { return }
-        currentUtterance = nil
-        panel?.setTime(position)
-        // The last second stays on the panel for a moment before it goes.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, self.currentUtterance == nil, self.state == .playing else { return }
-            self.stop()
-        }
+        guard isCurrent(synthesizer, utterance) else { return }
+        finish(after: nil)
     }
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        // Every cancel is ours — a skip, a new speed, a stop — and each of them has already
-        // set the state it wants.
+        // Every cancel is ours — a skip, a new speed, a stop — and a stopped synthesizer has
+        // stopped reporting to this one before it was stopped.
     }
 
     // MARK: Voice
 
-    /// The best installed voice for the language the answer is written in: premium, then
-    /// enhanced, then the default one, preferring the reader's own region.
+    /// The best natural voice installed for the language the answer is written in: premium,
+    /// then enhanced, then the one the system itself speaks the language with, preferring the
+    /// reader's own region.
     private static func voice(for text: String) -> AVSpeechSynthesisVoice? {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(String(text.prefix(1200)))
-        let detected = recognizer.dominantLanguage?.rawValue
-        let fallback = AVSpeechSynthesisVoice.currentLanguageCode()
-        let language = (detected ?? String(fallback.prefix(2))).lowercased()
+        let current = AVSpeechSynthesisVoice.currentLanguageCode()
+        let detected = recognizer.dominantLanguage?.rawValue.lowercased()
+        let language = (detected ?? current.lowercased()).split(separator: "-").first.map(String.init) ?? "en"
         let region = Locale.current.regionCode?.uppercased()
+        let systemVoice: AVSpeechSynthesisVoice? = {
+            let code: String
+            if current.lowercased().hasPrefix(language) {
+                code = current
+            } else if let region {
+                code = "\(language)-\(region)"
+            } else {
+                code = language
+            }
+            guard let voice = AVSpeechSynthesisVoice(language: code) ?? AVSpeechSynthesisVoice(language: language), isNatural(voice) else {
+                return nil
+            }
+            return voice
+        }()
         let candidates = AVSpeechSynthesisVoice.speechVoices().filter { voice in
-            guard voice.language.lowercased().hasPrefix(language) else { return false }
-            if #available(iOS 17.0, *), voice.voiceTraits.contains(.isNoveltyVoice) {
+            return voice.language.lowercased().hasPrefix(language) && isNatural(voice)
+        }
+        func score(_ voice: AVSpeechSynthesisVoice) -> Int {
+            var value = voice.quality.rawValue * 100
+            if voice.identifier == systemVoice?.identifier {
+                value += 20
+            }
+            if let region, voice.language.uppercased().hasSuffix(region) {
+                value += 10
+            }
+            return value
+        }
+        return candidates.max { score($0) < score($1) } ?? systemVoice ?? AVSpeechSynthesisVoice(language: current)
+    }
+
+    /// The voices that read like a person. The Eloquence voices — Eddy, Flo, Reed, Sandy and
+    /// the rest — are the robotic ones made for screen readers, the novelty voices are jokes,
+    /// and a personal voice is the reader's own, not the app's to use.
+    private static func isNatural(_ voice: AVSpeechSynthesisVoice) -> Bool {
+        let identifier = voice.identifier.lowercased()
+        if identifier.contains("eloquence") || identifier.contains("speech.synthesis.voice") {
+            return false
+        }
+        if #available(iOS 17.0, *) {
+            if voice.voiceTraits.contains(.isNoveltyVoice) || voice.voiceTraits.contains(.isPersonalVoice) {
                 return false
             }
-            return true
         }
-        let best = candidates.max { lhs, rhs in
-            let lhsScore = lhs.quality.rawValue * 10 + (region.map { lhs.language.uppercased().hasSuffix($0) } == true ? 1 : 0)
-            let rhsScore = rhs.quality.rawValue * 10 + (region.map { rhs.language.uppercased().hasSuffix($0) } == true ? 1 : 0)
-            return lhsScore < rhsScore
-        }
-        return best ?? AVSpeechSynthesisVoice(language: detected ?? fallback)
+        return true
     }
 
     /// The voice's speaking rate for a speed: 0.5 is its normal pace, and the system's scale
@@ -397,21 +566,27 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     // MARK: Audio session
 
     private func activateSession() {
-        let session = AVAudioSession.sharedInstance()
-        do {
-            // Spoken audio over the silent switch, with music lowered under it rather than
-            // stopped.
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-            try session.setActive(true)
-            didActivateSession = true
-        } catch {
-            didActivateSession = false
+        sessionGeneration += 1
+        var active = false
+        // Behind a release that may still be running, so the two never cross.
+        Self.sessionQueue.sync {
+            let session = AVAudioSession.sharedInstance()
+            do {
+                // Spoken audio over the silent switch, with music lowered under it rather than
+                // stopped.
+                try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+                try session.setActive(true)
+                active = true
+            } catch {
+                active = false
+            }
         }
+        sessionActive = active
         guard observers.isEmpty else { return }
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             let raw = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue
             guard raw == AVAudioSession.InterruptionType.began.rawValue, let self, self.state == .playing else { return }
-            if self.synthesizer.pauseSpeaking(at: .immediate) {
+            if self.synthesizer?.pauseSpeaking(at: .immediate) == true {
                 self.notePaused()
             }
         })
@@ -419,19 +594,28 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
             // Headphones taken out: the reading pauses rather than carrying on aloud.
             let raw = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
             guard raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue, let self, self.state == .playing else { return }
-            if self.synthesizer.pauseSpeaking(at: .immediate) {
+            if self.synthesizer?.pauseSpeaking(at: .immediate) == true {
                 self.notePaused()
             }
         })
     }
 
-    private func deactivateSession() {
+    /// Lets whatever was playing before come back up: once the voice has let go of the
+    /// output, and off the main thread.
+    private func releaseSession() {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
-        guard didActivateSession else { return }
-        didActivateSession = false
-        // Let whatever was playing before come back up.
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        guard sessionActive else { return }
+        sessionActive = false
+        let generation = sessionGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            if let self, self.sessionGeneration != generation {
+                return
+            }
+            Self.sessionQueue.async {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
+        }
     }
 
     // MARK: Panel
@@ -464,7 +648,7 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         } else {
             panel = AorusAIReadAloudPanel()
             panel.onPlayPause = { [weak self] in self?.togglePlayback() }
-            panel.onStop = { [weak self] in self?.stop() }
+            panel.onClose = { [weak self] in self?.stop() }
             panel.onSpeed = { [weak self] in self?.cycleSpeed() }
             panel.onBack = { [weak self] in self?.skip(by: -AorusAIReadAloudController.skipInterval) }
             panel.onForward = { [weak self] in self?.skip(by: AorusAIReadAloudController.skipInterval) }
@@ -489,18 +673,22 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         host.requestLayout(transition: .animated(duration: 0.35, curve: .spring))
     }
 
-    private func hidePanel() {
+    private func hidePanel(relayout: Bool) {
         guard let panel else { return }
         self.panel = nil
         panel.animateOut {
             panel.removeFromSuperview()
         }
-        host?.requestLayout(transition: .animated(duration: 0.35, curve: .spring))
+        if relayout {
+            host?.requestLayout(transition: .animated(duration: 0.35, curve: .spring))
+        }
     }
 }
 
-/// The reading panel: play or pause — a spinner until the voice starts — stop, the time read
-/// so far, and on the right the speed and fifteen seconds back and forward.
+/// The reading panel. On the left one button — pause while the voice reads, play while it is
+/// paused, a spinner until it starts, read-again once it has finished — and the time read so
+/// far, or the whole time at the end. On the right the speed, fifteen seconds back and
+/// forward, and last the cross that ends the reading.
 ///
 /// Interface 2.0 floats it as a capsule of glass under the screen's bar. The old interface has
 /// no glass, and there it is 12.0's own audio panel: a full-width strip under the navigation
@@ -510,6 +698,7 @@ final class AorusAIReadAloudPanel: UIView {
         case loading
         case playing
         case paused
+        case finished
     }
 
     let isClassic = AorusOldInterface.isEnabled
@@ -519,15 +708,15 @@ final class AorusAIReadAloudPanel: UIView {
     private let content = UIView()
     private let playPauseButton = UIButton(type: .system)
     private let spinner = UIActivityIndicatorView(style: .medium)
-    private let stopButton = UIButton(type: .system)
     private let timeLabel = UILabel()
     private let speedButton = UIButton(type: .system)
     private let backButton = UIButton(type: .system)
     private let forwardButton = UIButton(type: .system)
+    private let closeButton = UIButton(type: .system)
     private var isDark = true
     private var playbackState: PlaybackState = .loading
     var onPlayPause: (() -> Void)?
-    var onStop: (() -> Void)?
+    var onClose: (() -> Void)?
     var onSpeed: (() -> Void)?
     var onBack: (() -> Void)?
     var onForward: (() -> Void)?
@@ -558,23 +747,23 @@ final class AorusAIReadAloudPanel: UIView {
         }
         playPauseButton.setImage(Self.glyph("pause.fill"), for: .normal)
         playPauseButton.accessibilityLabel = aorusAILocalized("Пауза", "Pause")
-        stopButton.setImage(Self.glyph("stop.fill"), for: .normal)
-        stopButton.accessibilityLabel = aorusAILocalized("Остановить чтение", "Stop Reading")
         backButton.setImage(Self.glyph("gobackward.15", weight: .medium), for: .normal)
         backButton.accessibilityLabel = aorusAILocalized("Назад на 15 секунд", "Back 15 seconds")
         forwardButton.setImage(Self.glyph("goforward.15", weight: .medium), for: .normal)
         forwardButton.accessibilityLabel = aorusAILocalized("Вперёд на 15 секунд", "Forward 15 seconds")
+        closeButton.setImage(Self.glyph("xmark", weight: .semibold, size: 14.0), for: .normal)
+        closeButton.accessibilityLabel = aorusAILocalized("Закончить чтение", "Stop Reading")
         speedButton.titleLabel?.font = UIFont.systemFont(ofSize: 14.0, weight: .semibold).aorusRounded()
         speedButton.accessibilityLabel = aorusAILocalized("Скорость", "Speed")
-        timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 14.0, weight: .medium)
+        timeLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 14.0, weight: .semibold)
         timeLabel.textAlignment = .left
         spinner.hidesWhenStopped = true
         playPauseButton.addTarget(self, action: #selector(playPausePressed), for: .touchUpInside)
-        stopButton.addTarget(self, action: #selector(stopPressed), for: .touchUpInside)
+        closeButton.addTarget(self, action: #selector(closePressed), for: .touchUpInside)
         speedButton.addTarget(self, action: #selector(speedPressed), for: .touchUpInside)
         backButton.addTarget(self, action: #selector(backPressed), for: .touchUpInside)
         forwardButton.addTarget(self, action: #selector(forwardPressed), for: .touchUpInside)
-        [playPauseButton, spinner, stopButton, timeLabel, speedButton, backButton, forwardButton].forEach { content.addSubview($0) }
+        [playPauseButton, spinner, timeLabel, speedButton, backButton, forwardButton, closeButton].forEach { content.addSubview($0) }
         isAccessibilityElement = false
     }
 
@@ -584,50 +773,60 @@ final class AorusAIReadAloudPanel: UIView {
         isDark = theme.overallDarkAppearance
         let palette = AorusAIPalette.resolve(theme)
         let ink: UIColor
-        let secondary: UIColor
+        let time: UIColor
         if isClassic {
             let bar = theme.rootController.navigationBar
             classicBackground?.updateColor(color: bar.blurredBackgroundColor, transition: .immediate)
             classicSeparator.backgroundColor = bar.separatorColor
             ink = bar.accentTextColor
-            secondary = bar.secondaryTextColor
+            time = bar.primaryTextColor
         } else {
             ink = palette.label
-            secondary = palette.secondary
+            time = palette.label
         }
-        for button in [playPauseButton, stopButton, speedButton, backButton, forwardButton] {
+        for button in [playPauseButton, speedButton, backButton, forwardButton, closeButton] {
             button.tintColor = ink
         }
         speedButton.setTitleColor(ink, for: .normal)
         spinner.color = ink
-        timeLabel.textColor = secondary
+        // The time is read as the panel's own text, not a caption under it.
+        timeLabel.textColor = time
         setNeedsLayout()
     }
 
     func setState(_ state: PlaybackState) {
         let previous = playbackState
         playbackState = state
+        let forwardEnabled = state != .finished
+        forwardButton.isEnabled = forwardEnabled
+        forwardButton.alpha = forwardEnabled ? 1.0 : 0.35
         switch state {
         case .loading:
             spinner.startAnimating()
             playPauseButton.alpha = 0.0
-            stopButton.alpha = 0.0
-            stopButton.isUserInteractionEnabled = false
-        case .playing, .paused:
+            playPauseButton.isUserInteractionEnabled = false
+        case .playing, .paused, .finished:
             spinner.stopAnimating()
-            let image = Self.glyph(state == .playing ? "pause.fill" : "play.fill")
-            playPauseButton.accessibilityLabel = state == .playing ? aorusAILocalized("Пауза", "Pause") : aorusAILocalized("Продолжить", "Play")
+            playPauseButton.isUserInteractionEnabled = true
+            let image: UIImage?
+            switch state {
+            case .playing:
+                image = Self.glyph("pause.fill")
+                playPauseButton.accessibilityLabel = aorusAILocalized("Пауза", "Pause")
+            case .paused:
+                image = Self.glyph("play.fill")
+                playPauseButton.accessibilityLabel = aorusAILocalized("Продолжить", "Play")
+            default:
+                image = Self.glyph("arrow.counterclockwise", weight: .semibold)
+                playPauseButton.accessibilityLabel = aorusAILocalized("Прочитать снова", "Read Again")
+            }
             if previous == .loading {
-                // The voice has started: play gives way to pause, and stop comes in beside it.
+                // The voice has started: the spinner gives way to the button.
                 playPauseButton.setImage(image, for: .normal)
                 playPauseButton.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-                stopButton.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-                stopButton.isUserInteractionEnabled = true
                 UIView.animate(withDuration: 0.35, delay: 0.0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.0, options: [.allowUserInteraction]) {
                     self.playPauseButton.alpha = 1.0
                     self.playPauseButton.transform = .identity
-                    self.stopButton.alpha = 1.0
-                    self.stopButton.transform = .identity
                 }
             } else if previous != state {
                 UIView.transition(with: playPauseButton, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction]) {
@@ -677,9 +876,9 @@ final class AorusAIReadAloudPanel: UIView {
         let y = floor((size.height - button) / 2.0)
         playPauseButton.frame = CGRect(x: side, y: y, width: button, height: button)
         spinner.center = playPauseButton.center
-        stopButton.frame = CGRect(x: playPauseButton.frame.maxX, y: y, width: button, height: button)
-        timeLabel.frame = CGRect(x: stopButton.frame.maxX + 6.0, y: 0.0, width: 64.0, height: size.height)
-        forwardButton.frame = CGRect(x: size.width - side - button, y: y, width: button, height: button)
+        timeLabel.frame = CGRect(x: playPauseButton.frame.maxX + 4.0, y: 0.0, width: 64.0, height: size.height)
+        closeButton.frame = CGRect(x: size.width - side - button, y: y, width: button, height: button)
+        forwardButton.frame = CGRect(x: closeButton.frame.minX - button - 2.0, y: y, width: button, height: button)
         backButton.frame = CGRect(x: forwardButton.frame.minX - button, y: y, width: button, height: button)
         speedButton.frame = CGRect(x: backButton.frame.minX - 50.0, y: y, width: 48.0, height: button)
     }
@@ -715,8 +914,8 @@ final class AorusAIReadAloudPanel: UIView {
         }
     }
 
-    private static func glyph(_ name: String, weight: UIImage.SymbolWeight = .regular) -> UIImage? {
-        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17.0, weight: weight))
+    private static func glyph(_ name: String, weight: UIImage.SymbolWeight = .regular, size: CGFloat = 17.0) -> UIImage? {
+        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: weight))
     }
 
     @objc private func playPausePressed() {
@@ -724,8 +923,8 @@ final class AorusAIReadAloudPanel: UIView {
         onPlayPause?()
     }
 
-    @objc private func stopPressed() {
-        onStop?()
+    @objc private func closePressed() {
+        onClose?()
     }
 
     @objc private func speedPressed() {

@@ -644,6 +644,9 @@ final class AorusAISharePreviewController: UIViewController {
     private var displayLink: CADisplayLink?
     private weak var sheet: UIViewController?
     private var isAnimatingOut = false
+    private var isOut = false
+    private var outCompletions: [() -> Void] = []
+    private var observesInteraction = false
     var onDismissRequest: (() -> Void)?
 
     init(image: UIImage, isDark: Bool) {
@@ -710,6 +713,27 @@ final class AorusAISharePreviewController: UIViewController {
 
     fileprivate func tick() {
         guard !isAnimatingOut else { return }
+        // The slide goes as the sheet starts to go, not once it has gone: the system says the
+        // share is over only after the sheet's own dismissal has finished.
+        if let sheet, sheet.isBeingDismissed {
+            if let coordinator = sheet.transitionCoordinator, coordinator.isInteractive {
+                // Pulled down by a finger, it may still come back: the slide follows the edge
+                // until the finger lets go, and goes only if the sheet does.
+                if !observesInteraction {
+                    observesInteraction = true
+                    coordinator.notifyWhenInteractionChanges { [weak self] context in
+                        guard let self else { return }
+                        self.observesInteraction = false
+                        if !context.isCancelled {
+                            self.animateOut(completion: {})
+                        }
+                    }
+                }
+            } else {
+                animateOut(completion: {})
+                return
+            }
+        }
         layoutCard()
     }
 
@@ -770,7 +794,13 @@ final class AorusAISharePreviewController: UIViewController {
     }
 
     /// The slide drops out of sight past the bottom of the screen, and the backdrop goes with it.
+    /// Asked again while it is already going, or gone, it calls back when it is out.
     func animateOut(completion: @escaping () -> Void) {
+        if isOut {
+            completion()
+            return
+        }
+        outCompletions.append(completion)
         guard !isAnimatingOut else { return }
         isAnimatingOut = true
         displayLink?.invalidate()
@@ -782,7 +812,13 @@ final class AorusAISharePreviewController: UIViewController {
         UIView.animate(withDuration: 0.36, delay: 0.08, options: [.curveEaseOut, .beginFromCurrentState]) {
             self.backdrop.alpha = 0.0
         } completion: { _ in
-            completion()
+            self.isOut = true
+            // Nothing is left on screen, and nothing of it should take a touch meant for the
+            // chat while the share finishes underneath.
+            self.view.isUserInteractionEnabled = false
+            let completions = self.outCompletions
+            self.outCompletions = []
+            completions.forEach { $0() }
         }
     }
 

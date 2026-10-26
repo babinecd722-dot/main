@@ -171,6 +171,13 @@ func aorusProbeShare(from presenter: UIViewController, sourceView: UIView, previ
         _ = container.convert(layer.frame, to: preview.view).minY
     }
     _ = preview.traitCollection.userInterfaceIdiom == .pad
+    // The slide leaves as the sheet begins to: a sheet pulled down by a finger is followed
+    // until the finger lets go.
+    if activity.isBeingDismissed, let coordinator = activity.transitionCoordinator, coordinator.isInteractive {
+        coordinator.notifyWhenInteractionChanges { context in
+            _ = context.isCancelled
+        }
+    }
 }
 
 final class AorusProbeDisplayLinkTarget: NSObject {
@@ -232,4 +239,22 @@ func aorusProbeSpeech(_ text: String) {
     _ = AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue
     _ = (text as NSString).character(at: 0)
     _ = CACurrentMediaTime()
+    // Only natural voices are read with: the Eloquence and novelty voices, and the reader's
+    // own personal voice, are told apart by these.
+    if let voice = AVSpeechSynthesisVoice(language: "ru-RU") {
+        _ = voice.identifier.lowercased().contains("eloquence")
+        if #available(iOS 17.0, *) {
+            _ = voice.voiceTraits.contains(.isPersonalVoice)
+        }
+    }
+    // What a voice can only spell is taken out of the spoken text.
+    if let marker = try? NSRegularExpression(pattern: #"^\s*[-•]\s+"#) {
+        _ = marker.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: "")
+    }
+    for scalar in text.unicodeScalars where scalar.properties.isEmojiPresentation || scalar.properties.isEmoji {
+        _ = scalar.value
+    }
+    // The small glyphs under an answer.
+    _ = UIImage(systemName: "doc.on.doc", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13.0, weight: .medium, scale: .small))
+    _ = UIImage(systemName: "arrow.counterclockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17.0, weight: .semibold))
 }

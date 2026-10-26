@@ -30871,6 +30871,9 @@ def main() -> None:
     from aorus_live_theme import patch_live_theme
     patch_live_theme(tg)
     patch_tab_settings(tg)
+    # After the tab settings: it anchors on the observer and the deinit they add.
+    from aorus_tab_bar_resume import patch_tab_bar_resume
+    patch_tab_bar_resume(tg)
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)
     patch_interface_v2_run_switch(tg)

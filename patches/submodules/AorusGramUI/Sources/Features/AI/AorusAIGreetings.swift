@@ -2,29 +2,28 @@ import Foundation
 
 /// The headline over the AorusAI conversation list.
 ///
-/// It used to be one of three lines — good morning, afternoon or evening — and after a week
-/// it was furniture. It is now drawn from a large pool: plain greetings, ones that know the
-/// time of day, the day of the week or the date, and jokes written as a line of code, which
-/// are shown as the ordinary headline text they are, in the headline's own face.
+/// One ordinary greeting at a time — plain ones, and ones that know the part of the day, the
+/// day of the week or the date — and among them a single line written as code,
+/// `print("Hello Ivan")`, shown as the ordinary headline text it is.
 ///
-/// The pick is random but never one of the last few shown, so opening the screen twice in a
-/// row does not show the same line, and it is kept while the screen stays open: the name
-/// arriving a moment later fills the line in rather than drawing another one.
+/// The line belongs to the part of the day it was picked in. Opening the screen again shows
+/// the same line, however often it is opened; the next morning, afternoon, evening or night
+/// brings a new one, never one of the last few shown.
 struct AorusAIGreeting: Equatable {
-    /// A line written as code keeps its quotes and brackets and never loses its name: when
-    /// the name is not known yet the code greets the world, as code does.
+    /// The line written as code keeps its quotes and brackets and never loses its name: when
+    /// the name is not known the code greets the world, as code does.
     let isCode: Bool
     let ru: String
     let en: String
 
-    /// `{name}` is the user's first name, and a prose line that carries it is only used when
-    /// the name is known. `{, name}` is ", Name" when it is and nothing when it is not.
+    /// `{name}` is the user's first name, and a prose line that carries it is only picked
+    /// when the name is known. `{, name}` is ", Name" when it is and nothing when it is not.
     fileprivate var needsName: Bool {
         return !isCode && (ru.contains("{name}") || en.contains("{name}"))
     }
 
-    /// Identifies the line in the recently-shown list. The English text is unique across the
-    /// pool, and survives a reordering of it.
+    /// Identifies the line in what is kept between launches. The English text is unique
+    /// across the pool, and survives a reordering of it.
     fileprivate var key: String { en }
 
     func text(name: String?) -> String {
@@ -37,7 +36,7 @@ struct AorusAIGreeting: Equatable {
             return aorusAILocalized("Привет", "Hello")
         }
         var result = template.replacingOccurrences(of: "{, name}", with: name.map { ", \($0)" } ?? "")
-        let fallback = isCode ? aorusAILocalized("мир", "World") : ""
+        let fallback = isCode ? "World" : ""
         result = result.replacingOccurrences(of: "{name}", with: name ?? fallback)
         return result
     }
@@ -45,188 +44,126 @@ struct AorusAIGreeting: Equatable {
 
 enum AorusAIGreetings {
     private static let recentKey = "aorusgram.ai.greeting.recent"
+    /// The line on the headline now, the part of the day it was picked in, and the name it
+    /// was last shown with.
+    private static let currentKey = "aorusgram.ai.greeting.current"
     /// How many recent lines are kept out of the next pick.
-    private static let recentLimit = 40
+    private static let recentLimit = 12
 
     private static func prose(_ ru: String, _ en: String) -> AorusAIGreeting {
         return AorusAIGreeting(isCode: false, ru: ru, en: en)
     }
 
-    private static func code(_ ru: String, _ en: String) -> AorusAIGreeting {
-        return AorusAIGreeting(isCode: true, ru: ru, en: en)
-    }
+    /// The one line written as code. It reads the same in every language: it is code.
+    private static let codeLine = AorusAIGreeting(isCode: true, ru: "print(\"Hello {name}\")", en: "print(\"Hello {name}\")")
 
     /// Lines that fit any moment.
     private static let anytime: [AorusAIGreeting] = [
-        code("print(\"Привет, {name}\")", "print(\"Hello, {name}\")"),
-        code("console.log(\"Привет, {name} 👋\")", "console.log(\"Hi, {name} 👋\")"),
-        code("echo \"Привет, {name}\"", "echo \"Hello, {name}\""),
-        code("System.out.println(\"Привет, {name}\");", "System.out.println(\"Hello, {name}\");"),
-        code("printf(\"Привет, %s\\n\", \"{name}\");", "printf(\"Hello, %s\\n\", \"{name}\");"),
-        code("print(f\"Привет, {name}\")", "print(f\"Hi there, {name}\")"),
-        code("println!(\"Привет, {name}!\");", "println!(\"Hello, {name}!\");"),
-        code("fmt.Println(\"Привет, {name}\")", "fmt.Println(\"Hello, {name}\")"),
-        code("std::cout << \"Привет, {name}\";", "std::cout << \"Hello, {name}\";"),
-        code("Console.WriteLine(\"Привет, {name}\");", "Console.WriteLine(\"Hello, {name}\");"),
-        code("puts \"Привет, {name}\"", "puts \"Hello, {name}\""),
-        code("alert(\"Привет, {name}!\")", "alert(\"Hey, {name}!\")"),
-        code("<h1>Привет, {name}</h1>", "<h1>Hello, {name}</h1>"),
-        code(">>> hello(\"{name}\")", ">>> hello(\"{name}\")"),
-        code("return \"Привет, {name}\"", "return \"Welcome, {name}\""),
-        code("git commit -m \"Привет, {name}\"", "git commit -m \"Hi, {name}\""),
-        code("SELECT * FROM идеи WHERE автор = '{name}';", "SELECT * FROM ideas WHERE author = '{name}';"),
-        code("{name}.greet()", "{name}.greet()"),
-        code("while true { помогать({name}) }", "while true { help({name}) }"),
-        code("if {name}.isReady { start() }", "if {name}.isReady { start() }"),
-        code("try удивить({name})", "try surprise({name})"),
-        code("let идеи = await думать()", "let ideas = await think()"),
-        code("// TODO: удивить {name}", "// TODO: impress {name}"),
-        code("import вдохновение", "import inspiration"),
-        code("npm install идеи", "npm install ideas"),
-        code("rm -rf скука", "rm -rf boredom"),
-        code("sudo сделай мне кофе", "sudo make me a coffee"),
-        code("ping {name} → pong", "ping {name} → pong"),
-        code("$ ./hello --name \"{name}\"", "$ ./hello --name \"{name}\""),
-        code("01001000 01101001, {name}", "01001000 01101001, {name}"),
-        code("200 OK, {name}", "200 OK, {name}"),
-        code("404: скука не найдена", "404: boredom not found"),
-        code("Ctrl+C, Ctrl+V, привет", "Ctrl+C, Ctrl+V, hello"),
-        code("git checkout -b новая-идея", "git checkout -b new-idea"),
-        code("fn main() { greet(\"{name}\") }", "fn main() { greet(\"{name}\") }"),
-        code("document.title = \"Привет, {name}\"", "document.title = \"Hi, {name}\""),
-        code("Hello, World! Ой, то есть {name}", "Hello, World! I mean, {name}"),
-        code("{name} = Человек(идей: .бесконечно)", "{name} = Human(ideas: .infinite)"),
-        prose("Привет{, name}! Есть идеи?", "Hi{, name}! Got any ideas?"),
-        prose("О, {name}, это снова ты", "Oh, {name}, it's you again"),
+        codeLine,
+        prose("Привет{, name}", "Hello{, name}"),
+        prose("Снова привет{, name}", "Hello again{, name}"),
         prose("Рад тебя видеть{, name}", "Good to see you{, name}"),
         prose("С возвращением{, name}", "Welcome back{, name}"),
-        prose("{name}, давай что-нибудь придумаем", "{name}, let's make something"),
+        prose("Хорошо, что ты здесь{, name}", "Glad you're here{, name}"),
+        prose("Как дела{, name}?", "How are you{, name}?"),
+        prose("Привет, {name}! Как дела?", "Hi, {name}! How are you?"),
+        prose("Чем могу помочь{, name}?", "How can I help{, name}?"),
+        prose("{name}, чем помочь?", "{name}, how can I help?"),
+        prose("{name}, рад тебя видеть", "{name}, good to see you"),
         prose("Что на уме{, name}?", "What's on your mind{, name}?"),
-        prose("Готов к мозговому штурму?", "Ready for a brainstorm?"),
+        prose("О чём поговорим{, name}?", "What shall we talk about{, name}?"),
+        prose("С чего начнём{, name}?", "Where shall we start{, name}?"),
+        prose("Над чем работаем{, name}?", "What are we working on{, name}?"),
+        prose("Какие планы{, name}?", "What's the plan{, name}?"),
         prose("Спрашивай что угодно{, name}", "Ask me anything{, name}"),
-        prose("Слушаю внимательно", "I'm all ears"),
-        prose("Твой ход{, name}", "Your move{, name}"),
-        prose("Ну что{, name}, начнём?", "So{, name}, shall we begin?"),
-        prose("Новый день — новые вопросы", "New day, new questions"),
-        prose("Загрузка гениальности… 100%", "Loading genius… 100%"),
-        prose("Нейроны размяты{, name}", "Neurons warmed up{, name}"),
-        prose("Без паники{, name}", "Don't panic{, name}"),
-        prose("Ответ — 42. А какой вопрос?", "The answer is 42. What's the question?"),
-        prose("Да пребудет с тобой сила{, name}", "May the Force be with you{, name}"),
-        prose("Хьюстон, мы готовы", "Houston, we're ready"),
-        prose("Поехали!", "Let's go!"),
-        prose("Режим гения: включён", "Genius mode: on"),
-        prose("Расскажи, что задумал{, name}", "Tell me what you're planning{, name}"),
-        prose("Сегодня без багов{, name}?", "Bug-free today{, name}?"),
-        prose("Кто здесь? А, это {name}", "Who's there? Oh, it's {name}"),
-        prose("Пишем историю{, name}?", "Making history today{, name}?"),
-        prose("Привет-привет{, name}", "Hey hey{, name}"),
-        prose("Алоха{, name}", "Aloha{, name}"),
-        prose("Бонжур{, name}", "Bonjour{, name}"),
-        prose("Hola{, name}", "Hola{, name}"),
-        prose("Konnichiwa{, name}", "Konnichiwa{, name}"),
-        prose("Йо{, name}", "Yo{, name}"),
-        prose("Идея дня уже ждёт", "Today's idea is waiting"),
-        prose("Один вопрос — и поехали", "One question and we're off"),
-        prose("Мысли вслух? Я тут", "Thinking out loud? I'm here"),
-        prose("Чистый лист{, name}", "A blank page{, name}"),
-        prose("Ты спрашиваешь — я думаю", "You ask, I think"),
-        prose("Сделаем что-то классное{, name}", "Let's build something great{, name}"),
-        prose("Бип-буп. Привет{, name}", "Beep boop. Hello{, name}"),
-        prose("Вдох, выдох, вопрос", "Breathe in, breathe out, ask away"),
-        prose("Сегодня твой день{, name}", "Today is your day{, name}"),
-        prose("Любопытство приветствуется", "Curiosity welcome"),
+        prose("Есть вопрос{, name}?", "Got a question{, name}?"),
+        prose("Есть идея{, name}?", "Got an idea{, name}?"),
+        prose("Готов помочь{, name}", "Ready to help{, name}"),
+        prose("Я на связи{, name}", "I'm here{, name}"),
+        prose("Слушаю{, name}", "I'm listening{, name}"),
+        prose("Давай начнём{, name}", "Let's get started{, name}"),
+        prose("Давай разберёмся вместе{, name}", "Let's figure it out together{, name}"),
+        prose("Давай придумаем что-нибудь{, name}", "Let's come up with something{, name}"),
+        prose("Расскажи, что у тебя на уме", "Tell me what you're thinking"),
     ]
 
     private static let morning: [AorusAIGreeting] = [
         prose("Доброе утро{, name}", "Good morning{, name}"),
-        prose("Утро начинается с идей", "Mornings start with ideas"),
-        prose("Кофе уже налит{, name}?", "Coffee poured yet{, name}?"),
-        prose("Солнце встало — и я тоже", "The sun is up, and so am I"),
-        prose("Бодрого утра{, name}", "Have a bright morning{, name}"),
-        prose("Утро вечера мудренее. Спрашивай", "Morning is wiser. Ask away"),
-        code("wakeUp({name})", "wakeUp({name})"),
-        code("alarm.snooze() // ещё 5 минут", "alarm.snooze() // 5 more minutes"),
-        code("coffee.brew(strength: .max)", "coffee.brew(strength: .max)"),
+        prose("С добрым утром{, name}", "Morning{, name}"),
+        prose("Хорошего утра{, name}", "Have a good morning{, name}"),
+        prose("Как спалось{, name}?", "Did you sleep well{, name}?"),
+        prose("Утро — время для идей", "Mornings are for ideas"),
     ]
 
     private static let earlyMorning: [AorusAIGreeting] = [
+        prose("Ты сегодня рано{, name}", "You're up early{, name}"),
         prose("Ранняя пташка{, name}", "Early bird{, name}"),
-        prose("Ещё все спят, а мы уже тут", "Everyone's asleep, but here we are"),
     ]
 
     private static let afternoon: [AorusAIGreeting] = [
         prose("Добрый день{, name}", "Good afternoon{, name}"),
+        prose("Хорошего дня{, name}", "Have a good day{, name}"),
         prose("Продуктивного дня{, name}", "Have a productive day{, name}"),
-        prose("Обед — лучшее время для идей", "Lunch break is idea time"),
-        prose("Середина дня, полёт нормальный", "Midday, all systems go"),
-        code("day.progress = 50%", "day.progress = 50%"),
-        code("lunch.break() // но не мозг", "lunch.break() // not the brain"),
+        prose("Как проходит день{, name}?", "How's your day going{, name}?"),
     ]
 
     private static let evening: [AorusAIGreeting] = [
         prose("Добрый вечер{, name}", "Good evening{, name}"),
         prose("Как прошёл день{, name}?", "How was your day{, name}?"),
+        prose("Хорошего вечера{, name}", "Have a nice evening{, name}"),
         prose("Уютного вечера{, name}", "Have a cozy evening{, name}"),
-        prose("Подведём итоги дня?", "Shall we wrap up the day?"),
-        prose("Вечер — время для идей", "Evenings are for ideas"),
-        code("work.stop(); ideas.start()", "work.stop(); ideas.start()"),
     ]
 
     private static let night: [AorusAIGreeting] = [
         prose("Доброй ночи{, name}", "Good night{, name}"),
         prose("Не спится{, name}?", "Can't sleep{, name}?"),
-        prose("Полуночник на связи", "Night owl online"),
-        prose("Лучшие идеи приходят ночью", "The best ideas come at night"),
-        prose("Тсс… все спят. Спрашивай тихо", "Shh… everyone's asleep. Ask quietly"),
-        code("while night { think() }", "while night { think() }"),
-        code("sleep() // позже", "sleep() // later"),
-        code("darkMode = true", "darkMode = true"),
+        prose("Уже поздно{, name}", "It's late{, name}"),
+        prose("Тихой ночи{, name}", "Have a quiet night{, name}"),
     ]
 
     private static let monday: [AorusAIGreeting] = [
-        prose("Понедельник? Справимся", "Monday? We've got this"),
-        code("week.start(mood: .optimistic)", "week.start(mood: .optimistic)"),
+        prose("Хорошего понедельника{, name}", "Happy Monday{, name}"),
+        prose("Новая неделя — новые планы", "New week, new plans"),
     ]
 
     private static let friday: [AorusAIGreeting] = [
         prose("Пятница{, name}!", "It's Friday{, name}!"),
-        prose("Пятница — почти выходные", "Friday: the weekend's almost here"),
-        code("deploy() // в пятницу? смело", "deploy() // on a Friday? Bold"),
+        prose("Хорошей пятницы{, name}", "Have a good Friday{, name}"),
     ]
 
     private static let weekend: [AorusAIGreeting] = [
-        prose("Хороших выходных{, name}", "Happy weekend{, name}"),
-        prose("Выходные — время своих проектов", "Weekends are for side projects"),
-        code("weekend.enjoy()", "weekend.enjoy()"),
+        prose("Хороших выходных{, name}", "Have a great weekend{, name}"),
+        prose("Спокойных выходных{, name}", "Have a relaxing weekend{, name}"),
     ]
 
     private static func special(month: Int, day: Int, dayOfYear: Int) -> [AorusAIGreeting] {
         var result: [AorusAIGreeting] = []
         if month == 1 && day == 1 {
             result.append(prose("С Новым годом{, name}!", "Happy New Year{, name}!"))
-            result.append(code("year += 1", "year += 1"))
         }
         if month == 12 && day == 31 {
-            result.append(prose("Почти Новый год{, name}", "Almost New Year{, name}"))
-        }
-        if month == 4 && day == 1 {
-            result.append(prose("Сегодня я не шучу. Наверное", "No jokes today. Probably"))
+            result.append(prose("С наступающим{, name}!", "Happy New Year's Eve{, name}!"))
         }
         if month == 10 && day == 31 {
-            result.append(prose("Сладость или гадость{, name}?", "Trick or treat{, name}?"))
+            result.append(prose("С Хэллоуином{, name}!", "Happy Halloween{, name}!"))
         }
         // The programmers' day is the 256th day of the year.
         if dayOfYear == 256 {
             result.append(prose("С Днём программиста{, name}!", "Happy Programmer's Day{, name}!"))
-            result.append(code("day == 0x100 // праздник", "day == 0x100 // holiday"))
         }
         return result
     }
 
+    private static var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone.current
+        return calendar
+    }
+
     /// The lines that may be shown now. A day that has its own lines shows one of them more
     /// often than not: on New Year's morning that is the greeting that is wanted.
-    private static func candidates(at date: Date, calendar: Calendar) -> (pool: [AorusAIGreeting], special: [AorusAIGreeting]) {
+    private static func candidates(at date: Date) -> (pool: [AorusAIGreeting], special: [AorusAIGreeting]) {
+        let calendar = self.calendar
         let hour = calendar.component(.hour, from: date)
         let weekday = calendar.component(.weekday, from: date)
         let month = calendar.component(.month, from: date)
@@ -234,15 +171,15 @@ enum AorusAIGreetings {
         let dayOfYear = calendar.ordinality(of: .day, in: .year, for: date) ?? 0
 
         var pool = anytime
-        switch hour {
-        case 5 ..< 12:
+        switch timeSlot(at: date) {
+        case 0:
             pool += morning
             if hour < 8 {
                 pool += earlyMorning
             }
-        case 12 ..< 18:
+        case 1:
             pool += afternoon
-        case 18 ..< 23:
+        case 2:
             pool += evening
         default:
             pool += night
@@ -261,13 +198,43 @@ enum AorusAIGreetings {
         return (pool, special(month: month, day: day, dayOfYear: dayOfYear))
     }
 
+    /// The headline for now: the line already picked for this part of the day if there is
+    /// one, so the screen shows the same line each time it is opened, and a new pick when the
+    /// part of the day has changed.
+    ///
+    /// The name lands a moment after the screen is built. A line picked before it was known
+    /// is picked again once, with the lines that address the user by name among them, if the
+    /// name follows within a moment — before anyone has read the first one.
+    static func greeting(at date: Date = Date(), name: String?) -> AorusAIGreeting {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (trimmed?.isEmpty == false) ? trimmed : nil
+        let period = self.period(at: date)
+        if var record = storedRecord(), record.period == period, let current = line(withKey: record.key, at: date) {
+            let fresh = date.timeIntervalSince(record.pickedAt)
+            if !record.named, name != nil, fresh >= 0.0, fresh < 1.5 {
+                return store(pick(at: date, hasName: true), period: period, name: name, at: date)
+            }
+            if let name, record.name != name {
+                record.name = name
+                save(record)
+            }
+            return current
+        }
+        return store(pick(at: date, hasName: name != nil), period: period, name: name, at: date)
+    }
+
+    /// The name the headline was last shown with, so it can be drawn whole before the name
+    /// has been read again.
+    static var lastName: String? {
+        return storedRecord()?.name
+    }
+
+    /// A fresh line for `date`, never one of the last few shown.
     static func pick(at date: Date = Date(), hasName: Bool) -> AorusAIGreeting {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone.current
-        let (pool, special) = candidates(at: date, calendar: calendar)
+        let (pool, special) = candidates(at: date)
         let recent = recentKeys()
-        // A prose line that names the user waits for the name. Code lines never wait: they
-        // greet the world until the name is known.
+        // A prose line that names the user waits for the name. The code line never waits:
+        // it greets the world until the name is known.
         func usable(_ list: [AorusAIGreeting]) -> [AorusAIGreeting] {
             return list.filter { hasName || !$0.needsName }
         }
@@ -287,13 +254,75 @@ enum AorusAIGreetings {
     /// Which part of the day `date` is in, so a line written for the morning is replaced
     /// once it is evening.
     static func timeSlot(at date: Date = Date()) -> Int {
-        let hour = Calendar.current.component(.hour, from: date)
+        let hour = calendar.component(.hour, from: date)
         switch hour {
         case 5 ..< 12: return 0
         case 12 ..< 18: return 1
         case 18 ..< 23: return 2
         default: return 3
         }
+    }
+
+    /// The day and the part of it, as one value: the night after midnight belongs to the day
+    /// it began on, so a line picked at 23:30 stays until morning.
+    static func period(at date: Date) -> String {
+        let calendar = self.calendar
+        let slot = timeSlot(at: date)
+        let hour = calendar.component(.hour, from: date)
+        let day = slot == 3 && hour < 5 ? calendar.date(byAdding: .day, value: -1, to: date) ?? date : date
+        let components = calendar.dateComponents([.year, .month, .day], from: day)
+        return "\(components.year ?? 0)-\(components.month ?? 0)-\(components.day ?? 0)#\(slot)"
+    }
+
+    /// Forgets the line on the headline and the recent ones, so the next call picks anew.
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: currentKey)
+        UserDefaults.standard.removeObject(forKey: recentKey)
+    }
+
+    // MARK: What is kept
+
+    private struct Record {
+        var key: String
+        var period: String
+        var named: Bool
+        var pickedAt: Date
+        var name: String?
+    }
+
+    private static func storedRecord() -> Record? {
+        guard let value = UserDefaults.standard.dictionary(forKey: currentKey),
+              let key = value["key"] as? String,
+              let period = value["period"] as? String,
+              let pickedAt = value["pickedAt"] as? Double else {
+            return nil
+        }
+        return Record(key: key, period: period, named: value["named"] as? Bool ?? false, pickedAt: Date(timeIntervalSince1970: pickedAt), name: value["name"] as? String)
+    }
+
+    private static func save(_ record: Record) {
+        var value: [String: Any] = [
+            "key": record.key,
+            "period": record.period,
+            "named": record.named,
+            "pickedAt": record.pickedAt.timeIntervalSince1970
+        ]
+        if let name = record.name {
+            value["name"] = name
+        }
+        UserDefaults.standard.set(value, forKey: currentKey)
+    }
+
+    private static func store(_ greeting: AorusAIGreeting, period: String, name: String?, at date: Date) -> AorusAIGreeting {
+        save(Record(key: greeting.key, period: period, named: name != nil, pickedAt: date, name: name ?? storedRecord()?.name))
+        return greeting
+    }
+
+    /// The line a kept key names, among those of `date`'s day; a line no longer in the pool
+    /// is not shown again.
+    private static func line(withKey key: String, at date: Date) -> AorusAIGreeting? {
+        let (pool, special) = candidates(at: date)
+        return (special + pool).first { $0.key == key }
     }
 
     private static func recentKeys() -> [String] {

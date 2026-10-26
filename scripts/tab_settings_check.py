@@ -90,6 +90,9 @@ def main():
         require('ComponentFlow/Source/Components/Image.swift', 'AorusRGBColors.sameSource(lhs.tintColor, rhs.tintColor)')
         require('PeerAvatarGalleryUI/Sources/AvatarGalleryController.swift', 'animatedOutNode && !crossfade', 'useSimpleAnimation: presentationArguments.crossfadeContent')
         require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift', 'let entry = AorusInterfaceV2Run.isEnabled && self.isAvatarExpanded ? nil : entry', 'aorusBadgeForegroundColor(over: accentRatingBackgroundColor)')
+        from aorus_tab_bar_resume import verify_tab_bar_resume
+        problems = verify_tab_bar_resume(tg)
+        assert not problems, '; '.join(problems)
     print('Tab settings and light surfaces: OK')
 
 if __name__ == '__main__': main()
