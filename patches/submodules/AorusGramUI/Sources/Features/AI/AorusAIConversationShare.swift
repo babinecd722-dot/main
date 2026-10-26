@@ -180,6 +180,10 @@ enum AorusAIConversationPDF {
                     line.append(NSAttributedString(string: artifact.filename, attributes: [.font: UIFont.systemFont(ofSize: 14.0, weight: .medium), .foregroundColor: style.accent]))
                     pieces.append(.box(Box(text: line, maximumWidth: width)))
                 }
+            case .notice:
+                // The app's own line in the thread, not part of what was said: it is not sent to
+                // the model either.
+                continue
             }
         }
 
