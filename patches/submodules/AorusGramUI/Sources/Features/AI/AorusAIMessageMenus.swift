@@ -36,9 +36,11 @@ enum AorusAIMessageTime {
 
 enum AorusAIContextMenuItems {
     /// The grey line at the head of a message's menu. Not an action: it cannot be pressed and
-    /// is not highlighted, and it is set smaller than the rows under it.
+    /// is not highlighted, and it is set smaller than the rows under it. It is the menu's title,
+    /// so no rule is drawn between it and the rows it heads, in either interface.
     static func header(_ text: String) -> ContextMenuItem {
         return .action(ContextMenuActionItem(
+            id: AnyHashable(aorusContextMenuTitleIdentifier),
             text: text,
             textColor: .disabled,
             textLayout: .singleLine,
@@ -115,10 +117,13 @@ enum AorusAIContextMenuItems {
 /// the row, so what is lifted is a picture of it in a container standing exactly where it
 /// stands. The row's own bubble is hidden while the picture is up, so there is only ever one,
 /// and comes back the moment the picture has been put back.
+///
+/// The conversation behind stays as it is, neither darkened nor blurred: the menu opens over
+/// it as the "more" menu under an answer does.
 final class AorusAIExtractedBubbleSource: ContextExtractedContentSource {
     let keepInPlace: Bool = false
     let ignoreContentTouches: Bool = true
-    let blurBackground: Bool = true
+    let blurBackground: Bool = false
     let centerVertically: Bool = false
 
     private weak var container: ContextExtractedContentContainingView?

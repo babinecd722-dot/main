@@ -254,7 +254,7 @@ func aorusProbeSpeech(_ text: String) {
     for scalar in text.unicodeScalars where scalar.properties.isEmojiPresentation || scalar.properties.isEmoji {
         _ = scalar.value
     }
-    // The small glyphs under an answer.
-    _ = UIImage(systemName: "doc.on.doc", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13.0, weight: .medium, scale: .small))
+    // The glyphs under an answer.
+    _ = UIImage(systemName: "square.on.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular, scale: .medium))
     _ = UIImage(systemName: "arrow.counterclockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17.0, weight: .semibold))
 }

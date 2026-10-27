@@ -1010,6 +1010,9 @@ jobs:
           # AorusGram → Interface → Bubble Settings: its preview is a chat's real header — the
           # navigation bar, the title and the avatar — built here from Telegram's own parts.
           cp $PATCHES/submodules/TelegramUI/Sources/AorusBubbleSettings.swift $TG/submodules/TelegramUI/Sources/
+          # Search inside a chat: the filter under the close button. aorus_search_filter.py, run by
+          # aorus_branding.py, puts it in the search, the bar, the node and the results list.
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusChatSearchFilter.swift $TG/submodules/TelegramUI/Sources/
 
           # 8. The chat controller's half of the plugin chat surface. `aorus.chat.*` means
           #    the chat on screen, and only the controller knows which one that is; the

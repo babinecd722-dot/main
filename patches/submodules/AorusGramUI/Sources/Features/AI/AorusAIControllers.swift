@@ -1958,6 +1958,19 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         }
         let instance = AorusAIReadAloudController(host: self)
         instance.update(theme: presentationData.theme)
+        instance.onVoiceHint = { [weak self] title, text in
+            guard let self else { return }
+            self.present(
+                UndoOverlayController(
+                    presentationData: self.presentationData,
+                    content: .info(title: title, text: text, timeout: 8.0, customUndoText: nil),
+                    elevatedLayout: false,
+                    animateInAsReplacement: true,
+                    action: { _ in false }
+                ),
+                in: .current
+            )
+        }
         readAloudInstance = instance
         return instance
     }
@@ -4759,9 +4772,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             gesture.cancel()
             return
         }
+        // The time heads the rows directly, with no rule between them: it is the menu's title,
+        // not a group of its own.
         var items: [ContextMenuItem] = [
-            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt)),
-            .separator
+            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt))
         ]
         items.append(AorusAIContextMenuItems.action(aorusAILocalized("Копировать", "Copy"), bundleIcon: "Chat/Context Menu/Copy") { [weak self] in
             UIPasteboard.general.string = message.rawText
@@ -4798,9 +4812,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         guard let index = conversation.messages.firstIndex(where: { $0.id == messageId }) else { return }
         let message = conversation.messages[index]
         guard message.role == .assistant else { return }
+        // The time heads the rows directly, with no rule between them: it is the menu's title,
+        // not a group of its own.
         var items: [ContextMenuItem] = [
-            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt)),
-            .separator
+            AorusAIContextMenuItems.header(AorusAIMessageTime.title(for: message.createdAt))
         ]
         if readAloudInstance?.isReading(messageId: messageId) == true {
             items.append(AorusAIContextMenuItems.action(aorusAILocalized("Остановить чтение", "Stop Reading"), bundleIcon: "Chat/Context Menu/SoundOff") { [weak self] in
@@ -6491,21 +6506,22 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         noticeCard.onRetry = { [weak self] in self?.onRetry?() }
         contentStack.addArrangedSubview(noticeCard)
         assistantActions.axis = .horizontal
-        assistantActions.spacing = 2
+        assistantActions.spacing = 0
         assistantActions.alignment = .center
         // Glyphs alone, light and of one weight. `UIImage(systemName:)` with no configuration
         // renders at the body text style — a 17pt glyph, which made the row half again as tall
         // as the design draws it.
-        copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
+        copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
         shareButton.setImage(Self.actionGlyph("square.and.arrow.up"), for: .normal)
         moreButton.setImage(Self.actionGlyph("ellipsis"), for: .normal)
         copyButton.accessibilityLabel = aorusAILocalized("Копировать", "Copy")
         shareButton.accessibilityLabel = aorusAILocalized("Поделиться", "Share")
         moreButton.accessibilityLabel = aorusAILocalized("Ещё", "More")
         for button in [copyButton, shareButton, moreButton] {
-            // A 32pt square to touch around a 13pt glyph; the first glyph's left edge sits on
-            // the answer's text edge, so the row starts where the answer does.
-            button.contentEdgeInsets = UIEdgeInsets(top: 9.0, left: 9.0, bottom: 9.0, right: 9.0)
+            // A 32pt square to touch around a 16pt glyph, the squares side by side, so the
+            // glyphs stand a glyph's width apart; the first glyph's left edge sits on the
+            // answer's text edge, so the row starts where the answer does.
+            button.contentEdgeInsets = UIEdgeInsets(top: 8.0, left: 8.0, bottom: 8.0, right: 8.0)
             button.adjustsImageWhenHighlighted = true
             // `contentStack` stretches this row to the full body width, and a horizontal
             // stack with the default `.fill` distribution hands all of that width to its
@@ -6513,7 +6529,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             button.setContentHuggingPriority(.required, for: .horizontal)
             assistantActions.addArrangedSubview(button)
         }
-        assistantActions.layoutMargins = UIEdgeInsets(top: 0.0, left: -9.0, bottom: 0.0, right: 0.0)
+        assistantActions.layoutMargins = UIEdgeInsets(top: 0.0, left: -8.0, bottom: 0.0, right: 0.0)
         assistantActions.isLayoutMarginsRelativeArrangement = true
         let actionsSpacer = UIView()
         actionsSpacer.setContentHuggingPriority(UILayoutPriority(1.0), for: .horizontal)
@@ -6814,10 +6830,10 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
 
     // MARK: The row under an answer
 
-    /// The glyphs are set small, below the answer's text, so the row reads as a quiet margin of
-    /// the answer rather than as buttons of their own.
+    /// Outline glyphs of the regular weight, a little taller than the answer's capitals, in a
+    /// light grey: present under the answer without competing with it.
     private static func actionGlyph(_ name: String) -> UIImage? {
-        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13.0, weight: .medium, scale: .small))
+        return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular, scale: .medium))
     }
 
     /// The copy glyph turns into a check for a moment, so the press is answered where it was
@@ -6830,7 +6846,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             UIView.transition(with: self.copyButton, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                self.copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
+                self.copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
             }
         }
         copyResetWork = work
@@ -6840,7 +6856,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     private func resetCopyGlyph() {
         copyResetWork?.cancel()
         copyResetWork = nil
-        copyButton.setImage(Self.actionGlyph("doc.on.doc"), for: .normal)
+        copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
     }
 
     /// Streaming path (§27): keeps the existing view tree and only pushes the text that
@@ -7119,9 +7135,10 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         configureWorkTrail(message: message, theme: theme)
         retryButton.tintColor = palette.accent
         copyText = message.rawText
-        // Bare glyphs: no pill behind them, and a grey lighter than the hint text — mixed into
-        // the page rather than laid over it, so it is the same grey in any theme.
-        let actionTint = AorusAIPalette.mix(palette.label, into: palette.plainBackground, amount: palette.isDark ? 0.64 : 0.45)
+        // Bare glyphs: no pill behind them, in a light grey just short of the answer's own
+        // text — mixed into the page rather than laid over it, so it is the same grey in any
+        // theme.
+        let actionTint = AorusAIPalette.mix(palette.label, into: palette.plainBackground, amount: palette.isDark ? 0.8 : 0.6)
         for button in [copyButton, shareButton, moreButton] {
             button.tintColor = actionTint
             button.backgroundColor = .clear

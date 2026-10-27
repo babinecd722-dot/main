@@ -1060,6 +1060,12 @@ enum AorusL10nTable {
         "Key copied": "Chiave copiata",
         "Delete configuration": "Elimina configurazione",
         "Delete “%@”? The servers of this configuration go with it.": "Eliminare “%@”? I server di questa configurazione verranno eliminati con essa.",
+        "Filter results": "Filtra risultati",
+        "Hide in results": "Nascondi nei risultati",
+        "Bots": "Bot",
+        "Channel posts": "Post dei canali",
+        "Forwarded": "Inoltrati",
+        "My messages": "I miei messaggi",
     ]
 
     private static let pl: [String: String] = [
@@ -2070,6 +2076,12 @@ enum AorusL10nTable {
         "Key copied": "Klucz skopiowany",
         "Delete configuration": "Usuń konfigurację",
         "Delete “%@”? The servers of this configuration go with it.": "Usunąć „%@”? Serwery tej konfiguracji zostaną usunięte razem z nią.",
+        "Filter results": "Filtruj wyniki",
+        "Hide in results": "Ukryj w wynikach",
+        "Bots": "Boty",
+        "Channel posts": "Posty kanałów",
+        "Forwarded": "Przekazane",
+        "My messages": "Moje wiadomości",
     ]
 
     private static let nl: [String: String] = [
@@ -3080,6 +3092,12 @@ enum AorusL10nTable {
         "Key copied": "Sleutel gekopieerd",
         "Delete configuration": "Configuratie verwijderen",
         "Delete “%@”? The servers of this configuration go with it.": "“%@” verwijderen? De servers van deze configuratie verdwijnen mee.",
+        "Filter results": "Resultaten filteren",
+        "Hide in results": "Verbergen in resultaten",
+        "Bots": "Bots",
+        "Channel posts": "Kanaalberichten",
+        "Forwarded": "Doorgestuurd",
+        "My messages": "Mijn berichten",
     ]
 
     private static let ca: [String: String] = [
@@ -4090,6 +4108,12 @@ enum AorusL10nTable {
         "Key copied": "Clau copiada",
         "Delete configuration": "Elimina la configuració",
         "Delete “%@”? The servers of this configuration go with it.": "Vols eliminar “%@”? Els servidors d'aquesta configuració s'eliminaran amb ella.",
+        "Filter results": "Filtra els resultats",
+        "Hide in results": "Amaga als resultats",
+        "Bots": "Bots",
+        "Channel posts": "Publicacions de canals",
+        "Forwarded": "Reenviats",
+        "My messages": "Els meus missatges",
     ]
 
     private static let id: [String: String] = [
@@ -5100,6 +5124,12 @@ enum AorusL10nTable {
         "Key copied": "Kunci disalin",
         "Delete configuration": "Hapus konfigurasi",
         "Delete “%@”? The servers of this configuration go with it.": "Hapus “%@”? Server pada konfigurasi ini akan terhapus juga.",
+        "Filter results": "Saring hasil",
+        "Hide in results": "Sembunyikan di hasil",
+        "Bots": "Bot",
+        "Channel posts": "Postingan kanal",
+        "Forwarded": "Diteruskan",
+        "My messages": "Pesan saya",
     ]
 
     private static let ms: [String: String] = [
@@ -6110,6 +6140,12 @@ enum AorusL10nTable {
         "Key copied": "Kunci disalin",
         "Delete configuration": "Buang konfigurasi",
         "Delete “%@”? The servers of this configuration go with it.": "Buang “%@”? Pelayan konfigurasi ini akan dibuang bersamanya.",
+        "Filter results": "Tapis keputusan",
+        "Hide in results": "Sembunyikan dalam keputusan",
+        "Bots": "Bot",
+        "Channel posts": "Hantaran saluran",
+        "Forwarded": "Dimajukan",
+        "My messages": "Mesej saya",
     ]
 
     private static let be: [String: String] = [
@@ -7120,6 +7156,12 @@ enum AorusL10nTable {
         "Key copied": "Ключ скапіяваны",
         "Delete configuration": "Выдаліць канфігурацыю",
         "Delete “%@”? The servers of this configuration go with it.": "Выдаліць «%@»? Серверы гэтай канфігурацыі будуць выдалены разам з ёй.",
+        "Filter results": "Фільтр вынікаў",
+        "Hide in results": "Хаваць у выніках",
+        "Bots": "Ботаў",
+        "Channel posts": "Допісы каналаў",
+        "Forwarded": "Перасланыя",
+        "My messages": "Мае паведамленні",
     ]
 
     private static let uz: [String: String] = [
@@ -8130,6 +8172,12 @@ enum AorusL10nTable {
         "Key copied": "Kalit nusxalandi",
         "Delete configuration": "Konfiguratsiyani o'chirish",
         "Delete “%@”? The servers of this configuration go with it.": "“%@” o'chirilsinmi? Bu konfiguratsiyaning serverlari ham o'chiriladi.",
+        "Filter results": "Natijalarni saralash",
+        "Hide in results": "Natijalarda yashirish",
+        "Bots": "Botlar",
+        "Channel posts": "Kanal postlari",
+        "Forwarded": "Uzatilganlar",
+        "My messages": "Mening xabarlarim",
     ]
 
     private static let ko: [String: String] = [
@@ -9140,6 +9188,12 @@ enum AorusL10nTable {
         "Key copied": "키가 복사되었습니다",
         "Delete configuration": "구성 삭제",
         "Delete “%@”? The servers of this configuration go with it.": "“%@”을 삭제할까요? 이 구성의 서버도 함께 삭제됩니다.",
+        "Filter results": "결과 필터",
+        "Hide in results": "결과에서 숨기기",
+        "Bots": "봇",
+        "Channel posts": "채널 게시물",
+        "Forwarded": "전달된 메시지",
+        "My messages": "내 메시지",
     ]
 
     private static let ar: [String: String] = [
@@ -10150,6 +10204,12 @@ enum AorusL10nTable {
         "Key copied": "تم نسخ المفتاح",
         "Delete configuration": "حذف التكوين",
         "Delete “%@”? The servers of this configuration go with it.": "حذف “%@”؟ ستُحذف خوادم هذا التكوين معه.",
+        "Filter results": "تصفية النتائج",
+        "Hide in results": "إخفاء من النتائج",
+        "Bots": "البوتات",
+        "Channel posts": "منشورات القنوات",
+        "Forwarded": "المُعاد توجيهها",
+        "My messages": "رسائلي",
     ]
 
     private static let fa: [String: String] = [
@@ -11160,6 +11220,12 @@ enum AorusL10nTable {
         "Key copied": "کلید کپی شد",
         "Delete configuration": "حذف پیکربندی",
         "Delete “%@”? The servers of this configuration go with it.": "«%@» حذف شود؟ سرورهای این پیکربندی هم با آن حذف می‌شوند.",
+        "Filter results": "فیلتر نتایج",
+        "Hide in results": "پنهان کردن در نتایج",
+        "Bots": "ربات‌ها",
+        "Channel posts": "پست‌های کانال",
+        "Forwarded": "بازارسال‌شده‌ها",
+        "My messages": "پیام‌های من",
     ]
 
     private static let kk: [String: String] = [
@@ -12170,6 +12236,12 @@ enum AorusL10nTable {
         "Key copied": "Кілт көшірілді",
         "Delete configuration": "Конфигурацияны жою",
         "Delete “%@”? The servers of this configuration go with it.": "«%@» жойылсын ба? Осы конфигурацияның серверлері де жойылады.",
+        "Filter results": "Нәтижелерді сүзу",
+        "Hide in results": "Нәтижелерде жасыру",
+        "Bots": "Боттар",
+        "Channel posts": "Арна жазбалары",
+        "Forwarded": "Қайта жіберілгендер",
+        "My messages": "Менің хабарларым",
     ]
 
     private static let zhHans: [String: String] = [
@@ -13180,6 +13252,12 @@ enum AorusL10nTable {
         "Key copied": "密钥已复制",
         "Delete configuration": "删除配置",
         "Delete “%@”? The servers of this configuration go with it.": "要删除“%@”吗？该配置下的服务器会一并删除。",
+        "Filter results": "筛选结果",
+        "Hide in results": "在结果中隐藏",
+        "Bots": "机器人",
+        "Channel posts": "频道消息",
+        "Forwarded": "转发的消息",
+        "My messages": "我的消息",
     ]
 
 
@@ -14191,6 +14269,12 @@ enum AorusL10nTable {
         "Key copied": "金鑰已複製",
         "Delete configuration": "刪除組態",
         "Delete “%@”? The servers of this configuration go with it.": "要刪除「%@」嗎？此組態下的伺服器會一併刪除。",
+        "Filter results": "篩選結果",
+        "Hide in results": "在結果中隱藏",
+        "Bots": "機器人",
+        "Channel posts": "頻道貼文",
+        "Forwarded": "轉傳的訊息",
+        "My messages": "我的訊息",
     ]
 
     private static let ja: [String: String] = [
@@ -15201,6 +15285,12 @@ enum AorusL10nTable {
         "Key copied": "キーをコピーしました",
         "Delete configuration": "構成を削除",
         "Delete “%@”? The servers of this configuration go with it.": "「%@」を削除しますか？この構成のサーバーも一緒に削除されます。",
+        "Filter results": "結果を絞り込む",
+        "Hide in results": "結果に表示しない",
+        "Bots": "ボット",
+        "Channel posts": "チャンネルの投稿",
+        "Forwarded": "転送されたメッセージ",
+        "My messages": "自分のメッセージ",
     ]
 
     private static let fi: [String: String] = [
@@ -16211,6 +16301,12 @@ enum AorusL10nTable {
         "Key copied": "Avain kopioitu",
         "Delete configuration": "Poista määritys",
         "Delete “%@”? The servers of this configuration go with it.": "Poistetaanko ”%@”? Tämän määrityksen palvelimet poistuvat sen mukana.",
+        "Filter results": "Suodata tulokset",
+        "Hide in results": "Piilota tuloksista",
+        "Bots": "Botit",
+        "Channel posts": "Kanavien julkaisut",
+        "Forwarded": "Välitetyt",
+        "My messages": "Omat viestit",
     ]
 
     private static let he: [String: String] = [
@@ -17221,6 +17317,12 @@ enum AorusL10nTable {
         "Key copied": "המפתח הועתק",
         "Delete configuration": "מחק תצורה",
         "Delete “%@”? The servers of this configuration go with it.": "למחוק את “%@”? השרתים של תצורה זו יימחקו עמה.",
+        "Filter results": "סינון תוצאות",
+        "Hide in results": "הסתרה מהתוצאות",
+        "Bots": "בוטים",
+        "Channel posts": "פוסטים של ערוצים",
+        "Forwarded": "הודעות שהועברו",
+        "My messages": "ההודעות שלי",
     ]
 
     private static let hr: [String: String] = [
@@ -18231,6 +18333,12 @@ enum AorusL10nTable {
         "Key copied": "Ključ kopiran",
         "Delete configuration": "Izbriši konfiguraciju",
         "Delete “%@”? The servers of this configuration go with it.": "Izbrisati „%@”? Poslužitelji ove konfiguracije brišu se s njom.",
+        "Filter results": "Filtriraj rezultate",
+        "Hide in results": "Sakrij u rezultatima",
+        "Bots": "Botove",
+        "Channel posts": "Objave kanala",
+        "Forwarded": "Proslijeđene",
+        "My messages": "Moje poruke",
     ]
 
     private static let sr: [String: String] = [
@@ -19241,6 +19349,12 @@ enum AorusL10nTable {
         "Key copied": "Кључ је копиран",
         "Delete configuration": "Избриши конфигурацију",
         "Delete “%@”? The servers of this configuration go with it.": "Избрисати „%@”? Сервери ове конфигурације бришу се са њом.",
+        "Filter results": "Филтрирај резултате",
+        "Hide in results": "Сакриј у резултатима",
+        "Bots": "Ботове",
+        "Channel posts": "Објаве канала",
+        "Forwarded": "Прослеђене",
+        "My messages": "Моје поруке",
     ]
 
     private static let cs: [String: String] = [
@@ -20251,6 +20365,12 @@ enum AorusL10nTable {
         "Key copied": "Klíč zkopírován",
         "Delete configuration": "Smazat konfiguraci",
         "Delete “%@”? The servers of this configuration go with it.": "Smazat „%@“? Servery této konfigurace zmizí s ní.",
+        "Filter results": "Filtrovat výsledky",
+        "Hide in results": "Skrýt ve výsledcích",
+        "Bots": "Boty",
+        "Channel posts": "Příspěvky kanálů",
+        "Forwarded": "Přeposlané",
+        "My messages": "Moje zprávy",
     ]
 
     private static let sk: [String: String] = [
@@ -21261,6 +21381,12 @@ enum AorusL10nTable {
         "Key copied": "Kľúč skopírovaný",
         "Delete configuration": "Odstrániť konfiguráciu",
         "Delete “%@”? The servers of this configuration go with it.": "Odstrániť „%@“? Servery tejto konfigurácie zmiznú s ňou.",
+        "Filter results": "Filtrovať výsledky",
+        "Hide in results": "Skryť vo výsledkoch",
+        "Bots": "Botov",
+        "Channel posts": "Príspevky kanálov",
+        "Forwarded": "Preposlané",
+        "My messages": "Moje správy",
     ]
 
     private static let ro: [String: String] = [
@@ -22271,6 +22397,12 @@ enum AorusL10nTable {
         "Key copied": "Cheie copiată",
         "Delete configuration": "Șterge configurația",
         "Delete “%@”? The servers of this configuration go with it.": "Ștergi „%@”? Serverele acestei configurații dispar împreună cu ea.",
+        "Filter results": "Filtrează rezultatele",
+        "Hide in results": "Ascunde din rezultate",
+        "Bots": "Boți",
+        "Channel posts": "Postări din canale",
+        "Forwarded": "Redirecționate",
+        "My messages": "Mesajele mele",
     ]
 
     private static let hu: [String: String] = [
@@ -23281,6 +23413,12 @@ enum AorusL10nTable {
         "Key copied": "Kulcs másolva",
         "Delete configuration": "Konfiguráció törlése",
         "Delete “%@”? The servers of this configuration go with it.": "Törlöd a következőt: „%@”? A konfiguráció kiszolgálói is törlődnek.",
+        "Filter results": "Találatok szűrése",
+        "Hide in results": "Elrejtés a találatok közül",
+        "Bots": "Botok",
+        "Channel posts": "Csatornabejegyzések",
+        "Forwarded": "Továbbítottak",
+        "My messages": "Saját üzeneteim",
     ]
 
     private static let nb: [String: String] = [
@@ -24291,6 +24429,12 @@ enum AorusL10nTable {
         "Key copied": "Nøkkel kopiert",
         "Delete configuration": "Slett konfigurasjon",
         "Delete “%@”? The servers of this configuration go with it.": "Slette «%@»? Serverne i denne konfigurasjonen slettes sammen med den.",
+        "Filter results": "Filtrer resultater",
+        "Hide in results": "Skjul i resultater",
+        "Bots": "Roboter",
+        "Channel posts": "Kanalinnlegg",
+        "Forwarded": "Videresendte",
+        "My messages": "Mine meldinger",
     ]
 
     private static let sv: [String: String] = [
@@ -25301,6 +25445,12 @@ enum AorusL10nTable {
         "Key copied": "Nyckel kopierad",
         "Delete configuration": "Ta bort konfiguration",
         "Delete “%@”? The servers of this configuration go with it.": "Ta bort ”%@”? Servrarna i den här konfigurationen tas bort med den.",
+        "Filter results": "Filtrera resultat",
+        "Hide in results": "Dölj i resultat",
+        "Bots": "Bottar",
+        "Channel posts": "Kanalinlägg",
+        "Forwarded": "Vidarebefordrade",
+        "My messages": "Mina meddelanden",
     ]
 
     private static let vi: [String: String] = [
@@ -26311,6 +26461,12 @@ enum AorusL10nTable {
         "Key copied": "Đã sao chép khóa",
         "Delete configuration": "Xóa cấu hình",
         "Delete “%@”? The servers of this configuration go with it.": "Xóa “%@”? Các máy chủ của cấu hình này cũng bị xóa theo.",
+        "Filter results": "Lọc kết quả",
+        "Hide in results": "Ẩn trong kết quả",
+        "Bots": "Bot",
+        "Channel posts": "Bài đăng kênh",
+        "Forwarded": "Tin nhắn chuyển tiếp",
+        "My messages": "Tin nhắn của tôi",
     ]
 
     private static let uk: [String: String] = [
@@ -27330,6 +27486,12 @@ enum AorusL10nTable {
         "Key copied": "Ключ скопійовано",
         "Delete configuration": "Видалити конфігурацію",
         "Delete “%@”? The servers of this configuration go with it.": "Видалити «%@»? Сервери цієї конфігурації буде видалено разом із нею.",
+        "Filter results": "Фільтр результатів",
+        "Hide in results": "Приховувати в результатах",
+        "Bots": "Ботів",
+        "Channel posts": "Дописи каналів",
+        "Forwarded": "Переслані",
+        "My messages": "Мої повідомлення",
     ]
 
     private static let es: [String: String] = [
@@ -28349,6 +28511,12 @@ enum AorusL10nTable {
         "Key copied": "Clave copiada",
         "Delete configuration": "Eliminar configuración",
         "Delete “%@”? The servers of this configuration go with it.": "¿Eliminar “%@”? Los servidores de esta configuración se eliminarán con ella.",
+        "Filter results": "Filtrar resultados",
+        "Hide in results": "Ocultar en los resultados",
+        "Bots": "Bots",
+        "Channel posts": "Publicaciones de canales",
+        "Forwarded": "Reenviados",
+        "My messages": "Mis mensajes",
     ]
 
     private static let pt: [String: String] = [
@@ -29368,6 +29536,12 @@ enum AorusL10nTable {
         "Key copied": "Chave copiada",
         "Delete configuration": "Excluir configuração",
         "Delete “%@”? The servers of this configuration go with it.": "Excluir “%@”? Os servidores desta configuração vão junto.",
+        "Filter results": "Filtrar resultados",
+        "Hide in results": "Ocultar nos resultados",
+        "Bots": "Bots",
+        "Channel posts": "Publicações de canais",
+        "Forwarded": "Encaminhadas",
+        "My messages": "Minhas mensagens",
     ]
 
     private static let de: [String: String] = [
@@ -30387,6 +30561,12 @@ enum AorusL10nTable {
         "Key copied": "Schlüssel kopiert",
         "Delete configuration": "Konfiguration löschen",
         "Delete “%@”? The servers of this configuration go with it.": "„%@“ löschen? Die Server dieser Konfiguration verschwinden mit ihr.",
+        "Filter results": "Ergebnisse filtern",
+        "Hide in results": "In Ergebnissen ausblenden",
+        "Bots": "Bots",
+        "Channel posts": "Kanalbeiträge",
+        "Forwarded": "Weitergeleitete",
+        "My messages": "Eigene Nachrichten",
     ]
 
     private static let fr: [String: String] = [
@@ -31406,6 +31586,12 @@ enum AorusL10nTable {
         "Key copied": "Clé copiée",
         "Delete configuration": "Supprimer la configuration",
         "Delete “%@”? The servers of this configuration go with it.": "Supprimer « %@ » ? Les serveurs de cette configuration disparaissent avec elle.",
+        "Filter results": "Filtrer les résultats",
+        "Hide in results": "Masquer dans les résultats",
+        "Bots": "Bots",
+        "Channel posts": "Publications de chaînes",
+        "Forwarded": "Transférés",
+        "My messages": "Mes messages",
     ]
 
     private static let tr: [String: String] = [
@@ -32425,5 +32611,11 @@ enum AorusL10nTable {
         "Key copied": "Anahtar kopyalandı",
         "Delete configuration": "Yapılandırmayı sil",
         "Delete “%@”? The servers of this configuration go with it.": "“%@” silinsin mi? Bu yapılandırmanın sunucuları da silinir.",
+        "Filter results": "Sonuçları filtrele",
+        "Hide in results": "Sonuçlarda gizle",
+        "Bots": "Botlar",
+        "Channel posts": "Kanal gönderileri",
+        "Forwarded": "İletilenler",
+        "My messages": "Mesajlarım",
     ]
 }

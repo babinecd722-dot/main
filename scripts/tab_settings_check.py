@@ -91,7 +91,9 @@ def main():
         require('PeerAvatarGalleryUI/Sources/AvatarGalleryController.swift', 'animatedOutNode && !crossfade', 'useSimpleAnimation: presentationArguments.crossfadeContent')
         require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift', 'let entry = AorusInterfaceV2Run.isEnabled && self.isAvatarExpanded ? nil : entry', 'aorusBadgeForegroundColor(over: accentRatingBackgroundColor)')
         from aorus_tab_bar_resume import verify_tab_bar_resume
-        problems = verify_tab_bar_resume(tg)
+        from aorus_menu_titles import verify_menu_titles
+        from aorus_search_filter import verify_search_filter
+        problems = verify_tab_bar_resume(tg) + verify_menu_titles(tg) + verify_search_filter(tg)
         assert not problems, '; '.join(problems)
     print('Tab settings and light surfaces: OK')
 

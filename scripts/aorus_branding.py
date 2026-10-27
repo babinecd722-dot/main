@@ -30874,6 +30874,12 @@ def main() -> None:
     # After the tab settings: it anchors on the observer and the deinit they add.
     from aorus_tab_bar_resume import patch_tab_bar_resume
     patch_tab_bar_resume(tg)
+    # After the old interface: it anchors on the hairlines that draws between menu rows.
+    from aorus_menu_titles import patch_menu_titles
+    patch_menu_titles(tg)
+    # After the old interface: it anchors on the Cancel row that puts in the chat's search bar.
+    from aorus_search_filter import patch_search_filter
+    patch_search_filter(tg)
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)
     patch_interface_v2_run_switch(tg)

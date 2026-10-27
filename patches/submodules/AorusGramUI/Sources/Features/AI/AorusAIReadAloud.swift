@@ -152,6 +152,8 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     private var layoutSize: CGSize = .zero
     private var layoutTop: CGFloat = 0.0
     private var layoutSideInset: CGFloat = 0.0
+    /// Shows a short note over the screen: a title and what to do.
+    var onVoiceHint: ((String, String) -> Void)?
 
     init(host: ViewController) {
         self.host = host
@@ -203,9 +205,13 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         self.playedInUtterance = 0.0
         self.playingSince = nil
         self.state = .loading
-        activateSession()
         showPanel()
-        speak(from: 0)
+        activateSession { [weak self] in
+            self?.speak(from: 0)
+        }
+        if let voice, voice.quality == .default {
+            offerBetterVoice(language: voice.language)
+        }
     }
 
     /// Ends the reading and takes the panel away. A screen being left passes `relayout: false`:
@@ -245,15 +251,17 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
                 notePaused()
             }
         case .paused:
-            activateSession()
-            if let start = pendingStart {
-                pendingStart = nil
-                speak(from: start)
-            } else if let synthesizer, synthesizer.isPaused {
-                synthesizer.continueSpeaking()
-            } else {
-                positionAtUtteranceStart = position
-                speak(from: spokenLocation)
+            activateSession { [weak self] in
+                guard let self, self.state == .paused else { return }
+                if let start = self.pendingStart {
+                    self.pendingStart = nil
+                    self.speak(from: start)
+                } else if let synthesizer = self.synthesizer, synthesizer.isPaused {
+                    synthesizer.continueSpeaking()
+                } else {
+                    self.positionAtUtteranceStart = self.position
+                    self.speak(from: self.spokenLocation)
+                }
             }
         case .finished:
             replay(from: 0, position: 0.0)
@@ -264,7 +272,6 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
 
     /// Reads a finished answer again, from the start or from a place before its end.
     private func replay(from location: Int, position: TimeInterval) {
-        activateSession()
         duration = nil
         pendingStart = nil
         positionAtUtteranceStart = position
@@ -273,7 +280,12 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         state = .loading
         panel?.setState(.loading)
         panel?.setTime(position)
-        speak(from: location)
+        // The session was let go at the end; it is taken again off the main thread, and the
+        // voice starts once it has been. Taken here, it froze the screen on "read again".
+        activateSession { [weak self] in
+            guard let self, self.state == .loading else { return }
+            self.speak(from: location)
+        }
     }
 
     private func speak(from location: Int) {
@@ -504,6 +516,11 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
         }
         func score(_ voice: AVSpeechSynthesisVoice) -> Int {
             var value = voice.quality.rawValue * 100
+            // A Siri voice, where the system lists one, reads far more like a person than the
+            // other voices of its quality.
+            if voice.identifier.lowercased().contains("siri") {
+                value += 50
+            }
             if voice.identifier == systemVoice?.identifier {
                 value += 20
             }
@@ -565,23 +582,29 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: Audio session
 
-    private func activateSession() {
+    /// Takes the audio session for speech and then carries on with `then`, on the main thread.
+    /// The session is taken on a queue of its own: the call waits on the media server, and made
+    /// on the main thread it froze the screen for a moment each time a reading began.
+    private func activateSession(then: @escaping () -> Void) {
         sessionGeneration += 1
-        var active = false
-        // Behind a release that may still be running, so the two never cross.
-        Self.sessionQueue.sync {
+        let generation = sessionGeneration
+        sessionActive = true
+        installSessionObservers()
+        Self.sessionQueue.async { [weak self] in
             let session = AVAudioSession.sharedInstance()
-            do {
-                // Spoken audio over the silent switch, with music lowered under it rather than
-                // stopped.
-                try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-                try session.setActive(true)
-                active = true
-            } catch {
-                active = false
+            // Spoken audio over the silent switch, with music lowered under it rather than
+            // stopped.
+            try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try? session.setActive(true)
+            DispatchQueue.main.async {
+                // A stop or a new reading since then has its own session to see to.
+                guard let self, self.sessionGeneration == generation else { return }
+                then()
             }
         }
-        sessionActive = active
+    }
+
+    private func installSessionObservers() {
         guard observers.isEmpty else { return }
         observers.append(NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             let raw = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue
@@ -601,12 +624,14 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     /// Lets whatever was playing before come back up: once the voice has let go of the
-    /// output, and off the main thread.
+    /// output, and off the main thread. Behind a session still being taken on the same queue,
+    /// so the two never cross.
     private func releaseSession() {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
         guard sessionActive else { return }
         sessionActive = false
+        sessionGeneration += 1
         let generation = sessionGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             if let self, self.sessionGeneration != generation {
@@ -616,6 +641,26 @@ final class AorusAIReadAloudController: NSObject, AVSpeechSynthesizerDelegate {
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             }
         }
+    }
+
+    // MARK: Voice quality
+
+    /// Only the compact voice is installed for this language: the reader is told, once per
+    /// language, where the natural one is downloaded. The system offers no way to fetch it for
+    /// them.
+    private func offerBetterVoice(language: String) {
+        let code = language.split(separator: "-").first.map(String.init) ?? language
+        let key = "aorusgram.ai.read-aloud.voice-hint.\(code)"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        let name = Locale.current.localizedString(forLanguageCode: code).map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? code
+        onVoiceHint?(
+            aorusAILocalized("Голос можно сделать естественнее", "A more natural voice is available"),
+            aorusAILocalized(
+                "Настройки → Универсальный доступ → Устный контент → Голоса → \(name): загрузите улучшенный или премиальный голос.",
+                "Settings → Accessibility → Spoken Content → Voices → \(name): download an Enhanced or Premium voice."
+            )
+        )
     }
 
     // MARK: Panel
