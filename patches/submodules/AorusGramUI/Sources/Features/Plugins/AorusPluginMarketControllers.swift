@@ -1349,9 +1349,9 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     /// is not the usual one, so a list in another order never passes for the usual one.
     private func updateFilters() {
         let changed = sort != .newest
-        // Its iOS 13 name too: the current one only exists from iOS 15.
-        let glyph = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-        filterButton.setImage(UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: glyph) ?? UIImage(systemName: "line.horizontal.3.decrease", withConfiguration: glyph), for: .normal)
+        // A funnel, filled while the order is not the usual one; the search inside a chat draws the
+        // same one.
+        filterButton.setImage(AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed), for: .normal)
         UIView.animate(withDuration: window == nil ? 0 : 0.2) {
             self.filterButton.backgroundColor = changed ? self.theme.list.itemAccentColor : self.theme.list.itemBlocksBackgroundColor
             self.filterButton.tintColor = changed ? .white : self.theme.list.itemAccentColor

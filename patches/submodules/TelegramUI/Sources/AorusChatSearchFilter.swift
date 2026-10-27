@@ -14,7 +14,7 @@ import ChatInlineSearchResultsListComponent
 import AorusGramUI
 
 // AorusGram: whose messages a search inside a chat leaves out -- bots, channels, forwarded
-// messages, one's own. The search itself is Telegram's; its results are filtered on their way
+// messages, one's own or everyone else's. The search itself is Telegram's; its results are filtered on their way
 // to the list and to the arrows, and filtered again from the same results when the choice
 // changes, so the list rebuilds at once, with the rows that stay moving into place.
 
@@ -25,6 +25,7 @@ struct AorusSearchFilter: OptionSet {
     static let channels = AorusSearchFilter(rawValue: 1 << 1)
     static let forwarded = AorusSearchFilter(rawValue: 1 << 2)
     static let own = AorusSearchFilter(rawValue: 1 << 3)
+    static let others = AorusSearchFilter(rawValue: 1 << 4)
 
     private static let defaultsKey = "aorusgram.chat-search.hidden-senders"
 
@@ -64,20 +65,25 @@ struct AorusSearchFilter: OptionSet {
             case .broadcast:
                 return [.forwarded]
             case .group:
-                return channel.isMonoForum ? [] : [.bots, .channels, .forwarded, .own]
+                return channel.isMonoForum ? [] : [.bots, .channels, .forwarded, .own, .others]
             }
         }
         if peer is TelegramGroup {
-            return [.bots, .forwarded, .own]
+            return [.bots, .forwarded, .own, .others]
         }
         if peer is TelegramUser || peer is TelegramSecretChat {
-            return [.forwarded, .own]
+            return [.forwarded, .own, .others]
         }
         return []
     }
 
     func hides(_ message: Message, accountPeerId: PeerId) -> Bool {
-        if self.contains(.own), message.author?.id == accountPeerId || !message.flags.contains(.Incoming) {
+        // One's own: sent from this account, or posted by it as the chat or a channel.
+        let isOwn = message.author?.id == accountPeerId || !message.flags.contains(.Incoming)
+        if self.contains(.own), isOwn {
+            return true
+        }
+        if self.contains(.others), !isOwn {
             return true
         }
         if self.contains(.bots), let user = message.author as? TelegramUser, user.botInfo != nil {
@@ -119,19 +125,9 @@ final class AorusSearchFilterButton: UIView {
     private let classicIconView: UIImageView?
     private let button: HighlightTrackingButton
 
-    private static let glyph: UIImage? = generateImage(CGSize(width: 40.0, height: 40.0), contextGenerator: { size, context in
-        context.clear(CGRect(origin: CGPoint(), size: size))
-        context.setLineWidth(2.0)
-        context.setLineCap(.round)
-        context.setStrokeColor(UIColor.white.cgColor)
-        let center = size.width * 0.5
-        // Three bars narrowing downwards, in the close cross's stroke.
-        for (y, halfWidth) in [(13.0, 8.0), (20.0, 5.5), (27.0, 3.0)] as [(CGFloat, CGFloat)] {
-            context.move(to: CGPoint(x: center - halfWidth, y: y))
-            context.addLine(to: CGPoint(x: center + halfWidth, y: y))
-        }
-        context.strokePath()
-    })?.withRenderingMode(.alwaysTemplate)
+    // A funnel about the close cross's size and weight: drawn, and filled while the filter is on.
+    private static let glyph = AorusGlyphs.filter(size: 22.0, lineWidth: 1.9)
+    private static let activeGlyph = AorusGlyphs.filter(size: 22.0, lineWidth: 1.9, filled: true)
 
     init(classic: Bool) {
         self.isClassic = classic
@@ -139,7 +135,7 @@ final class AorusSearchFilterButton: UIView {
         if classic {
             self.glassView = nil
             self.glassIconView = nil
-            self.classicIconView = UIImageView(image: AorusSearchFilterButton.glyph)
+            self.classicIconView = UIImageView()
         } else {
             self.glassView = GlassBackgroundView()
             self.glassIconView = GlassBackgroundView.ContentImageView()
@@ -149,7 +145,6 @@ final class AorusSearchFilterButton: UIView {
         super.init(frame: CGRect())
 
         if let glassView = self.glassView, let glassIconView = self.glassIconView {
-            glassIconView.image = AorusSearchFilterButton.glyph
             self.addSubview(glassView)
             glassView.contentView.addSubview(glassIconView)
             glassView.contentView.addSubview(self.button)
@@ -186,13 +181,15 @@ final class AorusSearchFilterButton: UIView {
         let bounds = CGRect(origin: CGPoint(), size: size)
         self.button.frame = bounds
         self.button.accessibilityTraits = isActive ? [.button, .selected] : [.button]
+        let glyph = isActive ? AorusSearchFilterButton.activeGlyph : AorusSearchFilterButton.glyph
 
         if let glassView = self.glassView, let glassIconView = self.glassIconView {
             transition.setFrame(view: glassView, frame: bounds)
             glassView.update(size: size, cornerRadius: size.height * 0.5, isDark: theme.overallDarkAppearance, tintColor: .init(kind: preferClearGlass ? .clear : .panel), isInteractive: true, transition: transition)
-            if let image = glassIconView.image {
-                glassIconView.frame = image.size.centered(in: bounds)
+            if glassIconView.image !== glyph {
+                glassIconView.image = glyph
             }
+            glassIconView.frame = glyph.size.centered(in: bounds)
             glassIconView.tintColor = isActive ? theme.chat.inputPanel.panelControlAccentColor : theme.chat.inputPanel.panelControlColor
         } else if let classicIconView = self.classicIconView {
             let accent = theme.rootController.navigationBar.accentTextColor
@@ -200,9 +197,8 @@ final class AorusSearchFilterButton: UIView {
             // On: the accent fills the circle, as a pressed bar button in the old interface reads.
             self.backgroundColor = isActive ? accent : theme.chat.historyNavigation.fillColor
             self.layer.borderColor = (isActive ? accent : theme.chat.historyNavigation.strokeColor).cgColor
-            if let image = classicIconView.image {
-                classicIconView.frame = image.size.centered(in: bounds)
-            }
+            classicIconView.image = glyph
+            classicIconView.frame = glyph.size.centered(in: bounds)
             classicIconView.tintColor = isActive ? theme.list.itemCheckColors.foregroundColor : accent
         }
     }
@@ -278,7 +274,8 @@ extension ChatControllerImpl {
             (.bots, aorusL("Ботов", "Bots")),
             (.channels, aorusL("Сообщения каналов", "Channel posts")),
             (.forwarded, aorusL("Пересланные", "Forwarded")),
-            (.own, aorusL("Мои сообщения", "My messages"))
+            (.own, aorusL("Мои сообщения", "My messages")),
+            (.others, aorusL("Чужие сообщения", "Others' messages"))
         ]
         let options = allOptions.filter { applicable.contains($0.0) }
 
@@ -288,21 +285,33 @@ extension ChatControllerImpl {
             context.clear(CGRect(origin: CGPoint(), size: size))
         })
 
+        func rowId(_ option: AorusSearchFilter) -> AnyHashable {
+            return AnyHashable("aorusgram.chat-search.filter.\(option.rawValue)")
+        }
         func row(_ option: AorusSearchFilter, _ title: String) -> ContextMenuActionItem {
             let isOn = AorusSearchFilter.current.contains(option)
-            let id = AnyHashable("aorusgram.chat-search.filter.\(option.rawValue)")
-            return ContextMenuActionItem(id: id, text: title, icon: { theme in
+            return ContextMenuActionItem(id: rowId(option), text: title, icon: { theme in
                 return isOn ? generateTintedImage(image: checkImage, color: theme.contextMenu.primaryColor) : blankImage
             }, action: { [weak self] action in
-                var filter = AorusSearchFilter.current
+                let previous = AorusSearchFilter.current
+                var filter = previous
                 if filter.contains(option) {
                     filter.remove(option)
                 } else {
                     filter.insert(option)
+                    // One's own messages and everyone else's hidden at once would leave nothing:
+                    // turning one on turns the other off.
+                    if option == .own {
+                        filter.remove(.others)
+                    } else if option == .others {
+                        filter.remove(.own)
+                    }
                 }
                 AorusSearchFilter.current = filter
-                // The menu stays open for the next choice; the row changes in place.
-                action.updateAction(id, row(option, title))
+                // The menu stays open for the next choice; the rows that changed change in place.
+                for (changed, changedTitle) in options where previous.contains(changed) != filter.contains(changed) {
+                    action.updateAction(rowId(changed), row(changed, changedTitle))
+                }
                 self?.aorusSearchFilterChanged()
             })
         }

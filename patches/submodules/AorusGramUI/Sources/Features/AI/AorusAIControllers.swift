@@ -6511,7 +6511,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         // Glyphs alone, light and of one weight. `UIImage(systemName:)` with no configuration
         // renders at the body text style — a 17pt glyph, which made the row half again as tall
         // as the design draws it.
-        copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
+        copyButton.setImage(Self.copyGlyph, for: .normal)
         shareButton.setImage(Self.actionGlyph("square.and.arrow.up"), for: .normal)
         moreButton.setImage(Self.actionGlyph("ellipsis"), for: .normal)
         copyButton.accessibilityLabel = aorusAILocalized("Копировать", "Copy")
@@ -6836,6 +6836,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular, scale: .medium))
     }
 
+    /// Copy: two overlapping squares, the front one on the right -- the symbol drawn mirrored.
+    private static let copyGlyph = AorusGlyphs.mirrored(actionGlyph("square.on.square"))
+
     /// The copy glyph turns into a check for a moment, so the press is answered where it was
     /// made.
     private func showCopiedGlyph() {
@@ -6846,7 +6849,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             UIView.transition(with: self.copyButton, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                self.copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
+                self.copyButton.setImage(Self.copyGlyph, for: .normal)
             }
         }
         copyResetWork = work
@@ -6856,7 +6859,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     private func resetCopyGlyph() {
         copyResetWork?.cancel()
         copyResetWork = nil
-        copyButton.setImage(Self.actionGlyph("square.on.square"), for: .normal)
+        copyButton.setImage(Self.copyGlyph, for: .normal)
     }
 
     /// Streaming path (§27): keeps the existing view tree and only pushes the text that

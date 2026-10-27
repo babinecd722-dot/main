@@ -1066,6 +1066,7 @@ enum AorusL10nTable {
         "Channel posts": "Post dei canali",
         "Forwarded": "Inoltrati",
         "My messages": "I miei messaggi",
+        "Others' messages": "Messaggi degli altri",
     ]
 
     private static let pl: [String: String] = [
@@ -2082,6 +2083,7 @@ enum AorusL10nTable {
         "Channel posts": "Posty kanałów",
         "Forwarded": "Przekazane",
         "My messages": "Moje wiadomości",
+        "Others' messages": "Wiadomości innych",
     ]
 
     private static let nl: [String: String] = [
@@ -3098,6 +3100,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanaalberichten",
         "Forwarded": "Doorgestuurd",
         "My messages": "Mijn berichten",
+        "Others' messages": "Berichten van anderen",
     ]
 
     private static let ca: [String: String] = [
@@ -4114,6 +4117,7 @@ enum AorusL10nTable {
         "Channel posts": "Publicacions de canals",
         "Forwarded": "Reenviats",
         "My messages": "Els meus missatges",
+        "Others' messages": "Missatges dels altres",
     ]
 
     private static let id: [String: String] = [
@@ -5130,6 +5134,7 @@ enum AorusL10nTable {
         "Channel posts": "Postingan kanal",
         "Forwarded": "Diteruskan",
         "My messages": "Pesan saya",
+        "Others' messages": "Pesan orang lain",
     ]
 
     private static let ms: [String: String] = [
@@ -6146,6 +6151,7 @@ enum AorusL10nTable {
         "Channel posts": "Hantaran saluran",
         "Forwarded": "Dimajukan",
         "My messages": "Mesej saya",
+        "Others' messages": "Mesej orang lain",
     ]
 
     private static let be: [String: String] = [
@@ -7162,6 +7168,7 @@ enum AorusL10nTable {
         "Channel posts": "Допісы каналаў",
         "Forwarded": "Перасланыя",
         "My messages": "Мае паведамленні",
+        "Others' messages": "Чужыя паведамленні",
     ]
 
     private static let uz: [String: String] = [
@@ -8178,6 +8185,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanal postlari",
         "Forwarded": "Uzatilganlar",
         "My messages": "Mening xabarlarim",
+        "Others' messages": "Boshqalarning xabarlari",
     ]
 
     private static let ko: [String: String] = [
@@ -9194,6 +9202,7 @@ enum AorusL10nTable {
         "Channel posts": "채널 게시물",
         "Forwarded": "전달된 메시지",
         "My messages": "내 메시지",
+        "Others' messages": "다른 사람의 메시지",
     ]
 
     private static let ar: [String: String] = [
@@ -10210,6 +10219,7 @@ enum AorusL10nTable {
         "Channel posts": "منشورات القنوات",
         "Forwarded": "المُعاد توجيهها",
         "My messages": "رسائلي",
+        "Others' messages": "رسائل الآخرين",
     ]
 
     private static let fa: [String: String] = [
@@ -11226,6 +11236,7 @@ enum AorusL10nTable {
         "Channel posts": "پست‌های کانال",
         "Forwarded": "بازارسال‌شده‌ها",
         "My messages": "پیام‌های من",
+        "Others' messages": "پیام‌های دیگران",
     ]
 
     private static let kk: [String: String] = [
@@ -12242,6 +12253,7 @@ enum AorusL10nTable {
         "Channel posts": "Арна жазбалары",
         "Forwarded": "Қайта жіберілгендер",
         "My messages": "Менің хабарларым",
+        "Others' messages": "Басқалардың хабарлары",
     ]
 
     private static let zhHans: [String: String] = [
@@ -13258,6 +13270,7 @@ enum AorusL10nTable {
         "Channel posts": "频道消息",
         "Forwarded": "转发的消息",
         "My messages": "我的消息",
+        "Others' messages": "他人的消息",
     ]
 
 
@@ -14275,6 +14288,7 @@ enum AorusL10nTable {
         "Channel posts": "頻道貼文",
         "Forwarded": "轉傳的訊息",
         "My messages": "我的訊息",
+        "Others' messages": "他人的訊息",
     ]
 
     private static let ja: [String: String] = [
@@ -15291,6 +15305,7 @@ enum AorusL10nTable {
         "Channel posts": "チャンネルの投稿",
         "Forwarded": "転送されたメッセージ",
         "My messages": "自分のメッセージ",
+        "Others' messages": "他の人のメッセージ",
     ]
 
     private static let fi: [String: String] = [
@@ -16307,6 +16322,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanavien julkaisut",
         "Forwarded": "Välitetyt",
         "My messages": "Omat viestit",
+        "Others' messages": "Muiden viestit",
     ]
 
     private static let he: [String: String] = [
@@ -17323,6 +17339,7 @@ enum AorusL10nTable {
         "Channel posts": "פוסטים של ערוצים",
         "Forwarded": "הודעות שהועברו",
         "My messages": "ההודעות שלי",
+        "Others' messages": "הודעות של אחרים",
     ]
 
     private static let hr: [String: String] = [
@@ -18339,6 +18356,7 @@ enum AorusL10nTable {
         "Channel posts": "Objave kanala",
         "Forwarded": "Proslijeđene",
         "My messages": "Moje poruke",
+        "Others' messages": "Tuđe poruke",
     ]
 
     private static let sr: [String: String] = [
@@ -19355,6 +19373,7 @@ enum AorusL10nTable {
         "Channel posts": "Објаве канала",
         "Forwarded": "Прослеђене",
         "My messages": "Моје поруке",
+        "Others' messages": "Туђе поруке",
     ]
 
     private static let cs: [String: String] = [
@@ -20371,6 +20390,7 @@ enum AorusL10nTable {
         "Channel posts": "Příspěvky kanálů",
         "Forwarded": "Přeposlané",
         "My messages": "Moje zprávy",
+        "Others' messages": "Zprávy ostatních",
     ]
 
     private static let sk: [String: String] = [
@@ -21387,6 +21407,7 @@ enum AorusL10nTable {
         "Channel posts": "Príspevky kanálov",
         "Forwarded": "Preposlané",
         "My messages": "Moje správy",
+        "Others' messages": "Správy ostatných",
     ]
 
     private static let ro: [String: String] = [
@@ -22403,6 +22424,7 @@ enum AorusL10nTable {
         "Channel posts": "Postări din canale",
         "Forwarded": "Redirecționate",
         "My messages": "Mesajele mele",
+        "Others' messages": "Mesajele altora",
     ]
 
     private static let hu: [String: String] = [
@@ -23419,6 +23441,7 @@ enum AorusL10nTable {
         "Channel posts": "Csatornabejegyzések",
         "Forwarded": "Továbbítottak",
         "My messages": "Saját üzeneteim",
+        "Others' messages": "Mások üzenetei",
     ]
 
     private static let nb: [String: String] = [
@@ -24435,6 +24458,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanalinnlegg",
         "Forwarded": "Videresendte",
         "My messages": "Mine meldinger",
+        "Others' messages": "Andres meldinger",
     ]
 
     private static let sv: [String: String] = [
@@ -25451,6 +25475,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanalinlägg",
         "Forwarded": "Vidarebefordrade",
         "My messages": "Mina meddelanden",
+        "Others' messages": "Andras meddelanden",
     ]
 
     private static let vi: [String: String] = [
@@ -26467,6 +26492,7 @@ enum AorusL10nTable {
         "Channel posts": "Bài đăng kênh",
         "Forwarded": "Tin nhắn chuyển tiếp",
         "My messages": "Tin nhắn của tôi",
+        "Others' messages": "Tin nhắn của người khác",
     ]
 
     private static let uk: [String: String] = [
@@ -27492,6 +27518,7 @@ enum AorusL10nTable {
         "Channel posts": "Дописи каналів",
         "Forwarded": "Переслані",
         "My messages": "Мої повідомлення",
+        "Others' messages": "Чужі повідомлення",
     ]
 
     private static let es: [String: String] = [
@@ -28517,6 +28544,7 @@ enum AorusL10nTable {
         "Channel posts": "Publicaciones de canales",
         "Forwarded": "Reenviados",
         "My messages": "Mis mensajes",
+        "Others' messages": "Mensajes de otros",
     ]
 
     private static let pt: [String: String] = [
@@ -29542,6 +29570,7 @@ enum AorusL10nTable {
         "Channel posts": "Publicações de canais",
         "Forwarded": "Encaminhadas",
         "My messages": "Minhas mensagens",
+        "Others' messages": "Mensagens de outros",
     ]
 
     private static let de: [String: String] = [
@@ -30567,6 +30596,7 @@ enum AorusL10nTable {
         "Channel posts": "Kanalbeiträge",
         "Forwarded": "Weitergeleitete",
         "My messages": "Eigene Nachrichten",
+        "Others' messages": "Nachrichten anderer",
     ]
 
     private static let fr: [String: String] = [
@@ -31592,6 +31622,7 @@ enum AorusL10nTable {
         "Channel posts": "Publications de chaînes",
         "Forwarded": "Transférés",
         "My messages": "Mes messages",
+        "Others' messages": "Messages des autres",
     ]
 
     private static let tr: [String: String] = [
@@ -32617,5 +32648,6 @@ enum AorusL10nTable {
         "Channel posts": "Kanal gönderileri",
         "Forwarded": "İletilenler",
         "My messages": "Mesajlarım",
+        "Others' messages": "Başkalarının mesajları",
     ]
 }

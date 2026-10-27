@@ -366,6 +366,7 @@ jobs:
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginChatBridge.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketHost.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/AI/AorusAITimelineStrings.swift \
+            aorusgram/patches/submodules/AorusGramUI/Sources/UI/AorusGlyphs.swift \
             /tmp/aorus-plugin-ui/AorusPluginControllers.swift \
             /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift \
             /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift \

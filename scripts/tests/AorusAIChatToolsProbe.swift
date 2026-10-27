@@ -255,6 +255,22 @@ func aorusProbeSpeech(_ text: String) {
         _ = scalar.value
     }
     // The glyphs under an answer.
-    _ = UIImage(systemName: "square.on.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular, scale: .medium))
+    // Copy is the symbol drawn mirrored into a bitmap; the funnel of the filter buttons is a path.
+    if let copy = UIImage(systemName: "square.on.square", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular, scale: .medium)) {
+        _ = UIGraphicsImageRenderer(size: copy.size).image { context in
+            context.cgContext.translateBy(x: copy.size.width, y: 0.0)
+            context.cgContext.scaleBy(x: -1.0, y: 1.0)
+            copy.draw(in: CGRect(origin: .zero, size: copy.size))
+        }.withRenderingMode(.alwaysTemplate)
+    }
+    let funnel = CGMutablePath()
+    funnel.move(to: CGPoint(x: 12.0, y: 2.75))
+    funnel.addArc(tangent1End: CGPoint(x: 22.0, y: 2.75), tangent2End: CGPoint(x: 14.0, y: 12.25), radius: 1.0)
+    funnel.closeSubpath()
+    _ = UIGraphicsImageRenderer(size: CGSize(width: 24.0, height: 24.0)).image { context in
+        context.cgContext.addPath(funnel)
+        context.cgContext.setLineJoin(.round)
+        context.cgContext.drawPath(using: .fillStroke)
+    }
     _ = UIImage(systemName: "arrow.counterclockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17.0, weight: .semibold))
 }
