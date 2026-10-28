@@ -959,7 +959,10 @@ def main() -> None:
         )
         fake_gift_view_text = fake_gift_view.read_text(encoding="utf-8") if fake_gift_view.is_file() else ""
         if (
-            "if let _ = arguments.transferStars {" not in fake_gift_view_text
+            (
+                "if let _ = arguments.transferStars {" not in fake_gift_view_text
+                and "if arguments.transferStars != nil || self.isMyWalletGift(gift) {" not in fake_gift_view_text
+            )
             or "presentationData.strings.Gift_View_Context_Transfer" not in fake_gift_view_text
         ):
             err.append("FakeGifts: Telegram's native Transfer overflow action is missing")
@@ -2852,12 +2855,11 @@ def main() -> None:
     tab_component_text = tab_component.read_text(encoding="utf-8") if tab_component.is_file() else ""
     for marker in (
         "public let hideTitles: Bool",
-        "component.hideTitles ? 48.0 : 56.0",
-        "component.isCompact || component.hideTitle",
-        "component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5)",
         "public let compactPanel: Bool",
-        "component.compactPanel ? min(availableItemsWidth",
-        "let itemWeightNorm: CGFloat = layoutItemsWidth / unboundItemWidthSum",
+        "let aorusShowsTitles = !component.isCompact && !(component.hideTitles && component.axis == .horizontal)",
+        "component.hideTitles && component.axis == .horizontal ? tabBarCompactItemThickness : 56.0",
+        "let itemsLayout = aorusTabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, hideTitles: component.hideTitles, compactPanel: component.compactPanel,",
+        "private func aorusTabBarItemsLayout(",
         "CGPoint(x: size.width - searchSize.width",
     ):
         if marker not in tab_component_text:
@@ -2866,7 +2868,7 @@ def main() -> None:
     tab_node = tg / "submodules" / "TabBarUI" / "Sources" / "TabBarContollerNode.swift"
     tab_node_text = tab_node.read_text(encoding="utf-8") if tab_node.is_file() else ""
     for marker in (
-        'aorusgram_hide_search_button") ? nil',
+        'sidePlacement != nil || UserDefaults.standard.bool(forKey: "aorusgram_hide_search_button") ? nil',
         'hideTitles: UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")',
         'compactPanel: UserDefaults.standard.bool(forKey: "aorusgram_compact_tab_bar")',
     ):
@@ -3300,8 +3302,8 @@ def main() -> None:
             ),
         ),
         (
-            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButtonContainerNode.swift",
-            ("aorusPlainNavGlass",),
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/Sources/PeerInfoNavigationButtons.swift",
+            ("aorusPlainNavGlass", "glassStyle: .clear, glassTintColor: nil"),
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift",
@@ -3459,14 +3461,21 @@ def main() -> None:
             ("aorusHidesTitlePill", "let displayBackground: Bool = !aorusHidesTitlePill"),
         ),
         (
-            "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationBarImpl.swift",
+            "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponentContent.swift",
+            ("var aorusGlasslessRightNode: Bool", "self.rightButtons.count == 1, case .node = self.rightButtons[0].content"),
+        ),
+        (
+            "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponent.swift",
             (
-                "aorusHidesCustomButtonGlass",
-                "singleCustomNode != nil",
                 # isVisible and not isHidden: the bar button is a subview of this container's own
                 # contentView, so hiding the container took the avatar and the ghost badge with it.
-                "isVisible: !aorusHidesCustomButtonGlass",
+                "isInteractive: true, isVisible: false, transition: aorusTransition)",
+                "let aorusKept = self.rightPills.contains(where: { $0.aorusGlassless && $0.background === container })",
             ),
+        ),
+        (
+            "submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarTransitionRenderer.swift",
+            ("aorusWithoutGlasslessPill(navigationBarTransitionCapsuleContent(bottomState))", "aorusWithoutGlasslessPill(navigationBarTransitionCapsuleContent(topState))"),
         ),
         # The avatar/ghost item carries a pill of its own inside the bar's right-hand pane, so both
         # have to go or the capsule survives the one that was hidden.
@@ -3825,10 +3834,6 @@ def main() -> None:
                 "theme: presentationData.theme, aorusInk: aorusPlainPanes ? AorusGlassPane.profilePageInk : nil)",
             ),
         ),
-        (
-            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButtonContainerNode.swift",
-            ("spec.isForExpandedView ? self.aorusExpandedButtonContentsColor(expandedButtonContentsColor) : normalButtonContentsColor",),
-        ),
         ("submodules/Display/Source/AorusLegibleInk.swift", ("func aorusLegible(over fill: UIColor?) -> UIColor",)),
         # A profile's first frame has its page, read from the photo already on the disk.
         (
@@ -3904,8 +3909,15 @@ def main() -> None:
         # The QR scanner follows the app theme around the camera picture.
         ("submodules/QrCodeUI/Sources/QrCodeScanScreen.swift", ("aorusQrScanIsDark = self.presentationData.theme.overallDarkAppearance", "self.backgroundColor = aorusPage", "isDark: aorusQrScanIsDark,")),
         ("submodules/QrCodeUI/Sources/GlassButtonNode.swift", ("isDark: aorusQrScanIsDark, tintColor: .init(kind: .panel)",)),
+        # 13.1's chat -> profile expansion runs from Interface 2.0's pill-less title, its glass rising
+        # in, and lends the 2.0 page (the photo behind it, the music capsule) with Telegram's own.
+        ("submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift", ("titleView.aorusExpansionOriginFrame", "loan.aorusGlassRisesIn = titleView.glassPillFrame == nil")),
+        ("submodules/TelegramUI/Sources/ChatController.swift", ("titleView.aorusExpansionOriginFrame != nil",)),
+        ("submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/ExpansionChoreography.swift", ("glass: g.aorusGlassRisesIn ? min(",)),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoExpansionDestination.swift", ("$0.tag == AorusGlassProfileTint.backdropTag",)),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift", ("expansionBackgroundView.backgroundColor = aorusPageColor",)),
         # The fade under a profile's top bar is the profile's page, not the plain theme white.
-        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                        tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                            tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),
     )
     ghost_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
     if ghost_buttons.is_file() and "let ghostColor = UIColor.white" in ghost_buttons.read_text(encoding="utf-8"):

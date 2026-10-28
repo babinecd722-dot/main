@@ -115,7 +115,7 @@ final class AorusPluginWebPageController: ViewController {
         self.presentationData = presentationData
         self.initialURL = url
         self.openTelegramLink = openTelegramLink
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         self.events.controller = self
         self.badgeHandler.controller = self

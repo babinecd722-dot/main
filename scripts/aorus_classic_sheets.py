@@ -282,8 +282,8 @@ def _adaptive_sheets(tg: Path) -> None:
     )
     text = edit(
         text,
-        "var bottomInsets = ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)",
-        "var bottomInsets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: 0.0, left: 16.0, bottom: isCentered ? 16.0 : (sheetEnvironment.safeInsets.bottom.isZero ? 16.0 : sheetEnvironment.safeInsets.bottom + 14.0), right: 16.0) : ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: 30.0)",
+        "var bottomInsets = ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: ResizableSheetComponent.bottomItemSideInset(inputHeight: 0.0))",
+        "var bottomInsets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: 0.0, left: 16.0, bottom: isCentered ? 16.0 : (sheetEnvironment.safeInsets.bottom.isZero ? 16.0 : sheetEnvironment.safeInsets.bottom + 14.0), right: 16.0) : ContainerViewLayout.concentricInsets(bottomInset: isCentered ? 0.0 : sheetEnvironment.safeInsets.bottom, innerDiameter: 52.0, sideInset: ResizableSheetComponent.bottomItemSideInset(inputHeight: 0.0))",
         "classic resizable sheet footer",
     )
     text += "\n// AorusGram: classic resizable sheet\n"

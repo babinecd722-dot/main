@@ -11,7 +11,8 @@ def patch_classic_layout(tg: Path) -> None:
     for binding in manifest["bindings"]:
         path = tg / binding["path"]
         text = path.read_text()
-        text = edit(text, binding["new"] + "\n", binding["replacement"] + "\n", binding["path"] + " reference geometry")
+        # A value 13.1.1 repeats (a loading skeleton laid out like the loaded panel) is bound everywhere.
+        text = edit(text, binding["new"] + "\n", binding["replacement"] + "\n", binding["path"] + " reference geometry", count=binding.get("count", 1))
         path.write_text(text)
     from aorus_classic_values import patch_classic_values
     patch_classic_values(tg)
@@ -226,6 +227,10 @@ def _attachments(tg: Path) -> None:
     signature = "    func update(layout: ContainerViewLayout, controllers: [AttachmentContainable], coveredByModalTransition: CGFloat, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void = {}) {"
     body = ATTACHMENT_CONTAINER_LAYOUT.replace("inVoiceOver: layout.inVoiceOver)", "inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet)")
     body = body.replace("let (panInitialTopInset, panOffset, _, _)", "let (panInitialTopInset, panOffset, _, _, _)")
+    # 13.1's layout also carries the screen's reserved corners and the fold's division; the sheet
+    # takes them as 13.1's own sheet does: corners moved down with it, no division.
+    body = body.replace("safeInsets: UIEdgeInsets(top: 0.0, left: safeInsets.left, bottom: safeInsets.bottom, right: safeInsets.right), additionalInsets:", "safeInsets: UIEdgeInsets(top: 0.0, left: safeInsets.left, bottom: safeInsets.bottom, right: safeInsets.right), reservedCorners: layout.reservedCorners.offsettingTop(by: containerTopInset), division: nil, additionalInsets:")
+    body = body.replace("safeInsets: .zero, additionalInsets: .zero,", "safeInsets: .zero, reservedCorners: .none, division: nil, additionalInsets: .zero,")
     text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {\n" + body + "\n            self.pillView.isHidden = true\n            return\n        }\n", "attachment 12.0 sheet layout")
     text = edit(text, "self.view.convert(point, to: self.bottomClipNode.view)", "self.view.convert(point, to: AorusOldInterface.isEnabled ? self.clipNode.view : self.bottomClipNode.view)", "attachment 12.0 hit testing")
     path.write_text(text)
@@ -264,7 +269,8 @@ def _attachments(tg: Path) -> None:
     text = edit(text, signature, helper + signature, "attachment 12.0 scroll layout")
     body = ATTACHMENT_PANEL_LAYOUT.replace("self.updateScrollLayoutIfNeeded", "self.aorusClassicUpdateScrollLayout").replace("height: buttonSize.height + insets.bottom", "height: self.buttonSize.height + insets.bottom")
     body = body.replace("additionalSideInsets: UIEdgeInsets(), maxHeight: layout.size.height / 2.0,", "keyboardHeight: layout.inputHeight ?? 0.0, additionalSideInsets: UIEdgeInsets(), textFieldMaxHeight: layout.size.height / 2.0, availableHeight: layout.size.height,")
-    body = body.replace("[MessageId]", "[EngineMessage.Id]").replace("append(MessageId(", "append(EngineMessage.Id(")
+    # 13.1's panel no longer imports Postbox: the engine's names for its ids.
+    body = body.replace("[MessageId]", "[EngineMessage.Id]").replace("append(MessageId(", "append(EngineMessage.Id(").replace("peerId: PeerId(0)", "peerId: EnginePeer.Id(0)")
     body = body.replace("updateLayout(size: buttonSize, state:", "updateLayout(size: buttonSize, context: self.context, style: .legacy, state:")
     body = "\n        self.hideButtons = hideButtons\n" + body.replace("return containerFrame.height", "return (containerFrame.height, 0.0)")
     text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {\n" + body + "\n        }\n", "attachment 12.0 panel layout")
@@ -423,7 +429,9 @@ def _media_editor(tg: Path) -> None:
     path = tg / 'submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift'
     text = path.read_text()
     text = edit(text, 'controlsBottomInset = -62.0', 'controlsBottomInset = AorusOldInterface.isEnabled ? -50.0 : -62.0', "12.0 editor insets", count=1)
-    text = edit(text, 'buttonSideInset = 9.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : 9.0', "12.0 editor insets", count=2)
+    # 13.1.1 keeps 16 points beside a status island or a folded screen's corners; 12.0 had 10.
+    text = edit(text, 'buttonSideInset = (environment.navigationBarTrailingButtonsInset > 0.0 || environment.reservedCorners != .none) ? 16.0 : 9.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : ((environment.navigationBarTrailingButtonsInset > 0.0 || environment.reservedCorners != .none) ? 16.0 : 9.0)', "12.0 editor insets beside an island", count=1)
+    text = edit(text, 'buttonSideInset = 9.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : 9.0', "12.0 editor insets", count=1)
     text = edit(text, 'buttonSideInset = 16.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : 16.0', "12.0 editor insets", count=1)
     text = edit(text, "minSize: buttonSize,", "minSize: AorusOldInterface.isEnabled ? CGSize(width: 30.0, height: 30.0) : buttonSize,", "12.0 editor tool minimum size", count=6)
     text = edit(text, "containerSize: buttonSize", "containerSize: AorusOldInterface.isEnabled ? CGSize(width: 40.0, height: 40.0) : buttonSize", "12.0 editor tool available size", count=6)

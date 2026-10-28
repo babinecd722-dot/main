@@ -163,8 +163,8 @@ def _search_display(tg: Path) -> None:
             "stored bar height",
         ),
         (
-            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: navigationBarHeight, transition: transition)\n",
-            "intrinsicInsets: layout.intrinsicInsets, safeInsets: safeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: aorusClassicHeights ? defaultNavigationBarHeight : navigationBarHeight, transition: transition)\n",
+            "statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: navigationBarHeight, transition: transition)\n",
+            "statusBarHeight: nil, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), navigationBarHeight: aorusClassicHeights ? defaultNavigationBarHeight : navigationBarHeight, transition: transition)\n",
             "results under the bar",
         ),
         (
@@ -251,17 +251,17 @@ def _chat_list(tg: Path) -> None:
             "filters accessor",
         ),
         (
-            "        self.filterContainerNode.update(size: CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0), sideInset: 0.0, filters:",
-            "        self.filterContainerNode.update(size: AorusOldInterface.isEnabled ? CGSize(width: layout.size.width, height: 38.0) : CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0), sideInset: AorusOldInterface.isEnabled ? layout.safeInsets.left : 0.0, filters:",
+            "        self.filterContainerNode.update(size: self.filterContainerFrame(layout: layout).size, sideInset: 0.0, filters:",
+            "        self.filterContainerNode.update(size: AorusOldInterface.isEnabled ? CGSize(width: layout.size.width, height: 38.0) : self.filterContainerFrame(layout: layout).size, sideInset: AorusOldInterface.isEnabled ? layout.safeInsets.left : 0.0, filters:",
             "filters size",
         ),
         (
-            "        transition.updateFrame(node: self.filterContainerNode, frame: CGRect(origin: CGPoint(x: layout.safeInsets.left + filtersInsets.left, y: layout.size.height - filtersInsets.bottom - 40.0), size: CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0)))\n",
+            "        transition.updateFrame(node: self.filterContainerNode, frame: self.filterContainerFrame(layout: layout))\n",
             "        if AorusOldInterface.isEnabled {\n"
             "            // " + MARK + ": 12.0's strip of filters, under the field in the bar.\n"
             "            transition.updateFrame(node: self.filterContainerNode, frame: CGRect(origin: CGPoint(x: 0.0, y: navigationBarHeight + 6.0), size: CGSize(width: layout.size.width, height: 38.0)))\n"
             "        } else {\n"
-            "            transition.updateFrame(node: self.filterContainerNode, frame: CGRect(origin: CGPoint(x: layout.safeInsets.left + filtersInsets.left, y: layout.size.height - filtersInsets.bottom - 40.0), size: CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0)))\n"
+            "            transition.updateFrame(node: self.filterContainerNode, frame: self.filterContainerFrame(layout: layout))\n"
             "        }\n",
             "filters position",
         ),

@@ -61,6 +61,6 @@ extension ViewController {
     /// given. The bar is Telegram's own glass bar, as each of these screens builds it.
     func aorusUpdateChrome(_ presentationData: PresentationData) {
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
-        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, style: .glass), animated: false)
+        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData), animated: false)
     }
 }

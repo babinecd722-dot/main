@@ -171,7 +171,7 @@ public final class AorusPluginTabHost {
         guard previousTheme !== presentationData.theme else { return }
         for entry in entries.values {
             decorate(entry)
-            entry.controller.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: presentationData, style: .glass), transition: .immediate)
+            entry.controller.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: presentationData), transition: .immediate)
             if let page = entry.controller as? AorusPluginWebPageController {
                 page.updatePresentationData(presentationData)
             } else if let page = entry.controller as? AorusPluginPageController {

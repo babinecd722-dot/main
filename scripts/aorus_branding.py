@@ -852,18 +852,18 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         print("DeletedQuoteReply: already injected")
         return
 
-    # 1) Build the quote (if the reply target is a preserved deleted message) right after
-    #    the outgoing attributed text is finalized.
-    anchor1 = "                let inputText = convertMarkdownToAttributes(effectiveInputText)\n"
-    if anchor1 not in t:
-        print("DeletedQuoteReply: convertMarkdownToAttributes anchor not found — skipped")
+    # 1) Work out the quote once, before the message is split by route: 13.1.1 sends the text
+    #    through chatComposerTextMessages (TextFormat) instead of an inline loop. A rich message
+    #    (headings, tables) carries no quote, so it keeps its reply too.
+    anchor1 = "                var mediaReference: AnyMediaReference?\n                var webpage: TelegramMediaWebpage?\n"
+    if t.count(anchor1) != 1:
+        print("DeletedQuoteReply: send branch anchor not found — skipped")
         return
     inject1 = (
-        anchor1
-        + "                // AorusGram: deleted-message quote reply — the native reply bar was shown as\n"
+        "                // AorusGram: deleted-message quote reply — the native reply bar was shown as\n"
         "                // usual; here at send the preserved text becomes a collapsed blockquote that\n"
         "                // goes through Telegram's own entity serialization below.\n"
-        "                let aorusDeletedReplyQuote: NSAttributedString? = {\n"
+        "                let aorusDeletedReplyQuote: NSAttributedString? = sendAsRichMessage ? nil : {\n"
         "                    guard let aorusReplySubject = self.chatPresentationInterfaceState.interfaceState.replyMessageSubject else { return nil }\n"
         "                    var aorusReplyText: String?\n"
         "                    if let aorusMsg = self.chatPresentationInterfaceState.replyMessage, aorusMsg.id == aorusReplySubject.messageId {\n"
@@ -880,30 +880,35 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         "                    aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
         "                    return aorusQuote\n"
         "                }()\n"
-        "                let aorusOutgoingInputText: NSAttributedString\n"
-        "                if let aorusDeletedReplyQuote {\n"
-        "                    let aorusCombined = NSMutableAttributedString()\n"
-        "                    aorusCombined.append(aorusDeletedReplyQuote)\n"
-        "                    aorusCombined.append(NSAttributedString(string: \"\\n\"))\n"
-        "                    aorusCombined.append(inputText)\n"
-        "                    aorusOutgoingInputText = aorusCombined\n"
-        "                } else {\n"
-        "                    aorusOutgoingInputText = inputText\n"
-        "                }\n"
+        + anchor1
     )
     t = t.replace(anchor1, inject1, 1)
 
-    # 2) Feed the (possibly quoted) text into the existing serialization loop.
-    anchor2 = "                for text in breakChatInputText(trimChatInputText(inputText)) {\n"
-    if anchor2 not in t:
-        print("DeletedQuoteReply: breakChatInputText anchor not found — aborting file write")
+    # 2) The quote goes in front of the converted text -- after the typed markdown is turned
+    #    into attributes, so the preserved words are quoted as they were and not reformatted --
+    #    and the result is split and given entities exactly as chatComposerTextMessages does.
+    anchor2 = "                    for (text, entities) in textMessages.pieces {\n"
+    if t.count(anchor2) != 1:
+        print("DeletedQuoteReply: text pieces anchor not found — aborting file write")
         return
-    t = t.replace(anchor2, "                for text in breakChatInputText(trimChatInputText(aorusOutgoingInputText)) {\n", 1)
+    t = t.replace(anchor2,
+        "                    var aorusTextPieces = textMessages.pieces\n"
+        "                    if let aorusDeletedReplyQuote {\n"
+        "                        let aorusCombined = NSMutableAttributedString()\n"
+        "                        aorusCombined.append(aorusDeletedReplyQuote)\n"
+        "                        aorusCombined.append(NSAttributedString(string: \"\\n\"))\n"
+        "                        aorusCombined.append(textMessages.inputText)\n"
+        "                        aorusTextPieces = []\n"
+        "                        for aorusPiece in breakChatInputText(trimChatInputText(aorusCombined)) where aorusPiece.length != 0 {\n"
+        "                            aorusTextPieces.append((aorusPiece, generateTextEntities(aorusPiece.string, enabledTypes: .all, currentEntities: generateChatInputTextEntities(aorusPiece, maxAnimatedEmojisInText: 0))))\n"
+        "                        }\n"
+        "                    }\n"
+        "                    for (text, entities) in aorusTextPieces {\n", 1)
 
     # 3) Drop the server reply for these messages — the target is gone on the server, so a
     #    real reply would be rejected/normalized by the ack and make the message flicker.
     anchor3 = "                if !messages.isEmpty && forwardingToSameChat {\n"
-    if anchor3 not in t:
+    if t.count(anchor3) != 1:
         print("DeletedQuoteReply: forwardingToSameChat anchor not found — aborting file write")
         return
     inject3 = (
@@ -1503,7 +1508,7 @@ def patch_client_spoof_app_version(tg: Path) -> None:
         tg / "submodules/BuildConfig/Sources/BuildConfig.swift",
         tg / "Telegram/Telegram-iOS/BuildConfig.swift",
     ]
-    official_version = "13.0"
+    official_version = "13.1.1"
 
     for vpath in version_candidates:
         if not vpath.is_file():
@@ -2704,6 +2709,11 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
             )
             if submit_anchor in submit_text:
                 submit_text = submit_text.replace(submit_anchor, submit_injection + submit_anchor, 1)
+                # The local edit is written straight to Postbox (a stored message, its attributes and
+                # its forward info), which 13.1's file no longer imports; scripts/postbox_allowlist.py
+                # lists the file for Telegram's Postbox import check.
+                if not re.search(r"^import Postbox$", submit_text, re.M):
+                    submit_text = submit_text.replace("import TelegramCore\n", "import Postbox\nimport TelegramCore\n", 1)
                 print("EditLocally: injected native composer submit hook")
             else:
                 print("WARNING: EditLocally native submit anchor not found")
@@ -6161,60 +6171,24 @@ def patch_unlimited_pinned_chats(tg: Path) -> None:
         if "AorusGram: unlimited pins icon" in t:
             print("Unlimited pins: ChatListViewState already patched")
         else:
-            note = " // AorusGram: unlimited pins icon — keep pinningIndex so the pin badge shows for pins 6+ in folder tabs"
-            # Replace the whole `var updatedIndex = index` + includePinnedAsUnpinned reset with
-            # a plain `let updatedIndex = index`. This both preserves pinningIndex (so the pin
-            # icon renders inside folders) and avoids a "never mutated; use let" Swift warning
-            # that deleting only the reset block would leave behind. Three indent levels.
-            pin_blocks = [
-                (
-                    "                    var updatedIndex = index\n"
-                    "                    if case .includePinnedAsUnpinned = pinned {\n"
-                    "                        updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                    }\n",
-                    "                    let updatedIndex = index" + note + "\n",
-                ),
-                (
-                    "                        var updatedIndex = index\n"
-                    "                        if case .includePinnedAsUnpinned = pinned {\n"
-                    "                            updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                        }\n",
-                    "                        let updatedIndex = index" + note + "\n",
-                ),
-                (
-                    "                                var updatedIndex = index\n"
-                    "                                if case .includePinnedAsUnpinned = pinned {\n"
-                    "                                    updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                                }\n",
-                    "                                let updatedIndex = index" + note + "\n",
-                ),
-            ]
-            changed = 0
-            for old, new in pin_blocks:
-                if old in t:
-                    t = t.replace(old, new, 1)
-                    changed += 1
-            # In the .RemoveEntry branch `pinned` was bound only to feed the now-removed
-            # includePinnedAsUnpinned reset; without it the build trips on the strict
-            # "immutable value 'pinned' was never used" error, so silence that one binding.
-            remove_old = (
-                "                case let .RemoveEntry(indices):\n"
-                "                    switch self.space {\n"
-                "                    case let .group(spaceGroupId, pinned, _):\n"
+            # 13.1.1 maps every entry of a space that shows pins as unpinned through one
+            # function, for adding, looking up and removing alike; keeping the index whole there
+            # keeps it whole on every path, as the three separate resets did before.
+            old = (
+                "        case .includePinnedAsUnpinned:\n"
+                "            return ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
+                "        case .notPinned, .includePinned:\n"
+                "            return index\n"
             )
-            remove_new = (
-                "                case let .RemoveEntry(indices):\n"
-                "                    switch self.space {\n"
-                "                    case let .group(spaceGroupId, _, _):\n"
+            new = (
+                "        case .notPinned, .includePinned, .includePinnedAsUnpinned:\n"
+                "            // AorusGram: unlimited pins icon — keep pinningIndex so the pin badge shows for pins 6+ in folder tabs\n"
+                "            return index\n"
             )
-            remove_fixed = remove_old in t
-            if remove_fixed:
-                t = t.replace(remove_old, remove_new, 1)
-            if changed == 3 and remove_fixed:
-                view_state.write_text(t, encoding="utf-8")
-                print("Unlimited pins: patched ChatListViewState (3 sites, var→let, pinningIndex kept)")
-            else:
-                print(f"WARNING: ChatListViewState pin-icon sites: only {changed}/3 matched, remove-binding fixed={remove_fixed}")
+            if t.count(old) != 1:
+                raise RuntimeError("Unlimited pins: ChatListViewState space index mapping is missing")
+            view_state.write_text(t.replace(old, new, 1), encoding="utf-8")
+            print("Unlimited pins: patched ChatListViewState (space index keeps pinningIndex)")
     else:
         print("ChatListViewState.swift not found, skip pin icon UI")
 
@@ -9578,9 +9552,10 @@ def patch_local_premium(tg: Path) -> None:
                 "            self.audioTranscriptionTrial = audioTranscriptionTrial\n"
                 "        })\n"
             )
+            # 13.1.1 opens deinit with the wallet's transfer tasks.
             method_anchor = (
                 "    deinit {\n"
-                "        self.walletTonConnectDisposable.dispose()\n"
+                "        if self.walletContext != nil {\n"
             )
             deinit_anchor = (
                 "        self.userLimitsConfigurationDisposable?.dispose()\n"
@@ -13333,12 +13308,10 @@ def patch_fake_stars_purchases(tg: Path) -> None:
     text = buy.read_text(encoding="utf-8")
     marker = "// AorusGram: local-only collectible purchase"
     if marker not in text:
-        anchor = (
-            "            let finalPrice = acceptedPrice ?? resellAmount\n"
-            "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice, message.hideName, message.text, message.entities)\n"
-        )
+        # 13.1.1 settles the price before the purchase closure (in the currency asked for), so
+        # the local purchase goes in front of the request itself.
+        anchor = "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice, message.hideName, message.text, message.entities)\n"
         replacement = (
-            "            let finalPrice = acceptedPrice ?? resellAmount\n"
             "            // AorusGram: local-only collectible purchase. TON and real\n"
             "            // Stars purchases remain unchanged.\n"
             "            if AorusFakeStarsStore.isEnabled, finalPrice.currency == .stars {\n"
@@ -13355,7 +13328,7 @@ def patch_fake_stars_purchases(tg: Path) -> None:
             "            }\n"
             "            let _ = (buyGiftImpl(uniqueGift.slug, recipientPeerId, finalPrice, message.hideName, message.text, message.entities)\n"
         )
-        if anchor not in text:
+        if text.count(anchor) != 1:
             raise RuntimeError("FakeStarsPurchases: collectible payment anchor is missing")
         buy.write_text(text.replace(anchor, replacement, 1), encoding="utf-8")
         print("FakeStarsPurchases: patched collectible native purchase flow")
@@ -16784,22 +16757,10 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
     )
 
     if "// AorusGram: per-chat ghost toggle action" not in t:
-        anchor = (
-            "    @objc func rightNavigationButtonAction() {\n"
-            "        if let button = self.rightNavigationButton {\n"
-            "            if case .standard(.previewing) = self.mode {\n"
-            "                self.navigationButtonAction(button.action)\n"
-            "            } else if case let .peer(peerId) = self.chatLocation, case .openChatInfo(expandAvatar: true, _) = button.action, let storyStats = self.contentData?.state.storyStats, storyStats.unseenCount != 0, let avatarNode = self.avatarNode {\n"
-            "                self.openStories(peerId: peerId, avatarHeaderNode: nil, avatarNode: avatarNode.avatarNode)\n"
-            "            } else {\n"
-            "                self.navigationButtonAction(button.action)\n"
-            "            }\n"
-            "        }\n"
-            "    }\n"
-        )
-        injection = anchor + r'''
-
-    // AorusGram: per-chat ghost toggle action
+        # Only where it goes: the function itself grew a branch in 13.1.1 (the profile opened from
+        # the header), and the toggle has nothing to do with its body.
+        anchor = "    @objc func rightNavigationButtonAction() {\n"
+        injection = r'''    // AorusGram: per-chat ghost toggle action
     // The ghost is only there while Ghost Mode is on, so it has one thing to do: turn Ghost Mode
     // off for this chat, or back on. What it turned off is kept in the settings; the ghost redraws
     // from them when they say they have changed.
@@ -16816,8 +16777,9 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
         self.updateChatPresentationInterfaceState(animated: true, interactive: false, { $0 })
     }
-'''
-        if anchor in t:
+
+''' + anchor
+        if t.count(anchor) == 1:
             t = t.replace(anchor, injection, 1)
             controller.write_text(t, encoding="utf-8")
             print("PerChatGhost: added ChatController toggle action")
@@ -17104,7 +17066,8 @@ def patch_mask_picker_call(tg: Path) -> None:
                       "    // so the mask strip can be positioned directly above it.\n"
                       "    private(set) var aorusButtonRowTop: CGFloat = 0.0\n", 1)
 
-        y_anchor = "        var buttonX: CGFloat = floor((size.width - buttonSize * CGFloat(buttons.count) - buttonSpacing * CGFloat(buttons.count - 1)) * 0.5)\n"
+        # 13.1 centres the row in the band between unequal side insets (iPhone Duo's strip).
+        y_anchor = "        var buttonX: CGFloat = centeredX(width: buttonSize * CGFloat(buttons.count) + buttonSpacing * CGFloat(buttons.count - 1))\n"
         if y_anchor not in t:
             raise RuntimeError("MaskPicker: buttonX anchor not found")
         t = t.replace(y_anchor, "        self.aorusButtonRowTop = buttonY\n" + y_anchor, 1)
@@ -19451,11 +19414,10 @@ def patch_plugin_icons(tg: Path) -> None:
                 "                let aorusStillImage = tabBarItem.animationName.flatMap { aorusTabBarStillImage(animationName: $0) }\n"
                 "                if let animationName = tabBarItem.animationName, aorusStillImage == nil {\n",
             ),
+            # The still icon is a template, and 13.1.1 tints a template tab image itself.
             (
-                "                            image: component.isSelected ? tabBarItem.selectedImage : tabBarItem.image,\n"
-                "                            tintColor: nil,\n",
-                "                            image: aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image),\n"
-                "                            tintColor: aorusStillImage != nil ? iconTintColor : nil,\n",
+                "                    let iconImage = component.isSelected ? tabBarItem.selectedImage : tabBarItem.image\n",
+                "                    let iconImage = aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image)\n",
             ),
         ]
         for old, new in edits:
@@ -20869,11 +20831,11 @@ extension ChatTitleView {
 
 AORUS_CHAT_LIST_BUTTON_SWIFT = '''
     // AorusGram: `ui.addChatListHeaderButton`. `.text` rather than `.icon` because that
-    // component loads a named image out of the app bundle and a plugin's SF Symbol is not in
+    // content loads a named image out of the app bundle and a plugin's SF Symbol is not in
     // it; a word is what a plugin can honestly put in this row. A button with no word is
     // skipped rather than drawn as a gap between Telegram's own controls.
-    func aorusPluginHeaderButtons() -> [AnyComponentWithIdentity<NavigationButtonComponentEnvironment>] {
-        var result: [AnyComponentWithIdentity<NavigationButtonComponentEnvironment>] = []
+    func aorusPluginHeaderButtons() -> [NavigationBarComponent.Button] {
+        var result: [NavigationBarComponent.Button] = []
         for item in AorusPluginRuntimeManager.shared.pluginNativeButtons(.chatListHeader) {
             let pluginId = item.pluginId
             let buttonId = item.button.id
@@ -20881,18 +20843,16 @@ AORUS_CHAT_LIST_BUTTON_SWIFT = '''
             if title.isEmpty {
                 continue
             }
-            result.append(AnyComponentWithIdentity(
+            result.append(NavigationBarComponent.Button(
                 id: "aorusPlugin-" + pluginId + "-" + buttonId,
-                component: AnyComponent(NavigationButtonComponent(
-                    content: .text(title: title, isBold: false),
-                    pressed: { _ in
-                        AorusPluginRuntimeManager.shared.dispatchNativeButtonAction(
-                            pluginId: pluginId,
-                            buttonId: buttonId,
-                            payload: ["source": "chatListHeader"]
-                        )
-                    }
-                ))
+                content: .text(title: title, isBold: false),
+                action: { _ in
+                    AorusPluginRuntimeManager.shared.dispatchNativeButtonAction(
+                        pluginId: pluginId,
+                        buttonId: buttonId,
+                        payload: ["source": "chatListHeader"]
+                    )
+                }
             ))
         }
         return result
@@ -21378,13 +21338,13 @@ def patch_plugin_settings_refresh(tg: Path) -> None:
         (
             "    deinit {\n"
             "        self.dataDisposable?.dispose()\n"
-            "        self.hiddenMediaDisposable?.dispose()\n",
+            "        self.walletStickersPreloadDisposable.dispose()\n",
             "    deinit {\n"
             "        if let aorusPluginIntegrationsObserver = self.aorusPluginIntegrationsObserver {\n"
             "            NotificationCenter.default.removeObserver(aorusPluginIntegrationsObserver)\n"
             "        }\n"
             "        self.dataDisposable?.dispose()\n"
-            "        self.hiddenMediaDisposable?.dispose()\n",
+            "        self.walletStickersPreloadDisposable.dispose()\n",
         ),
     ]
     for old, new in edits:
@@ -21426,10 +21386,12 @@ def patch_plugin_context_menu(tg: Path) -> None:
 def patch_tab_bar_visibility_controls(tg: Path) -> None:
     """Hide Search / tab titles live while preserving Telegram's native tab bar.
 
-    Search is removed at the composition boundary, before width calculation. Tab
-    titles are hidden inside TabBarComponent, where the component also reduces its
-    real height and vertically centres icons. TabBarController's temporary insets
-    use the same adjustment, preventing a one-frame content jump during rebuilds.
+    Search is removed at the composition boundary, before the bar's length is worked out.
+    Titles hidden make the horizontal bar Telegram's own icon-only bar -- the compact one iPad
+    and the iPhone Duo side column show, items at the compact thickness with the icons centred
+    by the item itself -- and the bar still fills its width unless the panel is compact. A
+    compact panel hugs its items. TabBarController's temporary insets take the same height off,
+    so a rebuild does not make the content jump for a frame.
     """
     component_file = (
         tg
@@ -21437,332 +21399,191 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
     )
     node_file = tg / "submodules/TabBarUI/Sources/TabBarContollerNode.swift"
     controller_file = tg / "submodules/TabBarUI/Sources/TabBarController.swift"
-    if not component_file.is_file() or not node_file.is_file() or not controller_file.is_file():
-        print("TabBarVisibility: required tab-bar sources not found, skip")
-        return
+    for path in (component_file, node_file, controller_file):
+        if not path.is_file():
+            raise RuntimeError(f"TabBarVisibility: {path.name} is missing")
 
     component = component_file.read_text(encoding="utf-8")
     if "AorusGram: hide tab titles" not in component:
-        original = component
         replacements = [
             (
-                "    public let search: Search?\n"
-                "    public let selectedId: AnyHashable?\n",
-                "    public let search: Search?\n"
-                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
-                "    public let selectedId: AnyHashable?\n",
-            ),
-            (
-                "        items: [Item],\n"
-                "        search: Search?,\n"
-                "        selectedId: AnyHashable?,\n",
-                "        items: [Item],\n"
-                "        search: Search?,\n"
-                "        hideTitles: Bool = false,\n"
-                "        selectedId: AnyHashable?,\n",
-            ),
-            (
-                "        self.items = items\n"
-                "        self.search = search\n"
-                "        self.selectedId = selectedId\n",
-                "        self.items = items\n"
-                "        self.search = search\n"
-                "        self.hideTitles = hideTitles\n"
-                "        self.selectedId = selectedId\n",
-            ),
-            (
-                "        if lhs.search != rhs.search {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.selectedId != rhs.selectedId {\n",
-                "        if lhs.search != rhs.search {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.hideTitles != rhs.hideTitles {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.selectedId != rhs.selectedId {\n",
-            ),
-            (
-                "            let barHeight: CGFloat = 56.0 + innerInset * 2.0\n",
-                "            let itemHeight: CGFloat = component.hideTitles ? 48.0 : 56.0\n"
-                "            let barHeight: CGFloat = itemHeight + innerInset * 2.0\n",
-            ),
-            (
-                "                    containerSize: CGSize(width: 200.0, height: 56.0)\n",
-                "                    containerSize: CGSize(width: 200.0, height: itemHeight)\n",
-            ),
-            (
-                "            let itemHeight: CGFloat = 56.0\n"
-                "            let contentWidth: CGFloat = innerInset * 2.0 + totalItemsWidth\n",
-                "            let contentWidth: CGFloat = innerInset * 2.0 + totalItemsWidth\n",
-            ),
-            (
-                "    let isCompact: Bool\n"
-                "    let isSelected: Bool\n",
-                "    let isCompact: Bool\n"
-                "    let hideTitle: Bool\n"
-                "    let isSelected: Bool\n",
-            ),
-            (
-                "    init(item: TabBarComponent.Item, theme: PresentationTheme, isCompact: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool) {\n"
-                "        self.item = item\n"
-                "        self.theme = theme\n"
-                "        self.isCompact = isCompact\n"
-                "        self.isSelected = isSelected\n",
-                "    init(item: TabBarComponent.Item, theme: PresentationTheme, isCompact: Bool, hideTitle: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool) {\n"
-                "        self.item = item\n"
-                "        self.theme = theme\n"
-                "        self.isCompact = isCompact\n"
-                "        self.hideTitle = hideTitle\n"
-                "        self.isSelected = isSelected\n",
-            ),
-            (
-                "        if lhs.isCompact != rhs.isCompact {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.isSelected != rhs.isSelected {\n",
-                "        if lhs.isCompact != rhs.isCompact {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.hideTitle != rhs.hideTitle {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.isSelected != rhs.isSelected {\n",
-            ),
-            (
-                "                alphaTransition.setAlpha(view: titleView, alpha: component.isCompact ? 0.0 : 1.0)\n",
-                "                alphaTransition.setAlpha(view: titleView, alpha: (component.isCompact || component.hideTitle) ? 0.0 : 1.0)\n",
-            ),
-            (
-                "                return CGSize(width: titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
-                "                return CGSize(width: component.hideTitle ? 48.0 : titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
-            ),
-        ]
-        for old, new in replacements:
-            if old not in component:
-                print(f"TabBarVisibility: WARNING — component anchor missing: {old.splitlines()[0]!r}")
-                component = original
-                break
-            component = component.replace(old, new, 1)
-
-        if component != original:
-            compact_anchors = (
-                "                        isCompact: false,\n"
-                "                        isSelected: false,\n",
-                "                        isCompact: component.search?.isActive == true,\n"
-                "                        isSelected: false,\n",
-                "                        isCompact: component.search?.isActive == true,\n"
-                "                        isSelected: true,\n",
-            )
-            for old in compact_anchors:
-                if old not in component:
-                    print("TabBarVisibility: WARNING — ItemComponent construction anchor missing")
-                    component = original
-                    break
-                component = component.replace(
-                    old,
-                    old.replace(
-                        "                        isSelected:",
-                        "                        hideTitle: component.hideTitles,\n"
-                        "                        isSelected:",
-                    ),
-                    1,
-                )
-
-        if component != original:
-            icon_replacements = [
-                (
-                    "y: -4.0), size: iconSize).offsetBy(dx: tabBarItem.animationOffset.x",
-                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : -4.0), size: iconSize).offsetBy(dx: tabBarItem.animationOffset.x",
-                ),
-                (
-                    "y: 3.0), size: iconSize)\n",
-                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : 3.0), size: iconSize)\n",
-                ),
-                (
-                    "y: -4.0), size: iconSize).offsetBy(dx: offset.x",
-                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : -4.0), size: iconSize).offsetBy(dx: offset.x",
-                ),
-                (
-                    "y: 8.0), size: iconSize)\n",
-                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : 8.0), size: iconSize)\n",
-                ),
-            ]
-            for old, new in icon_replacements:
-                if old not in component:
-                    print(f"TabBarVisibility: WARNING — icon anchor missing: {old!r}")
-                    component = original
-                    break
-                component = component.replace(old, new, 1)
-
-        if component != original:
-            component_file.write_text(component, encoding="utf-8")
-            print("TabBarVisibility: native title hiding and compact height injected")
-    else:
-        print("TabBarVisibility: TabBarComponent already patched")
-
-    # Compact mode is intentionally independent from title visibility. It keeps
-    # Telegram's native item rendering and touch targets, but sizes the glass
-    # panel to the intrinsic width of the visible tabs instead of stretching it
-    # across all available space. This migration also upgrades cached CI trees
-    # that already contain the earlier title-hiding patch.
-    component = component_file.read_text(encoding="utf-8")
-    if "AorusGram: compact tab panel" not in component:
-        original = component
-        compact_replacements = [
-            (
-                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
-                "    public let selectedId: AnyHashable?\n",
+                "    public let isCompact: Bool\n"
+                "    \n"
+                "    public init(\n",
+                "    public let isCompact: Bool\n"
                 "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
                 "    public let compactPanel: Bool // AorusGram: compact tab panel\n"
-                "    public let selectedId: AnyHashable?\n",
+                "    \n"
+                "    public init(\n",
             ),
             (
+                "        axis: Axis,\n"
+                "        isCompact: Bool\n"
+                "    ) {\n",
+                "        axis: Axis,\n"
+                "        isCompact: Bool,\n"
                 "        hideTitles: Bool = false,\n"
-                "        selectedId: AnyHashable?,\n",
-                "        hideTitles: Bool = false,\n"
-                "        compactPanel: Bool = false,\n"
-                "        selectedId: AnyHashable?,\n",
+                "        compactPanel: Bool = false\n"
+                "    ) {\n",
             ),
             (
-                "        self.hideTitles = hideTitles\n"
-                "        self.selectedId = selectedId\n",
+                "        self.axis = axis\n"
+                "        self.isCompact = isCompact\n"
+                "    }\n",
+                "        self.axis = axis\n"
+                "        self.isCompact = isCompact\n"
                 "        self.hideTitles = hideTitles\n"
                 "        self.compactPanel = compactPanel\n"
-                "        self.selectedId = selectedId\n",
+                "    }\n",
             ),
             (
-                "        if lhs.hideTitles != rhs.hideTitles {\n"
+                "        if lhs.isCompact != rhs.isCompact {\n"
                 "            return false\n"
                 "        }\n"
-                "        if lhs.selectedId != rhs.selectedId {\n",
+                "        return true\n",
+                "        if lhs.isCompact != rhs.isCompact {\n"
+                "            return false\n"
+                "        }\n"
                 "        if lhs.hideTitles != rhs.hideTitles {\n"
                 "            return false\n"
                 "        }\n"
                 "        if lhs.compactPanel != rhs.compactPanel {\n"
                 "            return false\n"
                 "        }\n"
-                "        if lhs.selectedId != rhs.selectedId {\n",
+                "        return true\n",
             ),
             (
-                "            let equalWidth = floorToScreenPixels(availableItemsWidth / CGFloat(component.items.count))\n",
-                "            let minimumItemsWidth = 48.0 * CGFloat(component.items.count)\n"
-                "            let layoutItemsWidth = component.compactPanel ? min(availableItemsWidth, max(minimumItemsWidth, unboundItemWidthSum)) : availableItemsWidth\n"
-                "            let equalWidth = floorToScreenPixels(layoutItemsWidth / CGFloat(component.items.count))\n",
+                "            let search = component.axis == .horizontal ? component.search : nil\n",
+                "            let search = component.axis == .horizontal ? component.search : nil\n"
+                "            // AorusGram: titles hidden on the horizontal bar make it Telegram's own\n"
+                "            // icon-only bar; the side column and iPad are icon-only already.\n"
+                "            let aorusShowsTitles = !component.isCompact && !(component.hideTitles && component.axis == .horizontal)\n",
             ),
             (
-                "                let itemWeightNorm: CGFloat = availableItemsWidth / unboundItemWidthSum\n",
-                "                let itemWeightNorm: CGFloat = layoutItemsWidth / unboundItemWidthSum\n",
+                "            let barHeight: CGFloat = 56.0 + innerInset * 2.0\n",
+                "            // The search button is as tall as the bar beside it.\n"
+                "            let barHeight: CGFloat = (component.hideTitles && component.axis == .horizontal ? tabBarCompactItemThickness : 56.0) + innerInset * 2.0\n",
             ),
             (
-                "                return CGSize(width: component.hideTitle ? 48.0 : titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
-                "                return CGSize(width: component.hideTitle ? 48.0 : max(48.0, titleSize.width + 10.0 * 2.0), height: availableSize.height)\n",
+                "            let itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)\n",
+                "            let itemsLayout = aorusTabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, hideTitles: component.hideTitles, compactPanel: component.compactPanel, unboundItemWidths: unboundItemWidths, availableLength: availableLength)\n",
+            ),
+            # A bar that hugs its items is narrower than the space it was offered, and Search
+            # belongs at the bar's own end, not at the end of that space.
+            (
+                "                    searchFrame = CGRect(origin: CGPoint(x: availableSize.width - searchSize.width, y: 0.0), size: searchSize)\n",
+                "                    searchFrame = CGRect(origin: CGPoint(x: size.width - searchSize.width, y: 0.0), size: searchSize) // AorusGram: compact search position\n",
             ),
         ]
-        for old, new in compact_replacements:
-            if old not in component:
-                print(f"TabBarVisibility: WARNING — compact component anchor missing: {old.splitlines()[0]!r}")
-                component = original
-                break
+        for old, new in replacements:
+            if component.count(old) != 1:
+                raise RuntimeError(f"TabBarVisibility: component anchor missing: {old.splitlines()[0]!r}")
             component = component.replace(old, new, 1)
-        if component != original:
-            component_file.write_text(component, encoding="utf-8")
-            print("TabBarVisibility: compact native panel sizing injected")
-    else:
-        print("TabBarVisibility: compact panel already patched")
-
-    # The stock inactive-search frame is based on the full available width because
-    # the stock tabs always fill it. In compact mode the component returns a smaller
-    # width, so anchor Search to that actual width or it ends up outside the panel.
-    component = component_file.read_text(encoding="utf-8")
-    compact_search_anchor = (
-        "                    searchFrame = CGRect(origin: CGPoint(x: availableSize.width - searchSize.width, y: 0.0), size: searchSize)\n"
-    )
-    if "AorusGram: compact tab panel" in component and compact_search_anchor in component:
-        component = component.replace(
-            compact_search_anchor,
-            "                    searchFrame = CGRect(origin: CGPoint(x: size.width - searchSize.width, y: 0.0), size: searchSize) // AorusGram: compact search position\n",
-            1,
-        )
+        title_site = "                        showsTitle: !component.isCompact,\n"
+        if component.count(title_site) != 2:
+            raise RuntimeError("TabBarVisibility: item title anchors missing")
+        component = component.replace(title_site, "                        showsTitle: aorusShowsTitles,\n")
+        component = component.rstrip("\n") + "\n" + _AORUS_TAB_BAR_ITEMS_LAYOUT
         component_file.write_text(component, encoding="utf-8")
-        print("TabBarVisibility: compact search position aligned")
+        print("TabBarVisibility: native icon-only bar and compact panel injected")
+    else:
+        print("TabBarVisibility: TabBarComponent already patched")
 
     node = node_file.read_text(encoding="utf-8")
     if "AorusGram: hide search button" not in node:
-        original = node
-        old = "                search: self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in\n"
-        new = (
-            "                search: UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\") ? nil : self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in // AorusGram: hide search button\n"
-        )
-        hide_titles_anchor = "                selectedId: selectedId,\n"
-        if old in node and hide_titles_anchor in node:
-            node = node.replace(old, new, 1)
-            node = node.replace(
-                hide_titles_anchor,
+        edits = [
+            (
+                "                search: sidePlacement != nil ? nil : self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in\n",
+                "                search: sidePlacement != nil || UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\") ? nil : self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in // AorusGram: hide search button\n",
+            ),
+            (
+                "                isCompact: tabBarIsCompact(layout: params.layout, sidePlacement: sidePlacement)\n"
+                "            )),\n",
+                "                isCompact: tabBarIsCompact(layout: params.layout, sidePlacement: sidePlacement),\n"
                 "                hideTitles: UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\"),\n"
-                + hide_titles_anchor,
-                1,
-            )
-            node_file.write_text(node, encoding="utf-8")
-            print("TabBarVisibility: search composition and title mode wired")
-        else:
-            print("TabBarVisibility: WARNING — TabBarContollerNode anchors missing")
-            node = original
+                "                compactPanel: UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+                "            )),\n",
+            ),
+        ]
+        for old, new in edits:
+            if node.count(old) != 1:
+                raise RuntimeError(f"TabBarVisibility: tab composition anchor missing: {old.splitlines()[0].strip()!r}")
+            node = node.replace(old, new, 1)
+        node_file.write_text(node, encoding="utf-8")
+        print("TabBarVisibility: search composition and title mode wired")
     else:
         print("TabBarVisibility: TabBarContollerNode already patched")
 
-    node = node_file.read_text(encoding="utf-8")
-    if "compactPanel: UserDefaults.standard.bool" not in node:
-        anchor = (
-            "                hideTitles: UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\"),\n"
-        )
-        if anchor in node:
-            node = node.replace(
-                anchor,
-                anchor
-                + "                compactPanel: UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\"),\n",
-                1,
-            )
-            node_file.write_text(node, encoding="utf-8")
-            print("TabBarVisibility: compact panel setting wired")
-        else:
-            print("TabBarVisibility: WARNING — compact panel node anchor missing")
-    else:
-        print("TabBarVisibility: compact panel setting already wired")
-
     controller = controller_file.read_text(encoding="utf-8")
     if "AorusGram: compact tab titles" not in controller:
-        original = controller
-        anchor = (
-            "                    let bottomInset: CGFloat = validLayout.insets(options: options).bottom\n"
-            "                    if !validLayout.safeInsets.left.isZero {\n"
-            "                        tabBarHeight = 34.0 + bottomInset\n"
-            "                    } else {\n"
-            "                        tabBarHeight = 49.0 + bottomInset\n"
-            "                    }\n"
-        )
-        replacement = (
-            "                    let bottomInset: CGFloat = validLayout.insets(options: options).bottom\n"
-            "                    let aorusTabTitleAdjustment: CGFloat = !AorusOldInterface.isEnabled && UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\") ? 8.0 : 0.0 // AorusGram: compact tab titles\n"
-            "                    if !validLayout.safeInsets.left.isZero {\n"
-            "                        tabBarHeight = 34.0 - aorusTabTitleAdjustment + bottomInset\n"
-            "                    } else {\n"
-            "                        tabBarHeight = 49.0 - aorusTabTitleAdjustment + bottomInset\n"
-            "                    }\n"
-        )
-        anchor2 = anchor.replace("validLayout", "updatedLayout").replace("                    ", "            ")
-        replacement2 = replacement.replace("validLayout", "updatedLayout").replace("                    ", "            ")
-        if anchor in controller and anchor2 in controller:
+        # Icons alone take the compact thickness: 16 points off the bar.
+        adjustment = "!AorusOldInterface.isEnabled && UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\") ? 16.0 : 0.0 // AorusGram: compact tab titles\n"
+        for layout, indent in (("validLayout", " " * 24), ("updatedLayout", " " * 12)):
+            anchor = (
+                f"{indent}let bottomInset: CGFloat = {layout}.insets(options: options).bottom\n"
+                f"{indent}if !{layout}.safeInsets.left.isZero {{\n"
+                f"{indent}    tabBarHeight = 34.0 + bottomInset\n"
+                f"{indent}}} else {{\n"
+                f"{indent}    tabBarHeight = 49.0 + bottomInset\n"
+                f"{indent}}}\n"
+            )
+            replacement = (
+                f"{indent}let bottomInset: CGFloat = {layout}.insets(options: options).bottom\n"
+                f"{indent}let aorusTabTitleAdjustment: CGFloat = " + adjustment +
+                f"{indent}if !{layout}.safeInsets.left.isZero {{\n"
+                f"{indent}    tabBarHeight = 34.0 - aorusTabTitleAdjustment + bottomInset\n"
+                f"{indent}}} else {{\n"
+                f"{indent}    tabBarHeight = 49.0 - aorusTabTitleAdjustment + bottomInset\n"
+                f"{indent}}}\n"
+            )
+            if controller.count(anchor) != 1:
+                raise RuntimeError(f"TabBarVisibility: {layout} inset anchor missing")
             controller = controller.replace(anchor, replacement, 1)
-            controller = controller.replace(anchor2, replacement2, 1)
-            controller_file.write_text(controller, encoding="utf-8")
-            print("TabBarVisibility: temporary controller insets aligned")
-        else:
-            print("TabBarVisibility: WARNING — TabBarController inset anchors missing")
-            controller = original
+        controller_file.write_text(controller, encoding="utf-8")
+        print("TabBarVisibility: temporary controller insets aligned")
     else:
         print("TabBarVisibility: TabBarController already patched")
+
+
+_AORUS_TAB_BAR_ITEMS_LAYOUT = """
+/// AorusGram: the bar's items with the tab settings applied. Titles hidden on the horizontal
+/// bar give the items the compact thickness and the bar still fills its width, as a bar with
+/// titles does; a compact panel hugs its items -- the titles' own widths, or the compact
+/// length each once the titles are hidden. The side column and iPad keep Telegram's layout.
+private func aorusTabBarItemsLayout(axis: TabBarAxis, isCompact: Bool, hideTitles: Bool, compactPanel: Bool, unboundItemWidths: [CGFloat], availableLength: CGFloat) -> TabBarItemsLayout {
+    guard axis == .horizontal, !isCompact, !unboundItemWidths.isEmpty, hideTitles || compactPanel else {
+        return tabBarItemsLayout(axis: axis, isCompact: isCompact, unboundItemWidths: unboundItemWidths, availableLength: availableLength)
+    }
+    let count = unboundItemWidths.count
+    let availableItemsLength = availableLength - tabBarInnerInset * 2.0
+    let thickness: CGFloat = hideTitles ? tabBarCompactItemThickness : tabBarItemLength
+    let lengths: [CGFloat]
+    if hideTitles {
+        var length = floorToScreenPixels(availableItemsLength / CGFloat(count))
+        if compactPanel {
+            length = min(length, tabBarItemLength)
+        }
+        lengths = Array(repeating: length, count: count)
+    } else {
+        let widths = unboundItemWidths.map { max(48.0, $0) }
+        let total = widths.reduce(0.0, +)
+        let itemsLength = min(availableItemsLength, total)
+        let equalLength = floorToScreenPixels(itemsLength / CGFloat(count))
+        if widths.allSatisfy({ $0 <= equalLength }) {
+            lengths = Array(repeating: equalLength, count: count)
+        } else {
+            lengths = widths.map { floorToScreenPixels($0 * itemsLength / total) }
+        }
+    }
+    var itemFrames: [CGRect] = []
+    var position = tabBarInnerInset
+    for length in lengths {
+        itemFrames.append(CGRect(x: position, y: tabBarInnerInset, width: length, height: thickness))
+        position += length
+    }
+    return TabBarItemsLayout(size: CGSize(width: position + tabBarInnerInset, height: thickness + tabBarInnerInset * 2.0), itemFrames: itemFrames)
+}
+"""
 
 
 def patch_action_confirmation(tg: Path) -> None:
@@ -21785,24 +21606,24 @@ def patch_action_confirmation(tg: Path) -> None:
 
             edits = [
                 (
-                    "    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n",
-                    "    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n"
+                    "    public func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {\n",
+                    "    public func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {\n"
                     "        aorusConfirmCall(self, isVideo: isVideo, parentController: nil) { [weak self] in // AorusGram: Action confirmation\n"
                     "            self?.aorusPerformRequestCall(peerId: peerId, isVideo: isVideo, completion: completion)\n"
                     "        }\n"
                     "    }\n"
                     "\n"
-                    "    private func aorusPerformRequestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n",
+                    "    private func aorusPerformRequestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {\n",
                 ),
                 (
-                    "    public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
-                    "    public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n"
+                    "    public func joinGroupCall(peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
+                    "    public func joinGroupCall(peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n"
                     "        aorusConfirmGroupCall(self, parentController: nil) { [weak self] in // AorusGram: Action confirmation\n"
                     "            self?.aorusPerformJoinGroupCall(peerId: peerId, invite: invite, requestJoinAsPeerId: requestJoinAsPeerId, activeCall: activeCall)\n"
                     "        }\n"
                     "    }\n"
                     "\n"
-                    "    private func aorusPerformJoinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
+                    "    private func aorusPerformJoinGroupCall(peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
                 ),
                 (
                     "    public func joinConferenceCall(call: JoinCallLinkInformation, isVideo: Bool, unmuteByDefault: Bool) {\n",
@@ -22019,12 +21840,14 @@ def patch_plugin_tabs(tg: Path) -> None:
             "    public var aorusWallController: ViewController? // AorusGram: Wall tab\n",
             "    public var aorusWallController: ViewController? // AorusGram: Wall tab\n"
             "    " + sentinel + "\n"
-            "    private var aorusShowCallsTab = true\n",
+            "    private var aorusShowCallsTab = true\n"
+            "    private var aorusShowNewsTab = false\n",
         ),
         (
-            "    public func addRootControllers(showCallsTab: Bool) {\n",
-            "    public func addRootControllers(showCallsTab: Bool) {\n"
-            "        self.aorusShowCallsTab = showCallsTab\n",
+            "    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool) {\n",
+            "    public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool) {\n"
+            "        self.aorusShowCallsTab = showCallsTab\n"
+            "        self.aorusShowNewsTab = showNewsTab\n",
         ),
         (
             "        if let aorusWallController {\n"
@@ -22047,40 +21870,37 @@ def patch_plugin_tabs(tg: Path) -> None:
             "            guard let self else {\n"
             "                return\n"
             "            }\n"
-            "            self.updateRootControllers(showCallsTab: self.aorusShowCallsTab)\n"
+            "            self.updateRootControllers(showCallsTab: self.aorusShowCallsTab, showNewsTab: self.aorusShowNewsTab)\n"
             "        }\n",
         ),
         (
-            "    public func updateRootControllers(showCallsTab: Bool) {\n"
+            "    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool) {\n"
             "        guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {\n"
             "            return\n"
             "        }\n",
-            "    public func updateRootControllers(showCallsTab: Bool) {\n"
+            "    public func updateRootControllers(showCallsTab: Bool, showNewsTab: Bool) {\n"
             "        guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {\n"
             "            return\n"
             "        }\n"
-            "        self.aorusShowCallsTab = showCallsTab\n",
+            "        self.aorusShowCallsTab = showCallsTab\n"
+            "        self.aorusShowNewsTab = showNewsTab\n",
         ),
+        # A plugin tab that has just left the bar may be the one that was open: 13.1.1 sends the
+        # selection to Chats then by itself.
         (
             "        } else {\n"
             "            self.aorusWallController = nil\n"
             "        }\n"
-            "        \n"
-            "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+            "\n"
+            "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
             "        } else {\n"
             "            self.aorusWallController = nil\n"
             "        }\n"
             "        if let aorusPluginTabs = self.aorusPluginTabs {\n"
             "            controllers.append(contentsOf: aorusPluginTabs.controllers())\n"
             "        }\n"
-            "        // A plugin tab that has just left the bar may be the one that was open: the\n"
-            "        // selection goes to Chats then, not to whichever tab happens to be first.\n"
-            "        var aorusSelectedIndex: Int?\n"
-            "        if let current = rootTabController.currentController, !controllers.contains(where: { $0 === current }) {\n"
-            "            aorusSelectedIndex = controllers.firstIndex(where: { $0 === self.chatListController })\n"
-            "        }\n"
-            "        \n"
-            "        rootTabController.setControllers(controllers, selectedIndex: aorusSelectedIndex)\n",
+            "\n"
+            "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
         ),
     ]
     for old, new in edits:
@@ -22182,7 +22002,8 @@ def patch_wall_tab(tg: Path) -> None:
             (
                 "        controllers.append(accountSettingsController)\n"
                 "                \n"
-                "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : (controllers.count - 2))\n",
+                "        let chatsIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? 0\n"
+                "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex)\n",
                 "        controllers.append(accountSettingsController)\n"
                 "        let aorusWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "        let aorusWallController: ViewController? = aorusWallEnabled ? makeAorusWallController(context: self.context) : nil\n"
@@ -22207,8 +22028,8 @@ def patch_wall_tab(tg: Path) -> None:
             ),
             (
                 "        controllers.append(self.accountSettingsController!)\n"
-                "        \n"
-                "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+                "\n"
+                "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
                 "        controllers.append(self.accountSettingsController!)\n"
                 "        let aorusWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "        if aorusWallEnabled {\n"
@@ -22221,8 +22042,8 @@ def patch_wall_tab(tg: Path) -> None:
                 "        } else {\n"
                 "            self.aorusWallController = nil\n"
                 "        }\n"
-                "        \n"
-                "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+                "\n"
+                "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
             ),
         ]
         matched = 0
@@ -22461,18 +22282,15 @@ def patch_wall_tab(tg: Path) -> None:
             old = (
                 "    override public func viewWillDisappear(_ animated: Bool) {\n"
                 "        super.viewWillDisappear(animated)\n"
-                "        \n"
             )
             new = (
                 "    override public func viewWillDisappear(_ animated: Bool) {\n"
                 "        super.viewWillDisappear(animated)\n"
-                "        \n"
                 "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
                 "            aorusWall.setVisible(false)\n"
                 "        }\n"
-                "\n"
             )
-            if old in t:
+            if t.count(old) == 1:
                 chat_controller.write_text(t.replace(old, new, 1), encoding="utf-8")
                 print("Wall: hidden lifecycle integrated")
             else:
@@ -22683,7 +22501,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts {\n"
                 "                strongSelf.aorusLastHideCalls = hideCalls\n"
                 "                strongSelf.aorusLastHideContacts = hideContacts\n"
-                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
                 "            }\n"
             )
             new_tabs = (
@@ -22696,7 +22514,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 "                strongSelf.aorusLastHideContacts = hideContacts\n"
                 "                strongSelf.aorusLastHideSearch = hideSearch\n"
                 "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
-                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
                 "            }\n"
             )
             if old_tabs not in t:
@@ -22730,7 +22548,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 "                strongSelf.aorusLastHideContacts = hideContacts\n"
                 "                strongSelf.aorusLastHideSearch = hideSearch\n"
                 "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
-                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
                 "            }\n"
             )
             new_tabs = (
@@ -22747,7 +22565,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
                 "                strongSelf.aorusLastCompactTabBar = compactTabBar\n"
                 "                strongSelf.aorusLastLocalPremium = localPremium\n"
-                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
                 "            }\n"
             )
             if old_tabs not in t:
@@ -22816,7 +22634,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 "            } else {\n"
                 "                strongSelf.aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "            }\n"
-                "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
                 "        }\n"
                 "\n"
             )
@@ -22873,7 +22691,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            if let strongSelf = self {\n"
         "                if strongSelf.showCallsTab != value {\n"
         "                    strongSelf.showCallsTab = value\n"
-        "                    strongSelf.rootController.updateRootControllers(showCallsTab: value)\n"
+        "                    strongSelf.rootController.updateRootControllers(showCallsTab: value, showNewsTab: strongSelf.showNewsTab)\n"
         "                }\n"
         "            }\n"
         "        })\n"
@@ -22902,7 +22720,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
         "                strongSelf.aorusLastCompactTabBar = compactTabBar\n"
         "                strongSelf.aorusLastLocalPremium = localPremium\n"
-        "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+        "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
         "            }\n"
         "        }\n"
         "        self.aorusWallVisibilityObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram_wall_visibility_changed\"), object: nil, queue: OperationQueue.main) { [weak self] notification in\n"
@@ -22914,7 +22732,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            }\n"
         "            let wallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
         "            strongSelf.aorusLastWallEnabled = wallEnabled\n"
-        "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+        "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab, showNewsTab: strongSelf.showNewsTab)\n"
         "        }\n"
     )
     t = t.replace(init_anchor, init_anchor + observer, 1)
@@ -27205,13 +27023,13 @@ def patch_poll_results_preview(tg: Path) -> None:
         "    let normalized: CGFloat\n"
         "    let percent: Int\n"
         "    let count: Int32\n"
-        "    let recentVoterPeerIds: [PeerId]\n"
+        "    let recentVoterPeerIds: [EnginePeer.Id]\n"
         "}\n",
         "private struct ChatMessagePollOptionResult: Equatable {\n"
         "    let normalized: CGFloat\n"
         "    let percent: Int\n"
         "    let count: Int32\n"
-        "    let recentVoterPeerIds: [PeerId]\n"
+        "    let recentVoterPeerIds: [EnginePeer.Id]\n"
         "    // AorusGram: counts drawn before this account has voted, faint, as a look at the poll.\n"
         "    var isPreview: Bool = false\n"
         "}\n",

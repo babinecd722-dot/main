@@ -2,7 +2,12 @@
 """Compile the plugin bridge with the build's TelegramApi and exercise every entry.
 
 Usage: plugin_tl_check.py <repo> <TelegramApi Sources> [--swiftc PATH]
+       [--generated DIR --scheme swift_scheme.tl]   (13.1, whose API is generated at build time)
 No Telegram account or network requests are used by this check.
+
+13.1's generated API is backed by an Objective-C runtime (TelegramApi/ObjC, TLObject), so there the
+check builds that runtime as well -- the way the SwiftPM copy of TelegramApi does, without
+TL_OBJC_DIRECT -- and runs on macOS only.
 """
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ import shutil
 import subprocess
 import tempfile
 
-from gen_plugin_tl import schema, swift
+from gen_plugin_tl import build_schema, swift
 
 
 def fixtures(data: dict) -> dict:
@@ -85,15 +90,37 @@ def run(command: list[str], **kwargs):
     subprocess.run(command, check=True, **kwargs)
 
 
+def objc_runtime(api: Path, generated: Path, work: Path, clang: str) -> tuple[list[str], Path]:
+    """Objects of TelegramApi's ObjC runtime and its schema table, and the headers' module."""
+    include = work / "objc-include"
+    shutil.copytree(api / "ObjC/PublicHeaders", include)
+    (include / "module.modulemap").write_text(
+        'module TelegramApiObjC {\n    umbrella header "TelegramApiObjC/TelegramApiObjC.h"\n    export *\n}\n')
+    objects = []
+    for source in sorted((api / "ObjC/Sources").glob("*.m")) + sorted((generated / "ObjC").glob("*.m")):
+        target = work / (source.stem + ".o")
+        # MRC: TLObject implements retain and release itself, and #errors under ARC.
+        run([clang, "-c", "-fno-objc-arc", "-fmodules", "-Wall", "-I", str(include),
+             "-I", str(api / "ObjC/Sources"), str(source), "-o", str(target)])
+        objects.append(str(target))
+    return objects, include
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", type=Path)
     parser.add_argument("sources", type=Path)
     parser.add_argument("--swiftc", default="swiftc")
     parser.add_argument("--export-api", type=Path, help="keep the built API for native broker checks")
+    parser.add_argument("--generated", type=Path, help="telegram_api_generate.py's output (13.1)")
+    parser.add_argument("--scheme", type=Path, help="TelegramApi's swift_scheme.tl (13.1)")
+    parser.add_argument("--clang", default="clang")
     args = parser.parse_args()
     repo, sources = args.repo.resolve(), args.sources.resolve()
-    data = schema(sources)
+    data = build_schema(sources, args.generated, args.scheme)
+    generated_api = None if any(sources.glob("Api*.swift")) else args.generated.resolve()
+    if generated_api is not None and os.uname().sysname != "Darwin":
+        raise SystemExit("Plugin TL: 13.1's TelegramApi carries an Objective-C runtime; this check runs on macOS")
     cases = fixtures(data)
     with tempfile.TemporaryDirectory(prefix="aorus-plugin-tl-") as directory:
         work = Path(directory)
@@ -117,21 +144,35 @@ def main():
             target = work / path.name
             target.write_text(content)
             copied.append(str(target))
+        objc_flags: list[str] = []
+        objects: list[str] = []
+        if generated_api is not None:
+            for path in sorted((generated_api / "Swift").glob("Api*.swift")):
+                target = work / path.name
+                shutil.copyfile(path, target)
+                copied.append(str(target))
+            objects, include = objc_runtime(sources.parent, generated_api, work, args.clang)
+            objc_flags = ["-I", str(include)]
         bridge = work / "AorusPluginTL.swift"
         shutil.copyfile(repo / "patches/submodules/TelegramApi/Sources/AorusPluginTL.swift", bridge)
         generated = work / "AorusPluginTL.generated.swift"
         generated.write_text(swift(data))
         (work / "fixtures.json").write_text(json.dumps(cases, ensure_ascii=False))
         library = work / ("libTelegramApi.dylib" if os.uname().sysname == "Darwin" else "libTelegramApi.so")
-        common = [args.swiftc, "-swift-version", "5", "-module-cache-path", str(work / "cache")]
+        common = [args.swiftc, "-swift-version", "5", "-module-cache-path", str(work / "cache")] + objc_flags
         install_name = ["-Xlinker", "-install_name", "-Xlinker", "@rpath/libTelegramApi.dylib"] if os.uname().sysname == "Darwin" else []
         run(common + ["-warnings-as-errors", "-emit-library", "-emit-module", "-module-name", "TelegramApi",
                       "-emit-module-path", str(work / "TelegramApi.swiftmodule")]
-            + copied + [str(bridge), str(generated), "-o", str(library), "-j", "2"] + install_name)
+            + copied + [str(bridge), str(generated), "-o", str(library), "-j", "2"] + install_name
+            + objects + (["-lz", "-framework", "Foundation"] if objects else []))
         if args.export_api:
             args.export_api.mkdir(parents=True, exist_ok=True)
             for artifact in work.glob("*TelegramApi*"):
                 shutil.copyfile(artifact, args.export_api / artifact.name)
+            if objc_flags:
+                # The API's module imports its runtime's: whatever imports the API needs these too.
+                shutil.rmtree(args.export_api / "objc-include", ignore_errors=True)
+                shutil.copytree(work / "objc-include", args.export_api / "objc-include")
         executable = work / "tests"
         run(common + ["-I", str(work), "-L", str(work), "-lTelegramApi",
                       "-Xlinker", "-rpath", "-Xlinker", str(work),

@@ -66,10 +66,10 @@ def patch_composer_profile_refinements(tg):
     s = edit(s, anchor, 'component: aorusInterfaceV2Enabled && !AorusOldInterface.isEnabled ? AnyComponent(AorusProfileMusicIconComponent(playback: self.aorusMusicPlayback, color: aorusOverlayInk)) : AnyComponent(BundleIconComponent(name: "Media Editor/SmallAudio", tintColor: isOverlay ? aorusOverlayInk : presentationData.theme.list.itemAccentColor))', 'native saved-music equalizer')
     anchor = '                if aorusInterfaceV2Enabled {\n'
     s = edit(s, anchor, '                if aorusInterfaceV2Enabled && !AorusOldInterface.isEnabled {\n', 'profile playback mode')
-    anchor = '                    // The row\'s own alpha, to the point of using the same two branches and\n'
-    s = edit(s, anchor, '                    self.aorusMusicPlayback.configure(peerId: peer?.id, capsule: self.aorusMusicCapsule, color: aorusOverlayInk)\n' + anchor, 'profile playback progress material')
-    anchor = '                    self.aorusMusicCapsule.removeFromSuperview()\n'
-    s = edit(s, anchor, anchor + '                    self.aorusMusicPlayback.configure(peerId: nil, capsule: nil, color: .clear)\n', 'stop hidden profile playback updates')
+    anchor = '                        // The row\'s own alpha, on the same curve. Pinned at 1.0 the glass stayed\n'
+    s = edit(s, anchor, '                        self.aorusMusicPlayback.configure(peerId: peer?.id, capsule: self.aorusMusicCapsule, color: aorusOverlayInk)\n' + anchor, 'profile playback progress material')
+    anchor = '                    } else if self.aorusMusicCapsule.superview != nil {\n                        self.aorusMusicCapsule.removeFromSuperview()\n'
+    s = edit(s, anchor, anchor + '                        self.aorusMusicPlayback.configure(peerId: nil, capsule: nil, color: .clear)\n', 'stop hidden profile playback updates')
     anchor = '        } else {\n            if self.aorusMusicCapsule.superview != nil {\n'
     s = edit(s, anchor, '        } else {\n            self.aorusMusicPlayback.configure(peerId: nil, capsule: nil, color: .clear)\n            if self.aorusMusicCapsule.superview != nil {\n', 'remove missing-track progress')
     # Preserve the complete classic branch so replay can still compare it with 12.0.
@@ -139,8 +139,8 @@ def patch_composer_profile_refinements(tg):
 def patch_expanded_preview(tg):
     path = tg / 'submodules/TelegramUI/Components/RichTextAttachmentScreen/Sources/RichTextAttachmentScreen.swift'
     s = path.read_text()
-    anchor = '        mode: Mode,\n        sendMessage: @escaping (Document, [String: Media], [Int64: TelegramMediaFile], Bool) -> Void,\n'
-    s = edit(s, anchor, '        mode: Mode,\n        attachmentDraftPreview: ((CGFloat) -> (UIView, CGFloat)?)? = nil,\n        sendMessage: @escaping (Document, [String: Media], [Int64: TelegramMediaFile], Bool) -> Void,\n', 'expanded editor preview provider')
+    anchor = '        mode: Mode,\n        sendMessage: @escaping (Document, [String: EngineMedia], [Int64: TelegramMediaFile], Bool) -> Void,\n'
+    s = edit(s, anchor, '        mode: Mode,\n        attachmentDraftPreview: ((CGFloat) -> (UIView, CGFloat)?)? = nil,\n        sendMessage: @escaping (Document, [String: EngineMedia], [Int64: TelegramMediaFile], Bool) -> Void,\n', 'expanded editor preview provider')
     anchor = '            pastedMarkdownParser: pastedMarkdownParser\n        ), navigationBarAppearance:'
     s = edit(s, anchor, '            pastedMarkdownParser: pastedMarkdownParser,\n            attachmentDraftPreview: attachmentDraftPreview\n        ), navigationBarAppearance:', 'expanded editor preview component')
     anchor = '    let overNavigationContainer: UIView\n'

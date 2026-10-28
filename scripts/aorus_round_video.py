@@ -552,20 +552,15 @@ def patch_countdown(tg: Path) -> None:
 
 def patch_badge(tg: Path) -> None:
     path = tg / 'submodules/Display/Source/DeviceMetrics.swift'
-    old_notch = '''    public var hasTopNotch: Bool {
+    # 13.1.1 knows the iPhone 13 notch itself; it still leaves the Dynamic Island phones and the
+    # minis without the badge.
+    replace(path, '''        // The minis are left out as they were while they matched the iPhone X by screen size.
         switch self {
-            case .iPhoneX, .iPhoneXSMax, .iPhoneXr, .iPhone12Mini, .iPhone12, .iPhone12ProMax:
-                return true
-            default:
-                return false
-        }
-    }'''
-    new_notch = old_notch.replace('.iPhone12ProMax:', '.iPhone12ProMax, .iPhone13Mini, .iPhone13, .iPhone13Pro, .iPhone13ProMax:')
-    replace(path, old_notch, new_notch)
-    replace(path, '''        if case .iPhoneX = self {
+        case .iPhoneX, .iPhone12Mini, .iPhone13Mini:
             return false
-        }
-        return self.hasTopNotch''', '''        if self.hasTopNotch || self.hasDynamicIsland { return true }
+        default:
+            return self.hasTopNotch
+        }''', '''        if self.hasTopNotch || self.hasDynamicIsland { return true }
         // New screen sizes fall through to unknown until the native table catches up.
         if case let .unknown(_, statusBarHeight, navigationHeight, _) = self {
             return self.type == .phone && statusBarHeight >= 44.0 && (navigationHeight ?? 0.0) > 0.0

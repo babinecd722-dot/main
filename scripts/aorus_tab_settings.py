@@ -78,18 +78,18 @@ def patch_tab_settings(tg: Path) -> None:
         let theme = aorusTabBarTheme(theme)
         self.theme = theme''', 'tab theme and preview hooks')
     s = edit(s, '        self.backgroundColor = theme.list.plainBackgroundColor\n', '        self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor\n', 'preview excludes the controller page background', count=2)
-    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {\n        self.aorusStagePreviewDrag()\n        defer { self.aorusApplyPreviewDrag(transition: transition) }', 'preview visibility survives native relayout')
+    s = edit(s, '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat? {', '    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat? {\n        self.aorusStagePreviewDrag()\n        defer { self.aorusApplyPreviewDrag(transition: transition) }', 'preview visibility survives native relayout')
     path.write_text(s)
 
     path = tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift' 
     s = path.read_text()
     s = patch_modern_preview(s)
-    s = s.replace('hideTitle: component.hideTitles,', 'hideTitle: component.hideTitles || (AorusTabBarSettings.current.selectedTitleOnly && item.id != component.selectedId),')
+    s = edit(s, '                        showsTitle: aorusShowsTitles,\n', '                        showsTitle: aorusShowsTitles && !(AorusTabBarSettings.current.selectedTitleOnly && item.id != component.selectedId),\n', 'selected tab title only', count=2)
     s = edit(s, 'if let badgeText = badgeValue, !badgeText.isEmpty {', 'if let badgeText = AorusTabBarSettings.current.badge(badgeValue), !badgeText.isEmpty {', 'native badge style')
     # A native still image is precoloured. Only a chosen colour makes it a template.
     s = edit(s, '            let iconTintColor = (component.isSelected', '            let aorusAppearance = AorusTabBarSettings.current.appearance(dark: component.theme.overallDarkAppearance)\n            let aorusHasCustomInk = (component.isSelected ? aorusAppearance.active : aorusAppearance.inactive) != nil\n            let iconTintColor = (component.isSelected', 'chosen tab icon colour')
-    s = edit(s, 'image: aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image),', 'image: aorusTabBarImage(aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image), customInk: aorusHasCustomInk),', 'static tab icon template')
-    s = edit(s, 'tintColor: aorusStillImage != nil ? iconTintColor : nil,', 'tintColor: aorusStillImage != nil || aorusHasCustomInk ? iconTintColor : nil,', 'custom native still icon ink')
+    # A template is tinted by the item itself (13.1.1), so a chosen colour only has to make one.
+    s = edit(s, 'let iconImage = aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image)\n', 'let iconImage = aorusTabBarImage(aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image), customInk: aorusHasCustomInk)\n', 'static tab icon template')
     path.write_text(s)
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
@@ -148,17 +148,18 @@ def patch_tab_settings(tg: Path) -> None:
         callListController.tabBarItem.aorusTabIdentifier = "calls"
         chatListController.tabBarItem.aorusTabIdentifier = "chats"
         accountSettingsController.tabBarItem.aorusTabIdentifier = "settings"
+        newsController.tabBarItem.aorusTabIdentifier = "news"
         aorusWallController?.tabBarItem.aorusTabIdentifier = "wall"
         controllers = self.aorusOrderTabs(controllers)
                 ''', 'initial stable tab identities')
         s = edit(s, '        self.rootTabController = tabBarController', '''        self.rootTabController = tabBarController
         self.aorusTabSettingsObserver = NotificationCenter.default.addObserver(forName: AorusTabBarSettings.changedNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self, self.aorusAppliedTabOrder != AorusTabBarSettings.current.order else { return }
-            self.updateRootControllers(showCallsTab: self.aorusShowCallsTab)
+            self.updateRootControllers(showCallsTab: self.aorusShowCallsTab, showNewsTab: self.aorusShowNewsTab)
         }''', 'root tab settings observer')
-        s = edit(s, '        // A plugin tab that has just left the bar may be the one that was open:', '''        self.aorusWallController?.tabBarItem.aorusTabIdentifier = "wall"
+        s = edit(s, '        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.', '''        self.aorusWallController?.tabBarItem.aorusTabIdentifier = "wall"
         controllers = self.aorusOrderTabs(controllers)
-        // A plugin tab that has just left the bar may be the one that was open:''', 'live stable tab ordering')
+        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.''', 'live stable tab ordering')
     path.write_text(s)
     path = tg / 'submodules/TelegramUI/Sources/AppDelegate.swift'
     s = edit(path.read_text(), '        aorusInstallBubbleSettings()', '        aorusInstallBubbleSettings()\n        aorusInstallTabSettings()', 'tab settings registration')

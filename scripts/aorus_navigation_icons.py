@@ -13,56 +13,62 @@ def patch_navigation_icons(tg: Path) -> None:
         ("public func navigationBarBackArrowImage(color: UIColor) -> UIImage? {", "public func navigationBarBackArrowImage(color: UIColor) -> UIImage? {\n    let revision = AorusPluginIconValues.revision\n    if aorusBackArrowRevision != revision {\n        aorusBackArrowRevision = revision\n        backArrowImageCache.removeAll()\n    }"),
     ])
 
-    buttons = "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationButtonNode.swift"
-    edit(tg, buttons, "var aorusGlassBackArrowImage", [
-        ("let glassCloseImage: UIImage? = {", '''var aorusGlassBackArrowImage: UIImage? {
+    # The glass bar (13.1.1) draws its arrow in NavigationBarComponent's back button. The arrow
+    # is drawn there whenever the colour or the kind changes; it is drawn again when a plugin
+    # changes the icons, and the bar lays itself out again when they say so.
+    images = "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarGlassImages.swift"
+    edit(tg, images, "public var aorusGlassBackArrowImage", [
+        ("public let glassCloseImage: UIImage? = {", '''public var aorusGlassBackArrowImage: UIImage? {
     return AorusPluginIconValues.own(glassBackArrowImage, named: "Telegram/Navigation/GlassBack")
 }
 
-let glassCloseImage: UIImage? = {'''),
-        ("                iconImage = glassBackArrowImage", "                iconImage = aorusGlassBackArrowImage"),
-        ("    let color: UIColor\n    let content: Content", "    private let aorusIconRevision: Int\n    let color: UIColor\n    let content: Content"),
-        ("        self.content = content", "        self.content = content\n        self.aorusIconRevision = AorusPluginIconValues.revision"),
-        ("        if lhs.color != rhs.color {", "        if lhs.aorusIconRevision != rhs.aorusIconRevision { return false }\n        if lhs.color != rhs.color {"),
-        ("        private var iconView: UIImageView?", "        private var aorusIconObserver: NSObjectProtocol?\n        private var iconView: UIImageView?"),
-        ("            super.init(frame: frame)", '''            super.init(frame: frame)
-            self.aorusIconObserver = NotificationCenter.default.addObserver(forName: AorusPluginIconValues.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
-                DispatchQueue.main.async { [weak self] in self?.state?.updated(transition: .immediate) }
-            }'''),
-        ("        required init?(coder: NSCoder) {", '''        deinit {
-            if let observer = self.aorusIconObserver { NotificationCenter.default.removeObserver(observer) }
-        }
-
-        required init?(coder: NSCoder) {'''),
-        ("                iconView.image = iconImage", "                iconView.layer.minificationFilter = .nearest\n                iconView.layer.magnificationFilter = .nearest\n                iconView.image = iconImage"),
+public let glassCloseImage: UIImage? = {'''),
     ])
-
-    bar = "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationBarImpl.swift"
-    source = (tg / bar).read_text()
-    # Both initial construction and theme changes draw the glass arrow from its native
-    # source. A global let must never hold the first style selected at app launch.
-    source = source.replace("generateTintedImage(image: glassBackArrowImage,", "generateTintedImage(image: aorusGlassBackArrowImage,")
-    (tg / bar).write_text(source)
+    back = "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarBackButtonView.swift"
+    edit(tg, back, "private var aorusIconRevision", [
+        ("    private var currentKind: Kind?\n", "    private var currentKind: Kind?\n    private var aorusIconRevision = -1\n"),
+        ("        self.button.addSubview(self.arrowView)\n", "        self.button.addSubview(self.arrowView)\n        self.arrowView.layer.minificationFilter = .nearest\n        self.arrowView.layer.magnificationFilter = .nearest\n"),
+        ("        if self.currentColor != theme.buttonColor || self.currentKind != kind {\n            self.currentColor = theme.buttonColor\n            self.currentKind = kind\n",
+         "        if self.currentColor != theme.buttonColor || self.currentKind != kind || self.aorusIconRevision != AorusPluginIconValues.revision {\n            self.currentColor = theme.buttonColor\n            self.currentKind = kind\n            self.aorusIconRevision = AorusPluginIconValues.revision\n"),
+        ('''                let imageSize = CGSize(width: 44.0, height: 44.0)
+                let topRightPoint = CGPoint(x: 24.6, y: 14.0)
+                let centerPoint = CGPoint(x: 17.0, y: imageSize.height * 0.5)
+                self.arrowView.image = generateImage(imageSize, rotatedContext: { size, context in
+                    context.clear(CGRect(origin: CGPoint(), size: size))
+                    context.setStrokeColor(UIColor.white.cgColor)
+                    context.setLineWidth(2.0)
+                    context.setLineCap(.round)
+                    context.setLineJoin(.round)
+                    context.move(to: topRightPoint)
+                    context.addLine(to: centerPoint)
+                    context.addLine(to: CGPoint(x: topRightPoint.x, y: size.height - topRightPoint.y))
+                    context.strokePath()
+                })?.withRenderingMode(.alwaysTemplate)
+''', "                // The same 44-point template glassBackArrowImage draws, styled at the point of use.\n                self.arrowView.image = aorusGlassBackArrowImage\n"),
+    ])
+    bar = "submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarNode.swift"
     edit(tg, bar, "private var aorusNavigationIconObserver", [
-        ("    public init(presentationData: NavigationBarPresentationData) {", "    private var aorusNavigationIconObserver: NSObjectProtocol?\n\n    deinit {\n        if let observer = self.aorusNavigationIconObserver { NotificationCenter.default.removeObserver(observer) }\n    }\n\n    public init(presentationData: NavigationBarPresentationData) {"),
-        ("        super.init()", '''        super.init()
+        ("    public init(presentationData: NavigationBarPresentationData) {\n", "    private var aorusNavigationIconObserver: NSObjectProtocol?\n\n    deinit {\n        if let observer = self.aorusNavigationIconObserver { NotificationCenter.default.removeObserver(observer) }\n    }\n\n    public init(presentationData: NavigationBarPresentationData) {\n"),
+        ("        self.backgroundColor = nil\n        self.isOpaque = false\n    }\n", '''        self.backgroundColor = nil
+        self.isOpaque = false
 
-        self.backButtonArrow.layer.minificationFilter = .nearest
-        self.backButtonArrow.layer.magnificationFilter = .nearest
         self.aorusNavigationIconObserver = NotificationCenter.default.addObserver(forName: AorusPluginIconValues.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.backButtonArrow.image = self.presentationData.theme.style == .glass ? generateTintedImage(image: aorusGlassBackArrowImage, color: self.presentationData.theme.buttonColor) : navigationBarBackArrowImage(color: self.presentationData.theme.buttonColor)
-                self.updateLeftButton(animated: false)
-                self.requestLayout()
+                self?.requestLayout()
             }
-        }'''),
+        }
+    }
+'''),
     ])
 
-    peer = "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift"
+    # The profile's bar items are made from cached images (13.1.1); a new icon revision makes
+    # new images, and so new items.
+    peer = "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     edit(tg, peer, "private var aorusNavigationIconRevision", [
-        ("        if self.key != key {", "        if self.key != key || self.aorusNavigationIconRevision != AorusPluginIconValues.revision {\n            self.aorusNavigationIconRevision = AorusPluginIconValues.revision"),
-        ("    func update(key: PeerInfoHeaderNavigationButtonKey,", "    private var aorusNavigationIconRevision = -1\n\n    func update(key: PeerInfoHeaderNavigationButtonKey,"),
+        ("    private func navigationItemResources() -> PeerInfoNavigationItemResources {\n", "    private var aorusNavigationIconRevision = -1\n\n    private func navigationItemResources() -> PeerInfoNavigationItemResources {\n"),
+        ("        if let cached = self.cachedNavigationItemResources, cached.theme === theme, cached.strings === strings {\n",
+         "        if let cached = self.cachedNavigationItemResources, cached.theme === theme, cached.strings === strings, self.aorusNavigationIconRevision == AorusPluginIconValues.revision {\n"),
+        ("        self.cachedNavigationItemResources = (theme, strings, resources)\n", "        self.cachedNavigationItemResources = (theme, strings, resources)\n        self.aorusNavigationIconRevision = AorusPluginIconValues.revision\n"),
     ])
 
     peer_screen = "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
@@ -112,10 +118,10 @@ let glassCloseImage: UIImage? = {'''),
 def verify_navigation_icons(tg: Path) -> list[str]:
     expected = {
         "submodules/Display/Source/NavigationBar.swift": ["aorusBackArrowRevision != revision", 'named: "Telegram/Navigation/Back"', "backArrowImageCache.removeAll()"],
-        "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationButtonNode.swift": ["var aorusGlassBackArrowImage", 'named: "Telegram/Navigation/GlassBack"', "iconImage = aorusGlassBackArrowImage", "lhs.aorusIconRevision != rhs.aorusIconRevision", "self?.state?.updated", "removeObserver(observer)"],
-        "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationBarImpl.swift": ["private var aorusNavigationIconObserver", "generateTintedImage(image: aorusGlassBackArrowImage,", "self.updateLeftButton(animated: false)", "removeObserver(observer)"],
-        "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift": ["self.aorusNavigationIconRevision != AorusPluginIconValues.revision"],
-        "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift": ["AorusPhoneSpoofStore.changedNotification, AorusPluginIconValues.didChangeNotification"],
+        "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarGlassImages.swift": ["public var aorusGlassBackArrowImage", 'named: "Telegram/Navigation/GlassBack"'],
+        "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarBackButtonView.swift": ["self.aorusIconRevision != AorusPluginIconValues.revision", "self.arrowView.image = aorusGlassBackArrowImage", "self.arrowView.layer.magnificationFilter = .nearest"],
+        "submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarNode.swift": ["private var aorusNavigationIconObserver", "self?.requestLayout()", "removeObserver(observer)"],
+        "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift": ["self.aorusNavigationIconRevision == AorusPluginIconValues.revision", "self.aorusNavigationIconRevision = AorusPluginIconValues.revision", "AorusPhoneSpoofStore.changedNotification, AorusPluginIconValues.didChangeNotification"],
         "submodules/TelegramUI/Components/BackButtonComponent/Sources/BackButtonComponent.swift": ["private var aorusBackIconObserver", "self?.arrowView.image = navigationBarBackArrowImage", "removeObserver(observer)"],
         "submodules/InstantPageUI/Sources/InstantPageNavigationBar.swift": ["private var backArrowImage: UIImage? { navigationBarBackArrowImage"],
         "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift": ["private var aorusDictationIconObserver", "self?.requestLayout()", "removeObserver(observer)", "aorusVoiceButton.icon.layer.magnificationFilter = .nearest", 'aorusVoiceButton.icon.image = AorusPluginIconValues.symbol("waveform",'],
@@ -142,7 +148,7 @@ def navigation_test_source(tg: Path) -> str:
         raise RuntimeError("\n".join(errors))
     navigation = (tg / "submodules/Display/Source/NavigationBar.swift").read_text()
     generated = (tg / "submodules/Display/Source/GenerateImage.swift").read_text()
-    buttons = (tg / "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationButtonNode.swift").read_text()
+    buttons = (tg / "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarGlassImages.swift").read_text()
     panel = (tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift").read_text()
     assignment_start = panel.index("            aorusVoiceButton.icon.layer.minificationFilter")
     assignment_end = panel.index("            let aorusVoiceButtonSize", assignment_start)

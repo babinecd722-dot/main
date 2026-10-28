@@ -5,13 +5,22 @@ import ContextUI
 import TelegramPresentationData
 import ManagedAnimationNode
 import Display
+import PeerInfoPaneNode
 
 // AorusGram: old interface. The buttons on a profile's header as Telegram 12.0 drew them —
 // "Back" with its arrow and plain text buttons in the accent colour, on a small blurred disc
 // only over a coloured header or an open photo — laid out by 12.0's own container. This is
 // 12.0's PeerInfoHeaderNavigationButton and PeerInfoHeaderNavigationButtonContainerNode,
-// which 12.9.2 replaced with glass capsules; PeerInfoHeaderNavigationButtonContainerNode
-// hands its work to the container here while the old interface is on.
+// which 12.9.2 replaced with glass capsules and 13.1.1 with the bar's items; while the old
+// interface is on, the profile's header holds the container here and the bar stays empty
+// (aorus_old_interface.py).
+
+/// A button the header shows, and whether it belongs to the set of the pane that fills the screen
+/// (which fades in over the normal set as the pane expands).
+struct PeerInfoHeaderNavigationButtonSpec: Equatable {
+    let key: PeerInfoHeaderNavigationButtonKey
+    let isForExpandedView: Bool
+}
 
 private enum AorusClassicMoreIconNodeState: Equatable {
     case more

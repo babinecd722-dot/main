@@ -944,7 +944,8 @@
       "path": "submodules/TelegramUI/Sources/ChatPinnedMessageTitlePanelNode.swift",
       "old": "        let contentLeftInset: CGFloat = leftInset + 10.0",
       "new": "        let contentLeftInset: CGFloat = leftInset + 18.0",
-      "replacement": "        let contentLeftInset: CGFloat = AorusOldInterface.isEnabled ? leftInset + 10.0 : leftInset + 18.0"
+      "replacement": "        let contentLeftInset: CGFloat = AorusOldInterface.isEnabled ? leftInset + 10.0 : leftInset + 18.0",
+      "count": 2
     },
     {
       "path": "submodules/TelegramUI/Sources/ChatManagingBotTitlePanelNode.swift",
@@ -1165,8 +1166,8 @@
     {
       "path": "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift",
       "old": "            let sideInset: CGFloat = 8.0 + leftInset",
-      "new": "            let sideInset: CGFloat = 16.0 + leftInset",
-      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 8.0 + leftInset : 16.0 + leftInset"
+      "new": "            let sideInset: CGFloat = 16.0 + captionInsets.left",
+      "replacement": "            let sideInset: CGFloat = AorusOldInterface.isEnabled ? 8.0 + captionInsets.left : 16.0 + captionInsets.left"
     },
     {
       "path": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
@@ -1213,26 +1214,26 @@
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                        var nextButtonX = availableSize.width - topControlInset - rightMostButtonWidth / 2.0 - 58.0",
-      "new": "                        var nextButtonX = availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 100.0",
-      "replacement": "                        var nextButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 58.0 : availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 100.0"
+      "new": "                        var nextButtonX = availableSize.width - topControlRightInset - rightMostButtonWidth / 2.0 - 100.0",
+      "replacement": "                        var nextButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlRightInset - rightMostButtonWidth / 2.0 - 58.0 : availableSize.width - topControlRightInset - rightMostButtonWidth / 2.0 - 100.0"
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlInset - flashButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlInset) + flashButton.size.height / 2.0)",
-      "new": "                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 50.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0)",
-      "replacement": "                        let position = AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0) : CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 50.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0)"
+      "new": "                        let position = CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 50.0, y: topRowTop + flashButton.size.height / 2.0)",
+      "replacement": "                        let position = AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 5.0, y: topRowTop + flashButton.size.height / 2.0) : CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 50.0, y: topRowTop + flashButton.size.height / 2.0)"
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                            collageButtonX = availableSize.width - topControlInset - collageButton.size.width / 2.0 - 5.0",
-      "new": "                                collageButtonX = availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 54.0",
-      "replacement": "                                collageButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 5.0 : availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 54.0"
+      "new": "                                collageButtonX = availableSize.width - topControlRightInset - collageButton.size.width / 2.0 - 54.0",
+      "replacement": "                                collageButtonX = AorusOldInterface.isEnabled ? availableSize.width - topControlRightInset - collageButton.size.width / 2.0 - 5.0 : availableSize.width - topControlRightInset - collageButton.size.width / 2.0 - 54.0"
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : topControlInset + cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlInset) + cancelButton.size.height / 2.0))",
-      "new": "                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0))",
-      "replacement": "                        .position(AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? smallPanelWidth / 2.0 : topControlSideInset + cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0) : CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0))"
+      "new": "                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - cancelButton.size.width / 2.0, y: topRowTop + cancelButton.size.height / 2.0))",
+      "replacement": "                        .position(AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? smallPanelWidth / 2.0 : topControlSideInset + cancelButton.size.width / 2.0, y: topRowTop + cancelButton.size.height / 2.0) : CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - cancelButton.size.width / 2.0, y: topRowTop + cancelButton.size.height / 2.0))"
     }
   ]
 }

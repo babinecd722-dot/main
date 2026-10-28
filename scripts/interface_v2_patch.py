@@ -659,7 +659,7 @@ def _patch_profile_section_glass(tg: Path) -> None:
 
 
 _EDITING_FIELD_UPDATE_ANCHOR = (
-    "    func update(width: CGFloat, safeInset: CGFloat, isSettings: Bool, hasPrevious: Bool,"
+    "    func update(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, isSettings: Bool, hasPrevious: Bool,"
     " hasNext: Bool, placeholder: String, isEnabled: Bool, presentationData: PresentationData,"
     " updateText: String?) -> CGFloat {\n"
 )
@@ -669,10 +669,11 @@ def _inset_editing_field(path: Path, label: str) -> None:
     """Move one editing text field in by the block inset when Interface 2.0 is on.
 
     Every frame in these nodes -- the fill, the text, the top separator, the clear button, the
-    corner mask -- is laid out from `safeInset`, and `safeInset` is the horizontal safe area, which
-    is zero in portrait. That is why the field is a full-width rectangle there. Widening the inset
-    at the top of `update` moves all of those together, which is the whole reason to do it here
-    rather than at each frame: there is one number to keep in step with the pane behind them.
+    corner mask -- is laid out from `leftInset` and `rightInset`, the horizontal safe area (and,
+    from 13.1, a side strip), which are zero in portrait. That is why the field is a full-width
+    rectangle there. Widening both at the top of `update` moves all of those together, which is
+    the whole reason to do it here rather than at each frame: there is one number to keep in
+    step with the pane behind them.
     """
     text = _read(path, path.name)
     if "AorusGlassPane.blockSideInset" in text:
@@ -686,7 +687,8 @@ def _inset_editing_field(path: Path, label: str) -> None:
         "        // page instead of a band across it. The pane of glass behind them is inset by\n"
         "        // AorusGlassPane.blockSideInset, so the row is inset by the same amount -- one\n"
         "        // shared constant, because a pane and its rows disagreeing by a point shows.\n"
-        "        let safeInset = AorusGlassPane.isEnabled ? safeInset + AorusGlassPane.blockSideInset : safeInset\n",
+        "        let leftInset = AorusGlassPane.isEnabled ? leftInset + AorusGlassPane.blockSideInset : leftInset\n"
+        "        let rightInset = AorusGlassPane.isEnabled ? rightInset + AorusGlassPane.blockSideInset : rightInset\n",
         f"editing {label} field inset",
     )
     path.write_text(text, encoding="utf-8")
@@ -1158,46 +1160,47 @@ def _patch_header_centering(tg: Path) -> None:
         "        let usernameFrame: CGRect\n",
         "centred header flag",
     )
-    # titleFrame is derived from minTitleFrame.midX, so centring that frame centres the title.
+    # titleFrame is derived from minTitleFrame.midX, so centring that frame centres the title. 13.1
+    # lays the header out in the band between the side strips (iPhone Duo); the collapsed state
+    # centres with bandCenteredOrigin there, and the expanded one does the same here.
     text = _replace_once(
         text,
-        "            var minTitleFrame = CGRect(origin: CGPoint(x: 16.0, y: expandedAvatarHeight - bottomInset - 58.0 - UIScreenPixel + (subtitleSize.height.isZero ? 10.0 : 0.0)), size: minTitleSize)\n",
-        "            let aorusMinTitleX: CGFloat = aorusCentredHeader ? floorToScreenPixels((width - minTitleSize.width) / 2.0) : 16.0\n"
+        "            var minTitleFrame = CGRect(origin: CGPoint(x: 16.0 + stripLeft, y: expandedAvatarHeight - bottomInset - 58.0 - UIScreenPixel + (subtitleSize.height.isZero ? 10.0 : 0.0)), size: minTitleSize)\n",
+        "            let aorusMinTitleX: CGFloat = aorusCentredHeader ? (hasStrip ? bandCenteredOrigin(width: minTitleSize.width, margin: 16.0) : floorToScreenPixels((width - minTitleSize.width) / 2.0)) : 16.0 + stripLeft\n"
         "            var minTitleFrame = CGRect(origin: CGPoint(x: aorusMinTitleX, y: expandedAvatarHeight - bottomInset - 58.0 - UIScreenPixel + (subtitleSize.height.isZero ? 10.0 : 0.0)), size: minTitleSize)\n",
         "centred header title",
     )
-    if "let subtitleLeadingInset = self.isSettings ? subtitleRatingInset : 0.0" not in text:
-        text = _replace_once(
-            text,
-            "            subtitleFrame = CGRect(origin: CGPoint(x: 16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
-            "            if self.subtitleRating != nil {\n"
-            "                subtitleFrame.origin.x += 22.0\n"
-            "            }\n"
-            "            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n",
-            "            // A badge sits 8pt to the right of the status and a rating badge immediately\n"
-            "            // to its left, so what has to end up centred is the pair, not the words: the\n"
-            "            // status moves half a badge the other way for each. Stock moves a whole rating\n"
-            "            // badge because its status hangs off the left margin rather than the middle.\n"
-            "            var aorusCentredSubtitleWidth = subtitleSize.width\n"
-            "            if let subtitleBadgeSize {\n"
-            "                aorusCentredSubtitleWidth += subtitleBadgeSize.width + 8.0\n"
-            "            }\n"
-            "            let aorusSubtitleX: CGFloat = aorusCentredHeader\n"
-            "                ? floorToScreenPixels((width - aorusCentredSubtitleWidth) / 2.0)\n"
-            "                : (16.0 - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction))\n"
-            "            subtitleFrame = CGRect(origin: CGPoint(x: aorusSubtitleX, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
-            "            if self.subtitleRating != nil {\n"
-            "                subtitleFrame.origin.x += aorusCentredHeader ? 11.0 : 22.0\n"
-            "            }\n"
-            "            if aorusCentredHeader {\n"
-            "                // Under the status rather than opposite the name: at the edge it reads as a\n"
-            "                // second, unrelated label once the name is no longer beside it.\n"
-            "                usernameFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 2.0), size: usernameSize)\n"
-            "            } else {\n"
-            "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
-            "            }\n",
-            "centred header subtitle",
-        )
+    text = _replace_once(
+        text,
+        "            subtitleFrame = CGRect(origin: CGPoint(x: 16.0 + stripLeft - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction), y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
+        "            subtitleFrame.origin.x += subtitleRatingInset\n"
+        "            if let ratingView = self.subtitleRating?.view as? PeerInfoRatingComponent.View {\n"
+        "                subtitleFrame.origin.x -= ratingView.visibleLeftInset\n"
+        "            }\n"
+        "            usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0 - stripRight, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n",
+        "            // A badge sits beside the status and a rating badge before it, so what has to end up\n"
+        "            // centred is the run, not the words -- measured as the collapsed state measures it.\n"
+        "            var aorusCentredSubtitleWidth = subtitleRatingInset + subtitleSize.width\n"
+        "            if let subtitleBadgeSize {\n"
+        "                aorusCentredSubtitleWidth += subtitleBadgeSize.width + 7.0\n"
+        "            }\n"
+        "            let aorusSubtitleX: CGFloat = aorusCentredHeader\n"
+        "                ? (hasStrip ? bandCenteredOrigin(width: aorusCentredSubtitleWidth, margin: 16.0) : floorToScreenPixels((width - aorusCentredSubtitleWidth) / 2.0))\n"
+        "                : (16.0 + stripLeft - subtitleButtonHorizontalOffset * (1.0 - titleCollapseFraction))\n"
+        "            subtitleFrame = CGRect(origin: CGPoint(x: aorusSubtitleX, y: minTitleFrame.maxY + 2.0), size: subtitleSize)\n"
+        "            subtitleFrame.origin.x += subtitleRatingInset\n"
+        "            if let ratingView = self.subtitleRating?.view as? PeerInfoRatingComponent.View {\n"
+        "                subtitleFrame.origin.x -= ratingView.visibleLeftInset\n"
+        "            }\n"
+        "            if aorusCentredHeader {\n"
+        "                // Under the status rather than opposite the name: at the edge it reads as a\n"
+        "                // second, unrelated label once the name is no longer beside it.\n"
+        "                usernameFrame = CGRect(origin: CGPoint(x: hasStrip ? bandCenteredOrigin(width: usernameSize.width, margin: 16.0) : floorToScreenPixels((width - usernameSize.width) / 2.0), y: subtitleFrame.maxY + 2.0), size: usernameSize)\n"
+        "            } else {\n"
+        "                usernameFrame = CGRect(origin: CGPoint(x: width - usernameSize.width - 16.0 - stripRight, y: minTitleFrame.midY - usernameSize.height / 2.0), size: usernameSize)\n"
+        "            }\n",
+        "centred header subtitle",
+    )
 
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: centred the profile header")
@@ -2627,7 +2630,7 @@ def _patch_avatar_expansion(tg: Path) -> None:
     # titleFrame that only the collapsed branch computes.
     text = _replace_once(
         text,
-        "            titleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - titleSize.width) / 2.0), y: avatarFrame.maxY + 9.0 + (subtitleSize.height.isZero ? 11.0 : 0.0)), size: titleSize)\n"
+        "            titleFrame = CGRect(origin: CGPoint(x: hasStrip ? bandCenteredOrigin(width: titleSize.width, margin: textSideInset) : floorToScreenPixels((width - titleSize.width) / 2.0), y: avatarFrame.maxY + 9.0 + (subtitleSize.height.isZero ? 11.0 : 0.0)), size: titleSize)\n"
         "            \n"
         "            var titleCollapseOffset = titleFrame.midY - statusBarHeight - titleLockOffset\n"
         "            if case .regular = metrics.widthClass, !isSettings, !isMyProfile {\n"
@@ -2635,7 +2638,7 @@ def _patch_avatar_expansion(tg: Path) -> None:
         "            }\n"
         "            titleOffset = -min(titleCollapseOffset, contentOffset)\n"
         "            titleCollapseFraction = max(0.0, min(1.0, contentOffset / titleCollapseOffset))\n",
-        "            titleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((width - titleSize.width) / 2.0), y: avatarFrame.maxY + 9.0 + (subtitleSize.height.isZero ? 11.0 : 0.0)), size: titleSize)\n"
+        "            titleFrame = CGRect(origin: CGPoint(x: hasStrip ? bandCenteredOrigin(width: titleSize.width, margin: textSideInset) : floorToScreenPixels((width - titleSize.width) / 2.0), y: avatarFrame.maxY + 9.0 + (subtitleSize.height.isZero ? 11.0 : 0.0)), size: titleSize)\n"
         "            \n"
         "            var titleCollapseOffset = titleFrame.midY - statusBarHeight - titleLockOffset\n"
         "            if case .regular = metrics.widthClass, !isSettings, !isMyProfile {\n"
@@ -2671,27 +2674,27 @@ def _patch_avatar_expansion(tg: Path) -> None:
     # expanded one has a clipping node of its own to take the labels off screen.
     text = _replace_once(
         text,
-        "                    var usernameCenter = rawUsernameFrame.center\n"
-        "                    usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
-        "                    transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
-        "                }\n",
-        "                    var usernameCenter = rawUsernameFrame.center\n"
-        "                    usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
-        "                    transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
-        "                    if aorusScrollingHeader {\n"
-        "                        // AorusGram: each label fades out as it reaches the status bar. The\n"
-        "                        // photo has the clipping node above to take it behind the dynamic\n"
-        "                        // island; these three are siblings of it and would otherwise carry on\n"
-        "                        // over the clock. Recomputed every pass, so scrolling back brings\n"
-        "                        // them all the way back.\n"
-        "                        let aorusLabelAlpha: (CGRect) -> CGFloat = { frame in\n"
-        "                            return max(0.0, min(1.0, (frame.minY + titleOffset - statusBarHeight) / 20.0))\n"
-        "                        }\n"
-        "                        transition.updateAlpha(node: self.titleNodeContainer, alpha: aorusLabelAlpha(rawTitleFrame))\n"
-        "                        transition.updateAlpha(node: self.subtitleNodeContainer, alpha: aorusLabelAlpha(rawSubtitleFrame))\n"
-        "                        transition.updateAlpha(node: self.usernameNodeContainer, alpha: aorusLabelAlpha(rawUsernameFrame))\n"
+        "                var usernameCenter = rawUsernameFrame.center\n"
+        "                usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
+        "                transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
+        "            }\n",
+        "                var usernameCenter = rawUsernameFrame.center\n"
+        "                usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
+        "                transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
+        "                if aorusScrollingHeader {\n"
+        "                    // AorusGram: each label fades out as it reaches the status bar. The\n"
+        "                    // photo has the clipping node above to take it behind the dynamic\n"
+        "                    // island; these three are siblings of it and would otherwise carry on\n"
+        "                    // over the clock. Recomputed every pass, so scrolling back brings\n"
+        "                    // them all the way back.\n"
+        "                    let aorusLabelAlpha: (CGRect) -> CGFloat = { frame in\n"
+        "                        return max(0.0, min(1.0, (frame.minY + titleOffset - statusBarHeight) / 20.0))\n"
         "                    }\n"
-        "                }\n",
+        "                    transition.updateAlpha(node: self.titleNodeContainer, alpha: aorusLabelAlpha(rawTitleFrame))\n"
+        "                    transition.updateAlpha(node: self.subtitleNodeContainer, alpha: aorusLabelAlpha(rawSubtitleFrame))\n"
+        "                    transition.updateAlpha(node: self.usernameNodeContainer, alpha: aorusLabelAlpha(rawUsernameFrame))\n"
+        "                }\n"
+        "            }\n",
         "scrolling header label fade",
     )
     path.write_text(text, encoding="utf-8")
@@ -2818,7 +2821,6 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "            self.headerNode.ignoreCollapse = true\n"
         "            self.headerNode.updateIsAvatarExpanded(false, transition: .immediate)\n"
         "            self.headerNode.ignoreCollapse = false\n"
-        "            self.updateNavigationExpansionPresentation(isExpanded: false, animated: false)\n"
         "        }\n",
         "collapse without photo",
     )
@@ -2849,7 +2851,6 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "                    // reads as not editing, which is what the shared test needs.\n"
         "                    if !strongSelf.headerNode.isAvatarExpanded, strongSelf.aorusKeepsAvatarExpandedNow {\n"
         "                        strongSelf.headerNode.updateIsAvatarExpanded(true, transition: .immediate)\n"
-        "                        strongSelf.updateNavigationExpansionPresentation(isExpanded: true, animated: false)\n"
         "                    }\n"
         "                    if let (layout, navigationHeight) = strongSelf.validLayout {\n",
         "re-expand avatar after editing",
@@ -2858,7 +2859,6 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         text,
         "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height {\n"
         "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
-        "            self.updateNavigationExpansionPresentation(isExpanded: false, animated: true)\n"
         "        }\n",
         "        // AorusGram: Interface 2.0 keeps the photo open on a wide screen too, at the\n"
         "        // height the header gives it there. Telegram's collapse for landscape turned the\n"
@@ -2868,7 +2868,6 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "        // expanded the header behind the reader's back, leaving it in pieces on return.\n"
         "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {\n"
         "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
-        "            self.updateNavigationExpansionPresentation(isExpanded: false, animated: true)\n"
         "        } else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
         "            // AorusGram: Interface 2.0 has no small-photo profile. Asked on every layout,\n"
         "            // which makes it the rule rather than one more exception: whatever collapsed\n"
@@ -2876,7 +2875,6 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "            // small header. A photo deleted from the gallery leaves the list empty until\n"
         "            // the peer catches up, and an empty list has nothing to hold open.\n"
         "            self.headerNode.updateIsAvatarExpanded(true, transition: transition)\n"
-        "            self.updateNavigationExpansionPresentation(isExpanded: true, animated: transition.isAnimated)\n"
         "        }\n",
         "restore avatar expansion on layout",
     )
@@ -3105,13 +3103,15 @@ def _patch_menus_on_screen(tg: Path) -> None:
     if "aorusKeepsActionsOnScreen" not in text:
         text = _replace_once(
             text,
-            "            } else if case let .reference(reference) = self.source, let transitionInfo = reference.transitionInfo() ?? self.liquidMorphReferenceInfo, let customPosition = transitionInfo.customPosition {\n"
-            "                actionsFrame = actionsFrame.offsetBy(dx: customPosition.x, dy: customPosition.y)\n"
+            "                if stripLeft > 0.0, actionsFrame.minX < stripLeft + actionsEdgeInset {\n"
+            "                    actionsFrame.origin.x = stripLeft + actionsEdgeInset\n"
+            "                }\n"
             "            }\n"
             "            \n"
             "            var additionalActionsFrame: CGRect\n",
-            "            } else if case let .reference(reference) = self.source, let transitionInfo = reference.transitionInfo() ?? self.liquidMorphReferenceInfo, let customPosition = transitionInfo.customPosition {\n"
-            "                actionsFrame = actionsFrame.offsetBy(dx: customPosition.x, dy: customPosition.y)\n"
+            "                if stripLeft > 0.0, actionsFrame.minX < stripLeft + actionsEdgeInset {\n"
+            "                    actionsFrame.origin.x = stripLeft + actionsEdgeInset\n"
+            "                }\n"
             "            }\n"
             "            // AorusGram: a menu whose source asks to stay on screen slides up over the\n"
             "            // source until its end is on screen, as a system menu does, instead of the\n"
@@ -3593,10 +3593,10 @@ def _patch_item_list_glass(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "        self.leftOverlayNode.frame = CGRect(x: 0.0, y: 0.0, width: insets.left, height: layout.size.height)\n",
-        "        // AorusGram: the panes are cut to the same gutter the overlays cover.\n"
-        "        self.aorusListInsets = insets\n"
-        "        self.leftOverlayNode.frame = CGRect(x: 0.0, y: 0.0, width: insets.left, height: layout.size.height)\n",
+        "    private func updateMarginOverlays(layout: ContainerViewLayout, listInsets: UIEdgeInsets) {\n",
+        "    private func updateMarginOverlays(layout: ContainerViewLayout, listInsets: UIEdgeInsets) {\n"
+        "        // AorusGram: the panes are cut to the same gutter the block overlays cover.\n"
+        "        self.aorusListInsets = listInsets\n",
         "list glass insets capture",
     )
     text = _replace_once(
@@ -3615,53 +3615,35 @@ def _patch_item_list_glass(tg: Path) -> None:
 
 
 def _patch_nav_button_glass(tg: Path) -> None:
-    """Take the peer's colour out of the glass behind the navigation buttons.
+    """Take the peer's colour out of the glass behind the profile's navigation buttons.
 
-    Telegram already draws these two on the system material -- the back chevron and the Edit
-    label over the photo are glass in stock 12.9 -- but over a coloured header it tints that
-    material with the colour it sampled from the photo. Interface 2.0 asks for the material and
-    nothing else, so the tint goes clear and everything else about the container is left alone.
+    The profile's buttons are the bar's own capsules (13.1.1), and the profile chooses their
+    glass: plain over the page, tinted with the colour sampled from the photo over a coloured
+    header. Interface 2.0 asks for the material and nothing else -- clear glass, dark over the
+    photo with white glyphs, the page's side otherwise -- so the back chevron and Edit read as
+    glass rather than as tinted discs, and every button on the bar, a pane's search included,
+    takes the same white over the photo.
     """
-    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButtonContainerNode.swift"
-    text = _read(path, "PeerInfoHeaderNavigationButtonContainerNode.swift")
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/Sources/PeerInfoNavigationButtons.swift"
+    text = _read(path, "PeerInfoNavigationButtons.swift")
     if "aorusPlainNavGlass" in text:
         print("InterfaceV2: navigation button glass already untinted")
         return
     text = _replace_once(
         text,
-        "        let tintColor: GlassBackgroundView.TintColor\n"
-        "        let tintIsDark: Bool\n"
-        "        if self.isOverColoredContents {\n",
-        "        let tintColor: GlassBackgroundView.TintColor\n"
-        "        let tintIsDark: Bool\n"
-        "        // AorusGram: plain material under Interface 2.0. The sampled colour is what makes\n"
-        "        // the back button read as a tinted disc instead of glass, and the panel variant\n"
-        "        // brings a rim with it.\n"
-        "        let aorusPlainNavGlass = AorusInterfaceV2Run.isEnabled\n"
-        "        if aorusPlainNavGlass {\n"
-        "            tintColor = .init(kind: .clear)\n"
-        "            tintIsDark = self.isOverColoredContents ? true : presentationData.theme.overallDarkAppearance\n"
-        "        } else if self.isOverColoredContents {\n",
+        "public func peerInfoNavigationBarTheme(glass: PeerInfoNavigationGlass, base: NavigationBarTheme) -> NavigationBarTheme {\n",
+        "public func peerInfoNavigationBarTheme(glass: PeerInfoNavigationGlass, base: NavigationBarTheme) -> NavigationBarTheme {\n"
+        "    // AorusGram: plain material under Interface 2.0. The sampled colour is what makes the\n"
+        "    // back button read as a tinted disc instead of glass, and the panel variant brings a rim.\n"
+        "    let aorusPlainNavGlass = AorusInterfaceV2Run.isEnabled\n"
+        "    if aorusPlainNavGlass {\n"
+        "        var isOverColoredContents = false\n"
+        "        if case .tinted = glass {\n"
+        "            isOverColoredContents = true\n"
+        "        }\n"
+        "        return NavigationBarTheme(overallDarkAppearance: isOverColoredContents ? true : base.overallDarkAppearance, buttonColor: isOverColoredContents ? .white : base.buttonColor, disabledButtonColor: base.disabledButtonColor, primaryTextColor: base.primaryTextColor, badgeBackgroundColor: base.badgeBackgroundColor, badgeTextColor: base.badgeTextColor, edgeEffectColor: .clear, accentButtonColor: base.accentButtonColor, accentDisabledButtonColor: base.accentDisabledButtonColor, accentForegroundColor: base.accentForegroundColor, glassStyle: .clear, glassTintColor: nil)\n"
+        "    }\n",
         "navigation button glass tint",
-    )
-    # The buttons a pane brings when it is pinned -- search in files and links, the members'
-    # search -- are drawn in the bar's control colour, which is black in the light theme, while
-    # every other button on the same dark glass over the photo or the page is white.
-    expanded_use = "spec.isForExpandedView ? expandedButtonContentsColor : normalButtonContentsColor"
-    if text.count(expanded_use) != 5:
-        raise RuntimeError("InterfaceV2: missing navigation button colour uses anchor")
-    text = text.replace(expanded_use, "spec.isForExpandedView ? self.aorusExpandedButtonContentsColor(expandedButtonContentsColor) : normalButtonContentsColor")
-    text = _replace_once(
-        text,
-        "    func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, isOverColoredContents: Bool, transition: ContainedViewLayoutTransition) {\n",
-        "    // AorusGram: under Interface 2.0 the glass behind every button is dark while the\n"
-        "    // buttons are over the photo or its page, so a pane's own buttons are white there too.\n"
-        "    private func aorusExpandedButtonContentsColor(_ color: UIColor) -> UIColor {\n"
-        "        return AorusInterfaceV2Run.isEnabled && self.isOverColoredContents ? .white : color\n"
-        "    }\n"
-        "    \n"
-        "    func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, isOverColoredContents: Bool, transition: ContainedViewLayoutTransition) {\n",
-        "pane button colour",
     )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: untinted the navigation button glass")
@@ -5792,9 +5774,9 @@ def _patch_static_avatar(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "        if deviceMetrics.hasDynamicIsland && statusBarHeight > 0.0 && self.forumTopicThreadId == nil && self.navigationTransition == nil && !isLandscape {\n"
+        "        if deviceMetrics.hasDynamicIsland && statusBarHeight > 0.0 && self.forumTopicThreadId == nil && !isLandscape {\n"
         "            let maskValue = max(0.0, min(1.0, contentOffset / 120.0))\n",
-        "        if !aorusStaticAvatar && deviceMetrics.hasDynamicIsland && statusBarHeight > 0.0 && self.forumTopicThreadId == nil && self.navigationTransition == nil && !isLandscape {\n"
+        "        if !aorusStaticAvatar && deviceMetrics.hasDynamicIsland && statusBarHeight > 0.0 && self.forumTopicThreadId == nil && !isLandscape {\n"
         "            let maskValue = max(0.0, min(1.0, contentOffset / 120.0))\n",
         "static avatar island mask",
     )
@@ -6083,10 +6065,12 @@ def _patch_compact_music(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "            musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? .white : presentationData.theme.list.itemAccentColor))\n"
-        "            musicString.append(NSAttributedString(string: \" - \\(artist)\", font: Font.regular(12.0), textColor: isOverlay ? UIColor.white.withAlphaComponent(0.7) : presentationData.theme.list.itemSecondaryTextColor))\n",
-        "            musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? aorusOverlayInk : presentationData.theme.list.itemAccentColor))\n"
-        "            musicString.append(NSAttributedString(string: \" - \\(artist)\", font: Font.regular(12.0), textColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : presentationData.theme.list.itemSecondaryTextColor))\n",
+        "                musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? .white : presentationData.theme.list.itemAccentColor))\n"
+        "                let artistSeparatorIndex = musicString.length\n"
+        "                musicString.append(NSAttributedString(string: \" \\(artist)\", font: Font.regular(12.0), textColor: stripSecondaryColor))\n",
+        "                musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? aorusOverlayInk : presentationData.theme.list.itemAccentColor))\n"
+        "                let artistSeparatorIndex = musicString.length\n"
+        "                musicString.append(NSAttributedString(string: \" \\(artist)\", font: Font.regular(12.0), textColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
         "compact music font",
     )
     # The two glyphs in the pill, for the same reason as its text: white on a pale page is a hole
@@ -6099,8 +6083,8 @@ def _patch_compact_music(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "                                    component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: isOverlay ? .white : presentationData.theme.list.itemSecondaryTextColor))\n",
-        "                                    component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : presentationData.theme.list.itemSecondaryTextColor))\n",
+        "                                        component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: stripSecondaryColor))\n",
+        "                                        component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
         "compact music arrow",
     )
     # The pill's padding is written by the music-capsule pass, one script earlier. Pinned rather
@@ -6135,11 +6119,11 @@ def _patch_compact_music(tg: Path) -> None:
     # anchors on its line.
     text = _replace_once(
         text,
-        "            let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0)), size: musicSize)\n",
-        "            let aorusMusicPillHeight = musicSize.height + 6.0\n"
-        "            let aorusMusicPillTop = aorusButtonsBottom + max(4.0, floor((backgroundHeight - aorusButtonsBottom - aorusMusicPillHeight) / 2.0))\n"
-        "            let aorusMusicY: CGFloat = aorusCompactMusic ? (aorusMusicPillTop + 3.0) : (backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0))\n"
-        "            let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + aorusMusicY), size: musicSize)\n",
+        "                let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0) + 1.0 - UIScreenPixel), size: musicSize)\n",
+        "                let aorusMusicPillHeight = musicSize.height + 6.0\n"
+        "                let aorusMusicPillTop = aorusButtonsBottom + max(4.0, floor((backgroundHeight - aorusButtonsBottom - aorusMusicPillHeight) / 2.0))\n"
+        "                let aorusMusicY: CGFloat = aorusCompactMusic ? (aorusMusicPillTop + 3.0) : (backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0) + 1.0 - UIScreenPixel)\n"
+        "                let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + aorusMusicY), size: musicSize)\n",
         "compact music placement",
     )
     path.write_text(text, encoding="utf-8")
@@ -6600,9 +6584,13 @@ def _patch_chat_nav_glass(tg: Path) -> None:
 
     The right-hand pane is shared with every text button in the app -- Edit, Done, Cancel, Select --
     and those keep theirs, because a bare word floating in a navigation bar has nothing to say it is
-    a button. `singleCustomNode` is exactly that distinction: it is non-nil only for a bar item built
-    from a display node of its own, which the avatar and the ghost badge are and a title button is
-    not.
+    a button. A lone `.node` button is exactly that distinction: a bar item built from a display node
+    of its own, which the avatar and the ghost badge are and a title button is not.
+
+    Telegram 13.1.1 draws the bar's glass in NavigationBarComponent and hands it to the navigation
+    transition, which morphs each right pill into the other bar's. A pill without glass takes no
+    part in that: the avatar stays in its bar and rides its screen, as the name beside it does,
+    instead of being drawn in a capsule for the length of the push and losing it at the end.
 
     The title pane is written twice over, because there are two title views. `ChatTitleView` is the
     older one and still carries a `backgroundView` of its own; the one a chat actually installs is
@@ -6655,29 +6643,106 @@ def _patch_chat_nav_glass(tg: Path) -> None:
         component.write_text(text, encoding="utf-8")
         print("InterfaceV2: dropped the chat title pill")
 
-    bar = tg / "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationBarImpl.swift"
-    text = _read(bar, "NavigationBarImpl.swift")
-    if "aorusHidesCustomButtonGlass" in text:
+    sources = tg / "submodules/TelegramUI/Components/NavigationBarComponent/Sources"
+    content_path = sources / "NavigationBarComponentContent.swift"
+    text = _read(content_path, "NavigationBarComponentContent.swift")
+    if "aorusGlasslessRightNode" in text:
         print("InterfaceV2: chat avatar tablet already hidden")
         return
+    text = text.rstrip("\n") + "\n\n" + (
+        "public extension NavigationBarComponent.Content {\n"
+        "    /// AorusGram: Interface 2.0 shows a lone screen node on the right -- a chat's avatar, or the\n"
+        "    /// ghost-mode badge that stands in for it -- without the glass behind it.\n"
+        "    var aorusGlasslessRightNode: Bool {\n"
+        "        guard AorusInterfaceV2Run.isEnabled, self.rightButtons.count == 1, case .node = self.rightButtons[0].content else {\n"
+        "            return false\n"
+        "        }\n"
+        "        return true\n"
+        "    }\n"
+        "}\n"
+    )
+    content_path.write_text(text, encoding="utf-8")
+
+    bar = sources / "NavigationBarComponent.swift"
+    text = _read(bar, "NavigationBarComponent.swift")
     text = _replace_once(
         text,
-        "                rightButtonsBackgroundView.background.isHidden = false\n"
-        "                rightButtonsBackgroundView.background.update(size: rightButtonsBackgroundFrame.size, cornerRadius: rightButtonsBackgroundFrame.height * 0.5, isDark: self.presentationData.theme.overallDarkAppearance, tintColor: rightButtonsColor, isInteractive: true, transition: rightButtonsBackgroundTransition)\n",
-        "                rightButtonsBackgroundView.background.isHidden = false\n"
-        "                // AorusGram: the chat's avatar -- and the ghost-mode badge that stands in for\n"
-        "                // it -- is a display node of its own, and Interface 2.0 shows it without a\n"
-        "                // tablet. Text buttons keep theirs: they have no shape of their own, and the\n"
-        "                // left-hand pane behind the back button is a different view entirely.\n"
-        "                //\n"
-        "                // isVisible and not isHidden: the button is added to this container's own\n"
-        "                // contentView, so hiding the container takes the avatar with it, which is how\n"
-        "                // the first version of this made both the avatar and the badge disappear.\n"
-        "                let aorusHidesCustomButtonGlass = AorusInterfaceV2Run.isEnabled && self.rightButtonNodeImpl.singleCustomNode != nil\n"
-        "                rightButtonsBackgroundView.background.update(size: rightButtonsBackgroundFrame.size, cornerRadius: rightButtonsBackgroundFrame.height * 0.5, isDark: self.presentationData.theme.overallDarkAppearance, tintColor: rightButtonsColor, isInteractive: true, isVisible: !aorusHidesCustomButtonGlass, transition: rightButtonsBackgroundTransition)\n",
-        "chat right button glass",
+        "    /// The tint the last layout gave the glass.\n"
+        "    var appliedTint: NavigationBarComponent.Button.Tint = .generic\n",
+        "    /// The tint the last layout gave the glass.\n"
+        "    var appliedTint: NavigationBarComponent.Button.Tint = .generic\n"
+        "    /// AorusGram: the pill holds a lone screen node shown without glass (Interface 2.0).\n"
+        "    var aorusGlassless = false\n",
+        "glassless pill state",
+    )
+    text = _replace_once(
+        text,
+        "                rightPillTargets.append((slot, frame, tint))\n",
+        "                rightPillTargets.append((slot, frame, tint))\n"
+        "                // AorusGram: a lone avatar has no glass under Interface 2.0. Its pill keeps a\n"
+        "                // pane, never shown, so the avatar has the host, the frame and the context menu\n"
+        "                // source it always had; no in-place morph draws one for it either.\n"
+        "                pill.aorusGlassless = slot == 0 && rightPillMetrics.count == 1 && secondaryPills == nil && (component.primaryContent?.aorusGlasslessRightNode ?? false)\n"
+        "                if pill.aorusGlassless {\n"
+        "                    let aorusBackground: GlassContextExtractableContainer\n"
+        "                    var aorusTransition = transition\n"
+        "                    if let current = pill.background {\n"
+        "                        aorusBackground = current\n"
+        "                    } else {\n"
+        "                        aorusTransition = aorusTransition.withAnimation(.none)\n"
+        "                        aorusBackground = GlassContextExtractableContainer()\n"
+        "                        pill.background = aorusBackground\n"
+        "                        self.addSubview(aorusBackground)\n"
+        "                    }\n"
+        "                    if pill.itemsContainer.superview !== aorusBackground.contentView {\n"
+        "                        aorusBackground.contentView.addSubview(pill.itemsContainer)\n"
+        "                    }\n"
+        "                    aorusTransition.setFrame(view: aorusBackground, frame: frame)\n"
+        "                    aorusBackground.update(size: frame.size, cornerRadius: frame.height * 0.5, isDark: isDark, tintColor: tintColor, isInteractive: true, isVisible: false, transition: aorusTransition)\n"
+        "                    aorusTransition.setFrame(view: pill.itemsContainer, frame: CGRect(origin: CGPoint(), size: frame.size))\n"
+        "                    aorusBackground.morphsIntoContextMenu = false\n"
+        "                    continue\n"
+        "                }\n",
+        "glassless chat avatar pill",
+    )
+    text = _replace_once(
+        text,
+        "            for container in containers {\n"
+        "                if self.plattersDetached || (self.isLeftCapsuleLent && container === self.leftButtonsBackgroundContainer) {\n",
+        "            for container in containers {\n"
+        "                // AorusGram: a pill without glass stays with its bar through a transition, which draws\n"
+        "                // no capsule for it: the avatar rides its screen beside the name.\n"
+        "                let aorusKept = self.rightPills.contains(where: { $0.aorusGlassless && $0.background === container })\n"
+        "                if (self.plattersDetached && !aorusKept) || (self.isLeftCapsuleLent && container === self.leftButtonsBackgroundContainer) {\n",
+        "glassless pill stays in its bar",
     )
     bar.write_text(text, encoding="utf-8")
+
+    renderer = tg / "submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarTransitionRenderer.swift"
+    text = _read(renderer, "NavigationBarTransitionRenderer.swift")
+    text = _replace_once(
+        text,
+        "        var bottomContent = navigationBarTransitionCapsuleContent(bottomState)\n",
+        "        var bottomContent = aorusWithoutGlasslessPill(navigationBarTransitionCapsuleContent(bottomState))\n",
+        "glassless pill out of the bottom capsules",
+    )
+    text = _replace_once(
+        text,
+        "        let topContent = navigationBarTransitionCapsuleContent(topState)\n",
+        "        let topContent = aorusWithoutGlasslessPill(navigationBarTransitionCapsuleContent(topState))\n",
+        "glassless pill out of the top capsules",
+    )
+    text = text.rstrip("\n") + "\n\n" + (
+        "/// AorusGram: a content's capsules without a pill Interface 2.0 shows without glass; its node stays\n"
+        "/// in its own bar for the transition.\n"
+        "private func aorusWithoutGlasslessPill(_ content: NavigationBarComponent.Content) -> NavigationBarComponent.Content {\n"
+        "    guard content.aorusGlasslessRightNode else {\n"
+        "        return content\n"
+        "    }\n"
+        "    return NavigationBarComponent.Content(title: content.title, back: content.back, leftButton: content.leftButton, rightButtons: [], backPressed: content.backPressed, badge: content.badge, backContextAction: content.backContextAction)\n"
+        "}\n"
+    )
+    renderer.write_text(text, encoding="utf-8")
     print("InterfaceV2: hid the chat avatar tablet")
 
 
@@ -7648,6 +7713,216 @@ def _patch_disabled_row_wash(tg: Path) -> None:
     print("InterfaceV2: dimmed disabled rows with a neutral scrim instead of the card colour")
 
 
+def _patch_profile_expansion(tg: Path) -> None:
+    """Let Telegram's chat -> profile expansion run under Interface 2.0, and draw the 2.0 page in it.
+
+    13.1.1 opens a profile from a chat by growing the chat's title pill into the profile: the pill's
+    glass becomes a card the profile is seen through, the avatar flies from the bar to the header,
+    and the name and the status cross between the two screens. It asks the chat for the pill's
+    frame and runs only when there is one -- and Interface 2.0 stands the title on the wallpaper
+    with no pill, so the expansion never ran there and every profile slid in as in 13.0.
+
+    The title view now answers a second question, where an expansion grows from: the pill, or the
+    frame the pill would have had. `glassPillFrame` itself keeps meaning the pill alone, because the
+    bars' transition draws a glass platter for whatever it returns. With nothing to start from, the
+    drops' glass rises in over the first fifth of the clock instead of being there at once, and
+    still clears at the end as Telegram's does; the chat's avatar, glassless under 2.0 as well,
+    takes the same curve.
+
+    On the profile's side, what 2.0 adds to the page has to be lent with Telegram's own parts or it
+    stands in the card at full strength from the first frame: the photo stretched behind the whole
+    screen fades in with the page's colour, and the glass capsule behind the music strip rides and
+    fades with the strip. The page colour 2.0 sets is the expansion's background view's while one
+    is lent, as Telegram's own colour is, rather than the node's, which the expansion keeps clear.
+    """
+    component = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleComponent.swift"
+    text = _read(component, "ChatTitleComponent.swift")
+    if "aorusExpansionOriginFrame" in text:
+        print("InterfaceV2: profile expansion already patched")
+        return
+    text = _replace_once(
+        text,
+        "        var glassPillFrame: CGRect? {\n"
+        "            guard let backgroundView = self.backgroundView, !backgroundView.frame.isEmpty else {\n"
+        "                return nil\n"
+        "            }\n"
+        "            return backgroundView.frame\n"
+        "        }\n",
+        "        var glassPillFrame: CGRect? {\n"
+        "            guard let backgroundView = self.backgroundView, !backgroundView.frame.isEmpty else {\n"
+        "                return nil\n"
+        "            }\n"
+        "            return backgroundView.frame\n"
+        "        }\n"
+        "\n"
+        "        /// AorusGram: where an expansion grows from: the pill, or without one (Interface 2.0) the frame it would have.\n"
+        "        var aorusExpansionOriginFrame: CGRect? {\n"
+        "            if let frame = self.glassPillFrame {\n"
+        "                return frame\n"
+        "            }\n"
+        "            guard self.backgroundView == nil, let frame = self.expansionLayout?.containerFrame, !frame.isEmpty else {\n"
+        "                return nil\n"
+        "            }\n"
+        "            return frame\n"
+        "        }\n",
+        "title component expansion origin",
+    )
+    text = _replace_once(
+        text,
+        "    public var glassPillFrame: CGRect? {\n"
+        "        guard let titleView = self.title.view as? ChatTitleComponent.View, let frame = titleView.glassPillFrame else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return titleView.convert(frame, to: self)\n"
+        "    }\n",
+        "    public var glassPillFrame: CGRect? {\n"
+        "        guard let titleView = self.title.view as? ChatTitleComponent.View, let frame = titleView.glassPillFrame else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return titleView.convert(frame, to: self)\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: an expansion's origin, also where Interface 2.0 draws no pill. `glassPillFrame` stays the pill's\n"
+        "    /// alone: the bars' transition draws a platter for it.\n"
+        "    public var aorusExpansionOriginFrame: CGRect? {\n"
+        "        guard let titleView = self.title.view as? ChatTitleComponent.View, let frame = titleView.aorusExpansionOriginFrame else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return titleView.convert(frame, to: self)\n"
+        "    }\n",
+        "title view expansion origin",
+    )
+    component.write_text(text, encoding="utf-8")
+
+    controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    text = _read(controller, "ChatController.swift")
+    text = _replace_once(
+        text,
+        "        guard let titleView = self.chatTitleView, titleView.glassPillFrame != nil, case let .peer(peerId) = self.chatLocation,",
+        "        guard let titleView = self.chatTitleView, titleView.aorusExpansionOriginFrame != nil, case let .peer(peerId) = self.chatLocation,",
+        "chat expansion source guard",
+    )
+    controller.write_text(text, encoding="utf-8")
+
+    source = tg / "submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift"
+    text = _read(source, "ChatExpansionSource.swift")
+    text = _replace_once(
+        text,
+        "        guard let titleView = self.titleView, let pillFrame = titleView.glassPillFrame, let labels = titleView.lendExpansionLabels() else {\n",
+        "        guard let titleView = self.titleView, let pillFrame = titleView.aorusExpansionOriginFrame, let labels = titleView.lendExpansionLabels() else {\n",
+        "chat expansion origin",
+    )
+    text = _replace_once(
+        text,
+        "        return NavigationExpansionSourceLoan(origin: origin, originTint: .init(kind: self.preferClearGlass ? .clear : .panel), isDark: self.isDark, companion: companion, companionPhotoDiameter: 38.0, companionView: self.avatarNode?.view, labels: expansionLabels, press: press)\n",
+        "        let loan = NavigationExpansionSourceLoan(origin: origin, originTint: .init(kind: self.preferClearGlass ? .clear : .panel), isDark: self.isDark, companion: companion, companionPhotoDiameter: 38.0, companionView: self.avatarNode?.view, labels: expansionLabels, press: press)\n"
+        "        // AorusGram: no pill to grow from (Interface 2.0): the drops' glass rises in from nothing.\n"
+        "        loan.aorusGlassRisesIn = titleView.glassPillFrame == nil\n"
+        "        return loan\n",
+        "chat expansion loan",
+    )
+    source.write_text(text, encoding="utf-8")
+
+    sources = tg / "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources"
+    providing = sources / "NavigationExpansionProviding.swift"
+    text = _read(providing, "NavigationExpansionProviding.swift")
+    text = _replace_once(
+        text,
+        "    public let press: ExpansionPress\n"
+        "    public let originContent: UIView?\n",
+        "    public let press: ExpansionPress\n"
+        "    public let originContent: UIView?\n"
+        "    /// AorusGram: the origin shows no glass at rest (Interface 2.0's title), so the drops' glass rises in.\n"
+        "    public var aorusGlassRisesIn: Bool = false\n",
+        "expansion source loan glass",
+    )
+    providing.write_text(text, encoding="utf-8")
+
+    geometry = sources / "ExpansionGeometry.swift"
+    text = _read(geometry, "ExpansionGeometry.swift")
+    text = _replace_once(
+        text,
+        "    public var backgroundClosing: ClosedRange<CGFloat> = 0.30 ... 0.85\n",
+        "    public var backgroundClosing: ClosedRange<CGFloat> = 0.30 ... 0.85\n"
+        "    /// AorusGram: the drops' glass rises in from nothing (`NavigationExpansionSourceLoan.aorusGlassRisesIn`).\n"
+        "    public var aorusGlassRisesIn: Bool = false\n",
+        "expansion geometry glass",
+    )
+    geometry.write_text(text, encoding="utf-8")
+
+    renderer = sources / "NavigationExpansionRendererImpl.swift"
+    text = _read(renderer, "NavigationExpansionRendererImpl.swift")
+    text = _replace_once(
+        text,
+        "        geometry.avatarCornerFraction = destinationLoan.avatarCornerFraction\n",
+        "        geometry.avatarCornerFraction = destinationLoan.avatarCornerFraction\n"
+        "        geometry.aorusGlassRisesIn = sourceLoan.aorusGlassRisesIn\n",
+        "expansion renderer glass",
+    )
+    renderer.write_text(text, encoding="utf-8")
+
+    choreography = sources / "ExpansionChoreography.swift"
+    text = _read(choreography, "ExpansionChoreography.swift")
+    text = _replace_once(
+        text,
+        "            glass: 1.0 - ExpansionCurve.smooth(ExpansionCurve.ramp(fill, 0.75, 0.97)),\n",
+        "            glass: g.aorusGlassRisesIn ? min(1.0 - ExpansionCurve.smooth(ExpansionCurve.ramp(fill, 0.75, 0.97)), ExpansionCurve.smooth(ExpansionCurve.ramp(fill, 0.0, 0.2))) : 1.0 - ExpansionCurve.smooth(ExpansionCurve.ramp(fill, 0.75, 0.97)),\n",
+        "expansion glass curve",
+    )
+    choreography.write_text(text, encoding="utf-8")
+
+    profile = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
+    destination = profile / "PeerInfoExpansionDestination.swift"
+    text = _read(destination, "PeerInfoExpansionDestination.swift")
+    text = _replace_once(text, "import AsyncDisplayKit\n", "import AsyncDisplayKit\nimport AorusGramUI\n", "expansion destination import")
+    text = _replace_once(
+        text,
+        "            backgroundViews: [background, banner],\n",
+        "            // AorusGram: Interface 2.0's photo behind the whole page fades in with the page's colour.\n"
+        "            backgroundViews: [background, banner] + node.view.subviews.filter { $0.tag == AorusGlassProfileTint.backdropTag },\n",
+        "expansion destination backdrop",
+    )
+    destination.write_text(text, encoding="utf-8")
+
+    header = profile / "PeerInfoHeaderNode.swift"
+    text = _read(header, "PeerInfoHeaderNode.swift")
+    text = _replace_once(
+        text,
+        "        if let view = self.musicBackground {\n"
+        "            views.append(view)\n"
+        "        }\n"
+        "        return views\n"
+        "    }\n",
+        "        if let view = self.musicBackground {\n"
+        "            views.append(view)\n"
+        "        }\n"
+        "        // AorusGram: Interface 2.0's glass behind the strip.\n"
+        "        if self.aorusMusicCapsule.superview != nil {\n"
+        "            views.append(self.aorusMusicCapsule)\n"
+        "        }\n"
+        "        return views\n"
+        "    }\n",
+        "expansion decoration capsule",
+    )
+    text = _replace_once(
+        text,
+        "        var views: [UIView] = [self.buttonsContainerNode.view]\n"
+        "        if let view = self.music?.view {\n"
+        "            views.append(view)\n"
+        "        }\n",
+        "        var views: [UIView] = [self.buttonsContainerNode.view]\n"
+        "        if let view = self.music?.view {\n"
+        "            views.append(view)\n"
+        "        }\n"
+        "        if self.aorusMusicCapsule.superview != nil {\n"
+        "            views.append(self.aorusMusicCapsule)\n"
+        "        }\n",
+        "expansion page capsule",
+    )
+    header.write_text(text, encoding="utf-8")
+    print("InterfaceV2: profile expansion runs from the pill-less title")
+
+
 def _patch_build(tg: Path) -> None:
     _add_build_deps(
         tg / "submodules/UndoUI/BUILD",
@@ -7829,4 +8104,5 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_switch_item_leading_icon(tg)
     _patch_disabled_row_wash(tg)
     _patch_proxy_connection_section(tg)
+    _patch_profile_expansion(tg)
     _patch_build(tg)

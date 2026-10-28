@@ -75,7 +75,7 @@ def main():
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusDraggedFrame = itemFrame', 'self.aorusIsPreview ? .immediate : itemTransition', 'self.liquidLensView.contentView.convert(center, from: self)', '(self.selectionGestureState != nil || self.aorusPreviewDrag != nil) && component.isLiftedStateEnabled', 'aorusCarriedOver && self.aorusPreviewDrag?.id != item.id ? 0.0 : 1.0')
         require('TelegramPresentationData/Sources/MakePresentationTheme.swift', 'let aorusNativeLight =', 'reference: aorusNativeLight ? .day : reference')
         require('TelegramPresentationData/Sources/PresentationTheme.swift', 'func deriveList(from theme:', 'deriveList(from: self)')
-        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = 0.8', 'nativeParamsView.lumaMax = 0.801')
+        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = isDark ? 0.0 : 0.8', 'nativeParamsView.lumaMax = isDark ? 0.15 : 0.801')
         assert 'aorusGlassLuminance' not in glass and 'regularLight' not in glass
         pages = require('ItemListUI/Sources/ItemListControllerNode.swift')
         assert 'aorusUpdatePageBackground' not in pages
@@ -85,7 +85,7 @@ def main():
         require('GalleryUI/Sources/GalleryControllerNode.swift', 'public var aorusDismissWithCrossfade:', 'if let dismissWithCrossfade = self.aorusDismissWithCrossfade', 'self.pager.layer.transform = CATransform3DIdentity')
         profile = require('TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift', 'crossfadeContent: aorusSquareSource', 'if aorusSquareSource { return nil }')
         assert 'aorusRevealUntil' not in profile
-        require('MediaPickerUI/Sources/MediaPickerScreen.swift', 'self.containerView.addSubnode(self.icon)', 'self.containerView.addSubnode(self.label)', 'self.containerView.addSubview(self.button)', 'max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0')
+        require('MediaPickerUI/Sources/MediaPickerScreen.swift', 'self.containerView.addSubnode(self.icon)', 'self.containerView.addSubnode(self.label)', 'self.containerView.addSubview(self.button)', 'selectedButtonMinX(layout: layout) - 44.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0))')
         require('TelegramUI/Components/LottieComponent/Sources/LottieComponent.swift', 'AorusRGBColors.sameSource(lhs.color, rhs.color)', 'AorusRGBColors.tintImage(self, color: component.color ?? .white)')
         require('ComponentFlow/Source/Components/Image.swift', 'AorusRGBColors.sameSource(lhs.tintColor, rhs.tintColor)')
         require('PeerAvatarGalleryUI/Sources/AvatarGalleryController.swift', 'animatedOutNode && !crossfade', 'useSimpleAnimation: presentationArguments.crossfadeContent')

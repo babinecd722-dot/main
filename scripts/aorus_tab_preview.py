@@ -155,16 +155,30 @@ CLASSIC = '''    private var aorusPreviewDragItem: UITabBarItem?
 
 def patch_modern_preview(source: str) -> str:
     source = edit(source, '        private var searchView: NavigationSearchView?', MODERN + '        private var searchView: NavigationSearchView?', 'native preview movement')
-    source = edit(source, '            var selectionFrame: CGRect?\n', '            var aorusDraggedFrame: CGRect?\n            let aorusCarriedOver = self.aorusPreviewDrag != nil && self.aorusPreviewDrag?.center != self.aorusPreviewDragStart\n            self.aorusPreviewDragPending = false\n            var selectionFrame: CGRect?\n', 'preview lens geometry')
+    source = edit(source, '            var selectedItemFrame: CGRect?\n', '            var aorusDraggedFrame: CGRect?\n            let aorusCarriedOver = self.aorusPreviewDrag != nil && self.aorusPreviewDrag?.center != self.aorusPreviewDragStart\n            self.aorusPreviewDragPending = false\n            var selectedItemFrame: CGRect?\n', 'preview lens geometry')
     # Animate the tab position, not the icon within the tab as well.
     for name in ('itemView', 'selectedItemView'):
         source = edit(source, '                let _ = ' + name + '.update(\n                    transition: itemTransition,', '                let _ = ' + name + '.update(\n                    transition: self.aorusIsPreview ? .immediate : itemTransition,', 'stable preview child ' + name)
-    source = edit(source, '                nextItemX += itemSize.width\n', '''                nextItemX += itemSize.width
+    # The bar's layout (13.1.1) places every tab; the carried one is then moved under the finger
+    # along the bar's axis, before either copy of it is laid out.
+    source = edit(source, '''                    self.itemViews[item.id] = itemView
+                }
+                
+                let selectedItemView: ComponentView<Empty>
+''', '''                    self.itemViews[item.id] = itemView
+                }
                 if let drag = self.aorusPreviewDrag, drag.id == item.id {
-                    itemFrame.origin.x = max(innerInset, min(tabsSize.width - innerInset - itemFrame.width, drag.center.x - itemFrame.width * 0.5))
+                    switch component.axis {
+                    case .horizontal:
+                        itemFrame.origin.x = max(innerInset, min(tabsSize.width - innerInset - itemFrame.width, drag.center.x - itemFrame.width * 0.5))
+                    case .vertical:
+                        itemFrame.origin.y = max(innerInset, min(tabsSize.height - innerInset - itemFrame.height, drag.center.y - itemFrame.height * 0.5))
+                    }
                     aorusDraggedFrame = itemFrame
                     itemTransition = .immediate
                 }
+                
+                let selectedItemView: ComponentView<Empty>
 ''', 'native tab follows the finger')
     # Once the carried tab moves, the selected copies of the others are hidden: a tab that
     # makes room passes under the lifted lens instead of showing a second icon inside it.
@@ -180,9 +194,6 @@ def patch_modern_preview(source: str) -> str:
     # The carried tab is lifted the way the bar lifts a tab under a sliding finger: the lens
     # rises and the tab inside it grows, in the transition of the pass that picks it up.
     source = edit(source, '                    itemTransition.setScale(view: selectedItemComponentView, scale: (self.selectionGestureState != nil && component.isLiftedStateEnabled) ? 1.15 : 1.0)', '                    (self.aorusPreviewDrag?.id == item.id ? transition : itemTransition).setScale(view: selectedItemComponentView, scale: ((self.selectionGestureState != nil || self.aorusPreviewDrag?.id == item.id) && component.isLiftedStateEnabled) ? 1.15 : 1.0)', 'carried tab grows like a lifted tab')
-    source = edit(source, '            if let selectionGestureState = self.selectionGestureState {\n                lensSelection =', '''            if let aorusDraggedFrame {
-                lensSelection = (aorusDraggedFrame.minX - innerInset, aorusDraggedFrame.width + innerInset * 2.0)
-            } else if let selectionGestureState = self.selectionGestureState {
-                lensSelection =''', 'lens stays attached to dragged content')
+    source = edit(source, '                drag: self.selectionGestureState.map { (origin: $0.current, itemLength: $0.itemLength) }\n', '                drag: aorusDraggedFrame.map { (origin: (component.axis == .horizontal ? $0.minX : $0.minY) - innerInset, itemLength: component.axis == .horizontal ? $0.width : $0.height) } ?? self.selectionGestureState.map { (origin: $0.current, itemLength: $0.itemLength) }\n', 'lens stays attached to dragged content')
     source = edit(source, 'isLifted: self.selectionGestureState != nil && component.isLiftedStateEnabled, isCollapsed:', 'isLifted: (self.selectionGestureState != nil || self.aorusPreviewDrag != nil) && component.isLiftedStateEnabled, isCollapsed:', 'carried tab lifts the lens')
     return source

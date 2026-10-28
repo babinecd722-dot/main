@@ -5,7 +5,7 @@ import ObjectiveC
 // Патчит MTApiEnvironment так чтобы initConnection выглядел как официальный Telegram iOS.
 //
 // ЧТО МЕНЯЕТСЯ:
-//   app_version  "AorusGram 1.0" → "13.0"  (поле отображается в Активных сессиях)
+//   app_version  "AorusGram 1.0" → "13.1.1"  (поле отображается в Активных сессиях)
 //   lang_pack    ""              → "ios"       (идентификатор пакета локализации)
 //
 // ЧТО НЕ ТРОГАЕТСЯ (интернет не ломается):
@@ -23,7 +23,7 @@ public final class ClientSpoofManager: NSObject {
     override private init() {}
 
     // Синхронизировать с текущей версией Telegram в App Store при каждом обновлении.
-    public static let officialAppVersion = "13.0"
+    public static let officialAppVersion = "13.1.1"
     public static let officialLangPack   = "ios"
 
     // MARK: - Swizzle (главный механизм)

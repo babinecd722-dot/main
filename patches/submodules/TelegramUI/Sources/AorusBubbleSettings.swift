@@ -11,7 +11,7 @@ import ItemListUI
 import PresentationDataUtils
 import AccountContext
 import WallpaperBackgroundNode
-import NavigationBarImpl
+import NavigationBarNode
 import ChatTitleView
 import ChatAvatarNavigationNode
 import AppBundle
@@ -160,7 +160,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
     private let topStripeNode: ASDisplayNode
     private let bottomStripeNode: ASDisplayNode
     private let maskNode: ASImageNode
-    private var navigationBar: NavigationBarImpl?
+    private var navigationBar: NavigationBar?
     /// What the bar shows: the title and the avatar.
     private let barItem = UINavigationItem()
     /// The screen the chat was opened from, for the bar to draw its back button.
@@ -267,14 +267,16 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         let dark = item.theme.overallDarkAppearance
         let clearGlass = dark && self.backgroundNode?.contentStats?.isSaturated == true
 
-        let bar: NavigationBarImpl
+        let bar: NavigationBar
         if let current = self.navigationBar {
             bar = current
             if self.shownTheme !== item.theme || self.shownStrings !== item.strings || self.shownClearGlass != clearGlass {
                 bar.updatePresentationData(AorusBubblePreviewItemNode.barData(item: item, clearGlass: clearGlass), transition: .immediate)
             }
         } else {
-            bar = NavigationBarImpl(presentationData: AorusBubblePreviewItemNode.barData(item: item, clearGlass: clearGlass))
+            // The bar this run gives a chat -- the glass one, or 12.0's under the old interface.
+            let barData = AorusBubblePreviewItemNode.barData(item: item, clearGlass: clearGlass)
+            bar = defaultNavigationBarImpl?(barData) ?? NavigationBarNode(presentationData: barData)
             // A picture of a header: it scrolls with the list and nothing in it is pressed.
             bar.isUserInteractionEnabled = false
             self.barItem.titleView = self.titleView
@@ -337,7 +339,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
     private static func barData(item: AorusBubblePreviewItem, clearGlass: Bool) -> NavigationBarPresentationData {
         // As a chat builds its own: glass, no edge fading into the list, clear glass on a dark
         // saturated wallpaper.
-        let theme = NavigationBarTheme(rootControllerTheme: item.theme, hideBackground: false, hideBadge: false, edgeEffectColor: .clear, style: .glass, glassStyle: clearGlass ? .clear : .default)
+        let theme = NavigationBarTheme(rootControllerTheme: item.theme, hideBadge: false, edgeEffectColor: .clear, glassStyle: clearGlass ? .clear : .default)
         return NavigationBarPresentationData(theme: theme, strings: NavigationBarStrings(presentationStrings: item.strings))
     }
 
@@ -347,7 +349,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         }
         let barFrame = CGRect(x: 0.0, y: AorusBubblePreviewItemNode.barTop, width: params.width, height: 60.0)
         bar.frame = barFrame
-        bar.updateLayout(size: barFrame.size, defaultHeight: 60.0, additionalTopHeight: 0.0, additionalContentHeight: 0.0, additionalBackgroundHeight: 0.0, additionalCutout: nil, leftInset: params.leftInset, rightInset: params.rightInset, appearsHidden: false, isLandscape: false, transition: transition)
+        bar.updateLayout(size: barFrame.size, defaultHeight: 60.0, additionalTopHeight: 0.0, additionalContentHeight: 0.0, additionalBackgroundHeight: 0.0, leftInset: params.leftInset, rightInset: params.rightInset, appearsHidden: false, transition: transition)
     }
 
     /// The rounded card and the separators, as the list draws its own rows.

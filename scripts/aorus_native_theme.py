@@ -89,7 +89,8 @@ def patch_native_theme(tg: Path) -> None:
     profile = tg / 'submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift'
     profile_source = profile.read_text()
     if 'aorusSetNativeStyle' not in profile_source:
-        anchor = '        ), strings: baseNavigationBarPresentationData.strings))\n'
+        # 13.1.1 builds the profile's bar theme from the plain glass of PeerInfoNavigationButtons.
+        anchor = '            theme: peerInfoNavigationBarTheme(glass: .plain, base: baseNavigationBarPresentationData.theme),\n            strings: baseNavigationBarPresentationData.strings\n        ))\n'
         if profile_source.count(anchor) != 1:
             raise RuntimeError('NativeTheme: profile decorative navigation anchor missing')
         profile_source = profile_source.replace(anchor, anchor + '        self.aorusSetNativeStyle(dark: self.presentationData.theme.overallDarkAppearance)\n', 1)

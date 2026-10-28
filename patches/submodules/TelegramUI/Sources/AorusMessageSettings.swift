@@ -700,7 +700,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
 
         let messages = aorusPreviewMessages(item)
         let chatItems: [ListViewItem] = messages.reversed().map { message in
-            return item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [message], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin, isGiftMessageComposerPreview: false)
+            return item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [EngineMessage(message)], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin, isGiftMessageComposerPreview: false, activateGiftMessageInput: nil)
         }
         let itemParams = ListViewItemLayoutParams(width: params.width, leftInset: params.leftInset, rightInset: params.rightInset, availableHeight: params.availableHeight, isStandalone: params.isStandalone)
 

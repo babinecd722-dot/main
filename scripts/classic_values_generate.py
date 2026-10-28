@@ -23,8 +23,8 @@ import re
 from pathlib import Path
 
 REFERENCE_COMMIT = "29b266d5adb0d3a32b93f5506210fe7d20b8f81f"
-CURRENT = "13.0"
-CURRENT_COMMIT = "f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838"
+CURRENT = "13.1.1"
+CURRENT_COMMIT = "fb0e62ba8a147f0821da6aa63c09da7d79a10111"
 ISENABLED = "AorusOldInterface.isEnabled"
 WINDOW = 4
 

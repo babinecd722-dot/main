@@ -2366,7 +2366,7 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
     init(presentationData: PresentationData, owned: [AorusPluginMarketOwnedPlugin]) {
         self.presentationData = presentationData
         self.owned = owned
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = AorusPluginMarketText.myPlugins
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in

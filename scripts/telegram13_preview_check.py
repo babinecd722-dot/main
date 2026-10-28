@@ -1,4 +1,4 @@
-"""Exercise installed preview calls and overlay controls against native 13.0 APIs."""
+"""Exercise installed preview calls and overlay controls against native 13 APIs."""
 from pathlib import Path
 import re
 import subprocess
@@ -25,6 +25,9 @@ class ASDisplayNode {}
 enum ChatRankInfoScreenRole { case admin }
 struct ListViewItem { let centered: Bool; let preview: Bool; let standalone: Bool; let gift: Bool; let rank: String?; let role: ChatRankInfoScreenRole? }
 ''' + '\n'.join('struct ' + name + ' {}' for name in types) + '''
+// 13.1 takes the engine's wrappers: the message wrapped around the raw one, and the engine peer.
+struct EngineMessage { init(_ impl: EngineRawMessage) {} }
+struct EnginePeer {}
 final class SharedContext {
 ''' + signature + ''' {
     return ListViewItem(centered: isCentered, preview: isPreview, standalone: isStandalone, gift: isGiftMessageComposerPreview, rank: rank, role: rankRole)

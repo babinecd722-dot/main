@@ -19,16 +19,13 @@ def patch_plugin_screens(tg: Path) -> None:
     # corner is empty; the QR code stays available from the Settings tab itself.
     info = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     text = info.read_text()
-    settings_left = (
-        "                if self.isSettings {\n"
-        "                    leftNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .qrCode, isForExpandedView: false))\n"
-    )
+    settings_left = "            let navigationSets = peerInfoNavigationButtonSets(navigationFlags)\n"
     settings_left_new = (
-        "                if self.isSettings {\n"
-        "                    // AorusGram: settings opened above another screen keep Back or Close.\n"
-        "                    if self.controller?.previousItem == nil {\n"
-        "                        leftNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .qrCode, isForExpandedView: false))\n"
-        "                    }\n"
+        "            var navigationSets = peerInfoNavigationButtonSets(navigationFlags)\n"
+        "            // AorusGram: settings opened above another screen keep Back or Close.\n"
+        "            if self.isSettings, self.controller?.previousItem != nil {\n"
+        "                navigationSets.normal.left.removeAll(where: { $0 == .qrCode })\n"
+        "            }\n"
     )
     if settings_left_new not in text:
         if text.count(settings_left) != 1:

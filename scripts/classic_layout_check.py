@@ -36,7 +36,7 @@ def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) ->
             checks += 1
     for binding in manifest["bindings"]:
         source = (tg / binding["path"]).read_text()
-        if source.count(binding["replacement"] + "\n") != 1:
+        if source.count(binding["replacement"] + "\n") != binding.get("count", 1):
             raise RuntimeError(f"Classic geometry was not installed once: {binding['path']}: {binding['replacement']}")
         if reference is not None and binding["old"] + "\n" not in (reference / binding["path"]).read_text():
             raise RuntimeError(f"Geometry value does not come from 12.0: {binding['path']}")

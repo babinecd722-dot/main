@@ -24,7 +24,7 @@ final class AorusSessionBackupHostController: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         // The glass header every list screen of the client has, fading into the same
         // grouped background the screen is drawn on.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
 
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         let lang = AorusLang.resolve(self.presentationData.strings.baseLanguageCode)
@@ -41,7 +41,7 @@ final class AorusSessionBackupHostController: ViewController {
         self.presentationData = presentationData
         let theme = presentationData.theme
         self.statusBar.statusBarStyle = theme.rootController.statusBarStyle.style
-        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
+        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
         guard self.isNodeLoaded else { return }
         self.displayNode.backgroundColor = theme.list.blocksBackgroundColor
         self.hostingController?.overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light

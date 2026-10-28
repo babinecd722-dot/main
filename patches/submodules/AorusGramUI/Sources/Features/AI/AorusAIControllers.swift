@@ -38,7 +38,6 @@ private var aorusAINavigationGlassStyle: NavigationBarGlassStyle {
 private func aorusAINavigationBarPresentationData(_ presentationData: PresentationData) -> NavigationBarPresentationData {
     return NavigationBarPresentationData(
         presentationData: presentationData,
-        style: .glass,
         glassStyle: aorusAINavigationGlassStyle
     )
 }

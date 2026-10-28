@@ -275,19 +275,113 @@ def _browser(tg: Path) -> None:
     path.write_text(text)
 
 
+_NOTIFICATION_CLASSIC_LAYOUT = """        if AorusOldInterface.isEnabled, let contentNode = self.contentNode {
+            // AorusGram: old interface: 12.0's banner -- its own background image round the
+            // content, under the status bar, laid out over the whole container.
+            let inset: CGFloat = 8.0
+            var contentInsets = UIEdgeInsets(top: inset, left: inset + layout.safeInsets.left, bottom: inset, right: inset + layout.safeInsets.right)
+            if let statusBarHeight = layout.statusBarHeight, statusBarHeight >= 39.0 {
+                if layout.deviceMetrics.hasDynamicIsland || layout.topBarStatusIsland != nil {
+                    contentInsets.top = statusBarHeight
+                } else if statusBarHeight >= 44.0 {
+                    contentInsets.top += 34.0
+                } else {
+                    contentInsets.top += 29.0
+                }
+            }
+            let containerWidth = horizontalContainerFillingSizeForLayout(layout: layout, sideInset: layout.safeInsets.left)
+            let contentWidth = containerWidth - contentInsets.left - contentInsets.right
+            let contentHeight = contentNode.updateLayout(width: contentWidth, transition: transition)
+            self.bannerFrame = CGRect(origin: CGPoint(), size: layout.size)
+            transition.updateFrame(node: self.animationContainerNode, frame: CGRect(origin: CGPoint(), size: layout.size))
+            transition.updateFrame(node: self.aorusClassicBackgroundNode, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - containerWidth - 8.0 * 2.0) / 2.0), y: contentInsets.top - 16.0), size: CGSize(width: containerWidth + 8.0 * 2.0, height: 8.0 + contentHeight + 20.0 + 8.0)))
+            transition.updateFrame(node: contentNode, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - contentWidth) / 2.0), y: contentInsets.top), size: CGSize(width: contentWidth, height: contentHeight)))
+            return
+        }
+"""
+
+_NOTIFICATION_CLASSIC_IN = """        if AorusOldInterface.isEnabled {
+            // AorusGram: old interface: 12.0's banner slides down from above the screen.
+            if self.validLayout != nil {
+                self.layer.animatePosition(from: CGPoint(x: 0.0, y: -self.aorusClassicBackgroundNode.bounds.size.height), to: CGPoint(), duration: 0.4, additive: true)
+            }
+            return
+        }
+"""
+
+_NOTIFICATION_CLASSIC_OUT = """        if AorusOldInterface.isEnabled {
+            // AorusGram: old interface: and slides back up.
+            self.isDismissing = true
+            if self.validLayout != nil {
+                self.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: -self.aorusClassicBackgroundNode.bounds.size.height), duration: 0.4, removeOnCompletion: false, additive: true, completion: { [weak self] _ in
+                    guard let self else {
+                        return
+                    }
+                    self.isDismissed = true
+                    let completions = self.dismissCompletions
+                    self.dismissCompletions.removeAll()
+                    for completion in completions {
+                        completion()
+                    }
+                })
+            } else {
+                self.isDismissed = true
+                let completions = self.dismissCompletions
+                self.dismissCompletions.removeAll()
+                for completion in completions {
+                    completion()
+                }
+            }
+            return
+        }
+"""
+
+
 def _notifications(tg: Path) -> None:
+    # 12.0's in-app banner: its background image instead of the glass, laid out and moving as
+    # 12.0 moved it -- down from above the screen and back up -- where 13.1.1 springs it out of
+    # the island with a blur.
     path = tg / "submodules/TelegramUI/Sources/NotificationItemContainerNode.swift"
     text = path.read_text()
     text = edit(text, "    private let backgroundView = GlassBackgroundView()\n", "    private let backgroundView = GlassBackgroundView()\n    private let aorusClassicBackgroundNode = ASImageNode() // " + MARK + "\n", "notification background")
-    text = edit(text, "        super.init()\n", "        super.init()\n        if AorusOldInterface.isEnabled {\n            self.aorusClassicBackgroundNode.displayWithoutProcessing = true\n            self.aorusClassicBackgroundNode.displaysAsynchronously = false\n            self.aorusClassicBackgroundNode.image = PresentationResourcesRootController.inAppNotificationBackground(theme)\n            self.addSubnode(self.aorusClassicBackgroundNode)\n        }\n", "notification hierarchy")
-    text = edit(text, "        self.view.insertSubview(self.backgroundView, at: 0)\n", "        if !AorusOldInterface.isEnabled { self.view.insertSubview(self.backgroundView, at: 0) }\n", "notification material")
-    text = edit(text, "-self.backgroundView.frame.maxY", "-(AorusOldInterface.isEnabled ? self.aorusClassicBackgroundNode.bounds.height : self.backgroundView.frame.maxY)", "notification animation", count=2)
-    text = edit(text, "            var contentInsets = UIEdgeInsets(top: inset + layout.safeInsets.left, left: inset, bottom: inset, right: inset + layout.safeInsets.right)", "            var contentInsets = AorusOldInterface.isEnabled ? UIEdgeInsets(top: inset, left: inset + layout.safeInsets.left, bottom: inset, right: inset + layout.safeInsets.right) : UIEdgeInsets(top: inset + layout.safeInsets.left, left: inset, bottom: inset, right: inset + layout.safeInsets.right)", "notification safe insets")
-    text = edit(text, "                    contentInsets.top = statusBarHeight + 6.0", "                    contentInsets.top = statusBarHeight + (AorusOldInterface.isEnabled ? 0.0 : 6.0)", "notification island inset")
-    text = edit(text, "horizontalContainerFillingSizeForLayout(layout: layout, sideInset: 0.0)", "horizontalContainerFillingSizeForLayout(layout: layout, sideInset: AorusOldInterface.isEnabled ? layout.safeInsets.left : 0.0)", "notification width")
-    anchor = "            let backgroundInset: CGFloat = 8.0\n"
-    text = edit(text, anchor, "            if AorusOldInterface.isEnabled {\n                transition.updateFrame(node: self.aorusClassicBackgroundNode, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - containerWidth - 8.0 * 2.0) / 2.0), y: contentInsets.top - 16.0), size: CGSize(width: containerWidth + 8.0 * 2.0, height: 8.0 + contentHeight + 20.0 + 8.0)))\n            } else {\n" + anchor, "notification layout")
-    text = edit(text, "            transition.updateFrame(node: contentNode, frame:", "            }\n            transition.updateFrame(node: contentNode, frame:", "notification layout end")
+    text = edit(
+        text,
+        "        self.addSubnode(self.animationContainerNode)\n",
+        "        self.addSubnode(self.animationContainerNode)\n"
+        "        if AorusOldInterface.isEnabled {\n"
+        "            self.aorusClassicBackgroundNode.displayWithoutProcessing = true\n"
+        "            self.aorusClassicBackgroundNode.displaysAsynchronously = false\n"
+        "            self.aorusClassicBackgroundNode.image = PresentationResourcesRootController.inAppNotificationBackground(theme)\n"
+        "            self.animationContainerNode.addSubnode(self.aorusClassicBackgroundNode)\n"
+        "        }\n",
+        "notification hierarchy",
+    )
+    text = edit(text, "        self.animationContainerNode.view.insertSubview(self.backgroundView, at: 0)\n", "        if !AorusOldInterface.isEnabled { self.animationContainerNode.view.insertSubview(self.backgroundView, at: 0) }\n", "notification material")
+    text = edit(
+        text,
+        "    func animateIn() {\n",
+        "    func animateIn() {\n" + _NOTIFICATION_CLASSIC_IN,
+        "notification animation in",
+    )
+    text = edit(
+        text,
+        "        self.dismissCompletions.append(completion)\n"
+        "        guard !self.isDismissing else {\n"
+        "            return\n"
+        "        }\n",
+        "        self.dismissCompletions.append(completion)\n"
+        "        guard !self.isDismissing else {\n"
+        "            return\n"
+        "        }\n"
+        + _NOTIFICATION_CLASSIC_OUT,
+        "notification animation out",
+    )
+    text = edit(
+        text,
+        "        self.validLayout = layout\n        \n        if let contentNode = self.contentNode {\n            let inset: CGFloat = 8.0\n",
+        "        self.validLayout = layout\n        \n" + _NOTIFICATION_CLASSIC_LAYOUT + "        if let contentNode = self.contentNode {\n            let inset: CGFloat = 8.0\n",
+        "notification layout",
+    )
     path.write_text(text)
 
 
@@ -348,7 +442,7 @@ def verify_classic_components(tg: Path) -> list[str]:
         "BrowserUI/Sources/BrowserToolbarComponent.swift": ["component: AorusClassicBrowserToolbarComponent", "component: AorusClassicNavigationToolbarContentComponent", "component: AorusClassicSearchToolbarContentComponent"],
         "BrowserUI/Sources/BrowserTitleBarComponent.swift": ["component: AnyComponent(AorusClassicTitleBarContentComponent"],
         "BrowserUI/Sources/BrowserAddressBarComponent.swift": ["component: AnyComponent(AorusClassicAddressBarContentComponent"],
-        "TelegramUI/Sources/NotificationItemContainerNode.swift": ["PresentationResourcesRootController.inAppNotificationBackground(theme)", "self.aorusClassicBackgroundNode.bounds.height"],
+        "TelegramUI/Sources/NotificationItemContainerNode.swift": ["PresentationResourcesRootController.inAppNotificationBackground(theme)", "self.aorusClassicBackgroundNode.bounds.size.height"],
         "LocationUI/Sources/LocationMapHeaderNode.swift": ["let glass = glass && !AorusOldInterface.isEnabled"],
         "ReactionSelectionNode/Sources/ReactionContextBackgroundNode.swift": ["let glass = AorusOldInterface.isEnabled ? nil : glass"],
         "AttachmentUI/Sources/AttachmentPanel.swift": ["let style = AorusOldInterface.isEnabled ? .legacy : style"],

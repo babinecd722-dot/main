@@ -23,6 +23,8 @@ swift_library(
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
+        # The plugins' MTProto bridge. 13.1 makes TelegramApi visible to TelegramCore alone;
+        # scripts/postbox_allowlist.py lets this package see it too.
         "//submodules/TelegramApi:TelegramApi",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",

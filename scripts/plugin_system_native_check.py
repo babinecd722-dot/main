@@ -146,6 +146,9 @@ def main():
             (zlib / "module.modulemap").write_text('module zlib [system] { header "/usr/include/zlib.h" link "z" export * }\n')
         common = [args.swiftc, "-swift-version", "5", "-module-cache-path", str(work / "cache"),
                   "-I", str(work), "-L", str(work), "-Xlinker", "-rpath", "-Xlinker", str(work)]
+        # 13.1's API module imports its Objective-C runtime's headers (plugin_tl_check exports them).
+        if (api / "objc-include").is_dir():
+            common += ["-I", str(api / "objc-include")]
         def run(command, **kwargs):
             subprocess.run(command, check=True, **kwargs)
         suffix = ".dylib" if os.uname().sysname == "Darwin" else ".so"

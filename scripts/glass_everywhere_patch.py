@@ -538,12 +538,10 @@ def _patch_lens_halo(tg: Path) -> None:
     text = _replace_once(
         text,
         "        self.morph = morph\n"
-        "        self.isPresenting = true\n"
-        "        if !morph.animate(from: source, to: menu,",
+        "        self.isPresenting = true\n",
         "        self.morph = morph\n"
         "        self.isPresenting = true\n"
-        "        let aorusToken = self.aorusHoldHalos(preview: previewView, source: sourceView)\n"
-        "        if !morph.animate(from: source, to: menu,",
+        "        let aorusToken = self.aorusHoldHalos(preview: previewView, source: sourceView)\n",
         "lens opening halos",
     )
     text = _replace_once(
@@ -559,12 +557,14 @@ def _patch_lens_halo(tg: Path) -> None:
         text,
         "            self.restoreSourceViews()\n"
         "            self.fadeIn(alongsideAnimations: alongsideAnimations)\n"
+        "            return\n"
         "        }\n"
         "    }\n",
         "            self.restoreSourceViews()\n"
         "            self.aorusMenuHaloHold = nil\n"
         "            self.aorusSourceHaloHold = nil\n"
         "            self.fadeIn(alongsideAnimations: alongsideAnimations)\n"
+        "            return\n"
         "        }\n"
         "    }\n",
         "lens refused opening halos",
@@ -572,12 +572,12 @@ def _patch_lens_halo(tg: Path) -> None:
     text = _replace_once(
         text,
         "            let menu = self.makeMenuPreview()\n"
-        "            if morph.animate(from: menu, to: destination,",
+        "            let blurRadius = self.nativeBlurRadius\n",
         "            let menu = self.makeMenuPreview()\n"
         "            // AorusGram: the menu's halo stays out of sight while it shrinks into the button.\n"
         "            self.aorusMorphToken += 1\n"
         "            self.aorusMenuHaloHold = self.backgroundView.aorusHoldHalo()\n"
-        "            if morph.animate(from: menu, to: destination,",
+        "            let blurRadius = self.nativeBlurRadius\n",
         "lens closing halo",
     )
     text = _replace_once(

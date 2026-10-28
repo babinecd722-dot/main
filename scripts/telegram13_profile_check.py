@@ -44,7 +44,34 @@ COLLAPSED
     }
 '''
     native = method.replace("EXPANDED", expanded).replace("COLLAPSED", collapsed)
-    native = native.replace("        let usernameSpacing:", "        let subtitleRatingInset: CGFloat = 22\n        let subtitleButtonHorizontalOffset: CGFloat = 8\n        let subtitleRatingSize: CGSize? = self.subtitleRating == nil ? nil : CGSize(width: 22, height: 22)\n        let usernameSpacing:")
+    # What the modern branch reads around it: the rating's inset and the status button's offset,
+    # 13.1's side strip (iPhone Duo) and the band between its columns, Interface 2.0's centred
+    # header and the rating badge's visible inset. Declared only where the installed branch reads
+    # them: an unused one is a warning, and warnings fail here.
+    modern = expanded + collapsed
+    surroundings = []
+    if "subtitleRatingInset" in modern:
+        surroundings.append("        let subtitleRatingInset: CGFloat = 22")
+    if "subtitleButtonHorizontalOffset" in modern:
+        surroundings.append("        let subtitleButtonHorizontalOffset: CGFloat = 8")
+    if "subtitleRatingSize" in modern:
+        surroundings.append("        let subtitleRatingSize: CGSize? = self.subtitleRating == nil ? nil : CGSize(width: 22, height: 22)")
+    if "hasStrip" in modern:
+        surroundings.append("        let hasStrip = width > 1000")
+    if "stripLeft" in modern:
+        surroundings.append("        let stripLeft: CGFloat = hasStrip ? 48 : 0")
+    if "stripRight" in modern:
+        surroundings.append("        let stripRight: CGFloat = 0")
+    if "bandCenteredOrigin(" in modern:
+        surroundings.append("        func bandCenteredOrigin(width itemWidth: CGFloat, margin: CGFloat) -> CGFloat { max(margin, floorToScreenPixels((width - itemWidth) / 2.0)) }")
+    if "aorusCentredHeader" in modern:
+        surroundings.append("        let aorusCentredHeader = self.isSettings")
+    if surroundings:
+        native = native.replace("        let usernameSpacing:", "\n".join(surroundings) + "\n        let usernameSpacing:")
+    rating_view = "PeerInfoRatingComponent.View" in modern
+    rating_stub = '''enum PeerInfoRatingComponent { final class View { let visibleLeftInset: CGFloat = 3 } }
+final class RatingStub { let view: AnyObject? = PeerInfoRatingComponent.View() }
+''' if rating_view else ""
     reference = method.replace("EXPANDED", PROFILE_EXPANDED_SUBTITLE).replace("COLLAPSED", PROFILE_COLLAPSED_SUBTITLE)
     return '''import Foundation
 #if canImport(CoreGraphics)
@@ -52,8 +79,8 @@ import CoreGraphics
 #endif
 enum AorusOldInterface { static var isEnabled = true }
 func floorToScreenPixels(_ value: CGFloat) -> CGFloat { floor(value * 3) / 3 }
-class ProfileOwner {
-    var subtitleRating: Int?
+''' + rating_stub + '''class ProfileOwner {
+    var subtitleRating: ''' + ("RatingStub?" if rating_view else "Int?") + '''
     var isSettings = false
 ''' + native + '''
 }
@@ -67,8 +94,8 @@ let owner = ProfileOwner(), reference = ReferenceProfileOwner()
 for expanded in [false, true] { for width: CGFloat in [320, 390, 1024] {
     for usernameWidth: CGFloat in [0, 90] { for badge: CGSize? in [nil, CGSize(width: 24, height: 20)] {
         for fraction: CGFloat in [0, 0.5, 1] { for rating in [false, true] { for settings in [false, true] {
-            owner.subtitleRating = rating ? 1 : nil
-            reference.subtitleRating = owner.subtitleRating
+            owner.subtitleRating = rating ? ''' + ("RatingStub()" if rating_view else "1") + ''' : nil
+            reference.subtitleRating = rating ? 1 : nil
             owner.isSettings = settings
             AorusOldInterface.isEnabled = true
             expect(owner.layout(expanded: expanded, width: width, usernameWidth: usernameWidth, badge: badge, fraction: fraction) == reference.layout(expanded: expanded, width: width, usernameWidth: usernameWidth, badge: badge, fraction: fraction), "both classic profile states use the original 12.0 status and username frames")

@@ -122,8 +122,10 @@ def patch_native_proxy_updates(tg: Path, proxy_expression: str) -> None:
 def patch_camera_selection(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
     text = path.read_text()
-    text = replace(text, "            if useModernVideoMessagePipeline {",
-                   "            if useModernVideoMessagePipeline && !AorusOldInterface.isEnabled && !AorusVideoMaskProcessor.isMaskingActive {",
+    # 13.1.1 chooses among the round-video camera modes; the old interface and an active mask
+    # keep the legacy camera, as they did when the choice was modern or legacy.
+    text = replace(text, "            switch useModernVideoMessagePipeline ? experimentalSettings.videoMessageCameraMode : .legacy {",
+                   "            switch useModernVideoMessagePipeline && !AorusOldInterface.isEnabled && !AorusVideoMaskProcessor.isMaskingActive ? experimentalSettings.videoMessageCameraMode : .legacy {",
                    "camera implementation selection")
     if "import AorusGram\n" not in text:
         text = replace(text, "import Display\n", "import Display\nimport AorusGram\n", "camera core import")

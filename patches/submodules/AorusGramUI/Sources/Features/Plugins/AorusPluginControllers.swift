@@ -116,7 +116,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     init(context: AccountContext) {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         // Where the title was: Plugins and Market on Telegram's own glass. `title` stays unset,
         // because the navigation bar draws either the string or the custom view, never both.
@@ -466,7 +466,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     init(context: AccountContext, record: AorusPluginRecord) {
         self.context = context; self.record = record
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = record.manifest.name
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
@@ -718,7 +718,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         // The status is there the moment the screen is, saying it is being brought up to date,
         // instead of the section appearing a second later and pushing the rest down.
         self.isLoadingStatus = record.manifest.market?.isOwn == true
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = mode == .management ? record.manifest.name : AorusPluginUIString.configure.text
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
@@ -1170,7 +1170,7 @@ private final class AorusPluginLongTextController: ViewController {
         self.presentationData = presentationData
         self.saved = saved
         self.maxLength = max(1, maxLength)
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         self.title = title
         textView.text = text
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: AorusPluginUIString.save.text, style: .done, target: self, action: #selector(save))
@@ -1247,7 +1247,7 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
         layout.minimumInteritemSpacing = 12
         layout.sectionInset = UIEdgeInsets(top: 20, left: 20, bottom: 30, right: 20)
         self.collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         switch mode {
         case .icons: title = AorusPluginUIString.icon.text
         case .colors:
@@ -1487,7 +1487,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     init(context: AccountContext, record: AorusPluginRecord) {
         self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.lastRecorded = Snapshot(text: record.source, selection: NSRange(location: 0, length: 0))
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = record.manifest.name
         // Save · AI · ⋯. AI writes or rewrites the plugin from a description, into this editor.
         let aiButton = UIBarButtonItem(title: "AI", style: .plain, target: self, action: #selector(openGenerate))
@@ -2342,7 +2342,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
     private var valuesObserver: NSObjectProtocol?
     private var licenseObserver: NSObjectProtocol?
     private var colorPickerDelegate: AnyObject?
-    init(context: AccountContext, record: AorusPluginRecord) { self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }; self.values = AorusPluginStore.shared.settings(for: record.manifest.id); super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.settings.text; fields = AorusPluginRuntimeManager.shared.settingsSchema(id: record.manifest.id)
+    init(context: AccountContext, record: AorusPluginRecord) { self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }; self.values = AorusPluginStore.shared.settings(for: record.manifest.id); super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData)); title = AorusPluginUIString.settings.text; fields = AorusPluginRuntimeManager.shared.settingsSchema(id: record.manifest.id)
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
         })
@@ -2626,7 +2626,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
         self.requested = AorusPluginPermission.requestedBySource(record.source)
         let state = AorusPluginStore.shared.permissionState(for: record.manifest.id)
         self.granted = state.sourceDigest == AorusPluginStore.sourceDigest(record.source) ? state.granted : []
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = AorusPluginUIString.permissions.text
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
@@ -2707,7 +2707,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
 private final class AorusPluginDocsController: ViewController {
     private var presentationData: PresentationData; private let textView = UITextView()
     private var themeSubscription: AorusLiveThemeSubscription?
-    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text
+    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
         })
@@ -3676,7 +3676,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         self.pluginId = pluginId
         self.page = page
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = page.title
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         // A page opened over the app follows the theme by itself; a tab's bar is drawn by the
@@ -4346,7 +4346,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     init(context: AccountContext, record: AorusPluginRecord) {
         self.record = record
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = AorusPluginUIString.diagnostics.text
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
@@ -4473,7 +4473,7 @@ private final class AorusPluginConsoleController: ViewController {
     init(context: AccountContext, record: AorusPluginRecord) {
         self.record = record
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = AorusPluginUIString.console.text
         let clear = UIBarButtonItem(image: UIImage(bundleImageName: "Chat/Context Menu/Delete")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(clearLog))
         clear.accessibilityLabel = aorusL("Очистить", "Clear")

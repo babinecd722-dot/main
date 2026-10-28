@@ -13,7 +13,7 @@ def check_native_send(tg):
     from telegram13_list_check import block
     from aorus_telegram13 import install_native_enqueue_hook
     source = (tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift").read_text()
-    # Bodies from the pinned official release-13.0.0, before any client patches.
+    # Bodies from the pinned official Telegram (13.1.1), before any client patches.
     expected = {
         "enqueueMessages": "21dd38c28b9f3cd8261eb3a663c9800c54bcc6a6ca6fde42833a24c9aa8b82f0",
         "enqueueWelcomeMessages": "0b047a177fa53c68e82b4b34c39dead77c624b5bbbe69b42a3de019de22d374d",

@@ -12,16 +12,18 @@ def patch_light_surfaces(tg: Path) -> None:
     # attaches content to the effect view; the legacy branch needs the same hierarchy itself.
     source = edit(source, '            self.containerView.addSubnode(background)\n', '            self.containerView.addSubnode(background)\n            self.containerView.addSubnode(self.icon)\n            self.containerView.addSubnode(self.label)\n            self.containerView.addSubview(self.button)\n', 'classic gallery counter content')
     source = edit(source,
-        '            let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - selectedSize.height) / 2.0) + 1.0), size: selectedSize)',
+        '            let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n            self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonMinX(layout: layout), y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - selectedSize.height) / 2.0) + 1.0), size: selectedSize)',
         '            self.aorusLayoutSelectionCounter(size: selectedSize, layout: layout)',
         'selection changes use the same counter geometry as layout')
     source = edit(source,
-        '        let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n        self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: 16.0 + 44.0 + 12.0, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - self.selectedButtonNode.frame.height) / 2.0) + 1.0), size: self.selectedButtonNode.frame.size)',
+        '        let navigationHeight = navigationLayout(layout: layout).navigationFrame.height\n        self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonMinX(layout: layout), y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - self.selectedButtonNode.frame.height) / 2.0) + 1.0), size: self.selectedButtonNode.frame.size)',
         '        self.aorusLayoutSelectionCounter(size: self.selectedButtonNode.bounds.size, layout: layout)',
         'layout does not restore the glass counter position in classic mode')
     source = edit(source, '    public func dismissAnimated() {', '''    private func aorusLayoutSelectionCounter(size: CGSize, layout: ContainerViewLayout) {
         let isBack = self.cancelButtonNode.state == .back
-        let selectedButtonX: CGFloat = AorusOldInterface.isEnabled ? 16.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) + 12.0 : 16.0 + 44.0 + 12.0
+        // The classic Cancel or Back is wider than the glass button the native place is measured
+        // from; the side strip's inset (iPhone Duo) is in that place either way.
+        let selectedButtonX: CGFloat = AorusOldInterface.isEnabled ? selectedButtonMinX(layout: layout) - 44.0 + max(70.0, self.cancelButtonNode.buttonNode.bounds.width + (isBack ? 11.0 : 0.0)) : selectedButtonMinX(layout: layout)
         let navigationHeight = navigationLayout(layout: layout).navigationFrame.height
         self.selectedButtonNode.frame = CGRect(origin: CGPoint(x: selectedButtonX, y: self._hasGlassStyle ? 16.0 : floorToScreenPixels((navigationHeight - size.height) / 2.0) + 1.0), size: size)
         if AorusOldInterface.isEnabled, self.selectionCount > 0, self.controllerNode.currentDisplayMode == .all, let navigationBar = self.navigationBar {
@@ -168,8 +170,9 @@ def patch_light_surfaces(tg: Path) -> None:
             "                            var uploading = false\n"
         )
         media_node_source = edit(media_node_source, old_hls_block, new_hls_block, "preserve parent video file for thumbnail preview before HLS quality replacement")
+        # 13.1.1 draws a Wallet pass first; the secret media branch follows it.
         old_preview_section = (
-            "                            if isSecretMedia {\n"
+            "                            } else if isSecretMedia {\n"
             "                                updateImageSignal = { synchronousLoad, _ in\n"
             "                                    return chatSecretMessageVideo(account: context.account, userLocation: .peer(message.id.peerId), videoReference: .message(message: MessageReference(message), media: file))\n"
             "                                }\n"

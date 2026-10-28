@@ -21,6 +21,9 @@ def check_controls(tg: Path, swiftc: str) -> None:
     assert 'isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons' in picker
     counter = block(picker, '    private func aorusLayoutSelectionCounter(')
     counter_x = next(line.strip() for line in counter.splitlines() if 'let selectedButtonX:' in line)
+    # 13.1 measures the counter's place from the bar's side strip (iPhone Duo); run the installed
+    # measurement, from the layout's insets, rather than a copy of it.
+    minimum_x = block(picker, 'private func selectedButtonMinX(layout: ContainerViewLayout) -> CGFloat {')
     title = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerTitleView.swift').read_text()
     title_geometry = title[title.index('        let leadingInset = self.aorusLeadingContentInset'):title.index('        let titleSize = self.titleNode.updateLayout')]
     title_x = re.search(r'self.titleNode.frame = CGRect\(origin: CGPoint\(x: (.+), y: floorToScreenPixels', title).group(1)
@@ -36,10 +39,13 @@ enum AorusOldInterface { static var isEnabled = false }
 func floorToScreenPixels(_ x: CGFloat) -> CGFloat { x }
 struct Params { let leftInset: CGFloat; let rightInset: CGFloat }
 struct Cancel { enum State { case back, cancel }; var state: State; struct Button { var bounds: CGRect }; var buttonNode: Button }
+struct Insets { var left: CGFloat; var right: CGFloat }
+struct ContainerViewLayout { var safeInsets: Insets }
+''' + minimum_x + '''
 struct Gallery {
     var cancelButtonNode: Cancel
     var aorusLeadingContentInset: CGFloat = 0
-    func counterX() -> CGFloat {
+    func counterX(layout: ContainerViewLayout) -> CGFloat {
         let isBack = self.cancelButtonNode.state == .back
 ''' + counter_x + '''
         return selectedButtonX
@@ -77,16 +83,16 @@ for width: CGFloat in [320, 375, 390, 428, 768, 1024] {
 for old in [false, true] {
     AorusOldInterface.isEnabled = old
     for back in [false, true] {
-        for labelWidth: CGFloat in [40, 70, 96, 120] {
+        for labelWidth: CGFloat in [40, 70, 96, 120] { for strip: CGFloat in [0, 48] {
             var gallery = Gallery(cancelButtonNode: Cancel(state: back ? .back : .cancel, buttonNode: .init(bounds: CGRect(x: 0, y: 0, width: labelWidth, height: 44))))
-            let x = gallery.counterX()
-            expect(old ? x >= 16 + labelWidth + (back ? 11 : 0) + 12 : x == 72, "counter clears localized close/back labels and preserves glass placement")
-            if old {
+            let x = gallery.counterX(layout: ContainerViewLayout(safeInsets: Insets(left: strip, right: 0)))
+            expect(old ? x >= strip + 16 + labelWidth + (back ? 11 : 0) + 12 : x == strip + 72, "counter clears localized close/back labels and the side strip, and preserves glass placement")
+            if old && strip == 0 {
                 gallery.aorusLeadingContentInset = x + 48 + 8
                 let titleX = gallery.titleX(size: CGSize(width: 390, height: 56), totalWidth: 115)
                 expect(titleX >= gallery.aorusLeadingContentInset, "classic gallery title clears the selected counter")
             }
-        }
+        } }
     }
 }
 print("Gallery, paid composer and tab bounds: \\(checks) assertions passed")

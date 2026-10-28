@@ -861,7 +861,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.canvas = AorusMaskCanvasView(image: nil)
         // The glass header every list screen of the client has, fading into the same
         // grouped background the screen is drawn on.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, hideBackground: false, hideBadge: false, edgeEffectColor: self.presentationData.theme.list.blocksBackgroundColor))
         self.title = aorusL("Своя маска", "Custom Mask")
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
@@ -885,7 +885,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.presentationData = presentationData
         let theme = presentationData.theme
         self.statusBar.statusBarStyle = theme.rootController.statusBarStyle.style
-        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, style: .glass, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
+        self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData, hideBackground: false, hideBadge: false, edgeEffectColor: theme.list.blocksBackgroundColor), animated: false)
         self.navigationItem.rightBarButtonItem?.tintColor = theme.list.itemAccentColor
         guard self.isNodeLoaded else { return }
         self.displayNode.backgroundColor = theme.list.blocksBackgroundColor

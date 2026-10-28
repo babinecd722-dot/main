@@ -298,9 +298,9 @@ def _patch_round_action_buttons(tg: Path) -> None:
         return
     head = _replace_once(
         head,
-        "        let buttonWidth = (width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing\n"
+        "        let buttonWidth = (width - stripLeft - stripRight - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing\n"
         "        let buttonSize = CGSize(width: buttonWidth, height: 58.0)\n"
-        "        var buttonRightOrigin = CGPoint(x: width - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
+        "        var buttonRightOrigin = CGPoint(x: width - stripRight - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
         "        // AorusGram: Interface 2.0 lays the row out as centred circles instead of\n"
         "        // rectangles stretched edge to edge.\n"
         "        let aorusRoundButtons = !buttonKeys.isEmpty && AorusInterfaceV2Run.isEnabled\n"
@@ -310,12 +310,13 @@ def _patch_round_action_buttons(tg: Path) -> None:
         "        // profiles overflow their own header. Shrunk to fit instead, down to a floor that\n"
         "        // still holds a 40pt icon and a tappable target.\n"
         "        let aorusButtonCount = CGFloat(max(1, buttonKeys.count))\n"
-        "        let aorusRoundButtonFit = (width - buttonSideInset * 2.0 - (aorusButtonCount - 1.0) * buttonSpacing) / aorusButtonCount\n"
+        "        let aorusRoundButtonFit = (width - stripLeft - stripRight - buttonSideInset * 2.0 - (aorusButtonCount - 1.0) * buttonSpacing) / aorusButtonCount\n"
         "        let aorusRoundButtonDiameter: CGFloat = max(44.0, min(64.0, floor(aorusRoundButtonFit)))\n"
-        "        let buttonWidth = aorusRoundButtons ? aorusRoundButtonDiameter : ((width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing)\n"
+        "        let buttonWidth = aorusRoundButtons ? aorusRoundButtonDiameter : ((width - stripLeft - stripRight - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing)\n"
         "        let buttonSize = CGSize(width: buttonWidth, height: aorusRoundButtons ? aorusRoundButtonDiameter : 58.0)\n"
         "        let aorusRowWidth = CGFloat(buttonKeys.count) * buttonSize.width + CGFloat(max(0, buttonKeys.count - 1)) * buttonSpacing\n"
-        "        var buttonRightOrigin = CGPoint(x: aorusRoundButtons ? floor((width + aorusRowWidth) / 2.0) : width - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
+        "        // Centred in the band between the side strips (iPhone Duo), the whole width otherwise.\n"
+        "        var buttonRightOrigin = CGPoint(x: aorusRoundButtons ? floor((stripLeft + width - stripRight + aorusRowWidth) / 2.0) : width - stripRight - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
         "round button row",
     )
     header.write_text(head, encoding="utf-8")
@@ -360,75 +361,71 @@ def _patch_music_capsule(tg: Path) -> None:
     # which is what the capsule is sized from.
     text = _replace_once(
         text,
-        "                        minSize: CGSize(width: backgroundFrame.width, height: musicHeight),\n",
-        "                        minSize: CGSize(width: aorusInterfaceV2Enabled ? 0.0 : backgroundFrame.width, height: musicHeight),\n",
+        "                            minSize: CGSize(width: musicBandWidth, height: musicHeight),\n",
+        "                            minSize: CGSize(width: aorusInterfaceV2Enabled ? 0.0 : musicBandWidth, height: musicHeight),\n",
         "music capsule min size",
     )
     text = _replace_once(
         text,
-        "            let musicFrame = CGRect(origin: CGPoint(x: 0.0, y:",
-        "            let aorusMusicX: CGFloat = aorusInterfaceV2Enabled ? floor((backgroundFrame.width - musicSize.width) / 2.0) : 0.0\n"
-        "            let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y:",
+        "                let musicFrame = CGRect(origin: CGPoint(x: stripLeft, y:",
+        "                // Centred in the band between the side strips, as the row itself is laid out.\n"
+        "                let aorusMusicX: CGFloat = aorusInterfaceV2Enabled ? stripLeft + floor((musicBandWidth - musicSize.width) / 2.0) : stripLeft\n"
+        "                let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y:",
         "music capsule frame",
     )
     text = _replace_once(
         text,
-        "                if musicView.superview == nil {\n"
-        "                    self.regularContentNode.view.addSubview(musicView)\n",
-        "                if aorusInterfaceV2Enabled {\n"
-        "                    // Inserted below the row rather than behind it as a sublayer so it\n"
-        "                    // travels with the same additive transitions the row already uses.\n"
-        "                    if self.aorusMusicCapsule.superview == nil {\n"
-        "                        self.aorusMusicCapsule.isUserInteractionEnabled = false\n"
-        "                        self.regularContentNode.view.addSubview(self.aorusMusicCapsule)\n"
-        "                    }\n"
-        "                    // A small pill, per the mockup: the row inside it is 16pt of 11pt type,\n"
-        "                    // and 3pt of padding is what turns that into a capsule rather than into\n"
-        "                    // the 38pt banner the first version drew across the bottom of the header.\n"
-        "                    let aorusCapsuleFrame = musicFrame.insetBy(dx: -12.0, dy: -3.0)\n"
-        "                    // Additive when the row is additive, and never the plain path while the\n"
-        "                    // row takes the additive one. That mismatch is what made the capsule\n"
-        "                    // slide out from under its own text on every scroll frame -- the row's\n"
-        "                    // frame was being animated from its centre while the pill jumped\n"
-        "                    // straight to the new one.\n"
-        "                    if additive {\n"
-        "                        musicTransition.updateFrameAdditiveToCenter(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
-        "                    } else {\n"
-        "                        musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
-        "                    }\n"
-        "                    self.aorusMusicCapsule.update(\n"
-        "                        size: aorusCapsuleFrame.size,\n"
-        "                        cornerRadius: aorusCapsuleFrame.height * 0.5,\n"
-        "                        // The glass takes the page's side, as the ink inside it does: a\n"
-        "                        // dark pane under the near-black ink of a pale photo hid the track.\n"
-        "                        isDark: AorusGlassPane.profilePageIsDark,\n"
-        "                        tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "                        isInteractive: false,\n"
-        "                        isVisible: true,\n"
-        "                        transition: .immediate\n"
-        "                    )\n"
-        "                    // The row's own alpha, to the point of using the same two branches and\n"
-        "                    // the same curve. Pinned at 1.0 the glass stayed behind as a bare\n"
-        "                    // lozenge once the header collapsed the text out from inside it, which\n"
-        "                    // is the artefact that showed while scrolling.\n"
-        "                    if let _ = self.navigationTransition {\n"
-        "                        transition.updateAlpha(layer: self.aorusMusicCapsule.layer, alpha: 1.0 - transitionFraction)\n"
-        "                    } else {\n"
+        "                    if musicView.superview == nil {\n"
+        "                        // A newly loaded strip item fades in at its final position.\n",
+        "                    if aorusInterfaceV2Enabled {\n"
+        "                        // Inserted below the row rather than behind it as a sublayer so it\n"
+        "                        // travels with the same additive transitions the row already uses.\n"
+        "                        if self.aorusMusicCapsule.superview == nil {\n"
+        "                            self.aorusMusicCapsule.isUserInteractionEnabled = false\n"
+        "                            self.regularContentNode.view.addSubview(self.aorusMusicCapsule)\n"
+        "                        }\n"
+        "                        // A small pill, per the mockup: the row inside it is 16pt of 11pt type,\n"
+        "                        // and 3pt of padding is what turns that into a capsule rather than into\n"
+        "                        // the 38pt banner the first version drew across the bottom of the header.\n"
+        "                        let aorusCapsuleFrame = musicFrame.insetBy(dx: -12.0, dy: -3.0)\n"
+        "                        // Additive when the row is additive, and never the plain path while the\n"
+        "                        // row takes the additive one. That mismatch is what made the capsule\n"
+        "                        // slide out from under its own text on every scroll frame -- the row's\n"
+        "                        // frame was being animated from its centre while the pill jumped\n"
+        "                        // straight to the new one.\n"
+        "                        if additive {\n"
+        "                            musicTransition.updateFrameAdditiveToCenter(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                        } else {\n"
+        "                            musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                        }\n"
+        "                        self.aorusMusicCapsule.update(\n"
+        "                            size: aorusCapsuleFrame.size,\n"
+        "                            cornerRadius: aorusCapsuleFrame.height * 0.5,\n"
+        "                            // The glass takes the page's side, as the ink inside it does: a\n"
+        "                            // dark pane under the near-black ink of a pale photo hid the track.\n"
+        "                            isDark: AorusGlassPane.profilePageIsDark,\n"
+        "                            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
+        "                            isInteractive: false,\n"
+        "                            isVisible: true,\n"
+        "                            transition: .immediate\n"
+        "                        )\n"
+        "                        // The row's own alpha, on the same curve. Pinned at 1.0 the glass stayed\n"
+        "                        // behind as a bare lozenge once the header collapsed the text out from\n"
+        "                        // inside it, which is the artefact that showed while scrolling.\n"
         "                        ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut).updateAlpha(layer: self.aorusMusicCapsule.layer, alpha: backgroundBannerAlpha)\n"
+        "                    } else if self.aorusMusicCapsule.superview != nil {\n"
+        "                        self.aorusMusicCapsule.removeFromSuperview()\n"
         "                    }\n"
-        "                } else if self.aorusMusicCapsule.superview != nil {\n"
-        "                    self.aorusMusicCapsule.removeFromSuperview()\n"
-        "                }\n"
-        "                if musicView.superview == nil {\n"
-        "                    self.regularContentNode.view.addSubview(musicView)\n",
+        "                    if musicView.superview == nil {\n"
+        "                        // A newly loaded strip item fades in at its final position.\n",
         "music capsule view",
     )
     # One flag for the whole music block, read once where the block begins.
     text = _replace_once(
         text,
-        "        if let currentSavedMusic {\n",
-        "        let aorusInterfaceV2Enabled = AorusInterfaceV2Run.isEnabled\n"
-        "        if let currentSavedMusic {\n",
+        "            if let currentSavedMusic {\n",
+        "            let aorusInterfaceV2Enabled = AorusInterfaceV2Run.isEnabled\n"
+        "            if let currentSavedMusic {\n",
         "music capsule flag",
     )
     # The peer stops sharing a track, or the header is reused for one that never did: the row is
@@ -853,7 +850,13 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "        // slot: during a push two profiles lay out on every frame of the animation, and a\n"
         "        // single slot would let each overwrite the other's colour.\n"
         "        if let aorusPageColor = self.aorusUpdatePageColor() {\n"
-        "            self.backgroundColor = aorusPageColor\n"
+        "            // While an expansion fades the page in under its card the page is its view's,\n"
+        "            // as Telegram's own colour is: the node itself is kept clear until it ends.\n"
+        "            if let expansionBackgroundView = self.expansionBackgroundView {\n"
+        "                expansionBackgroundView.backgroundColor = aorusPageColor\n"
+        "            } else {\n"
+        "                self.backgroundColor = aorusPageColor\n"
+        "            }\n"
         "            self.aorusUpdatePageBackdrop(image: AorusGlassProfileTint.pageBackgroundImage(for: self.peerId.id._internalGetInt64Value()))\n"
         "            return\n"
         "        }\n"
@@ -868,8 +871,16 @@ def _patch_profile_list_glass(tg: Path) -> None:
     screen = _replace_once(
         screen,
         "    func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition, additive: Bool = false) {\n"
+        "        if self.isLentToExpansion {\n"
+        "            self.layoutHeldDuringExpansion = (layout, navigationHeight)\n"
+        "            return\n"
+        "        }\n"
         "        self.validLayout = (layout, navigationHeight)\n",
         "    func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition, additive: Bool = false) {\n"
+        "        if self.isLentToExpansion {\n"
+        "            self.layoutHeldDuringExpansion = (layout, navigationHeight)\n"
+        "            return\n"
+        "        }\n"
         "        self.validLayout = (layout, navigationHeight)\n"
         "        \n"
         "        // AorusGram: before anything on this screen is drawn, so it is drawn in this\n"
@@ -894,8 +905,16 @@ def _patch_profile_list_glass(tg: Path) -> None:
     screen = _replace_once(
         screen,
         "    fileprivate func updateNavigation(transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) {\n"
+        "        // Held with the layout while an expansion has the header's views; the held layout's application runs it.\n"
+        "        if self.isLentToExpansion {\n"
+        "            return\n"
+        "        }\n"
         "        let offsetY = self.scrollNode.view.contentOffset.y\n",
         "    fileprivate func updateNavigation(transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) {\n"
+        "        // Held with the layout while an expansion has the header's views; the held layout's application runs it.\n"
+        "        if self.isLentToExpansion {\n"
+        "            return\n"
+        "        }\n"
         "        // AorusGram: as in containerLayoutUpdated -- this pass redraws the header too, and\n"
         "        // does it before updateBackgroundColor at the end of it.\n"
         "        let aorusBorrowedSlot = self.aorusBorrowPageSlot()\n"

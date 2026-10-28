@@ -1,25 +1,14 @@
 {
  "reference": "release-12.0",
  "commit": "29b266d5adb0d3a32b93f5506210fe7d20b8f81f",
- "current": "13.0",
- "current_commit": "f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838",
+ "current": "13.1.1",
+ "current_commit": "fb0e62ba8a147f0821da6aa63c09da7d79a10111",
  "values": [
   {
    "path": "submodules/AttachmentUI/Sources/AttachmentController.swift",
    "reference": "submodules/AttachmentUI/Sources/AttachmentController.swift",
    "reference_sha256": "cc26d662a362a184749ab0a5625bf55262f0fc1543344539aa039b248a4bf5cd",
    "occurrence": 0,
-   "occurrences": 2,
-   "old": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.4, curve: .spring))",
-   "new": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.5, curve: .spring))",
-   "form": "if-statement",
-   "replacement": "                                        if AorusOldInterface.isEnabled {\n                                            strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.4, curve: .spring))\n                                        } else {\n                                            strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.5, curve: .spring))\n                                        }"
-  },
-  {
-   "path": "submodules/AttachmentUI/Sources/AttachmentController.swift",
-   "reference": "submodules/AttachmentUI/Sources/AttachmentController.swift",
-   "reference_sha256": "cc26d662a362a184749ab0a5625bf55262f0fc1543344539aa039b248a4bf5cd",
-   "occurrence": 1,
    "occurrences": 2,
    "old": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.4, curve: .spring))",
    "new": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.5, curve: .spring))",
@@ -93,6 +82,17 @@
    "replacement": "                if AorusOldInterface.isEnabled {\n                    self.containerLayoutUpdated(layout, transition: animated ? .animated(duration: 0.4, curve: .spring) : .immediate)\n                } else {\n                    self.containerLayoutUpdated(layout, transition: animated ? .animated(duration: 0.5, curve: .spring) : .immediate)\n                }"
   },
   {
+   "path": "submodules/AttachmentUI/Sources/AttachmentController.swift",
+   "reference": "submodules/AttachmentUI/Sources/AttachmentController.swift",
+   "reference_sha256": "cc26d662a362a184749ab0a5625bf55262f0fc1543344539aa039b248a4bf5cd",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.4, curve: .spring))",
+   "new": "                                        strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.5, curve: .spring))",
+   "form": "if-statement",
+   "replacement": "                                        if AorusOldInterface.isEnabled {\n                                            strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.4, curve: .spring))\n                                        } else {\n                                            strongSelf.containerLayoutUpdated(layout, transition: .animated(duration: 0.5, curve: .spring))\n                                        }"
+  },
+  {
    "path": "submodules/AuthorizationUI/Sources/AuthorizationSequencePaymentScreen.swift",
    "reference": "submodules/AuthorizationUI/Sources/AuthorizationSequencePaymentScreen.swift",
    "reference_sha256": "ac7845d76cfb75c21c5f4a6ff8ff8a983961052713fb7b3ad5b55df1745a4ff9",
@@ -143,9 +143,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "        self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 0.0), size: CGSize(width: width - 10.0 - sideInset * 2.0, height: 44.0))",
-   "new": "        self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 4.0), size: CGSize(width: width - 10.0 - sideInset * 2.0, height: 44.0))",
+   "new": "        self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 4.0), size: CGSize(width: width - 10.0 - sideInset - rightSideInset, height: 44.0))",
    "form": "if-statement",
-   "replacement": "        if AorusOldInterface.isEnabled {\n            self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 0.0), size: CGSize(width: width - 10.0 - sideInset * 2.0, height: 44.0))\n        } else {\n            self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 4.0), size: CGSize(width: width - 10.0 - sideInset * 2.0, height: 44.0))\n        }"
+   "replacement": "        if AorusOldInterface.isEnabled {\n            self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 0.0), size: CGSize(width: width - 10.0 - sideInset - rightSideInset, height: 44.0))\n        } else {\n            self.cardField.frame = CGRect(origin: CGPoint(x: 5.0 + sideInset, y: 4.0), size: CGSize(width: width - 10.0 - sideInset - rightSideInset, height: 44.0))\n        }"
   },
   {
    "path": "submodules/BotPaymentsUI/Sources/BotPaymentDisclosureItemNode.swift",
@@ -176,9 +176,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "        let switchFrame = CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - sideInset, y: 6.0), size: switchSize)",
-   "new": "        let switchFrame = CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - sideInset, y: 12.0), size: switchSize)",
+   "new": "        let switchFrame = CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - rightSideInset, y: 12.0), size: switchSize)",
    "form": "if-expression",
-   "replacement": "        let switchFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - sideInset, y: 6.0), size: switchSize) } else { CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - sideInset, y: 12.0), size: switchSize) }"
+   "replacement": "        let switchFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - rightSideInset, y: 6.0), size: switchSize) } else { CGRect(origin: CGPoint(x: width - switchSize.width - 15.0 - rightSideInset, y: 12.0), size: switchSize) }"
   },
   {
    "path": "submodules/BotPaymentsUI/Sources/BotPaymentSwitchItemNode.swift",
@@ -212,6 +212,17 @@
    "new": "                containerFrame = CGRect(origin: CGPoint(x: floor(component.addressBarFrame.center.x - containerSize.width / 2.0), y: 100.0), size: containerSize)",
    "form": "if-statement",
    "replacement": "                if AorusOldInterface.isEnabled {\n                    containerFrame = CGRect(origin: CGPoint(x: floor(component.addressBarFrame.center.x - containerSize.width / 2.0), y: 72.0), size: containerSize)\n                } else {\n                    containerFrame = CGRect(origin: CGPoint(x: floor(component.addressBarFrame.center.x - containerSize.width / 2.0), y: 100.0), size: containerSize)\n                }"
+  },
+  {
+   "path": "submodules/BrowserUI/Sources/BrowserAddressListItemComponent.swift",
+   "reference": "submodules/BrowserUI/Sources/BrowserAddressListItemComponent.swift",
+   "reference_sha256": "e976991e4bde7920d127514f690aad202b529ecd2a6f6f943f474896357693b7",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "private let iconFont = Font.with(size: 30.0, design: .round, weight: .bold)",
+   "new": "private let iconFont = Font.with(size: 28.0, design: .round, weight: .bold)",
+   "form": "if-expression",
+   "replacement": "private let iconFont = if AorusOldInterface.isEnabled { Font.with(size: 30.0, design: .round, weight: .bold) } else { Font.with(size: 28.0, design: .round, weight: .bold) }"
   },
   {
    "path": "submodules/ChatListUI/Sources/ChatListEmptyNode.swift",
@@ -256,6 +267,17 @@
    "new": "            let badgeFont = Font.with(size: floor(item.presentationData.fontSize.itemListBaseFontSize * 12.0 / 17.0), design: .regular, weight: .semibold, traits: [.monospacedNumbers])",
    "form": "if-expression",
    "replacement": "            let badgeFont = if AorusOldInterface.isEnabled { Font.with(size: floor(item.presentationData.fontSize.itemListBaseFontSize * 14.0 / 17.0), design: .regular, weight: .regular, traits: [.monospacedNumbers]) } else { Font.with(size: floor(item.presentationData.fontSize.itemListBaseFontSize * 12.0 / 17.0), design: .regular, weight: .semibold, traits: [.monospacedNumbers]) }"
+  },
+  {
+   "path": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
+   "reference": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
+   "reference_sha256": "2c90d6f6db7c59c9eeb7c7cb6db22cdf77ba0e6c841ab5b4752a44a9cd2f0b6c",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
+   "new": "            let titleFont = Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) } else { Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) }"
   },
   {
    "path": "submodules/ChatSendMessageActionUI/Sources/ChatSendMessageContextScreen.swift",
@@ -316,29 +338,7 @@
    "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
    "reference": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
    "reference_sha256": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
-   "occurrence": 1,
-   "occurrences": 2,
-   "old": "                let avatarSize: CGFloat = 28.0",
-   "new": "                let avatarSize: CGFloat = 30.0",
-   "form": "if-expression",
-   "replacement": "                let avatarSize: CGFloat = if AorusOldInterface.isEnabled { 28.0 } else { 30.0 }"
-  },
-  {
-   "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
-   "reference": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
-   "reference_sha256": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
    "occurrence": 0,
-   "occurrences": 2,
-   "old": "                let avatarSpacing: CGFloat = 8.0",
-   "new": "                let avatarSpacing: CGFloat = 10.0",
-   "form": "if-expression",
-   "replacement": "                let avatarSpacing: CGFloat = if AorusOldInterface.isEnabled { 8.0 } else { 10.0 }"
-  },
-  {
-   "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
-   "reference": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
-   "reference_sha256": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
-   "occurrence": 1,
    "occurrences": 2,
    "old": "                let avatarSpacing: CGFloat = 8.0",
    "new": "                let avatarSpacing: CGFloat = 10.0",
@@ -355,6 +355,28 @@
    "new": "            self.titleLabelNode.frame = CGRect(origin: CGPoint(x: sideInset + 42.0, y: floor((size.height - titleSize.height) / 2.0)), size: titleSize)",
    "form": "if-statement",
    "replacement": "            if AorusOldInterface.isEnabled {\n                self.titleLabelNode.frame = CGRect(origin: CGPoint(x: sideInset + 36.0, y: floor((size.height - titleSize.height) / 2.0)), size: titleSize)\n            } else {\n                self.titleLabelNode.frame = CGRect(origin: CGPoint(x: sideInset + 42.0, y: floor((size.height - titleSize.height) / 2.0)), size: titleSize)\n            }"
+  },
+  {
+   "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+   "reference": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+   "reference_sha256": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "                let avatarSize: CGFloat = 28.0",
+   "new": "                let avatarSize: CGFloat = 30.0",
+   "form": "if-expression",
+   "replacement": "                let avatarSize: CGFloat = if AorusOldInterface.isEnabled { 28.0 } else { 30.0 }"
+  },
+  {
+   "path": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+   "reference": "submodules/Components/ReactionListContextMenuContent/Sources/ReactionListContextMenuContent.swift",
+   "reference_sha256": "033b57e1d11d27ae48c162136c07bd57c21e7541fc3847ac23f644a0cb87673d",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "                let avatarSpacing: CGFloat = 8.0",
+   "new": "                let avatarSpacing: CGFloat = 10.0",
+   "form": "if-expression",
+   "replacement": "                let avatarSpacing: CGFloat = if AorusOldInterface.isEnabled { 8.0 } else { 10.0 }"
   },
   {
    "path": "submodules/CounterControllerTitleView/Sources/CounterControllerTitleView.swift",
@@ -374,9 +396,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "        self.dateButtonNode.frame = CGRect(x: size.width - timeSize.width - 4.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)",
-   "new": "        self.dateButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)",
+   "new": "        self.dateButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)",
    "form": "if-statement",
-   "replacement": "        if AorusOldInterface.isEnabled {\n            self.dateButtonNode.frame = CGRect(x: size.width - timeSize.width - 4.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)\n        } else {\n            self.dateButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)\n        }"
+   "replacement": "        if AorusOldInterface.isEnabled {\n            self.dateButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 4.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)\n        } else {\n            self.dateButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)\n        }"
   },
   {
    "path": "submodules/DatePickerNode/Sources/DatePickerNode.swift",
@@ -396,9 +418,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "        self.timeButtonNode.frame = CGRect(x: size.width - timeSize.width - 4.0, y: 4.0, width: timeSize.width, height: timeSize.height)",
-   "new": "        self.timeButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)",
+   "new": "        self.timeButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)",
    "form": "if-statement",
-   "replacement": "        if AorusOldInterface.isEnabled {\n            self.timeButtonNode.frame = CGRect(x: size.width - timeSize.width - 4.0, y: 4.0, width: timeSize.width, height: timeSize.height)\n        } else {\n            self.timeButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)\n        }"
+   "replacement": "        if AorusOldInterface.isEnabled {\n            self.timeButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 4.0, y: 4.0, width: timeSize.width, height: timeSize.height)\n        } else {\n            self.timeButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)\n        }"
   },
   {
    "path": "submodules/DatePickerNode/Sources/DatePickerNode.swift",
@@ -454,6 +476,17 @@
    "new": "        return min(layout.size.width, 440.0) - sideInset * 2.0",
    "form": "if-statement",
    "replacement": "        if AorusOldInterface.isEnabled {\n            return min(layout.size.width, 428.0) - sideInset * 2.0\n        } else {\n            return min(layout.size.width, 440.0) - sideInset * 2.0\n        }"
+  },
+  {
+   "path": "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift",
+   "reference": "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift",
+   "reference_sha256": "ad30021b22015f6c5fc5d050c72ba3de01dd778017ff7ade408624e3ed2d9cab",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "private let textFont = Font.with(size: 13.0, design: .regular, weight: .regular, traits: [.monospacedNumbers])",
+   "new": "private let textFont = Font.with(size: 13.0, design: .regular, weight: .medium, traits: [.monospacedNumbers])",
+   "form": "if-expression",
+   "replacement": "private let textFont = if AorusOldInterface.isEnabled { Font.with(size: 13.0, design: .regular, weight: .regular, traits: [.monospacedNumbers]) } else { Font.with(size: 13.0, design: .regular, weight: .medium, traits: [.monospacedNumbers]) }"
   },
   {
    "path": "submodules/GalleryUI/Sources/GalleryController.swift",
@@ -553,6 +586,73 @@
    "new": "        self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(17.0), textColor: theme.rootController.navigationBar.primaryTextColor)",
    "form": "if-statement",
    "replacement": "        if AorusOldInterface.isEnabled {\n            self.titleNode.attributedText = NSAttributedString(string: title, font: Font.medium(17.0), textColor: theme.rootController.navigationBar.primaryTextColor)\n        } else {\n            self.titleNode.attributedText = NSAttributedString(string: title, font: Font.semibold(17.0), textColor: theme.rootController.navigationBar.primaryTextColor)\n        }"
+  },
+  {
+   "path": "submodules/ItemListUI/Sources/Items/ItemListExpandableSwitchItem.swift",
+   "reference": "submodules/ItemListUI/Sources/Items/ItemListExpandableSwitchItem.swift",
+   "reference_sha256": "fa0be9cc60c22a698f3a5e52faa91a0b38fb5319ccfad434d39ee14a95f2581d",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
+  },
+  {
+   "path": "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift",
+   "reference": "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift",
+   "reference_sha256": "36068f05dd50f9659f8627c631e9bf2f790122025dccc205a4571da55609cd5a",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
+   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
+  },
+  {
+   "path": "submodules/ListMessageItem/Sources/ListMessageSnippetItemNode.swift",
+   "reference": "submodules/ListMessageItem/Sources/ListMessageSnippetItemNode.swift",
+   "reference_sha256": "5f4c42ed7eb62c9ffb1aed40d79b71cb99478705e72d54fca8d89488a2585cae",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "private let iconFont = Font.with(size: 30.0, design: .round, weight: .bold)",
+   "new": "private let iconFont = Font.with(size: 28.0, design: .round, weight: .bold)",
+   "form": "if-expression",
+   "replacement": "private let iconFont = if AorusOldInterface.isEnabled { Font.with(size: 30.0, design: .round, weight: .bold) } else { Font.with(size: 28.0, design: .round, weight: .bold) }"
+  },
+  {
+   "path": "submodules/LocationUI/Sources/LocationActionListItem.swift",
+   "reference": "submodules/LocationUI/Sources/LocationActionListItem.swift",
+   "reference_sha256": "2739dd18e81d203c24e4379cf69bb09c9aefb96d09ebbceeebe34e75328fd859",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
+   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
+  },
+  {
+   "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+   "reference": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
+   "reference_sha256": "1484aad6c79d9cb2c0f02c09eee7e37b0c0d446dda501b4ae771afade5c3b639",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
+   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
+  },
+  {
+   "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+   "reference": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
+   "reference_sha256": "1bcac2d06cac1ef55bacf723977f2e41f86ebed112a7555f1489bf53bbb03d4d",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
+   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
   },
   {
    "path": "submodules/LocationUI/Sources/LocationMapNode.swift",
@@ -707,6 +807,17 @@
    "new": "private let textFont = Font.regular(14.0)",
    "form": "if-expression",
    "replacement": "private let textFont = if AorusOldInterface.isEnabled { Font.regular(13.0) } else { Font.regular(14.0) }"
+  },
+  {
+   "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
+   "reference": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
+   "reference_sha256": "7b62afadbacb0338abfcf70f7bf3a6cc4cecd6b2ce66666e52defca0846edb43",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
+   "new": "            let titleFont = Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0))",
+   "form": "if-expression",
+   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) } else { Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0)) }"
   },
   {
    "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListWebsiteItem.swift",
@@ -1144,9 +1255,31 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "                    datePickerNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((params.width - datePickerSize.width) / 2.0), y: 0.0), size: datePickerSize)",
-   "new": "                    datePickerNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((params.width - datePickerSize.width) / 2.0), y: 4.0), size: datePickerSize)",
+   "new": "                    datePickerNode.frame = CGRect(origin: CGPoint(x: params.leftInset + floorToScreenPixels((params.width - params.leftInset - params.rightInset - datePickerSize.width) / 2.0), y: 4.0), size: datePickerSize)",
    "form": "if-statement",
-   "replacement": "                    if AorusOldInterface.isEnabled {\n                        datePickerNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((params.width - datePickerSize.width) / 2.0), y: 0.0), size: datePickerSize)\n                    } else {\n                        datePickerNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((params.width - datePickerSize.width) / 2.0), y: 4.0), size: datePickerSize)\n                    }"
+   "replacement": "                    if AorusOldInterface.isEnabled {\n                        datePickerNode.frame = CGRect(origin: CGPoint(x: params.leftInset + floorToScreenPixels((params.width - params.leftInset - params.rightInset - datePickerSize.width) / 2.0), y: 0.0), size: datePickerSize)\n                    } else {\n                        datePickerNode.frame = CGRect(origin: CGPoint(x: params.leftInset + floorToScreenPixels((params.width - params.leftInset - params.rightInset - datePickerSize.width) / 2.0), y: 4.0), size: datePickerSize)\n                    }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
+   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
+   "reference_sha256": "3ba32831f7de1c039b859b568247c9d6853282bc94c6a657547d5bf21e785cef",
+   "occurrence": 0,
+   "occurrences": 2,
+   "old": "                        font: Font.regular(14.0),",
+   "new": "                        font: Font.bold(13.0),",
+   "form": "ternary-argument",
+   "replacement": "                        font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
+   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
+   "reference_sha256": "3ba32831f7de1c039b859b568247c9d6853282bc94c6a657547d5bf21e785cef",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "                        font: Font.regular(14.0),",
+   "new": "                        font: Font.bold(13.0),",
+   "form": "ternary-argument",
+   "replacement": "                        font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
   },
   {
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
@@ -1163,6 +1296,17 @@
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
    "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
    "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
+   "occurrence": 0,
+   "occurrences": 5,
+   "old": "                                font: Font.regular(14.0),",
+   "new": "                                font: Font.medium(13.0),",
+   "form": "ternary-argument",
+   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
    "occurrence": 1,
    "occurrences": 4,
    "old": "                                font: Font.regular(14.0),",
@@ -1174,12 +1318,34 @@
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
    "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
    "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
+   "occurrence": 1,
+   "occurrences": 5,
+   "old": "                                font: Font.regular(14.0),",
+   "new": "                                font: Font.medium(13.0),",
+   "form": "ternary-argument",
+   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
    "occurrence": 2,
    "occurrences": 4,
    "old": "                                font: Font.regular(14.0),",
    "new": "                                font: Font.bold(13.0),",
    "form": "ternary-argument",
    "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
+   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
+   "occurrence": 2,
+   "occurrences": 5,
+   "old": "                                font: Font.regular(14.0),",
+   "new": "                                font: Font.medium(13.0),",
+   "form": "ternary-argument",
+   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
   },
   {
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
@@ -1191,39 +1357,6 @@
    "new": "                                font: Font.bold(13.0),",
    "form": "ternary-argument",
    "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
-   "occurrence": 0,
-   "occurrences": 5,
-   "old": "                                font: Font.regular(14.0),",
-   "new": "                                font: Font.medium(13.0),",
-   "form": "ternary-argument",
-   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
-   "occurrence": 1,
-   "occurrences": 5,
-   "old": "                                font: Font.regular(14.0),",
-   "new": "                                font: Font.medium(13.0),",
-   "form": "ternary-argument",
-   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
-   "reference_sha256": "910e60e75f396eac878e3a99171ff5ba84a896e87e0d2c58bd675ebb66057045",
-   "occurrence": 2,
-   "occurrences": 5,
-   "old": "                                font: Font.regular(14.0),",
-   "new": "                                font: Font.medium(13.0),",
-   "form": "ternary-argument",
-   "replacement": "                                font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.medium(13.0)),"
   },
   {
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/CurvesComponent.swift",
@@ -1254,9 +1387,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "                containerSize: CGSize(width: availableSize.width - buttonSideInset * 2.0, height: 50.0)",
-   "new": "                containerSize: CGSize(width: availableSize.width - buttonSideInset * 2.0, height: 52.0)",
+   "new": "                containerSize: CGSize(width: availableSize.width - buttonSideInset * 2.0 - doneButtonBandInsets.left - doneButtonBandInsets.right, height: 52.0)",
    "form": "ternary-argument",
-   "replacement": "                containerSize: CGSize(width: availableSize.width - buttonSideInset * 2.0, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
+   "replacement": "                containerSize: CGSize(width: availableSize.width - buttonSideInset * 2.0 - doneButtonBandInsets.left - doneButtonBandInsets.right, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
   },
   {
    "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/TintComponent.swift",
@@ -1408,9 +1541,21 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "                    containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 50.0)",
-   "new": "                    containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 52.0)",
+   "new": "                    containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset, height: 52.0)",
    "form": "ternary-argument",
-   "replacement": "                    containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
+   "replacement": "                    containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift",
+   "reference_sha256": "d7c0b94c1f75ade8b7d3e820b0b431c2fcd49cf3ed3ed10de13608b300acd6f7",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenAddressItem.swift",
@@ -1422,6 +1567,18 @@
    "new": "                strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.plainBackgroundColor)",
    "form": "if-statement",
    "replacement": "                if AorusOldInterface.isEnabled {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 28.0, color: theme.list.plainBackgroundColor)\n                } else {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.plainBackgroundColor)\n                }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenAddressItem.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenAddressItem.swift",
+   "reference_sha256": "feccae58d7c457f2b5c9f87bdacf07e1fbeb6e68347ed0ab3fc4c8df24949eba",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenBusinessHoursItem.swift",
@@ -1471,6 +1628,18 @@
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
    "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
    "reference_sha256": "c11df91c64ba8dc9d2c0d5e5c99ffc7f2506c0d5d8f9362bc36db65da831a7f6",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
+   "reference_sha256": "c11df91c64ba8dc9d2c0d5e5c99ffc7f2506c0d5d8f9362bc36db65da831a7f6",
    "occurrence": 1,
    "occurrences": 2,
    "old": "                iconSize = CGSize(width: 29.0, height: 29.0)",
@@ -1485,9 +1654,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "                containerSize: CGSize(width: width - sideInset * 2.0, height: 50.0)",
-   "new": "                containerSize: CGSize(width: width - sideInset * 2.0, height: 52.0)",
+   "new": "                containerSize: CGSize(width: width - sideInset - sideInsetRight, height: 52.0)",
    "form": "ternary-argument",
-   "replacement": "                containerSize: CGSize(width: width - sideInset * 2.0, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
+   "replacement": "                containerSize: CGSize(width: width - sideInset - sideInsetRight, height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
@@ -1501,6 +1670,18 @@
    "replacement": "                if AorusOldInterface.isEnabled {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 28.0, color: theme.list.plainBackgroundColor)\n                } else {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.plainBackgroundColor)\n                }"
   },
   {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
+   "reference_sha256": "1ef2a1975e7a8506b6c3afbf041464cfb4a3b9c15012348a97c95af05394d0b4",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
+  },
+  {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenPersonalChannelItem.swift",
    "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenPersonalChannelItem.swift",
    "reference_sha256": "17e4dec5acaedfee7c7bee8132ec1153205ee3e72c63a3d3e95978b2172f3258",
@@ -1512,37 +1693,39 @@
    "replacement": "                if AorusOldInterface.isEnabled {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 28.0, color: theme.list.plainBackgroundColor)\n                } else {\n                    strongSelf.extractedBackgroundImageNode.image = generateStretchableFilledCircleImage(diameter: 52.0, color: theme.list.plainBackgroundColor)\n                }"
   },
   {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift",
+   "reference_sha256": "fa865827cbdda7154dcbe9f5075fc833a15a7f9755b33cf9fd8a55f8e1665fb8",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
+   "reference_sha256": "096a2895c688d2c5cca2c4fe4ffbfc86bac256b70a54bf46bfb08a4658562e11",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
+  },
+  {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
    "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
    "reference_sha256": "096a2895c688d2c5cca2c4fe4ffbfc86bac256b70a54bf46bfb08a4658562e11",
    "occurrence": 0,
    "occurrences": 1,
    "old": "        let textNodeFrame = CGRect(origin: CGPoint(x: safeInset + 16.0, y: 10.0), size: CGSize(width: width - safeInset * 2.0 - 16.0 * 2.0 - 38.0, height: max(height, 1000.0)))",
-   "new": "        let textNodeFrame = CGRect(origin: CGPoint(x: safeInset + 16.0, y: 15.0), size: CGSize(width: width - safeInset * 2.0 - 16.0 * 2.0 - 38.0, height: max(height, 1000.0)))",
+   "new": "        let textNodeFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: 15.0), size: CGSize(width: width - (leftInset + rightInset) - 16.0 * 2.0 - 38.0, height: max(height, 1000.0)))",
    "form": "if-expression",
-   "replacement": "        let textNodeFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: safeInset + 16.0, y: 10.0), size: CGSize(width: width - safeInset * 2.0 - 16.0 * 2.0 - 38.0, height: max(height, 1000.0))) } else { CGRect(origin: CGPoint(x: safeInset + 16.0, y: 15.0), size: CGSize(width: width - safeInset * 2.0 - 16.0 * 2.0 - 38.0, height: max(height, 1000.0))) }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift",
-   "reference_sha256": "2dc32bd3222b0b3346a96005cbfe921a52b51f07e15030b6ccc57c935ba77ace",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            iconOffset = CGPoint(x: -1.0, y: 0.0)",
-   "new": "            iconOffset = CGPoint(x: 0.0, y: 0.0)",
-   "form": "if-statement",
-   "replacement": "            if AorusOldInterface.isEnabled {\n                iconOffset = CGPoint(x: -1.0, y: 0.0)\n            } else {\n                iconOffset = CGPoint(x: 0.0, y: 0.0)\n            }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButton.swift",
-   "reference_sha256": "2dc32bd3222b0b3346a96005cbfe921a52b51f07e15030b6ccc57c935ba77ace",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let font: UIFont = isBold ? Font.semibold(17.0) : Font.regular(17.0)",
-   "new": "            let font: UIFont = isBold ? Font.semibold(17.0) : Font.medium(17.0)",
-   "form": "if-expression",
-   "replacement": "            let font: UIFont = if AorusOldInterface.isEnabled { isBold ? Font.semibold(17.0) : Font.regular(17.0) } else { isBold ? Font.semibold(17.0) : Font.medium(17.0) }"
+   "replacement": "        let textNodeFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: leftInset + 16.0, y: 10.0), size: CGSize(width: width - (leftInset + rightInset) - 16.0 * 2.0 - 38.0, height: max(height, 1000.0))) } else { CGRect(origin: CGPoint(x: leftInset + 16.0, y: 15.0), size: CGSize(width: width - (leftInset + rightInset) - 16.0 * 2.0 - 38.0, height: max(height, 1000.0))) }"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
@@ -1554,6 +1737,18 @@
    "new": "        let titleLockOffset: CGFloat = 16.0 + singleTitleLockOffset",
    "form": "if-expression",
    "replacement": "        let titleLockOffset: CGFloat = if AorusOldInterface.isEnabled { 7.0 + singleTitleLockOffset } else { 16.0 + singleTitleLockOffset }"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderSingleLineTextFieldNode.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderSingleLineTextFieldNode.swift",
+   "reference_sha256": "751dbd865b01c8ec1a7b7ad486df76a6cefe6b5eacab50820d296ddd66f79b38",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "",
+   "new": "        let separatorRightInset: CGFloat = 16.0",
+   "form": "added-term",
+   "term": "separatorRightInset",
+   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift",
@@ -1583,10 +1778,32 @@
    "reference_sha256": "01867cd9bc3669d89c24a8fa60a57e1e0450a3fa34a51345de2dcd71aa09ca45",
    "occurrence": 0,
    "occurrences": 1,
+   "old": "                            font: Font.medium(14.0),",
+   "new": "                            font: Font.medium(15.0),",
+   "form": "ternary-argument",
+   "replacement": "                            font: Font.medium((AorusOldInterface.isEnabled ? 14.0 : 15.0)),"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
+   "reference_sha256": "01867cd9bc3669d89c24a8fa60a57e1e0450a3fa34a51345de2dcd71aa09ca45",
+   "occurrence": 0,
+   "occurrences": 1,
    "old": "                    containerSize: CGSize(width: params.size.width - 10.0 * 2.0, height: 50.0)",
    "new": "                    containerSize: CGSize(width: params.size.width - 14.0 * 2.0, height: 44.0)",
    "form": "ternary-argument",
    "replacement": "                    containerSize: CGSize(width: params.size.width - (AorusOldInterface.isEnabled ? 10.0 : 14.0) * 2.0, height: (AorusOldInterface.isEnabled ? 50.0 : 44.0))"
+  },
+  {
+   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
+   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
+   "reference_sha256": "b02391bdc1fc12ab1ce40e387fbad6f321bc9c2d5eff840300d46848f572c4aa",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "                    font: Font.medium(14.0),",
+   "new": "                    font: Font.medium(15.0),",
+   "form": "ternary-argument",
+   "replacement": "                    font: Font.medium((AorusOldInterface.isEnabled ? 14.0 : 15.0)),"
   },
   {
    "path": "submodules/TelegramUI/Components/PeerInfo/ProfileLevelRatingBarComponent/Sources/ProfileLevelRatingBarComponent.swift",
@@ -1617,9 +1834,9 @@
    "occurrence": 0,
    "occurrences": 1,
    "old": "                containerSize: CGSize(width: min(availableSize.width - 16.0 * 2.0, 280.0), height: 50.0)",
-   "new": "                containerSize: CGSize(width: min(availableSize.width - 16.0 * 2.0, 280.0), height: 52.0)",
+   "new": "                containerSize: CGSize(width: min(bandWidth - 16.0 * 2.0, 280.0), height: 52.0)",
    "form": "ternary-argument",
-   "replacement": "                containerSize: CGSize(width: min(availableSize.width - 16.0 * 2.0, 280.0), height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
+   "replacement": "                containerSize: CGSize(width: min(bandWidth - 16.0 * 2.0, 280.0), height: (AorusOldInterface.isEnabled ? 50.0 : 52.0))"
   },
   {
    "path": "submodules/TelegramUI/Components/Settings/ChatbotSetupScreen/Sources/ChatbotSetupScreen.swift",
@@ -1787,6 +2004,17 @@
    "replacement": "                        minSize: CGSize(width: (AorusOldInterface.isEnabled ? 44.0 : 40.0), height: (AorusOldInterface.isEnabled ? 44.0 : 40.0)),"
   },
   {
+   "path": "submodules/TelegramUI/Sources/ChatControllerNode.swift",
+   "reference": "submodules/TelegramUI/Sources/ChatControllerNode.swift",
+   "reference_sha256": "60c5c3fe911e763c16657563dc7d527924282fd992db8ff6cfc4526279fb713a",
+   "occurrence": 0,
+   "occurrences": 1,
+   "old": "                containerNode.cornerRadius = 15.0",
+   "new": "                containerNode.cornerRadius = 26.0",
+   "form": "if-statement",
+   "replacement": "                if AorusOldInterface.isEnabled {\n                    containerNode.cornerRadius = 15.0\n                } else {\n                    containerNode.cornerRadius = 26.0\n                }"
+  },
+  {
    "path": "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
    "reference": "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift",
    "reference_sha256": "e3c948f0dad379908ee47f2ac5827211f87500790d7f0f82d6af199fe77cee92",
@@ -1944,23 +2172,23 @@
    "path": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
    "reference": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
    "reference_sha256": "b003b973e50f15f853ccd527fa897455dccc7c39e927d847f4bde57bc9f151b5",
-   "occurrence": 1,
-   "occurrences": 2,
-   "old": "            let itemFrame = CGRect(origin: CGPoint(x: contentSize.width, y: -5.0), size: itemSize)",
-   "new": "            let itemFrame = CGRect(origin: CGPoint(x: contentSize.width, y: 0.0), size: itemSize)",
-   "form": "if-expression",
-   "replacement": "            let itemFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: contentSize.width, y: -5.0), size: itemSize) } else { CGRect(origin: CGPoint(x: contentSize.width, y: 0.0), size: itemSize) }"
-  },
-  {
-   "path": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
-   "reference": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
-   "reference_sha256": "b003b973e50f15f853ccd527fa897455dccc7c39e927d847f4bde57bc9f151b5",
    "occurrence": 0,
    "occurrences": 2,
    "old": "        let panelHeight: CGFloat = 39.0",
    "new": "        let panelHeight: CGFloat = 40.0",
    "form": "if-expression",
    "replacement": "        let panelHeight: CGFloat = if AorusOldInterface.isEnabled { 39.0 } else { 40.0 }"
+  },
+  {
+   "path": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
+   "reference": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
+   "reference_sha256": "b003b973e50f15f853ccd527fa897455dccc7c39e927d847f4bde57bc9f151b5",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "            let itemFrame = CGRect(origin: CGPoint(x: contentSize.width, y: -5.0), size: itemSize)",
+   "new": "            let itemFrame = CGRect(origin: CGPoint(x: contentSize.width, y: 0.0), size: itemSize)",
+   "form": "if-expression",
+   "replacement": "            let itemFrame = if AorusOldInterface.isEnabled { CGRect(origin: CGPoint(x: contentSize.width, y: -5.0), size: itemSize) } else { CGRect(origin: CGPoint(x: contentSize.width, y: 0.0), size: itemSize) }"
   },
   {
    "path": "submodules/TelegramUI/Sources/ChatSearchTitleAccessoryPanelNode.swift",
@@ -1988,17 +2216,6 @@
    "path": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
    "reference": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
    "reference_sha256": "0078af5d6cbeb667e621d65999a9f5a0b2dd1290741da471be0374aa942e08dc",
-   "occurrence": 1,
-   "occurrences": 2,
-   "old": "            height = 45.0",
-   "new": "            height = 40.0",
-   "form": "if-statement",
-   "replacement": "            if AorusOldInterface.isEnabled {\n                height = 45.0\n            } else {\n                height = 40.0\n            }"
-  },
-  {
-   "path": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
-   "reference": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
-   "reference_sha256": "0078af5d6cbeb667e621d65999a9f5a0b2dd1290741da471be0374aa942e08dc",
    "occurrence": 0,
    "occurrences": 1,
    "old": "            nextLeftX += buttonSize.width + 8.0",
@@ -2016,6 +2233,17 @@
    "new": "            nextLeftX += calendarButtonSize.width + 0.0",
    "form": "if-statement",
    "replacement": "            if AorusOldInterface.isEnabled {\n                nextLeftX += calendarButtonSize.width + 8.0\n            } else {\n                nextLeftX += calendarButtonSize.width + 0.0\n            }"
+  },
+  {
+   "path": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
+   "reference": "submodules/TelegramUI/Sources/ChatTagSearchInputPanelNode.swift",
+   "reference_sha256": "0078af5d6cbeb667e621d65999a9f5a0b2dd1290741da471be0374aa942e08dc",
+   "occurrence": 1,
+   "occurrences": 2,
+   "old": "            height = 45.0",
+   "new": "            height = 40.0",
+   "form": "if-statement",
+   "replacement": "            if AorusOldInterface.isEnabled {\n                height = 45.0\n            } else {\n                height = 40.0\n            }"
   },
   {
    "path": "submodules/TelegramUpdateUI/Sources/UpdateInfoItem.swift",
@@ -2049,245 +2277,6 @@
    "new": "                self.animationNode = AnimationNode(animation: \"anim_banned\", colors: [\"info1.info1.stroke\": self.animationBackgroundColor, \"info2.info2.Fill\": self.animationBackgroundColor], scale: 0.9)",
    "form": "if-statement",
    "replacement": "                if AorusOldInterface.isEnabled {\n                    self.animationNode = AnimationNode(animation: \"anim_banned\", colors: [\"info1.info1.stroke\": self.animationBackgroundColor, \"info2.info2.Fill\": self.animationBackgroundColor], scale: 1.0)\n                } else {\n                    self.animationNode = AnimationNode(animation: \"anim_banned\", colors: [\"info1.info1.stroke\": self.animationBackgroundColor, \"info2.info2.Fill\": self.animationBackgroundColor], scale: 0.9)\n                }"
-  },
-  {
-   "path": "submodules/BrowserUI/Sources/BrowserAddressListItemComponent.swift",
-   "reference": "submodules/BrowserUI/Sources/BrowserAddressListItemComponent.swift",
-   "reference_sha256": "e976991e4bde7920d127514f690aad202b529ecd2a6f6f943f474896357693b7",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "private let iconFont = Font.with(size: 30.0, design: .round, weight: .bold)",
-   "new": "private let iconFont = Font.with(size: 28.0, design: .round, weight: .bold)",
-   "form": "if-expression",
-   "replacement": "private let iconFont = if AorusOldInterface.isEnabled { Font.with(size: 30.0, design: .round, weight: .bold) } else { Font.with(size: 28.0, design: .round, weight: .bold) }"
-  },
-  {
-   "path": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
-   "reference": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
-   "reference_sha256": "2c90d6f6db7c59c9eeb7c7cb6db22cdf77ba0e6c841ab5b4752a44a9cd2f0b6c",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
-   "new": "            let titleFont = Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) } else { Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) }"
-  },
-  {
-   "path": "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift",
-   "reference": "submodules/GalleryUI/Sources/ChatVideoGalleryItemScrubberView.swift",
-   "reference_sha256": "ad30021b22015f6c5fc5d050c72ba3de01dd778017ff7ade408624e3ed2d9cab",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "private let textFont = Font.with(size: 13.0, design: .regular, weight: .regular, traits: [.monospacedNumbers])",
-   "new": "private let textFont = Font.with(size: 13.0, design: .regular, weight: .medium, traits: [.monospacedNumbers])",
-   "form": "if-expression",
-   "replacement": "private let textFont = if AorusOldInterface.isEnabled { Font.with(size: 13.0, design: .regular, weight: .regular, traits: [.monospacedNumbers]) } else { Font.with(size: 13.0, design: .regular, weight: .medium, traits: [.monospacedNumbers]) }"
-  },
-  {
-   "path": "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift",
-   "reference": "submodules/ItemListVenueItem/Sources/ItemListVenueItem.swift",
-   "reference_sha256": "36068f05dd50f9659f8627c631e9bf2f790122025dccc205a4571da55609cd5a",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
-   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
-  },
-  {
-   "path": "submodules/ListMessageItem/Sources/ListMessageSnippetItemNode.swift",
-   "reference": "submodules/ListMessageItem/Sources/ListMessageSnippetItemNode.swift",
-   "reference_sha256": "5f4c42ed7eb62c9ffb1aed40d79b71cb99478705e72d54fca8d89488a2585cae",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "private let iconFont = Font.with(size: 30.0, design: .round, weight: .bold)",
-   "new": "private let iconFont = Font.with(size: 28.0, design: .round, weight: .bold)",
-   "form": "if-expression",
-   "replacement": "private let iconFont = if AorusOldInterface.isEnabled { Font.with(size: 30.0, design: .round, weight: .bold) } else { Font.with(size: 28.0, design: .round, weight: .bold) }"
-  },
-  {
-   "path": "submodules/LocationUI/Sources/LocationActionListItem.swift",
-   "reference": "submodules/LocationUI/Sources/LocationActionListItem.swift",
-   "reference_sha256": "2739dd18e81d203c24e4379cf69bb09c9aefb96d09ebbceeebe34e75328fd859",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
-   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
-  },
-  {
-   "path": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
-   "reference": "submodules/LocationUI/Sources/LocationInfoListItem.swift",
-   "reference_sha256": "1484aad6c79d9cb2c0f02c09eee7e37b0c0d446dda501b4ae771afade5c3b639",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
-   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
-  },
-  {
-   "path": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
-   "reference": "submodules/LocationUI/Sources/LocationLiveListItem.swift",
-   "reference_sha256": "1bcac2d06cac1ef55bacf723977f2e41f86ebed112a7555f1489bf53bbb03d4d",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(item.presentationData.fontSize.itemListBaseFontSize)",
-   "new": "            let titleFont = Font.semibold(item.presentationData.fontSize.itemListBaseFontSize)",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(item.presentationData.fontSize.itemListBaseFontSize) } else { Font.semibold(item.presentationData.fontSize.itemListBaseFontSize) }"
-  },
-  {
-   "path": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
-   "reference": "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/ItemListRecentSessionItem.swift",
-   "reference_sha256": "7b62afadbacb0338abfcf70f7bf3a6cc4cecd6b2ce66666e52defca0846edb43",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "            let titleFont = Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))",
-   "new": "            let titleFont = Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0))",
-   "form": "if-expression",
-   "replacement": "            let titleFont = if AorusOldInterface.isEnabled { Font.medium(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0)) } else { Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 17.0 / 17.0)) }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
-   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
-   "reference_sha256": "3ba32831f7de1c039b859b568247c9d6853282bc94c6a657547d5bf21e785cef",
-   "occurrence": 0,
-   "occurrences": 2,
-   "old": "                        font: Font.regular(14.0),",
-   "new": "                        font: Font.bold(13.0),",
-   "form": "ternary-argument",
-   "replacement": "                        font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
-   "reference": "submodules/TelegramUI/Components/MediaEditorScreen/Sources/BlurComponent.swift",
-   "reference_sha256": "3ba32831f7de1c039b859b568247c9d6853282bc94c6a657547d5bf21e785cef",
-   "occurrence": 1,
-   "occurrences": 2,
-   "old": "                        font: Font.regular(14.0),",
-   "new": "                        font: Font.bold(13.0),",
-   "form": "ternary-argument",
-   "replacement": "                        font: (AorusOldInterface.isEnabled ? Font.regular(14.0) : Font.bold(13.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
-   "reference_sha256": "01867cd9bc3669d89c24a8fa60a57e1e0450a3fa34a51345de2dcd71aa09ca45",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                            font: Font.medium(14.0),",
-   "new": "                            font: Font.medium(15.0),",
-   "form": "ternary-argument",
-   "replacement": "                            font: Font.medium((AorusOldInterface.isEnabled ? 14.0 : 15.0)),"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
-   "reference_sha256": "b02391bdc1fc12ab1ce40e387fbad6f321bc9c2d5eff840300d46848f572c4aa",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "                    font: Font.medium(14.0),",
-   "new": "                    font: Font.medium(15.0),",
-   "form": "ternary-argument",
-   "replacement": "                    font: Font.medium((AorusOldInterface.isEnabled ? 14.0 : 15.0)),"
-  },
-  {
-   "path": "submodules/ItemListUI/Sources/Items/ItemListExpandableSwitchItem.swift",
-   "reference": "submodules/ItemListUI/Sources/Items/ItemListExpandableSwitchItem.swift",
-   "reference_sha256": "fa0be9cc60c22a698f3a5e52faa91a0b38fb5319ccfad434d39ee14a95f2581d",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenActionItem.swift",
-   "reference_sha256": "d7c0b94c1f75ade8b7d3e820b0b431c2fcd49cf3ed3ed10de13608b300acd6f7",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenAddressItem.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenAddressItem.swift",
-   "reference_sha256": "feccae58d7c457f2b5c9f87bdacf07e1fbeb6e68347ed0ab3fc4c8df24949eba",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
-   "reference_sha256": "c11df91c64ba8dc9d2c0d5e5c99ffc7f2506c0d5d8f9362bc36db65da831a7f6",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenLabeledValueItem.swift",
-   "reference_sha256": "1ef2a1975e7a8506b6c3afbf041464cfb4a3b9c15012348a97c95af05394d0b4",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenSwitchItem.swift",
-   "reference_sha256": "fa865827cbdda7154dcbe9f5075fc833a15a7f9755b33cf9fd8a55f8e1665fb8",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
-   "reference_sha256": "096a2895c688d2c5cca2c4fe4ffbfc86bac256b70a54bf46bfb08a4658562e11",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
-  },
-  {
-   "path": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderSingleLineTextFieldNode.swift",
-   "reference": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderSingleLineTextFieldNode.swift",
-   "reference_sha256": "751dbd865b01c8ec1a7b7ad486df76a6cefe6b5eacab50820d296ddd66f79b38",
-   "occurrence": 0,
-   "occurrences": 1,
-   "old": "",
-   "new": "        let separatorRightInset: CGFloat = 16.0",
-   "form": "added-term",
-   "term": "separatorRightInset",
-   "replacement": "        let separatorRightInset: CGFloat = if AorusOldInterface.isEnabled { 0.0 } else { 16.0 }"
   }
  ]
 }
