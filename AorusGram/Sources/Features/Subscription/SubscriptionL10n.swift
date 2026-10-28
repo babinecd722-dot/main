@@ -79,6 +79,10 @@ enum SubL10n {
     static var welcomeBody1: String { t("Вам доступен пробный период на 3 дня.", "You have a 3-day free trial.") }
     static var welcomeBody2: String { t("После окончания потребуется ключ подписки.", "After it ends you’ll need a subscription key.") }
     static var startTrial: String { t("Активировать 3 дня", "Start 3-day trial") }
+    // Before any Telegram account is signed in: the trial is the account's, so it starts after sign-in.
+    static var signInForTrial: String { t("Войти и активировать 3 дня", "Sign in and start 3-day trial") }
+    static var trialNeedsAccount: String { t("Пробный период привязывается к аккаунту Telegram: войдите в него, и он начнётся сразу.",
+                                             "The trial is tied to your Telegram account: sign in, and it starts right away.") }
     static var haveKey: String { t("У меня уже есть ключ", "I already have a key") }
 
     // MARK: Expired / locked

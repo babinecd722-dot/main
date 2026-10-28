@@ -5,11 +5,17 @@ import UIKit
 // IMPORTANT: the trial is NOT started automatically — only when the user taps
 // "Активировать 3 дня". The coordinator (Phase 3) wires the closures to the
 // license API and navigation.
+//
+// The trial belongs to a Telegram account. With none signed in yet (`needsAccount`) the
+// screen says so, and its button takes the user to Telegram's sign-in first; the trial
+// then starts as soon as the account is known.
 final class TrialWelcomeController: SubscriptionBaseController {
     var onActivateTrial: (() -> Void)?
     var onHaveKey: (() -> Void)?
+    /// Set before the screen is shown.
+    var needsAccount = false
 
-    private let primary = SubscriptionStyle.primaryButton(SubL10n.startTrial)
+    private lazy var primary = SubscriptionStyle.primaryButton(self.primaryTitle)
     private let secondary = SubscriptionStyle.secondaryButton(SubL10n.haveKey)
     private let spinner = UIActivityIndicatorView(style: .medium)
 
@@ -20,7 +26,7 @@ final class TrialWelcomeController: SubscriptionBaseController {
         addSpacing(6)
         addContent(SubscriptionStyle.title(SubL10n.welcomeTitle))
         addContent(SubscriptionStyle.body(SubL10n.welcomeBody1))
-        addContent(SubscriptionStyle.body(SubL10n.welcomeBody2,
+        addContent(SubscriptionStyle.body(self.needsAccount ? SubL10n.trialNeedsAccount : SubL10n.welcomeBody2,
                                           color: SubscriptionStyle.secondaryText, size: 14))
 
         primary.addTarget(self, action: #selector(activateTapped), for: .touchUpInside)
@@ -46,10 +52,14 @@ final class TrialWelcomeController: SubscriptionBaseController {
             secondary.isEnabled = false
         } else {
             spinner.stopAnimating()
-            primary.setTitle(SubL10n.startTrial, for: .normal)
+            primary.setTitle(self.primaryTitle, for: .normal)
             primary.isEnabled = true
             secondary.isEnabled = true
         }
+    }
+
+    private var primaryTitle: String {
+        return self.needsAccount ? SubL10n.signInForTrial : SubL10n.startTrial
     }
 
     @objc private func activateTapped() { onActivateTrial?() }

@@ -28,7 +28,9 @@ final class LicenseAPIClient {
 
     // MARK: - Public endpoints
 
-    func bootstrap(telegramUserId: Int64?,
+    /// Starts the trial, which belongs to a Telegram account: the id is required, so the server
+    /// can hold one trial per account however often the app is re-signed or re-identified.
+    func bootstrap(telegramUserId: Int64,
                    completion: @escaping (Result<LicenseResponse, LicenseError>) -> Void) {
         post(path: "/license/bootstrap", body: baseBody(telegramUserId: telegramUserId), completion: completion)
     }

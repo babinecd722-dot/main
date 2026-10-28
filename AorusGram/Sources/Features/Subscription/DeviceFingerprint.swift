@@ -10,6 +10,11 @@ import Security
 // iOS keeps Keychain items across app deletion/reinstall, so a reinstall keeps the
 // same device_hash → the free trial cannot be farmed by reinstalling.
 //
+// It does NOT survive re-signing: Keychain items belong to the signing team's access
+// group, and the bundle id is in the hash, so a new certificate or bundle id is a new
+// device_hash. That is an installation, not a person — the trial is therefore tied to
+// the Telegram account (LicenseGate, docs/license.md), never to this hash alone.
+//
 // We deliberately do NOT mix in identifierForVendor: idfv RESETS once all of the
 // vendor's apps are removed, which is exactly the reinstall case we must survive.
 //

@@ -53,6 +53,16 @@ final class LicenseGate {
     // When the lock is temporarily hidden so the user can reach the bot to buy, this
     // forces a re-check (and re-lock if still not active) on the next foreground.
     private var pendingRelock = false
+    /// The user asked for the trial with no Telegram account signed in yet.
+    ///
+    /// The trial is the ACCOUNT's, not the installation's. A trial started before sign-in
+    /// reached the server with no `telegram_user_id`, so all it could be tied to was the
+    /// device hash -- and that is anchored on a keychain item scoped to the signing team
+    /// and on the bundle id. Re-signing the app, or changing its bundle id, gave a "new
+    /// device" and a fresh trial. So the lock now steps aside for Telegram's own sign-in
+    /// (with every AorusGram feature still off), and the trial is requested the moment the
+    /// first account id arrives, with that id in the request.
+    private var trialAwaitsAccount = false
 
     // Binding hook: called once the Telegram account id is known (published from
     // AppDelegate after login). De-duped so a re-publish of the same id never
@@ -63,6 +73,13 @@ final class LicenseGate {
         telegramUserId = id
         // Persist so check/bootstrap/activate keep sending the real id across launches.
         LicenseStore.shared.setTelegramUserId(id)
+        if trialAwaitsAccount {
+            // Signed in from the trial screen: cover the chat list at once and ask for the
+            // trial with the account it belongs to.
+            trialAwaitsAccount = false
+            startTrial(telegramUserId: id, from: nil)
+            return
+        }
         if started { refresh() }
     }
 
@@ -258,6 +275,9 @@ final class LicenseGate {
             upgradeSystemProxy()
             maybeShowEntryBanner(status: status, response: response)
         case .notStarted:
+            // Sign-in for the trial is under way: the welcome screen must not come back over
+            // Telegram's own sign-in screens.
+            if trialAwaitsAccount && telegramUserId == nil { return }
             showTrialWelcome()
         case .expired:
             showExpired(banned: false)
@@ -284,6 +304,9 @@ final class LicenseGate {
         case .clientOutdated:
             showOutdated()
         default:
+            // Nothing granted and nothing known, while the user signs in for the trial: the
+            // sign-in screens stay; the trial request itself reports its own failure.
+            if trialAwaitsAccount && telegramUserId == nil { return }
             showConnection()
         }
     }
@@ -298,37 +321,74 @@ final class LicenseGate {
 
     private func showTrialWelcome() {
         setFeatureAccess(active: false)
-        guard lockKind != .trial else { return }
+        let needsAccount = telegramUserId == nil
+        if lockKind == .trial, let current = (lockWindow?.rootViewController as? UINavigationController)?.viewControllers.first as? TrialWelcomeController, current.needsAccount == needsAccount {
+            return
+        }
         lockKind = .trial
         let vc = TrialWelcomeController()
+        vc.needsAccount = needsAccount
         vc.onActivateTrial = { [weak self, weak vc] in
             guard let self = self else { return }
-            vc?.setLoading(true)
-            let uid = self.telegramUserId
-            LicenseAPIClient.shared.bootstrap(telegramUserId: uid) { [weak self, weak vc] result in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    vc?.setLoading(false)
-                    switch result {
-                    case .success(let response):
-                        _ = Self.beginLicenseGeneration()
-                        LicenseStore.shared.save(response: response, telegramUserId: uid)
-                        if response.status.allowsAppAccess {
-                            self.bannerShownThisLaunch = true
-                            self.hideLock()
-                            self.upgradeSystemProxy()
-                            self.showToast(SubL10n.toastTrialActivated)
-                        } else {
-                            self.apply(status: response.status, response: response)
-                        }
-                    case .failure(let error):
-                        self.presentAlert(self.message(for: error))
-                    }
-                }
+            guard let uid = self.telegramUserId else {
+                self.revealSignInForTrial()
+                return
             }
+            self.startTrial(telegramUserId: uid, from: vc)
         }
         vc.onHaveKey = { [weak self] in self?.pushActivateKeyInLock() }
         setLockRoot(vc)
+    }
+
+    /// Ask the server for the trial of this Telegram account. From the welcome screen its
+    /// button spins; on arriving from sign-in the loading screen covers the app instead.
+    private func startTrial(telegramUserId uid: Int64, from vc: TrialWelcomeController?) {
+        // A `/check` already on its way was asked without this request in mind.
+        _ = Self.beginLicenseGeneration()
+        let fromSignIn = vc == nil
+        if let vc {
+            vc.setLoading(true)
+        } else {
+            setFeatureAccess(active: false)
+            showLoading()
+        }
+        LicenseAPIClient.shared.bootstrap(telegramUserId: uid) { [weak self, weak vc] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                vc?.setLoading(false)
+                switch result {
+                case .success(let response):
+                    _ = Self.beginLicenseGeneration()
+                    LicenseStore.shared.save(response: response, telegramUserId: uid)
+                    if response.status.allowsAppAccess {
+                        self.bannerShownThisLaunch = true
+                        self.hideLock()
+                        self.upgradeSystemProxy()
+                        self.showToast(SubL10n.toastTrialActivated)
+                    } else {
+                        self.apply(status: response.status, response: response)
+                    }
+                case .failure(let error):
+                    // From sign-in the loading screen is up: put the welcome back under the alert.
+                    if fromSignIn { self.showTrialWelcome() }
+                    self.presentAlert(self.message(for: error))
+                }
+            }
+        }
+    }
+
+    /// The trial needs an account: let the user reach Telegram's sign-in. Only the cover
+    /// goes -- the feature kill-switch stays engaged, so what is reachable is the sign-in
+    /// flow and the plain client it leads to, which the first account id covers again
+    /// (`setTelegramUserId`) before anything can be done in it.
+    private func revealSignInForTrial() {
+        trialAwaitsAccount = true
+        setFeatureAccess(active: false)
+        lockKind = .none
+        guard let window = lockWindow else { return }
+        window.isHidden = true
+        window.rootViewController = nil
+        lockWindow = nil
     }
 
     private func showExpired(banned: Bool) {
