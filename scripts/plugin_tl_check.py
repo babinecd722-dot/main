@@ -117,7 +117,7 @@ def main():
     parser.add_argument("--clang", default="clang")
     args = parser.parse_args()
     repo, sources = args.repo.resolve(), args.sources.resolve()
-    data = build_schema(sources, args.generated, args.scheme)
+    data = build_schema(sources, args.generated / "Swift" if args.generated else None, args.scheme)
     generated_api = None if any(sources.glob("Api*.swift")) else args.generated.resolve()
     if generated_api is not None and os.uname().sysname != "Darwin":
         raise SystemExit("Plugin TL: 13.1's TelegramApi carries an Objective-C runtime; this check runs on macOS")
