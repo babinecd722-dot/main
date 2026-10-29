@@ -914,6 +914,12 @@ def main() -> int:
         fail(errors, "offline licence time must fail closed after a wall-clock rollback")
     if "serverNow.addingReportingOverflow" not in license_store:
         fail(errors, "offline licence time must fail closed on server-time overflow")
+    # Nor by setting it back to somewhere after the last check: the uptime floor counts what
+    # really passed, and it is tested in the preflight.
+    if "LicenseElapsedFloor.counted(wallElapsed: elapsed, floor: snap.elapsedFloor)" not in license_store:
+        fail(errors, "offline licence time must not fall below the uptime floor")
+    if "LicenseElapsedFloorTests.swift" not in (root / ".github/workflows/build-aorusgram.yml").read_text(encoding="utf-8"):
+        fail(errors, "the licence uptime floor tests are not wired into the preflight")
     for marker in ("private let lock = NSLock()", "private var snapshotValue", "lock.lock()"):
         if marker not in license_store:
             fail(errors, f"license snapshot concurrency guard is missing {marker}")

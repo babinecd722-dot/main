@@ -32,6 +32,22 @@ The client now never starts a trial without an account:
 * The first account id to arrive (`setTelegramUserId`) covers the app again and requests the trial
   with that id.
 
+## Offline time cannot be set back
+
+Offline, a licence runs on the server's time at the last check plus the time since, and that
+time used to come from the wall clock alone. A clock set back to *before* the check was already
+refused, but one set back to an hour *after* it was not: with the licence server blocked and the
+date put back before each launch, a trial stood still for good.
+
+The cache now also carries a floor under the elapsed time (`LicenseElapsedFloor`), read from the
+device's continuous uptime, which counts sleep and is not moved by setting the clock. Between two
+readings in one boot it is exactly the time that passed; after a restart the uptime of the new boot
+is added. Offline time counts the larger of the wall clock and the floor, so it can never be less
+than has really passed and never ends a licence sooner than a correct clock would. The floor is
+written as the app goes to the background and comes back; what goes uncounted is a phone's time
+switched off and the stretch between the app leaving and a restart. It is signed with the rest of
+the snapshot, and a snapshot written before it existed keeps the wall clock until its next verdict.
+
 ## What the server must enforce
 
 The client can only make sure the server is asked the right question. The server has to answer it:

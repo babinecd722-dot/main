@@ -28,6 +28,9 @@ final class LicenseStore {
         // Tamper / theft protection (optional → old blobs decode and are re-signed).
         var deviceHash: String?        // device this cache belongs to
         var sig: String?               // HMAC over the fields above (key = license key)
+        // Time known to have passed since the check, whatever the clock says. Optional,
+        // and signed only when present, so blobs written before it still verify.
+        var elapsedFloor: LicenseElapsedFloor?
     }
 
     private var snapshotValue: Snapshot?
@@ -94,7 +97,8 @@ final class LicenseStore {
             serverNow: response.serverNow,
             daysLeft: response.daysLeft,
             lastCheckWall: Date().timeIntervalSince1970,
-            telegramUserId: telegramUserId ?? snapshotValue?.telegramUserId
+            telegramUserId: telegramUserId ?? snapshotValue?.telegramUserId,
+            elapsedFloor: .start(uptime: LicenseElapsedFloor.currentUptime())
         )
         snapshotValue = snap
         // Keep the persisted blob in the same order as the in-memory snapshot. A
@@ -180,8 +184,32 @@ final class LicenseStore {
         // froze the licence at the last successful check and could extend offline
         // access indefinitely. Fail closed and require a fresh signed verdict.
         guard elapsed >= 0, elapsed < Double(Int64.max) else { return nil }
-        let estimate = serverNow.addingReportingOverflow(Int64(elapsed))
+        // A clock set back to somewhere after the check passes the guard above, and
+        // with the licence server blocked it kept a trial going for ever. The uptime
+        // floor knows better: never count less than has really passed.
+        let counted = LicenseElapsedFloor.counted(wallElapsed: elapsed, floor: snap.elapsedFloor)
+        guard counted < Double(Int64.max) else { return nil }
+        let estimate = serverNow.addingReportingOverflow(Int64(counted))
         return estimate.overflow ? nil : estimate.partialValue
+    }
+
+    /// The snapshot with its elapsed floor brought up to now, for reading. Call with the
+    /// lock held. Nothing is written: this runs on every feature check. Within one boot the
+    /// stored mark gives the same answer however late it is read.
+    private func snapshotWithCurrentFloorLocked() -> Snapshot? {
+        guard var snap = snapshotValue, let floor = snap.elapsedFloor else { return snapshotValue }
+        snap.elapsedFloor = floor.advanced(to: LicenseElapsedFloor.currentUptime())
+        return snap
+    }
+
+    /// Writes the floor as it stands, so a restart loses only what passed after this. Called
+    /// as the app goes to the background and comes back, not from the checks themselves.
+    func recordElapsedFloor() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let current = snapshotWithCurrentFloorLocked(), current.elapsedFloor != snapshotValue?.elapsedFloor else { return }
+        snapshotValue = current
+        writeKeychain(current)
     }
 
     /// How long the stored licence still has, in seconds, or nil when there is no active
@@ -193,7 +221,7 @@ final class LicenseStore {
     func secondsUntilOfflineExpiry() -> TimeInterval? {
         lock.lock()
         defer { lock.unlock() }
-        guard let snap = snapshotValue else { return nil }
+        guard let snap = snapshotWithCurrentFloorLocked() else { return nil }
         switch LicenseStatus.parse(snap.statusRaw) {
         case .trialActive, .paidActive:
             break
@@ -209,7 +237,10 @@ final class LicenseStore {
     // Offline effective status: an active cache is trusted only while active_until
     // has not passed (server-anchored estimate); otherwise it is treated expired.
     func effectiveOfflineStatus() -> LicenseStatus {
-        guard let snap = snapshot else { return .notStarted }
+        lock.lock()
+        let current = snapshotWithCurrentFloorLocked()
+        lock.unlock()
+        guard let snap = current else { return .notStarted }
         let cached = LicenseStatus.parse(snap.statusRaw)
         switch cached {
         case .trialActive, .paidActive:
@@ -241,6 +272,9 @@ final class LicenseStore {
         parts.append(String(format: "%.0f", s.lastCheckWall))
         parts.append(s.telegramUserId.map { String($0) } ?? "")
         parts.append(s.deviceHash ?? "")
+        if let floor = s.elapsedFloor {
+            parts.append(String(format: "%.3f,%.3f", floor.seconds, floor.uptimeMark))
+        }
         return parts.joined(separator: "|")
     }
 

@@ -112,6 +112,10 @@ final class LicenseGate {
 
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification, object: nil)
+        // The offline clock's floor is kept as the app leaves, so a restart while it is away
+        // costs only the time after that.
+        NotificationCenter.default.addObserver(self, selector: #selector(didEnterBackground),
+                                               name: UIApplication.didEnterBackgroundNotification, object: nil)
 
         // Any signed License endpoint may revoke this build, including activation.
         // Centralizing the transition prevents one UI flow from overlooking 426.
@@ -162,8 +166,14 @@ final class LicenseGate {
         }
     }
 
+    @objc private func didEnterBackground() {
+        guard started else { return }
+        LicenseStore.shared.recordElapsedFloor()
+    }
+
     @objc private func didBecomeActive() {
         guard started else { return }
+        LicenseStore.shared.recordElapsedFloor()
         // The licence can simply have run out while the app was away, and asking the
         // network is throttled to once every half hour. Nothing checked the date itself,
         // so a subscription that expired twenty minutes ago left the client open with

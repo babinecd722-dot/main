@@ -164,6 +164,12 @@ jobs:
           /tmp/aorus-ai-preflight/license-model-tests
           swiftc \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            aorusgram/AorusGram/Sources/Features/Subscription/LicenseElapsedFloor.swift \
+            aorusgram/scripts/tests/LicenseElapsedFloorTests.swift \
+            -o /tmp/aorus-ai-preflight/license-floor-tests
+          /tmp/aorus-ai-preflight/license-floor-tests
+          swiftc \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \
             aorusgram/scripts/tests/AorusUpdateManifestTests.swift \
             -o /tmp/aorus-ai-preflight/update-manifest-tests
