@@ -10246,6 +10246,29 @@ public enum AorusFakeGiftsStore {
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
+    // The gift marketplace shows Telegram's whole catalogue -- the sold-out gifts with it -- only
+    // when asked to. Telegram lists a sold-out gift with nothing to buy it with; without this
+    // switch the marketplace keeps to what can be had: in stock, or offered for resale. It is a
+    // switch of its own, apart from fake gifts and fake Stars, which both leave it as it is.
+    public static let showsAllGiftsKey = "aorusgram_gifts_show_all"
+
+    public static var showsAllGifts: Bool {
+        return UserDefaults.standard.bool(forKey: showsAllGiftsKey)
+    }
+
+    public static func setShowsAllGifts(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: showsAllGiftsKey)
+    }
+
+    /// Whether the marketplace leaves out the gifts nobody can buy. Never while the licence is
+    /// locked: AorusGram changes nothing then, and Telegram's own list stands.
+    public static var hidesUnavailableGifts: Bool {
+        if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
+            return false
+        }
+        return !showsAllGifts
+    }
+
     public static func key(for gift: StarGift) -> String {
         switch gift {
         case let .unique(uniqueGift):
@@ -13773,6 +13796,53 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
         stext = stext.replace(old, new, 1)
     setup.write_text(stext, encoding="utf-8")
     print("FakeStarsAllGifts: patched GiftSetupScreen (send button, auction context, availability bar)")
+
+
+def patch_gift_marketplace_show_all(tg: Path) -> None:
+    """The gift marketplace shows the whole catalogue only when the user asks for it.
+
+    `payments.getStarGifts` returns every gift Telegram ever sold, and the marketplace lists
+    them all: the sold-out ones come with a "Sold Out" ribbon and a read-only card, with nothing
+    to buy them with. A switch on the fake gifts screen -- "Show all gifts", off by default --
+    keeps that whole list; without it the marketplace keeps to what can be had, in stock or
+    offered for resale. A sold-out gift someone is reselling stays, since it can be bought.
+
+    The prune runs where the list is assembled, after the recipient's own privacy prune, so the
+    tabs, the counts beside them and the grid all see the same list. Fake Stars do not change
+    it: with the switch on, the whole catalogue is there and a retired gift buys locally as
+    before; with it off, a retired gift is not listed at all. While the licence is locked the
+    flag answers false and Telegram's own list stands.
+    """
+    options = tg / "submodules/TelegramUI/Components/Gifts/GiftOptionsScreen/Sources/GiftOptionsScreen.swift"
+    if not options.is_file():
+        raise RuntimeError("GiftMarketplaceShowAll: GiftOptionsScreen.swift is missing")
+    text = options.read_text(encoding="utf-8")
+    marker = "// AorusGram: the whole catalogue only on request"
+    if marker in text:
+        print("GiftMarketplaceShowAll: GiftOptionsScreen already patched")
+        return
+    anchor = (
+        "                if self.starGifts != filteredStarGifts {\n"
+        "                    self.starGiftsVersion += 1\n"
+        "                }\n"
+    )
+    if text.count(anchor) != 1:
+        raise RuntimeError(f"GiftMarketplaceShowAll: catalogue anchor found {text.count(anchor)} times")
+    text = text.replace(anchor, (
+        "                " + marker + ": a gift that is sold out and that nobody\n"
+        "                // resells cannot be had, so the marketplace leaves it out unless \"Show all\n"
+        "                // gifts\" is on (the fake gifts screen).\n"
+        "                if AorusFakeGiftsStore.hidesUnavailableGifts {\n"
+        "                    filteredStarGifts = filteredStarGifts?.filter { gift in\n"
+        "                        if case let .generic(gift) = gift, let availability = gift.availability, availability.remains == 0, availability.resale == 0 {\n"
+        "                            return false\n"
+        "                        }\n"
+        "                        return true\n"
+        "                    }\n"
+        "                }\n"
+    ) + anchor, 1)
+    options.write_text(text, encoding="utf-8")
+    print("GiftMarketplaceShowAll: the marketplace lists sold-out gifts only with Show all gifts on")
 
 
 def patch_stars_purchase_redirects(tg: Path) -> None:
@@ -30591,6 +30661,7 @@ def main() -> None:
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_fake_stars_all_gifts(tg)
+    patch_gift_marketplace_show_all(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)

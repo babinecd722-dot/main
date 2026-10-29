@@ -31,20 +31,24 @@ private func aorusGiftTitleAndNumber(_ gift: StarGift, isRu: Bool) -> (String, I
 
 private enum FakeGiftsSection: Int32 {
     case toggle
+    case showAll
     case list
 }
 
 private struct FakeGiftsState: Equatable {
     var enabled: Bool
+    var showsAllGifts: Bool
     var revision: Int
 }
 
 private final class FakeGiftsArguments {
     let setEnabled: (Bool) -> Void
+    let setShowsAllGifts: (Bool) -> Void
     let openGift: (AorusStoredGift) -> Void
 
-    init(setEnabled: @escaping (Bool) -> Void, openGift: @escaping (AorusStoredGift) -> Void) {
+    init(setEnabled: @escaping (Bool) -> Void, setShowsAllGifts: @escaping (Bool) -> Void, openGift: @escaping (AorusStoredGift) -> Void) {
         self.setEnabled = setEnabled
+        self.setShowsAllGifts = setShowsAllGifts
         self.openGift = openGift
     }
 }
@@ -52,6 +56,8 @@ private final class FakeGiftsArguments {
 private enum FakeGiftsEntry: ItemListNodeEntry {
     case enable(PresentationTheme, String, Bool)
     case enableInfo(PresentationTheme, String)
+    case showAll(PresentationTheme, String, Bool)
+    case showAllInfo(PresentationTheme, String)
     case listHeader(PresentationTheme, String)
     case empty(PresentationTheme, String)
     case gift(PresentationTheme, Int32, AorusStoredGift, String, String)
@@ -60,6 +66,8 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
         switch self {
         case .enable, .enableInfo:
             return FakeGiftsSection.toggle.rawValue
+        case .showAll, .showAllInfo:
+            return FakeGiftsSection.showAll.rawValue
         case .listHeader, .empty, .gift:
             return FakeGiftsSection.list.rawValue
         }
@@ -67,10 +75,12 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
-        case .enable:     return 0
-        case .enableInfo: return 1
-        case .listHeader: return 2
-        case .empty:      return 3
+        case .enable:      return 0
+        case .enableInfo:  return 1
+        case .showAll:     return 2
+        case .showAllInfo: return 3
+        case .listHeader:  return 4
+        case .empty:       return 5
         case let .gift(_, index, _, _, _): return 100 + index
         }
     }
@@ -85,6 +95,10 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
             if case let .enable(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .enableInfo(lt, ls):
             if case let .enableInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .showAll(lt, ls, lv):
+            if case let .showAll(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .showAllInfo(lt, ls):
+            if case let .showAllInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .listHeader(lt, ls):
             if case let .listHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .empty(lt, ls):
@@ -101,6 +115,10 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
         case let .enable(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setEnabled($0) })
         case let .enableInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .showAll(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowsAllGifts($0) })
+        case let .showAllInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .listHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
@@ -132,6 +150,10 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
     entries.append(.enable(theme, aorusL("Включить фейковые подарки", "Enable fake gifts"), state.enabled))
     entries.append(.enableInfo(theme, aorusL("Эти подарки видны только вам, локально. Ничего не отправляется на сервер.", "These gifts are visible only to you, locally. Nothing is sent to the server.")))
 
+    // Its own switch, apart from the one above: the marketplace is not about local gifts.
+    entries.append(.showAll(theme, aorusL("Показывать все подарки", "Show all gifts"), state.showsAllGifts))
+    entries.append(.showAllInfo(theme, aorusL("Показывает все подарки в маркетплейсе подарков, в том числе распроданные.", "Shows every gift in the gift marketplace, sold-out ones included.")))
+
     entries.append(.listHeader(theme, aorusL("ДОБАВЛЕННЫЕ ПОДАРКИ", "ADDED GIFTS")))
     let gifts = AorusFakeGiftsStore.ownProfileGifts()
     if gifts.isEmpty {
@@ -156,7 +178,7 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
 }
 
 public func aorusFakeGiftsController(context: AccountContext) -> ViewController {
-    let initialState = FakeGiftsState(enabled: AorusFakeGiftsStore.isEnabled, revision: 0)
+    let initialState = FakeGiftsState(enabled: AorusFakeGiftsStore.isEnabled, showsAllGifts: AorusFakeGiftsStore.showsAllGifts, revision: 0)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((FakeGiftsState) -> FakeGiftsState) -> Void = { f in
@@ -168,6 +190,7 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
             var next = current
             next.revision += 1
             next.enabled = AorusFakeGiftsStore.isEnabled
+            next.showsAllGifts = AorusFakeGiftsStore.showsAllGifts
             return next
         }
     }
@@ -188,6 +211,14 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
             updateState { current in
                 var next = current
                 next.enabled = value
+                return next
+            }
+        },
+        setShowsAllGifts: { value in
+            AorusFakeGiftsStore.setShowsAllGifts(value)
+            updateState { current in
+                var next = current
+                next.showsAllGifts = value
                 return next
             }
         },
