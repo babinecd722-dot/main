@@ -983,14 +983,16 @@ def main() -> None:
     if not gift_buy.is_file() or "AorusGram: local-only collectible purchase" not in gift_buy.read_text(encoding="utf-8"):
         err.append("FakeStars: native collectible purchase hook is missing")
 
-    # Sold-out gifts are buyable, and only with the local store on.
+    # Sold-out gifts are buyable, and only with "Show all gifts" and the local store on.
     #
     # Upstream has three gates: the picker routes a sold-out gift to a read-only card, the
     # setup screen disables its own send button, and the server refuses with
     # STARGIFT_USAGE_LIMITED. The first two are lifted here, and every one of them has to
-    # stay behind `!AorusFakeStarsStore.isEnabled` — the third gate is real, so without the
-    # local purchase replacing the request, lifting the first two would only walk the user
-    # into a server error. Counting the guards catches a future edit that drops one.
+    # stay behind `!AorusFakeGiftsStore.sellsWholeCatalogue` -- the switch, and fake Stars to
+    # pay: the third gate is real, so without the local purchase replacing the request,
+    # lifting the first two would only walk the user into a server error, and without the
+    # switch the marketplace is Telegram's own. Counting the guards catches a future edit
+    # that drops one.
     gift_options = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftOptionsScreen" / "Sources" / "GiftOptionsScreen.swift"
     if not gift_options.is_file():
         err.append("FakeStars: GiftOptionsScreen.swift is missing")
@@ -998,15 +1000,15 @@ def main() -> None:
         gift_options_text = gift_options.read_text(encoding="utf-8")
         if "AorusGram: every gift is buyable locally" not in gift_options_text:
             err.append("FakeStars: sold-out gifts are still diverted to the read-only card")
-        guards = gift_options_text.count("!AorusFakeStarsStore.isEnabled")
+        guards = gift_options_text.count("!AorusFakeGiftsStore.sellsWholeCatalogue")
         if guards != 6:
             err.append(f"FakeStars: gift picker has {guards} local-store guards, expected 6")
         # The two per-visible-item branches read a hoisted local instead of the store, so
         # a card being drawn on a scroll frame costs no UserDefaults lookup. They are
         # counted separately from the guards above for that reason: a future edit that
-        # "simplifies" them back to `AorusFakeStarsStore.isEnabled` would still pass the
-        # count above while putting the lookup back into the scroll path.
-        if "let aorusLocalGifts = AorusFakeStarsStore.isEnabled" not in gift_options_text:
+        # "simplifies" them back to `AorusFakeGiftsStore.sellsWholeCatalogue` would still pass
+        # the count above while putting the lookup back into the scroll path.
+        if "let aorusLocalGifts = AorusFakeGiftsStore.sellsWholeCatalogue" not in gift_options_text:
             err.append("FakeStars: the picker no longer hoists the local-store flag per layout pass")
         if gift_options_text.count("!aorusLocalGifts") != 2:
             err.append("FakeStars: the sold-out ribbon and the auction price label are not both gated")
@@ -1018,21 +1020,27 @@ def main() -> None:
         gift_setup_text = gift_setup.read_text(encoding="utf-8")
         if "AorusGram: a sold-out gift can still be sent locally" not in gift_setup_text:
             err.append("FakeStars: the send button is still disabled for a sold-out gift")
-        if "if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability" not in gift_setup_text:
+        if "if !AorusFakeGiftsStore.sellsWholeCatalogue, let availability = starGift.availability" not in gift_setup_text:
             err.append("FakeStars: the send button's sold-out guard is not tied to the local store")
         # The remaining-count bar states the sold-out claim in another shape, and the
         # auction context is what turns this screen into a bidding screen at all — the
         # send button alone is not enough to make a retired or auction gift buyable.
-        if "if !AorusFakeStarsStore.isEnabled, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {" not in gift_setup_text:
+        if "if !AorusFakeGiftsStore.sellsWholeCatalogue, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {" not in gift_setup_text:
             err.append("FakeStars: the setup screen still shows the remaining-count bar")
-        if "if !AorusFakeStarsStore.isEnabled, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction)" not in gift_setup_text:
+        if "if !AorusFakeGiftsStore.sellsWholeCatalogue, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction)" not in gift_setup_text:
             err.append("FakeStars: the setup screen still subscribes to the auction context")
 
+    fake_gifts_store = tg / "submodules" / "TelegramCore" / "Sources" / "AorusFakeGiftsStore.swift"
+    fake_gifts_store_text = fake_gifts_store.read_text(encoding="utf-8") if fake_gifts_store.is_file() else ""
+    if "return showsAllGifts && AorusFakeStarsStore.isEnabled" not in fake_gifts_store_text:
+        err.append("FakeGifts: the whole catalogue is not tied to both Show all gifts and fake Stars")
     fake_gifts_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftsController.swift"
     fake_gift_manage_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftManageController.swift"
     fake_gifts_controller_text = fake_gifts_controller.read_text(encoding="utf-8") if fake_gifts_controller.is_file() else ""
     if "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gifts_controller_text:
         err.append("FakeGifts: recipient gifts can leak into the manager list")
+    if "AorusFakeGiftsStore.setShowsAllGifts(value)" not in fake_gifts_controller_text:
+        err.append("FakeGifts: the Show all gifts switch is missing from the fake gifts screen")
     if (
         "genericGift.title?.trimmingCharacters" not in fake_gifts_controller_text
         or 'return (aorusL("Подарок", "Gift"), nil)' not in fake_gifts_controller_text

@@ -10246,10 +10246,9 @@ public enum AorusFakeGiftsStore {
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
-    // The gift marketplace shows Telegram's whole catalogue -- the sold-out gifts with it -- only
-    // when asked to. Telegram lists a sold-out gift with nothing to buy it with; without this
-    // switch the marketplace keeps to what can be had: in stock, or offered for resale. It is a
-    // switch of its own, apart from fake gifts and fake Stars, which both leave it as it is.
+    // "Show all gifts" (the fake gifts screen): the gift marketplace's whole catalogue, every gift
+    // buyable locally -- sold out, retired, auctioned, premium-only, or one the recipient does
+    // not accept. Off by default; off, the marketplace is Telegram's own, fake Stars or not.
     public static let showsAllGiftsKey = "aorusgram_gifts_show_all"
 
     public static var showsAllGifts: Bool {
@@ -10260,13 +10259,12 @@ public enum AorusFakeGiftsStore {
         UserDefaults.standard.set(value, forKey: showsAllGiftsKey)
     }
 
-    /// Whether the marketplace leaves out the gifts nobody can buy. Never while the licence is
-    /// locked: AorusGram changes nothing then, and Telegram's own list stands.
-    public static var hidesUnavailableGifts: Bool {
-        if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
-            return false
-        }
-        return !showsAllGifts
+    /// The whole catalogue is on sale: the switch asks for it, and fake Stars pay for it. A
+    /// purchase of a gift Telegram no longer sells only works when it never reaches the server,
+    /// so without fake Stars the switch changes nothing. False while the licence is locked,
+    /// which turns fake Stars off.
+    public static var sellsWholeCatalogue: Bool {
+        return showsAllGifts && AorusFakeStarsStore.isEnabled
     }
 
     public static func key(for gift: StarGift) -> String {
@@ -13566,7 +13564,11 @@ def patch_saved_messages_gift_upgrade(tg: Path) -> None:
 
 
 def patch_fake_stars_all_gifts(tg: Path) -> None:
-    """With fake Stars on, every gift in the catalogue can be bought locally.
+    """With "Show all gifts" and fake Stars on, every gift in the catalogue can be bought locally.
+
+    A switch of its own on the fake gifts screen, off by default: fake Stars alone pay for
+    what Telegram sells and leave the marketplace as Telegram draws it. Every guard below
+    reads `AorusFakeGiftsStore.sellsWholeCatalogue` -- the switch, and fake Stars to pay.
 
     The catalogue already contains the whole history. `payments.getStarGifts` keeps
     returning retired gifts — that is why `StarGift.Gift` carries a `SoldOut` struct with
@@ -13582,11 +13584,11 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
       2. `GiftSetupScreen` then disables its own send button for the same condition.
       3. The server answers `STARGIFT_USAGE_LIMITED`.
 
-    The third gate is why this is tied to fake Stars rather than offered unconditionally:
+    The third gate is why the switch needs fake Stars rather than working on its own:
     `patch_fake_stars_purchases` already replaces the whole payment signal with a local
     one when the store is enabled, so the request that would be refused is never made.
-    With fake Stars off, all three gates stand exactly as upstream wrote them and a
-    sold-out gift behaves as it always did.
+    With the switch off, or fake Stars off, all three gates stand exactly as upstream wrote
+    them and a sold-out gift behaves as it always did.
 
     The recipient's own gift-privacy prune and the channel prune are lifted for the same
     reason — with the purchase local, nothing reaches the recipient to be refused — so the
@@ -13616,7 +13618,7 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
 
     Two things are done about what this costs, and both are about work this patch itself
     adds rather than a lag anyone has profiled. The flag is read once per layout pass and
-    not once per gift — `isEnabled` is two or three `UserDefaults` lookups, and the guards
+    not once per gift — `sellsWholeCatalogue` is a few `UserDefaults` lookups, and the guards
     it feeds sit in the picker's per-visible-item branches, which run for every card on
     screen on every scroll frame. And the item walk now stops at the bottom of the visible
     window: upstream walks the whole list every pass, which was affordable while the list
@@ -13634,35 +13636,35 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
             (
                 "openGift route",
                 "                        if let availability = gift.availability, availability.remains == 0 || gift.perUserLimit?.remains == 0 || component.peerId.namespace == Namespaces.Peer.CloudChannel {\n",
-                "                        // AorusGram: every gift is buyable locally when fake Stars\n"
-                "                        // are on. Upstream diverts a sold-out gift — and anything\n"
-                "                        // sent to a channel — to a read-only card, because the\n"
-                "                        // server would refuse the purchase. With the store enabled\n"
-                "                        // the purchase never reaches the server, so the gift goes\n"
-                "                        // to the ordinary setup screen like any other.\n"
-                "                        if !AorusFakeStarsStore.isEnabled, let availability = gift.availability, availability.remains == 0 || gift.perUserLimit?.remains == 0 || component.peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+                "                        // AorusGram: every gift is buyable locally with \"Show all\n"
+                "                        // gifts\" and fake Stars on. Upstream diverts a sold-out\n"
+                "                        // gift — and anything sent to a channel — to a read-only\n"
+                "                        // card, because the server would refuse the purchase. With\n"
+                "                        // fake Stars paying, the purchase never reaches the server,\n"
+                "                        // so the gift goes to the ordinary setup screen like any other.\n"
+                "                        if !AorusFakeGiftsStore.sellsWholeCatalogue, let availability = gift.availability, availability.remains == 0 || gift.perUserLimit?.remains == 0 || component.peerId.namespace == Namespaces.Peer.CloudChannel {\n",
             ),
             (
                 "per-user limit",
                 "                    if let perUserLimit = gift.perUserLimit, perUserLimit.remains == 0 && (gift.availability?.resale ?? 0) == 0 {\n",
                 "                    // AorusGram: a per-account ceiling is the server counting what\n"
-                "                    // this account already bought. Nothing is bought there under\n"
-                "                    // fake Stars, so there is nothing for it to count.\n"
-                "                    if !AorusFakeStarsStore.isEnabled, let perUserLimit = gift.perUserLimit, perUserLimit.remains == 0 && (gift.availability?.resale ?? 0) == 0 {\n",
+                "                    // this account already bought. Nothing is bought there when\n"
+                "                    // fake Stars pay, so there is nothing for it to count.\n"
+                "                    if !AorusFakeGiftsStore.sellsWholeCatalogue, let perUserLimit = gift.perUserLimit, perUserLimit.remains == 0 && (gift.availability?.resale ?? 0) == 0 {\n",
             ),
             (
                 "premium gate",
                 "                    if gift.flags.contains(.requiresPremium) && !component.context.isPremium && !((gift.availability?.resale ?? 0) > 0) {\n",
                 "                    // AorusGram: same reasoning as the ceiling above.\n"
-                "                    if !AorusFakeStarsStore.isEnabled, gift.flags.contains(.requiresPremium) && !component.context.isPremium && !((gift.availability?.resale ?? 0) > 0) {\n",
+                "                    if !AorusFakeGiftsStore.sellsWholeCatalogue, gift.flags.contains(.requiresPremium) && !component.context.isPremium && !((gift.availability?.resale ?? 0) > 0) {\n",
             ),
             (
                 "privacy prune",
                 "                if let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {\n",
                 "                // AorusGram: the recipient's gift privacy decides what *they* will\n"
-                "                // accept. A local purchase never reaches them, so under fake Stars\n"
-                "                // the picker shows the whole catalogue instead of their subset.\n"
-                "                if !AorusFakeStarsStore.isEnabled, let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {\n",
+                "                // accept. A local purchase never reaches them, so with the whole\n"
+                "                // catalogue on sale the picker shows it instead of their subset.\n"
+                "                if !AorusFakeGiftsStore.sellsWholeCatalogue, let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {\n",
             ),
             (
                 "channel prune",
@@ -13670,19 +13672,19 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
                 "                if peerId.namespace == Namespaces.Peer.CloudChannel {\n",
                 "                var filteredStarGifts = starGifts\n"
                 "                // AorusGram: and the same for the channel prune.\n"
-                "                if !AorusFakeStarsStore.isEnabled, peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+                "                if !AorusFakeGiftsStore.sellsWholeCatalogue, peerId.namespace == Namespaces.Peer.CloudChannel {\n",
             ),
             (
                 "auction route",
                 "                    if gift.flags.contains(.isAuction) && !((gift.availability?.resale ?? 0) > 0) {\n"
                 "                        guard let giftAuctionsManager = component.context.giftAuctionsManager else {\n",
                 "                    // AorusGram: an auction is the server running a bidding round.\n"
-                "                    // A local purchase takes no part in one, so under fake Stars the\n"
+                "                    // A local purchase takes no part in one, so on local sale the\n"
                 "                    // gift skips the auction screens and opens the ordinary setup\n"
                 "                    // screen in the `else` below — the same one every other gift here\n"
                 "                    // opens. A gift with an active resale keeps the upstream route,\n"
                 "                    // which already works.\n"
-                "                    if !AorusFakeStarsStore.isEnabled, gift.flags.contains(.isAuction) && !((gift.availability?.resale ?? 0) > 0) {\n"
+                "                    if !AorusFakeGiftsStore.sellsWholeCatalogue, gift.flags.contains(.isAuction) && !((gift.availability?.resale ?? 0) > 0) {\n"
                 "                        guard let giftAuctionsManager = component.context.giftAuctionsManager else {\n",
             ),
             (
@@ -13690,10 +13692,10 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
                 "            let visibleBounds = self.scrollView.bounds.insetBy(dx: 0.0, dy: -10.0)\n",
                 "            let visibleBounds = self.scrollView.bounds.insetBy(dx: 0.0, dy: -10.0)\n"
                 "            // AorusGram: read once per layout pass. The two branches below run for\n"
-                "            // every card on screen on every scroll frame, and `isEnabled` is a\n"
-                "            // UserDefaults lookup — cheap once, not cheap a few hundred times a\n"
+                "            // every card on screen on every scroll frame, and the flag is a few\n"
+                "            // UserDefaults lookups — cheap once, not cheap a few hundred times a\n"
                 "            // second.\n"
-                "            let aorusLocalGifts = AorusFakeStarsStore.isEnabled\n",
+                "            let aorusLocalGifts = AorusFakeGiftsStore.sellsWholeCatalogue\n",
             ),
             (
                 "visible window break",
@@ -13762,9 +13764,9 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
             "                    buttonIsEnabled = false\n"
             "                }\n",
             "                // AorusGram: a sold-out gift can still be sent locally. Gate 2 of the\n"
-            "                // three; the payment itself is replaced further down when the store is\n"
-            "                // enabled, so the button now leads somewhere that works.\n"
-            "                if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability, availability.remains == 0 {\n"
+            "                // three; the payment itself is replaced further down when fake Stars\n"
+            "                // pay, so the button now leads somewhere that works.\n"
+            "                if !AorusFakeGiftsStore.sellsWholeCatalogue, let availability = starGift.availability, availability.remains == 0 {\n"
             "                    buttonIsEnabled = false\n"
             "                }\n",
         ),
@@ -13775,9 +13777,9 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
             "                // screen. `giftAuction` being non-nil turns the send button into a\n"
             "                // round countdown and the proceed action into a bid, and\n"
             "                // `giftAuctionState` overrides the remaining count. Left unsubscribed\n"
-            "                // under fake Stars, the screen is the plain one: a price button that\n"
+            "                // on local sale, the screen is the plain one: a price button that\n"
             "                // spends the local balance.\n"
-            "                if !AorusFakeStarsStore.isEnabled, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction), let giftAuctionsManager = component.context.giftAuctionsManager {\n",
+            "                if !AorusFakeGiftsStore.sellsWholeCatalogue, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction), let giftAuctionsManager = component.context.giftAuctionsManager {\n",
         ),
         (
             "availability bar",
@@ -13787,7 +13789,7 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
             "            // block is exactly the layout an unlimited gift produces — one never\n"
             "            // enters it — so nothing below needs adjusting. It also takes the auction\n"
             "            // footer, which lives inside it and would have nothing to open.\n"
-            "            if !AorusFakeStarsStore.isEnabled, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {\n",
+            "            if !AorusFakeGiftsStore.sellsWholeCatalogue, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {\n",
         ),
     ]
     for name, old, new in setup_replacements:
@@ -13796,53 +13798,6 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
         stext = stext.replace(old, new, 1)
     setup.write_text(stext, encoding="utf-8")
     print("FakeStarsAllGifts: patched GiftSetupScreen (send button, auction context, availability bar)")
-
-
-def patch_gift_marketplace_show_all(tg: Path) -> None:
-    """The gift marketplace shows the whole catalogue only when the user asks for it.
-
-    `payments.getStarGifts` returns every gift Telegram ever sold, and the marketplace lists
-    them all: the sold-out ones come with a "Sold Out" ribbon and a read-only card, with nothing
-    to buy them with. A switch on the fake gifts screen -- "Show all gifts", off by default --
-    keeps that whole list; without it the marketplace keeps to what can be had, in stock or
-    offered for resale. A sold-out gift someone is reselling stays, since it can be bought.
-
-    The prune runs where the list is assembled, after the recipient's own privacy prune, so the
-    tabs, the counts beside them and the grid all see the same list. Fake Stars do not change
-    it: with the switch on, the whole catalogue is there and a retired gift buys locally as
-    before; with it off, a retired gift is not listed at all. While the licence is locked the
-    flag answers false and Telegram's own list stands.
-    """
-    options = tg / "submodules/TelegramUI/Components/Gifts/GiftOptionsScreen/Sources/GiftOptionsScreen.swift"
-    if not options.is_file():
-        raise RuntimeError("GiftMarketplaceShowAll: GiftOptionsScreen.swift is missing")
-    text = options.read_text(encoding="utf-8")
-    marker = "// AorusGram: the whole catalogue only on request"
-    if marker in text:
-        print("GiftMarketplaceShowAll: GiftOptionsScreen already patched")
-        return
-    anchor = (
-        "                if self.starGifts != filteredStarGifts {\n"
-        "                    self.starGiftsVersion += 1\n"
-        "                }\n"
-    )
-    if text.count(anchor) != 1:
-        raise RuntimeError(f"GiftMarketplaceShowAll: catalogue anchor found {text.count(anchor)} times")
-    text = text.replace(anchor, (
-        "                " + marker + ": a gift that is sold out and that nobody\n"
-        "                // resells cannot be had, so the marketplace leaves it out unless \"Show all\n"
-        "                // gifts\" is on (the fake gifts screen).\n"
-        "                if AorusFakeGiftsStore.hidesUnavailableGifts {\n"
-        "                    filteredStarGifts = filteredStarGifts?.filter { gift in\n"
-        "                        if case let .generic(gift) = gift, let availability = gift.availability, availability.remains == 0, availability.resale == 0 {\n"
-        "                            return false\n"
-        "                        }\n"
-        "                        return true\n"
-        "                    }\n"
-        "                }\n"
-    ) + anchor, 1)
-    options.write_text(text, encoding="utf-8")
-    print("GiftMarketplaceShowAll: the marketplace lists sold-out gifts only with Show all gifts on")
 
 
 def patch_stars_purchase_redirects(tg: Path) -> None:
@@ -30661,7 +30616,6 @@ def main() -> None:
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_fake_stars_all_gifts(tg)
-    patch_gift_marketplace_show_all(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)

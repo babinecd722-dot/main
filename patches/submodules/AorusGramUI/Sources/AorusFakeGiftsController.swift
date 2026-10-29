@@ -150,9 +150,10 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
     entries.append(.enable(theme, aorusL("Включить фейковые подарки", "Enable fake gifts"), state.enabled))
     entries.append(.enableInfo(theme, aorusL("Эти подарки видны только вам, локально. Ничего не отправляется на сервер.", "These gifts are visible only to you, locally. Nothing is sent to the server.")))
 
-    // Its own switch, apart from the one above: the marketplace is not about local gifts.
+    // Its own switch, apart from the one above: the whole catalogue on sale, bought with fake
+    // Stars. Off, the marketplace is Telegram's own.
     entries.append(.showAll(theme, aorusL("Показывать все подарки", "Show all gifts"), state.showsAllGifts))
-    entries.append(.showAllInfo(theme, aorusL("Показывает все подарки в маркетплейсе подарков, в том числе распроданные.", "Shows every gift in the gift marketplace, sold-out ones included.")))
+    entries.append(.showAllInfo(theme, aorusL("Показывает все подарки в маркетплейсе подарков, даже распроданные и снятые с продажи, и позволяет купить их за фейковые звёзды.", "Shows every gift in the gift marketplace, even sold-out and retired ones, and lets you buy them with fake Stars.")))
 
     entries.append(.listHeader(theme, aorusL("ДОБАВЛЕННЫЕ ПОДАРКИ", "ADDED GIFTS")))
     let gifts = AorusFakeGiftsStore.ownProfileGifts()
