@@ -2621,7 +2621,7 @@ _PROFILE_CLASSIC_SEPARATOR_ALPHA = """        if AorusOldInterface.isEnabled {
             // tabs of the media below take over from it when they reach the bar.
             var aorusSeparatorAlpha: CGFloat = innerBackgroundTransitionFraction
             let aorusSecondarySeparatorAlpha = 1.0 - effectiveAreaExpansionFraction
-            if self.navigationTransition == nil && !self.isSettings && aorusSeparatorAlpha == 1.0 && aorusSecondarySeparatorAlpha < 1.0 {
+            if !self.isSettings && aorusSeparatorAlpha == 1.0 && aorusSecondarySeparatorAlpha < 1.0 {
                 aorusSeparatorAlpha = aorusSecondarySeparatorAlpha
             }
             if self.customNavigationContentNode != nil || state.isEditing {

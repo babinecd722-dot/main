@@ -27122,7 +27122,7 @@ def patch_poll_results_preview(tg: Path) -> None:
         "    private var isPreviewingResults = false\n"
         "    // AorusGram: polls with several answers whose preview gave way to the boxes to tick, and the\n"
         "    // answer tapped to get there, ticked once its box is back.\n"
-        "    fileprivate static var aorusDismissedPreviews = Set<MessageId>()\n"
+        "    fileprivate static var aorusDismissedPreviews = Set<EngineMessage.Id>()\n"
         "    fileprivate var aorusPendingCheck: Data?\n",
         "preview state",
     )

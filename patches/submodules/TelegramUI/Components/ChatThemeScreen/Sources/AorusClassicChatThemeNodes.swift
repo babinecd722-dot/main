@@ -360,7 +360,7 @@ private final class AorusClassicThemeSettingsThemeItemIconNode : ListViewItemNod
         super.selected()
 
         if let animatedStickerNode = self.animatedStickerNode {
-            Queue.mainQueue().after(0.1) { [self] in
+            Queue.mainQueue().after(0.1) { [self, animatedStickerNode] in
                 if !wasSelected {
                     animatedStickerNode.seekTo(.frameIndex(0))
                     animatedStickerNode.play(firstFrame: false, fromIndex: nil)
