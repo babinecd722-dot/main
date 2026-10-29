@@ -16476,6 +16476,8 @@ import GlassBackgroundComponent
 final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     let avatarNode: ChatAvatarNavigationNode
     private var glassView: GlassBackgroundView?
+    // The ghost and its pill, without the avatar: what goes out of sight while the profile opens.
+    private let ghostLayerNode: ASDisplayNode
     private let ghostButtonNode: ASButtonNode
     private var ghostPeerId: PeerId?
     private var ghostTheme: PresentationTheme?
@@ -16486,18 +16488,21 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     private var glassApplied: (size: CGSize, visible: Bool, isDark: Bool)?
     private var isDarkAppearance: Bool = true
     private var settingsObservers: [NSObjectProtocol] = []
+    private var isLentToExpansion = false
     // Lays the chat's navigation bar out again, so it takes this node's new width with the same
     // transition the ghost comes and goes with.
     var requestNavigationLayout: ((ContainedViewLayoutTransition) -> Void)?
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
+        self.ghostLayerNode = ASDisplayNode()
         self.ghostButtonNode = ASButtonNode()
         super.init()
         self.isOpaque = false
         self.ghostButtonNode.isHidden = true
         self.ghostButtonNode.isUserInteractionEnabled = false
-        self.addSubnode(self.ghostButtonNode)
+        self.ghostLayerNode.addSubnode(self.ghostButtonNode)
+        self.addSubnode(self.ghostLayerNode)
         self.addSubnode(self.avatarNode)
         self.ghostButtonNode.addTarget(self, action: #selector(self.ghostPressed), forControlEvents: .touchUpInside)
         // Ghost Mode, the ghost's own switch and the chats the ghost is turned off for all live
@@ -16527,8 +16532,23 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         let glassView = GlassBackgroundView(frame: CGRect())
         glassView.isUserInteractionEnabled = false
         self.glassView = glassView
-        self.view.insertSubview(glassView, at: 0)
+        self.ghostLayerNode.view.insertSubview(glassView, at: 0)
         self.setNeedsLayout()
+    }
+
+    /// Telegram 13.1.1 opens the profile from the chat's header by expansion: the avatar flies to
+    /// the profile on a circle of its own (the expansion lends it and gives it back), and the chat's
+    /// bar is drawn above both screens for as long as it runs. The rest of this node stays in that
+    /// bar -- so the ghost and its pill go out of sight as the expansion starts and come back with
+    /// the chat, instead of standing over the profile while it opens.
+    func setLentToExpansion(_ lent: Bool) {
+        guard self.isLentToExpansion != lent else {
+            return
+        }
+        self.isLentToExpansion = lent
+        let transition: ContainedViewLayoutTransition = .animated(duration: lent ? 0.12 : 0.2, curve: .easeInOut)
+        transition.updateAlpha(node: self.ghostLayerNode, alpha: lent ? 0.0 : 1.0)
+        self.ghostButtonNode.isUserInteractionEnabled = self.ghostVisible && !lent
     }
 
     func updateGhost(peerId: PeerId?, theme: PresentationTheme, transition: ContainedViewLayoutTransition, action: @escaping (PeerId, ASButtonNode) -> Void) {
@@ -16593,7 +16613,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
 
     private func setGhostVisible(_ isVisible: Bool, transition: ContainedViewLayoutTransition) {
         self.ghostVisible = isVisible
-        self.ghostButtonNode.isUserInteractionEnabled = isVisible
+        self.ghostButtonNode.isUserInteractionEnabled = isVisible && !self.isLentToExpansion
         self.invalidateCalculatedLayout()
         transition.updateFrame(node: self.avatarNode, frame: self.avatarFrame)
         self.updateGlass(size: self.ghostSize, transition: transition)
@@ -16671,7 +16691,11 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         // leave this capsule behind them. The back button's pane is a different view and keeps
         // its own tablet.
         let aorusHidesNavCapsule = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && AorusInterfaceV2Run.isEnabled
-        let isVisible = self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule
+        // Telegram 13.1.1's bar draws the glass pill a right button sits in itself, sized to this
+        // node and animated with it as the ghost comes and goes: a pill of this node's own would be
+        // a second pane inside that one. Only the old interface's bar, 12.0's, has no pill of its own.
+        let aorusBarDrawsPill = !AorusOldInterface.isEnabled
+        let isVisible = self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule && !aorusBarDrawsPill
         // A layout that only repeats what an animated change already set leaves that change to run.
         if let glassApplied = self.glassApplied, glassApplied.size == size, glassApplied.visible == isVisible, glassApplied.isDark == self.isDarkAppearance {
             return
@@ -16685,6 +16709,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         super.layout()
         // Each subnode in the place this state puts it. While the ghost comes or goes these are
         // the places its animation is already heading for, so they leave it running.
+        self.ghostLayerNode.frame = CGRect(origin: CGPoint(), size: self.bounds.size)
         self.updateGlass(size: self.ghostSize, transition: .immediate)
         self.avatarNode.frame = self.avatarFrame
         if self.ghostVisible {
@@ -16778,6 +16803,59 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
         )
         load_display.write_text(t, encoding="utf-8")
         print("PerChatGhost: routed chat avatar lookups through helper")
+
+    # Telegram 13.1.1 opens the profile from the chat's header by expansion. The chat's avatar item
+    # is the ghost's capsule node here, not the avatar node the expansion knows: the bar transition
+    # left that capsule in -- ghost and all -- above the opening profile, and the avatar's circle was
+    # centred on the capsule rather than on the avatar.
+    expansion = tg / "submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift"
+    t = expansion.read_text(encoding="utf-8")
+    if "// AorusGram: the ghost's capsule node" not in t:
+        for old, new, what in (
+            (
+                "        return NavigationBarTransitionExclusions(titlePill: true, nodes: self.avatarNode.flatMap { [$0] } ?? [])\n",
+                "        // AorusGram: the ghost's capsule node holds the avatar in the bar; it is what the bar's\n"
+                "        // transition would otherwise draw, so it is left out with the avatar.\n"
+                "        var nodes: [ASDisplayNode] = self.avatarNode.flatMap { [$0] } ?? []\n"
+                "        if let ghostCapsule = self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
+                "            nodes.append(ghostCapsule)\n"
+                "        }\n"
+                "        return NavigationBarTransitionExclusions(titlePill: true, nodes: nodes)\n",
+                "bar exclusions",
+            ),
+            (
+                "        var companion: CGRect?\n",
+                "        // AorusGram: the ghost stays in the chat's bar, which the expansion draws above both\n"
+                "        // screens; it goes out of sight until the expansion gives the chat back.\n"
+                "        (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.setLentToExpansion(true)\n"
+                "        var companion: CGRect?\n",
+                "ghost out of sight",
+            ),
+            (
+                "            let button = buttonView.convert(buttonView.bounds, to: screenView)\n",
+                "            // AorusGram: with the ghost beside it the button is wider than the avatar: the circle\n"
+                "            // is the avatar's, centred on it.\n"
+                "            var button = buttonView.convert(buttonView.bounds, to: screenView)\n"
+                "            if let avatarView = self.avatarNode?.view, avatarView.window != nil, avatarView.isDescendant(of: buttonView) {\n"
+                "                let avatarFrame = avatarView.convert(avatarView.bounds, to: screenView)\n"
+                "                button = CGRect(x: avatarFrame.midX - button.height * 0.5, y: button.minY, width: button.height, height: button.height)\n"
+                "            }\n",
+                "companion on the avatar",
+            ),
+            (
+                "    func returnExpansionSource() {\n"
+                "        self.titleView?.reclaimExpansionLabels()\n",
+                "    func returnExpansionSource() {\n"
+                "        self.titleView?.reclaimExpansionLabels()\n"
+                "        (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.setLentToExpansion(false)\n",
+                "ghost back",
+            ),
+        ):
+            if t.count(old) != 1:
+                raise RuntimeError(f"PerChatGhost: ChatExpansionSource {what} anchor not found")
+            t = t.replace(old, new, 1)
+        expansion.write_text(t, encoding="utf-8")
+        print("PerChatGhost: the profile's expansion leaves the ghost's capsule out and centres on the avatar")
 
 
 def patch_voice_twin_recorder(tg: Path) -> None:
