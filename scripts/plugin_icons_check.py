@@ -235,6 +235,13 @@ def main():
                     "CFBundleShortVersionString": "1.0", "CFBundleVersion": "1",
                     "MinimumOSVersion": "13.0", "LSRequiresIPhoneOS": True,
                     "UIDeviceFamily": [1, 2], "UILaunchScreen": {},
+                    # iOS 27 requires the scene lifecycle of an application built with its SDK.
+                    "UIApplicationSceneManifest": {
+                        "UIApplicationSupportsMultipleScenes": False,
+                        "UISceneConfigurations": {"UIWindowSceneSessionRoleApplication": [
+                            {"UISceneConfigurationName": "Default", "UISceneDelegateClassName": "AorusPluginIconsTestScene"},
+                        ]},
+                    },
                 }))
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"

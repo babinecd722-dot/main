@@ -317,15 +317,37 @@ private final class AorusPluginIconsTestApplication: NSObject, UIApplicationDele
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        let window = UIWindow(frame: UIScreen.main.bounds)
+        return true
+    }
+
+    // iOS 27 stops an application built with its SDK that does not adopt the scene
+    // lifecycle, so the window comes from the scene, as it does in Telegram.
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: "Default", sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = AorusPluginIconsTestScene.self
+        return configuration
+    }
+}
+
+@objc(AorusPluginIconsTestScene)
+@MainActor
+private final class AorusPluginIconsTestScene: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+    private static var started = false
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene, !Self.started else { return }
+        Self.started = true
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = windowScene.coordinateSpace.bounds
         window.rootViewController = UIViewController()
         self.window = window
+        (UIApplication.shared.delegate as? AorusPluginIconsTestApplication)?.window = window
         window.makeKeyAndVisible()
         Task { @MainActor in
             await AorusPluginIconsUIKitTests.run()
             fflush(stdout)
             exit(0)
         }
-        return true
     }
 }
