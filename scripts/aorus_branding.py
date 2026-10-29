@@ -28593,11 +28593,22 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "        guard !self.otherAccountPhoneNumbers.1.isEmpty || AorusLoginBackupPickerController.hasBackup() else {\n"
         "            return\n"
         "        }\n"
-        "        let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
-        "        let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
-        "        let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        "        aorusKeyItem.tintColor = aorusKeyColor\n"
-        "        self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
+        "        let aorusKeyItem: UIBarButtonItem\n"
+        "        if let current = self.aorusKeyItem {\n"
+        "            aorusKeyItem = current\n"
+        "        } else {\n"
+        "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
+        "            aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        "            aorusKeyItem.tintColor = aorusKeyColor\n"
+        "            self.aorusKeyItem = aorusKeyItem\n"
+        "        }\n"
+        "        // Beside Telegram's own button, never in place of it. On a narrow screen -- 320 points:\n"
+        "        // the first iPhone SE, or an SE or a mini with Display Zoom -- the phone screen hides its\n"
+        "        // Continue button and puts Next in the bar instead, so a key put where Next was left no\n"
+        "        // way on. Next stays the outermost; the key sits beside it.\n"
+        "        let telegramItems = (self.navigationItem.rightBarButtonItems ?? []).filter { $0 !== aorusKeyItem }\n"
+        "        self.navigationItem.rightBarButtonItems = [aorusKeyItem] + telegramItems\n"
         "    }\n"
         "\n    @objc private func aorusBackupKeyPressed() {\n"
         "        guard !self.aorusBackupPickerPresented else { return }\n"
@@ -28631,7 +28642,7 @@ def patch_login_backup_key_button(tg: Path) -> None:
         t = t.replace(method_anchor, method_inject, 1)
 
     picker_state_anchor = "    private let termsDisposable = MetaDisposable()\n"
-    picker_state_inject = picker_state_anchor + "    private var aorusBackupPickerPresented = false\n"
+    picker_state_inject = picker_state_anchor + "    private var aorusBackupPickerPresented = false\n    private var aorusKeyItem: UIBarButtonItem?\n"
     if "private var aorusBackupPickerPresented" not in t:
         if picker_state_anchor not in t:
             print("LoginBackupKey: WARNING picker-state anchor not found — skipped")
