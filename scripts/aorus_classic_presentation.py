@@ -58,6 +58,8 @@ def patch_classic_presentation(tg: Path) -> None:
     text = edit(text, "            self.backgroundContainer = GlassBackgroundContainerView(spacing: 28.0)", "            self.backgroundContainer = AorusOldInterface.isEnabled ? UIView() : GlassBackgroundContainerView(spacing: 28.0)", "classic menu background selection")
     text = edit(text, "            self.backgroundContainer.contentView.addSubview(self.contentContainer)", "            if let glassContainer = self.backgroundContainer as? GlassBackgroundContainerView {\n                glassContainer.contentView.addSubview(self.contentContainer)\n            } else {\n                self.backgroundContainer.addSubview(self.contentContainer)\n            }", "classic menu contents mounting")
     text = edit(text, "            self.backgroundContainer.update(size: size, isDark: presentationData.theme.overallDarkAppearance, transition: transition)", "            (self.backgroundContainer as? GlassBackgroundContainerView)?.update(size: size, isDark: presentationData.theme.overallDarkAppearance, transition: transition)", "classic menu background update")
+    # 13.1 lends the menu's glass its blur radius; the classic background has none.
+    text = edit(text, "            self.backgroundContainer.nativeBlurRadius = glassBlurRadius\n", "            (self.backgroundContainer as? GlassBackgroundContainerView)?.nativeBlurRadius = glassBlurRadius\n", "classic menu glass blur radius")
     # 12.0's three looks: a menu over a blurred, extracted message is opaque and flat; one
     # beside its source is blurred and shadowed; a second level is half see-through.
     text = edit(text, "            self.contentContainer.update(size: size, cornerRadius:", """            if AorusOldInterface.isEnabled {

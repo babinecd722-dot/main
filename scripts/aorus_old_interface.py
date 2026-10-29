@@ -868,7 +868,7 @@ def _patch_chat_panels(tg: Path) -> None:
         "                headerPanelsTransition.setFrame(view: aorusBackground.background, frame: aorusBackgroundFrame)\n"
         "                aorusBackground.background.update(size: aorusBackgroundFrame.size, transition: headerPanelsTransition.containedViewLayoutTransition)\n"
         "                headerPanelsTransition.setFrame(layer: aorusBackground.separator, frame: CGRect(origin: CGPoint(x: 0.0, y: aorusBackgroundFrame.height - UIScreenPixel), size: CGSize(width: aorusBackgroundFrame.width, height: UIScreenPixel)))\n"
-        "                self.navigationBar?.stripeNode.isHidden = true\n"
+        "                (self.navigationBar as? AorusClassicNavigationBar)?.stripeNode.isHidden = true\n"
         "            }\n"
         "            sidePanelTopInset += headerPanelsSize.height + 2.0\n"
         "        } else if AorusOldInterface.isEnabled {\n"
@@ -876,7 +876,7 @@ def _patch_chat_panels(tg: Path) -> None:
         "                self.aorusHeaderPanelsBackground = nil\n"
         "                aorusBackground.background.removeFromSuperview()\n"
         "            }\n"
-        "            self.navigationBar?.stripeNode.isHidden = false\n"
+        "            (self.navigationBar as? AorusClassicNavigationBar)?.stripeNode.isHidden = false\n"
         "        }\n",
         "header panels background",
     )

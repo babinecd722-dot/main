@@ -721,7 +721,7 @@ public class AorusClassicAdsInfoScreen: ViewController {
             self.wrappingView.addGestureRecognizer(panRecognizer)
 
             self.dim.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.dimTapGesture(_:))))
-            self.controller?.navigationBar?.updateBackgroundAlpha(0.0, transition: .immediate)
+            self.controller?.navigationBar?.setBackdropAlpha(0.0, transition: .immediate)
         }
 
         @objc func dimTapGesture(_ recognizer: UITapGestureRecognizer) {
