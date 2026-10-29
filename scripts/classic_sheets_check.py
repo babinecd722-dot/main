@@ -133,8 +133,11 @@ public struct AorusClassicMenuFixtureAnimator {
 final class AorusClassicFixtureSourceLease {}
 final class AorusClassicFixtureMorph { static let isSupported = true }
 final class AorusClassicFixtureGlassBackgroundView: UIView {
+    // 13.1's container keeps the tint of a layout it defers and lends the glass's blur radius.
+    struct TintColor {}
     static var constructions = 0
     let contentView = UIView()
+    var nativeBlurRadius: CGFloat?
     override init(frame: CGRect) {
         Self.constructions += 1
         super.init(frame: frame)

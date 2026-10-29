@@ -19,9 +19,16 @@ def tab_preview_test_source(tg: Path) -> str:
     native = (tg / 'submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift').read_text()
     move = '\n'.join(block(native, marker).replace('public ', '').replace('ComponentTransition', 'TabPreviewContainedViewLayoutTransitionFixture') for marker in ('        public func aorusPreviewStage(', '        public func aorusPreviewMoveItem(', '        public func aorusPreviewRefresh('))
     # Every pass of the glass bar draws the carried tab it holds.
-    assert 'self.aorusPreviewDragPending = false\n            var selectionFrame: CGRect?' in native
-    frame = native[native.index('                var itemFrame = CGRect(origin: CGPoint(x: nextItemX'):native.index('                if let itemComponentView = itemView.view as? ItemComponent.View')]
-    assert 'itemTransition = .immediate' in frame and 'aorusDraggedFrame = itemFrame' in frame
+    assert 'self.aorusPreviewDragPending = false\n            var selectedItemFrame: CGRect?' in native
+    # 13.1 takes each tab's frame from the bar's laid-out frames; the probe lays its tabs out
+    # side by side in their place, and the carried tab is moved by the bar's own code.
+    assert '                var itemFrame = itemsLayout.itemFrames[index]\n' in native
+    drag = block(native, '                if let drag = self.aorusPreviewDrag, drag.id == item.id {')
+    assert 'itemTransition = .immediate' in drag and 'aorusDraggedFrame = itemFrame' in drag
+    assert '                if isItemSelected {\n                    selectedItemFrame = itemFrame\n                }\n' in native
+    frame = ('                var itemFrame = CGRect(origin: CGPoint(x: nextItemX, y: 0.0), size: itemSize)\n'
+             '                nextItemX += itemSize.width\n' + drag + '\n'
+             '                if isItemSelected {\n                    selectedItemFrame = itemFrame\n                }\n')
     assert native.count('transition: self.aorusIsPreview ? .immediate : itemTransition,') == 2
     classic = (tg / 'submodules/TabBarUI/Sources/TabBarNode.swift').read_text()
     classic_helpers = classic[classic.index('    private var aorusPreviewDragItem:'):classic.index('    func frameForControllerTab(at index:')]
@@ -53,7 +60,8 @@ private final class NativeClassicDragProbe {
 '''
     visibility = r'''
 private struct NativePreviewItem: Equatable { let id: AnyHashable }
-private struct NativePreviewComponent: Equatable { var items: [NativePreviewItem]; var selected: Int }
+private enum NativePreviewAxis { case horizontal, vertical }
+private struct NativePreviewComponent: Equatable { var items: [NativePreviewItem]; var selected: Int; var axis = NativePreviewAxis.horizontal }
 private final class NativePreviewLens {
     let contentView = UIView()
     let selectedContentView = UIView()
@@ -89,7 +97,7 @@ private final class NativePreviewProbe: UIView {
         liquidLensView.contentView.frame = bounds
         liquidLensView.selectedContentView.frame = bounds
         var aorusDraggedFrame: CGRect?
-        var selectionFrame: CGRect?
+        var selectedItemFrame: CGRect?
         var nextItemX = innerInset
         for (index, item) in component.items.enumerated() {
             let itemSize = CGSize(width: (tabsSize.width - innerInset * 2) / CGFloat(component.items.count), height: 55)
@@ -108,7 +116,7 @@ private final class NativePreviewProbe: UIView {
                 itemTransition.setFrame(content, itemFrame)
             }
         }
-        if let selection = aorusDraggedFrame ?? selectionFrame { (aorusPreviewDrag == nil ? transition : .immediate).setFrame(liquidLensView.selection, selection) }
+        if let selection = aorusDraggedFrame ?? selectedItemFrame { (aorusPreviewDrag == nil ? transition : .immediate).setFrame(liquidLensView.selection, selection) }
     }
 }
 '''
@@ -140,9 +148,12 @@ struct TabPreviewLayoutMetricsFixture {
     enum SizeClass { case compact, regular }
     init(widthClass: SizeClass, heightClass: SizeClass, orientation: UIInterfaceOrientation?) {}
 }
+// 13.1's layouts carry the screen's rounded corners and any division of it.
+struct TabPreviewReservedCornersFixture { static let none = TabPreviewReservedCornersFixture() }
+struct TabPreviewDivisionFixture {}
 struct TabPreviewContainerViewLayoutFixture {
     let size: CGSize
-    init(size: CGSize, metrics: TabPreviewLayoutMetricsFixture, deviceMetrics: TabPreviewDeviceMetricsFixture, intrinsicInsets: UIEdgeInsets, safeInsets: UIEdgeInsets, additionalInsets: UIEdgeInsets, statusBarHeight: CGFloat?, inputHeight: CGFloat?, inputHeightIsInteractivellyChanging: Bool, inVoiceOver: Bool, presentedInFormSheet: Bool) { self.size = size }
+    init(size: CGSize, metrics: TabPreviewLayoutMetricsFixture, deviceMetrics: TabPreviewDeviceMetricsFixture, intrinsicInsets: UIEdgeInsets, safeInsets: UIEdgeInsets, reservedCorners: TabPreviewReservedCornersFixture, division: TabPreviewDivisionFixture?, additionalInsets: UIEdgeInsets, statusBarHeight: CGFloat?, inputHeight: CGFloat?, inputHeightIsInteractivellyChanging: Bool, inVoiceOver: Bool, presentedInFormSheet: Bool) { self.size = size }
 }
 struct TabPreviewTabBarNodeItemFixture {
     enum Kind { case none }

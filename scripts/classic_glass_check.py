@@ -185,6 +185,7 @@ extension CALayer {
     let legacyView: ContentView?
     let nativeParamsView: AorusClassicSettingsProbe?
     let nativeView: UIVisualEffectView?
+    let spacing: CGFloat
 ''' + container_init + container_content + container_hit + container_update + '''
     required init?(coder: NSCoder) { fatalError() }
 }

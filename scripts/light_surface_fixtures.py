@@ -7,10 +7,13 @@ def gallery_header_fixture(tg: Path) -> str:
     picker = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift').read_text()
     helper = block(picker, '    private func aorusLayoutSelectionCounter(')
     helper = helper.replace('ContainerViewLayout', 'GalleryCounterLayout').replace('AorusOldInterface', 'GalleryCounterStyle').replace('floorToScreenPixels', 'galleryCounterFloor')
+    # 13.1 measures the counter's place from the side strip's inset (iPhone Duo) as well.
+    minimum = block(picker, 'private func selectedButtonMinX(layout: ContainerViewLayout)').replace('ContainerViewLayout', 'GalleryCounterLayout')
     return '''
 private enum GalleryCounterStyle { static var isEnabled = false }
 private func galleryCounterFloor(_ value: CGFloat) -> CGFloat { floor(value * 3) / 3 }
-private struct GalleryCounterLayout { let navigationHeight: CGFloat }
+private struct GalleryCounterLayout { let navigationHeight: CGFloat; var safeInsets: UIEdgeInsets = .zero }
+''' + minimum + '''
 private final class GalleryCounterTitle: UIView { var aorusLeadingContentInset: CGFloat = 0 }
 private final class GalleryCounterCancel {
     enum State { case cancel, back }
@@ -82,7 +85,9 @@ def light_surface_test_source(tg: Path) -> str:
     expression = next(line.strip() for line in selector.splitlines() if 'self.selectionView.image = generateStretchableFilledCircleImage' in line).replace('generateStretchableFilledCircleImage', 'giftFixtureStretchableCircle')
     glass = (tg / 'submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift').read_text()
     assert 'regularLight' not in glass and 'aorusGlassLuminance' not in glass
-    assert 'case .clear:\n                                glassEffectValue = UIGlassEffect(style: .clear)' in glass
+    # Clear panes stay Telegram's native clear glass (13.1 maps a tint to its effect in one place).
+    assert 'case .clear:\n                return (true, isDark ? UIColor(white: 0.0, alpha: 0.28) : nil)' in glass
+    assert 'UIGlassEffect(style: nativeTint.isClear ? .clear : .regular)' in glass
     assert 'aorusUpdatePageBackground' not in (tg / 'submodules/ItemListUI/Sources/ItemListControllerNode.swift').read_text()
     return '''import UIKit
 private enum AorusGlassPane {\n''' + markers + '''\n}
