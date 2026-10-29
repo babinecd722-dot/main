@@ -4318,31 +4318,6 @@ def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
         print("OpenPurchaseBot: bootstrap anchor not found — skipped gracefully")
 
 
-def patch_app_delegate_import_telegram_api(tg: Path) -> None:
-    """Ensure AppDelegate.swift imports TelegramApi so we can call Api.functions.*.
-
-    Most Telegram-iOS builds already import TelegramApi here, but we add it
-    defensively because the anti-spoof-delete observer references
-    Api.functions.messages.editMessage / Api.InputPeer.
-    """
-    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
-    if not path.is_file():
-        return
-    t = path.read_text(encoding="utf-8")
-    if "import TelegramApi" in t:
-        return
-    needle = "import TelegramCore"
-    pos = t.find(needle)
-    if pos == -1:
-        return
-    line_end = t.find("\n", pos)
-    if line_end == -1:
-        return
-    t = t[:line_end + 1] + "import TelegramApi\n" + t[line_end + 1:]
-    path.write_text(t, encoding="utf-8")
-    print("AppDelegate: added import TelegramApi after import TelegramCore")
-
-
 def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
     """Observe aorusgram.antiSpoofDelete notification and send editMessage RPC.
 
@@ -30493,7 +30468,6 @@ def main() -> None:
     patch_app_delegate_open_purchase_bot(tg)
     patch_app_delegate_activate_deeplink(tg)
     patch_link_protection_open_url(tg)
-    patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)
     patch_peer_info_account_details(tg)

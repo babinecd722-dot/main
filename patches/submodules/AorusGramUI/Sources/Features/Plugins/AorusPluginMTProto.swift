@@ -109,6 +109,11 @@ final class AorusPluginMTProto {
                         throw AorusPluginRequestError("The current account does not match accountId")
                     }
                     let request = try AorusPluginTL.make(method, parameters: parameters)
+                    guard let call = context.account.network.aorusPluginRequest(request,
+                        automaticFloodWait: (options["automaticFloodWait"] as? NSNumber)?.boolValue ?? false
+                    ) else {
+                        throw AorusPluginRequestError("The request could not be sent")
+                    }
                     let disposable = MetaDisposable()
                     self.requests[key] = Pending(pluginId: pluginId, accountId: context.account.id.int64,
                                                   disposable: disposable, completion: completion)
@@ -118,14 +123,11 @@ final class AorusPluginMTProto {
                         guard self.requests[key]?.disposable === disposable else { return }
                         self.finish(key, .failure(AorusPluginRequestError("MTProto request timed out")))
                     }
-                    disposable.set(context.account.network.request(request,
-                        automaticFloodWait: (options["automaticFloodWait"] as? NSNumber)?.boolValue ?? false
-                    ).start(next: { result in
+                    disposable.set(call.start(next: { result in
                         self.queue.async {
                             guard self.requests[key]?.disposable === disposable else { return }
-                            if (options["applyUpdates"] as? NSNumber)?.boolValue != false,
-                               let updates = result as? Api.Updates {
-                                context.account.stateManager.aorusApplyPluginUpdates(updates)
+                            if (options["applyUpdates"] as? NSNumber)?.boolValue != false {
+                                context.account.stateManager.aorusApplyPluginUpdates(result)
                             }
                             do {
                                 let value = try AorusPluginTL.json(result)

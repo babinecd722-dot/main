@@ -1,6 +1,8 @@
 import Foundation
-import TelegramApi
+// Explicit, as TelegramCore's own files import the API layer `internal`.
+public import TelegramApi
 import SwiftSignalKit
+import MtProtoKit
 
 public final class AccountStateManager {
     public private(set) var count = 0
@@ -9,14 +11,6 @@ public final class AccountStateManager {
     func addUpdates(_ updates: Api.Updates) { count += 1 }
 }
 
-public struct MTRpcError: Error {
-    public let errorCode: Int32
-    public let errorDescription: String?
-    public init(errorCode: Int32, errorDescription: String?) {
-        self.errorCode = errorCode
-        self.errorDescription = errorDescription
-    }
-}
 /// Only transport delivery is replaced. The broker uses the real SDK tuple and parser.
 public final class Network {
     public var automaticFloodWait = false
@@ -26,8 +20,9 @@ public final class Network {
                                    @escaping (MTRpcError) -> Void, @escaping () -> Void) -> Disposable) {
         self.handler = handler
     }
-    public func request<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>),
-                           automaticFloodWait: Bool = true) -> Signal<T, MTRpcError> {
+    // Internal, as the pinned TelegramCore's is: only TelegramCore sends API requests.
+    func request<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>),
+                    automaticFloodWait: Bool = true) -> Signal<T, MTRpcError> {
         self.automaticFloodWait = automaticFloodWait
         return Signal { next, error, completed in
             self.handler(data.0, data.1, { buffer in

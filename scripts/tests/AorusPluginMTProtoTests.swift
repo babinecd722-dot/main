@@ -3,6 +3,7 @@ import AccountContext
 import TelegramCore
 import TelegramApi
 import SwiftSignalKit
+import MtProtoKit
 
 private var checks = 0
 private func expect(_ value: Bool, _ name: String) {

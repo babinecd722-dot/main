@@ -135,6 +135,15 @@ def main():
             raise ValueError("AccountStateManager.addUpdates signature differs from the pinned source")
         if (actual_method[1] or "internal") != (stub_method[1] or "internal"):
             raise ValueError("AccountStateManager.addUpdates access differs from the pinned source")
+        # The broker reaches the network only through TelegramCore's own plugin entry point when
+        # Telegram keeps its request method internal (13.1); the stub has to keep it so as well.
+        network = (args.telegram_core_sources / "Network/Network.swift").read_text()
+        request = r"(?m)^    (?:(public|internal|private|fileprivate) )?func request<T>\(_ data: \(FunctionDescription, Buffer, DeserializeFunctionResponse<T>\)"
+        actual_request, stub_request = re.search(request, network), re.search(request, stub)
+        if not actual_request or not stub_request:
+            raise ValueError("Network.request signature differs from the pinned source")
+        if (actual_request[1] or "internal") != (stub_request[1] or "internal"):
+            raise ValueError("Network.request access differs from the pinned source")
     plugin = repo / "patches/submodules/AorusGramUI/Sources/Features/Plugins"
     with tempfile.TemporaryDirectory(prefix="aorus-system-native-") as directory:
         work = Path(directory)
@@ -152,7 +161,7 @@ def main():
         def run(command, **kwargs):
             subprocess.run(command, check=True, **kwargs)
         suffix = ".dylib" if os.uname().sysname == "Darwin" else ".so"
-        for module, dependencies in [("SwiftSignalKit", []), ("TelegramCore", ["TelegramApi", "SwiftSignalKit"]),
+        for module, dependencies in [("SwiftSignalKit", []), ("MtProtoKit", []), ("TelegramCore", ["TelegramApi", "SwiftSignalKit", "MtProtoKit"]),
                                      ("AccountContext", ["TelegramCore"]), ("AorusGram", [])]:
             install_name = ["-Xlinker", "-install_name", "-Xlinker", "@rpath/lib" + module + ".dylib"] if suffix == ".dylib" else []
             source_files = [str(stubs / (module + ".swift"))]
@@ -171,7 +180,7 @@ def main():
         env = os.environ.copy()
         env["DYLD_LIBRARY_PATH" if os.uname().sysname == "Darwin" else "LD_LIBRARY_PATH"] = str(work)
         for name, sources, libraries in [
-            ("mtproto", ["AorusPluginMTProto.swift"], ["AccountContext", "TelegramCore", "TelegramApi", "SwiftSignalKit", "AorusGram"]),
+            ("mtproto", ["AorusPluginMTProto.swift"], ["AccountContext", "TelegramCore", "TelegramApi", "SwiftSignalKit", "MtProtoKit", "AorusGram"]),
             ("http", ["AorusPluginNetworkScope.swift", "AorusPluginHTTPTransport.swift"], ["AorusGram"]),
             ("network", ["AorusPluginNetworkScope.swift", "AorusPluginHTTPTransport.swift", "AorusPluginNetwork.swift"], ["AorusGram"]),
             ("files", [], ["AorusGram"]),

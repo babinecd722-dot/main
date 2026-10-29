@@ -60,6 +60,13 @@ API Telegram (`TelegramApi`) в 13.1 генерируется при каждо�
 схеме (`scripts/telegram_api_generate.py`, `scripts/gen_plugin_tl.py`): сигнатуры — из
 сгенерированного Swift, идентификаторы и флаги — из схемы.
 
+`TelegramCore` импортирует `TelegramApi` как `internal`, и всё, что принимает его типы,
+закрыто: запрос в сеть (`Network.request`) и приём обновлений
+(`AccountStateManager.addUpdates`). Поэтому MTProto-вызов плагина уходит через вход
+AorusGram в самом `TelegramCore` (`AorusPluginAccountUpdates.swift`): запрос, собранный
+`AorusPluginTL`, передаётся туда без типов API в сигнатуре, отправляется транспортом
+аккаунта, а его обновления попадают в менеджер состояния, как у обычного запроса.
+
 `Make.py` перед сборкой запускает проверку импортов Postbox: импортировать Postbox,
 обращаться к `.postbox` и зависеть от него можно только из перечисленных в его списках
 файлов и пакетов, а `TelegramApi` виден только `TelegramCore`. Шаг
