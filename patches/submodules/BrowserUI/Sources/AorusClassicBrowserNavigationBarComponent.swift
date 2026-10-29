@@ -21,7 +21,10 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
     let accentColor: UIColor
     let topInset: CGFloat
     let height: CGFloat
-    let sideInset: CGFloat
+    // 13.1.1's insets: each side on its own, for the side column and the fold.
+    let leftInset: CGFloat
+    let rightInset: CGFloat
+    let trailingButtonsInset: CGFloat
     let metrics: LayoutMetrics
     let externalState: BrowserNavigationBarComponent.ExternalState?
     let leftItems: [AnyComponentWithIdentity<Empty>]
@@ -40,7 +43,9 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
         accentColor: UIColor,
         topInset: CGFloat,
         height: CGFloat,
-        sideInset: CGFloat,
+        leftInset: CGFloat,
+        rightInset: CGFloat,
+        trailingButtonsInset: CGFloat,
         metrics: LayoutMetrics,
         externalState: BrowserNavigationBarComponent.ExternalState?,
         leftItems: [AnyComponentWithIdentity<Empty>],
@@ -58,7 +63,9 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
         self.accentColor = accentColor
         self.topInset = topInset
         self.height = height
-        self.sideInset = sideInset
+        self.leftInset = leftInset
+        self.rightInset = rightInset
+        self.trailingButtonsInset = trailingButtonsInset
         self.metrics = metrics
         self.externalState = externalState
         self.leftItems = leftItems
@@ -92,7 +99,7 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
         if lhs.height != rhs.height {
             return false
         }
-        if lhs.sideInset != rhs.sideInset {
+        if lhs.leftInset != rhs.leftInset || lhs.rightInset != rhs.rightInset || lhs.trailingButtonsInset != rhs.trailingButtonsInset {
             return false
         }
         if lhs.metrics != rhs.metrics {
@@ -131,7 +138,9 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
 
         return { context in
             var availableWidth = context.availableSize.width
-            let sideInset: CGFloat = (context.component.metrics.isTablet ? 20.0 : 16.0) + context.component.sideInset
+            let baseSideInset: CGFloat = context.component.metrics.isTablet ? 20.0 : 16.0
+            let leftSideInset: CGFloat = baseSideInset + context.component.leftInset
+            let rightSideInset: CGFloat = baseSideInset + context.component.rightInset + context.component.trailingButtonsInset
 
             let collapsedHeight: CGFloat = 24.0
             let expandedHeight = context.component.height
@@ -212,8 +221,8 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
                 .position(CGPoint(x: size.width / 2.0, y: size.height - loadingProgressHeight / 2.0))
             )
 
-            var centerLeftInset = sideInset
-            var leftItemX = sideInset
+            var centerLeftInset = leftSideInset
+            var leftItemX = leftSideInset
             for item in leftItemList {
                 context.add(item
                     .position(CGPoint(x: leftItemX + item.size.width / 2.0 - (item.size.width / 2.0 * 0.35 * context.component.collapseFraction), y: context.component.topInset + contentHeight / 2.0 + verticalOffset))
@@ -226,8 +235,8 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
                 centerLeftInset += item.size.width + itemSpacing
             }
 
-            var centerRightInset = sideInset - 5.0
-            var rightItemX = context.availableSize.width - (sideInset - 5.0)
+            var centerRightInset = rightSideInset - 5.0
+            var rightItemX = context.availableSize.width - (rightSideInset - 5.0)
             for item in rightItemList.reversed() {
                 context.add(item
                     .position(CGPoint(x: rightItemX - item.size.width / 2.0 + (item.size.width / 2.0 * 0.35 * context.component.collapseFraction), y: context.component.topInset + contentHeight / 2.0 + verticalOffset))
@@ -245,7 +254,7 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
             if !leftItemList.isEmpty || !rightItemList.isEmpty {
                 availableWidth -= itemSpacing * CGFloat(max(0, leftItemList.count - 1)) + itemSpacing * CGFloat(max(0, rightItemList.count - 1)) + 30.0
             }
-            availableWidth -= context.component.sideInset * 2.0
+            availableWidth -= context.component.leftInset + context.component.rightInset
 
             let canCenter = availableWidth > 660.0
             availableWidth = min(660.0, availableWidth)
@@ -264,7 +273,7 @@ final class AorusClassicBrowserNavigationBarComponent: CombinedComponent {
             var centerX = maxCenterInset + (context.availableSize.width - maxCenterInset * 2.0) / 2.0
             if "".isEmpty {
                 if canCenter {
-                    centerX = context.availableSize.width / 2.0
+                    centerX = context.component.leftInset + (context.availableSize.width - context.component.leftInset - context.component.rightInset) / 2.0
                 } else {
                     centerX = centerLeftInset + (context.availableSize.width - centerLeftInset - centerRightInset) / 2.0
                 }

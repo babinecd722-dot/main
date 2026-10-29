@@ -12,7 +12,9 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
     let separatorColor: UIColor
     let textColor: UIColor
     let bottomInset: CGFloat
-    let sideInset: CGFloat
+    // 13.1.1's insets: each side on its own, for the side column and the fold.
+    let leftInset: CGFloat
+    let rightInset: CGFloat
     let item: AnyComponentWithIdentity<Empty>?
     let collapseFraction: CGFloat
 
@@ -21,7 +23,8 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
         separatorColor: UIColor,
         textColor: UIColor,
         bottomInset: CGFloat,
-        sideInset: CGFloat,
+        leftInset: CGFloat,
+        rightInset: CGFloat,
         item: AnyComponentWithIdentity<Empty>?,
         collapseFraction: CGFloat
     ) {
@@ -29,7 +32,8 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
         self.separatorColor = separatorColor
         self.textColor = textColor
         self.bottomInset = bottomInset
-        self.sideInset = sideInset
+        self.leftInset = leftInset
+        self.rightInset = rightInset
         self.item = item
         self.collapseFraction = collapseFraction
     }
@@ -47,7 +51,7 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
         if lhs.bottomInset != rhs.bottomInset {
             return false
         }
-        if lhs.sideInset != rhs.sideInset {
+        if lhs.leftInset != rhs.leftInset || lhs.rightInset != rhs.rightInset {
             return false
         }
         if lhs.item != rhs.item {
@@ -85,7 +89,7 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
             let item = context.component.item.flatMap { item in
                 return centerItems[item.id].update(
                     component: item.component,
-                    availableSize: CGSize(width: context.availableSize.width - context.component.sideInset * 2.0, height: contentHeight),
+                    availableSize: CGSize(width: context.availableSize.width - context.component.leftInset - context.component.rightInset, height: contentHeight),
                     transition: context.transition
                 )
             }
@@ -100,7 +104,7 @@ final class AorusClassicBrowserToolbarComponent: CombinedComponent {
 
             if let centerItem = item {
                 context.add(centerItem
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight / 2.0 + offset))
+                    .position(CGPoint(x: context.component.leftInset + (context.availableSize.width - context.component.leftInset - context.component.rightInset) / 2.0, y: contentHeight / 2.0 + offset))
                     .appear(ComponentTransition.Appear({ _, view, transition in
                         transition.animatePosition(view: view, from: CGPoint(x: 0.0, y: size.height), to: .zero, additive: true)
                     }))

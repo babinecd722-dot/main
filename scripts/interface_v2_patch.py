@@ -764,10 +764,12 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         text,
         "        var removeKeys: [PeerInfoHeaderTextFieldNodeKey] = []\n",
         "        if aorusGlass && !fieldKeys.isEmpty {\n"
-        "            let aorusInset = safeInset + AorusGlassPane.blockSideInset\n"
+        "            // 13.1.1 insets each side on its own -- the fields follow the band of a Duo strip.\n"
+        "            let aorusLeftInset = leftInset + AorusGlassPane.blockSideInset\n"
+        "            let aorusRightInset = rightInset + AorusGlassPane.blockSideInset\n"
         "            let aorusGlassFrame = CGRect(\n"
-        "                origin: CGPoint(x: aorusInset, y: aorusFieldsTop),\n"
-        "                size: CGSize(width: max(1.0, width - aorusInset * 2.0), height: max(0.0, contentHeight - aorusFieldsTop))\n"
+        "                origin: CGPoint(x: aorusLeftInset, y: aorusFieldsTop),\n"
+        "                size: CGSize(width: max(1.0, width - aorusLeftInset - aorusRightInset), height: max(0.0, contentHeight - aorusFieldsTop))\n"
         "            )\n"
         "            let glassView: GlassBackgroundView\n"
         "            if let current = self.aorusFieldsGlassView {\n"
