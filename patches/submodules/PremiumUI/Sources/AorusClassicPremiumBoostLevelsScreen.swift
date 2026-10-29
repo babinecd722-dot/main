@@ -2364,7 +2364,7 @@ public class AorusClassicPremiumBoostLevelsScreen: ViewController {
                             controller.present(alertController, in: .window(.root))
                         } else {
                             let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-                            |> deliverOnMainQueue).start(next: { [weak controller] peer in
+                            |> deliverOnMainQueue).start(next: { [weak controller, self] peer in
                                 guard let peer, let controller else {
                                     return
                                 }

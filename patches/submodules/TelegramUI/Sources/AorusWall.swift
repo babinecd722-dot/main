@@ -1988,7 +1988,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // rather than when the page is ready. Once it is, the list is taken there again in case
         // the reader scrolled away meanwhile.
         self.scrollFeedToTop()
-        self.impl.with { impl in
+        self.impl.with { [self] impl in
             impl.refresh(rebuilt: { [weak self] in
                 Queue.mainQueue().async {
                     self?.scrollFeedToTop()

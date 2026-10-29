@@ -24348,7 +24348,7 @@ private final class AorusCallVideoRecorder {
         // camera is NOT routed through video(isIncoming:false) — it originates from the
         // capturer and is attached separately via attachLocal(capturer:).
         let remote = callContext.video(isIncoming: true)
-        self.queue.async {
+        self.queue.async { [self] in
             self.remoteDisposable = remote.start(next: { [weak self] frame in
                 guard let self = self else { return }
                 self.queue.async { self.handleRemote(frame) }
@@ -24357,7 +24357,7 @@ private final class AorusCallVideoRecorder {
     }
 
     func attachLocal(capturer: OngoingCallVideoCapturer) {
-        self.queue.async {
+        self.queue.async { [self] in
             if self.localDisposable != nil { return }
             let local = capturer.video()
             self.localDisposable = local.start(next: { [weak self] frame in

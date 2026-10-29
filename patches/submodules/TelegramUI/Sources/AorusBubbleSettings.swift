@@ -816,7 +816,7 @@ private final class AorusIconLookItemNode: AorusLookRowNode {
     }
 
     func asyncLayout() -> (_ item: AorusIconLookItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let contentSize = CGSize(width: params.width, height: AorusIconLookItemNode.height)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
             let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)

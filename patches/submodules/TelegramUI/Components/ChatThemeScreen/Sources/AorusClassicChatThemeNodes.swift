@@ -360,7 +360,7 @@ private final class AorusClassicThemeSettingsThemeItemIconNode : ListViewItemNod
         super.selected()
 
         if let animatedStickerNode = self.animatedStickerNode {
-            Queue.mainQueue().after(0.1) {
+            Queue.mainQueue().after(0.1) { [self] in
                 if !wasSelected {
                     animatedStickerNode.seekTo(.frameIndex(0))
                     animatedStickerNode.play(firstFrame: false, fromIndex: nil)
@@ -1136,7 +1136,7 @@ class AorusClassicChatThemeScreenNode: ViewControllerTracingNode, ASScrollViewDe
         let newIconColors = aorusClassicIconColors(theme: self.presentationData.theme)
 
         if !self.switchThemeButton.isUserInteractionEnabled {
-            Queue.mainQueue().after(ChatThemeScreen.themeCrossfadeDelay * UIView.animationDurationFactor()) {
+            Queue.mainQueue().after(ChatThemeScreen.themeCrossfadeDelay * UIView.animationDurationFactor()) { [self] in
                 self.switchThemeIconAnimator = DisplayLinkAnimator(duration: ChatThemeScreen.themeCrossfadeDuration * UIView.animationDurationFactor(), from: 0.0, to: 1.0, update: { [weak self] value in
                     self?.animationNode.setColors(colors: aorusClassicInterpolateColors(from: previousIconColors, to: newIconColors, fraction: value))
                 }, completion: { [weak self] in

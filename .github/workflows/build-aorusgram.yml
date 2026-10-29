@@ -1302,6 +1302,11 @@ jobs:
       - name: Tree protocol conformance preflight
         run: python3 aorusgram/scripts/swift_protocol_conformance_check.py telegram-ios Aorus
 
+      # Every Swift file the build added or changed must at least parse: a patch that leaves a
+      # file unbalanced otherwise shows up an hour into Bazel, as errors in every module after it.
+      - name: Patched Swift parse preflight
+        run: python3 aorusgram/scripts/swift_parse_check.py telegram-ios telegram-ios-pristine
+
       # Telegram 13.1's Make.py runs build-system/Make/PostboxImportCheck.py before it builds:
       # Postbox may be imported, reached through `.postbox` and depended on only from the files
       # and packages its lists name, and TelegramApi is visible to TelegramCore alone. AorusGram's

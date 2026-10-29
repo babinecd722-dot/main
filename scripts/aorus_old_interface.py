@@ -244,7 +244,8 @@ def _classic_scroll_fade(indent: str, bar: str, alpha: str, threshold: str) -> s
 
 
 def _classic_clear_bar(indent: str, bar: str) -> str:
-    return f"{indent}if AorusOldInterface.isEnabled {{\n{indent}    {bar}.setBackdropAlpha(0.0, transition: .immediate) // " + MARK + ": 12.0's bar starts without its panel\n{indent}}}\n"
+    return (f"{indent}if AorusOldInterface.isEnabled {{\n{indent}    {bar}.setBackdropAlpha(0.0, transition: .immediate) // " + MARK
+            + f": 12.0's bar starts without its panel\n{indent}}}\n")
 
 
 _ITEM_LIST_SCROLL_FADE = """            if AorusOldInterface.isEnabled {

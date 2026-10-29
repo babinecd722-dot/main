@@ -1445,7 +1445,7 @@ final class AorusLookSliderItemNode: AorusLookRowNode {
     }
 
     func asyncLayout() -> (_ item: AorusLookSliderItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let titleHeight = ceil(aorusLookTitleFont(item.presentationData).lineHeight)
             let contentSize = CGSize(width: params.width, height: 11.0 + titleHeight + 8.0 + 30.0 + 12.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -1725,7 +1725,7 @@ final class AorusLookSwatchesItemNode: AorusLookRowNode {
     }
 
     func asyncLayout() -> (_ item: AorusLookSwatchesItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let titleHeight = ceil(aorusLookTitleFont(item.presentationData).lineHeight)
             let contentSize = CGSize(width: params.width, height: 11.0 + titleHeight + 10.0 + AorusLookSwatchesItemNode.diameter + 13.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -1917,7 +1917,7 @@ final class AorusLookSegmentItemNode: AorusLookRowNode {
     }
 
     func asyncLayout() -> (_ item: AorusLookSegmentItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             var height: CGFloat = 10.0 + AorusLookSegmentItemNode.trackHeight + 10.0
             if item.title != nil {
                 height = 11.0 + ceil(aorusLookTitleFont(item.presentationData).lineHeight) + 10.0 + AorusLookSegmentItemNode.trackHeight + 12.0
