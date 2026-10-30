@@ -213,8 +213,10 @@ def checkout(tg):
     path = tg / "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen/Sources/StarsPurchaseScreen.swift"
     source = path.read_text()
     route = block(source, "            if product.localPack != nil {")
+    mode_guard = block(source, "            if aorusLocalStarsEnabled(self.purpose) {")
     enabled = block(source, "private func aorusLocalStarsEnabled(")
     assert source.index(route) < source.index("inAppPurchaseManager.buyProduct(")
+    assert source.index(route) < source.index(mode_guard) < source.index("            guard let storeProduct =")
     assert ".storeProduct.id" not in source and ".storeProduct.priceCurrencyAndAmount" not in source
     assert "self.animateSuccess()" in block(source, "        completionImpl =")
     return r'''import Foundation
@@ -240,7 +242,7 @@ private final class PurchaseProbe {
     func updateInProgress(_ value: Bool) { progress.append(value) }
     func completion(_ count: Int64) { completions.append(count) }
     func buy(product: Product) {
-''' + route + r'''
+''' + route + "\n" + mode_guard + r'''
         realPurchases += 1
     }
 }
@@ -262,6 +264,9 @@ private let rejected = PurchaseProbe(); rejected.buy(product: local)
 expect(rejected.completions.isEmpty && rejected.progressProduct == nil && rejected.progress == [true,false], "failed credit resets progress without a fake success effect")
 private let gift = PurchaseProbe(); gift.purpose = .gift(2); gift.buy(product: local)
 expect(gift.completions.isEmpty && gift.realPurchases == 0, "a gift-to-another-account flow never credits one's own balance")
+private let staleReal = PurchaseProbe(); staleReal.buy(product: Product(count: 100, localPack: nil))
+expect(staleReal.realPurchases == 0 && staleReal.completions.isEmpty, "enabling local mode blocks stale StoreKit rows before replacement products arrive")
+AorusFakeStarsStore.isEnabled = false
 private let real = PurchaseProbe(); real.buy(product: Product(count: 100, localPack: nil))
 expect(real.realPurchases == 1, "nonlocal products retain the original flow")
 print("Native Stars local checkout: \(checks) checks passed")

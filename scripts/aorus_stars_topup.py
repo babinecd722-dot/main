@@ -102,7 +102,9 @@ def patch(tg: Path, native: str, redirects: str) -> str:
                 return
             }
 ''', "local purchase dispatch")
-    text = replace(text, "            guard let inAppPurchaseManager = self.context.inAppPurchaseManager, self.progressProduct == nil else {", "            guard let storeProduct = product.storeProduct, let inAppPurchaseManager = self.context.inAppPurchaseManager, self.progressProduct == nil else {", "real purchase guard")
+    text = replace(text, "            guard let inAppPurchaseManager = self.context.inAppPurchaseManager, self.progressProduct == nil else {", '''            // AorusGram: a mode change may leave a stale StoreKit row until local products arrive.
+            if aorusLocalStarsEnabled(self.purpose) { return }
+            guard let storeProduct = product.storeProduct, let inAppPurchaseManager = self.context.inAppPurchaseManager, self.progressProduct == nil else {''', "real purchase guard")
     text = text.replace("product.storeProduct.priceCurrencyAndAmount", "storeProduct.priceCurrencyAndAmount", 1).replace("inAppPurchaseManager.buyProduct(product.storeProduct, purpose:", "inAppPurchaseManager.buyProduct(storeProduct, purpose:", 1)
     text += '''
 // AorusStarsPurchaseRedirects: real-money routes are kept outside the local top-up mode.
