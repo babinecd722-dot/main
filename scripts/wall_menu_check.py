@@ -14,7 +14,7 @@ def check(repo: Path, tg: Path, swiftc: str):
     methods = '\n'.join(block(store, marker) for marker in ('public static func removedMessageIds(', 'public static func removePosts(', 'private static func key(', 'private static func messageKey(', 'private static func parseMessageKey('))
     methods = methods.replace('UserDefaults.standard', 'testDefaults')
     action = block(menu, 'if let aorusWallContents {')
-    gate = re.search(r'if (!aorusIsWallPost && UserDefaults\.standard\.bool\(forKey: "aorusgram_feature_edit_locally"\)) \{', menu)
+    gate = re.search(r'if (!aorusIsWallPost && UserDefaults\.standard\.bool\(forKey: "aorusgram_feature_edit_locally"\))(?=,| \{)', menu)
     if gate is None:
         raise RuntimeError('Wall posts expose local editing')
     for marker in ('// AorusGram: AorusAI message action v7', '// AorusGram: hide-name forward v1'):

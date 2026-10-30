@@ -8,7 +8,12 @@ def patch_wall_context_menu(tg: Path) -> None:
     text = path.read_text()
     if "// AorusGram: wall post actions" in text:
         return
-    marker = "        // AorusGram: edit locally v2"
+    marker = next((value for value in (
+        "        // AorusGram: edit locally v3",
+        "        // AorusGram: edit locally v2",
+    ) if value in text), None)
+    if marker is None:
+        raise RuntimeError("Wall: the local editing menu boundary is missing")
     start = text.index(marker)
     anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
     end = text.index(anchor, start)
