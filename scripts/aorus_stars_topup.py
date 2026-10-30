@@ -72,6 +72,7 @@ def patch(tg: Path, native: str, redirects: str) -> str:
                 let quotes = Signal<[StarsTopUpOption], NoError>.single(initialQuotes)
                 |> then(context.engine.payments.starsTopUpOptions())
                 return combineLatest(quotes, context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)))
+                |> deliverOnMainQueue
                 |> map { quotes, peer -> [StarsProduct] in
                     let region = aorusStarsRegion(peer)
                     let language = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
