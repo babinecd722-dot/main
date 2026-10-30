@@ -2572,12 +2572,16 @@ def main() -> None:
     branding_script = Path(__file__).with_name("aorus_branding.py")
     branding_text = branding_script.read_text(encoding="utf-8") if branding_script.is_file() else ""
     for marker in (
-        "let aorusEditIsSticker = aorusEditMsg.media.contains",
-        "file.isSticker || file.isAnimatedSticker || file.isVideoSticker",
-        "if !aorusEditIsSticker",
+        "AorusLocalMessageEditing.canEdit(aorusEditMsg",
+        "!isEmbeddedMode, !isReplyThreadHead, !isPinnedMessages, !isMigrated",
+        "AorusLocalMessageEditing.canEdit(currentMessage",
     ):
         if marker not in branding_text:
-            err.append(f"EditLocally: sticker context-menu guard is missing {marker}")
+            err.append(f"EditLocally: shared content eligibility is missing {marker}")
+    eligibility = tg / "submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift"
+    if not eligibility.is_file() or "else if !(media is TelegramMediaWebpage)" not in eligibility.read_text():
+        err.append("EditLocally: native media whitelist is missing")
+
 
     audio_session = tg / "submodules" / "TelegramAudio" / "Sources" / "ManagedAudioSession.swift"
     audio_session_text = audio_session.read_text(encoding="utf-8") if audio_session.is_file() else ""

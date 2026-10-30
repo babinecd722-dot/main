@@ -2524,104 +2524,63 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
 
 
 def patch_chat_context_menu_edit_locally(tg: Path) -> None:
-    """Patch Edit Locally as one feature: context menu, native composer submit and title."""
+    """Offer local text/caption edits only on supported content and normal chat surfaces."""
+    source = Path(__file__).resolve().parent.parent / "patches/submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift"
+    (tg / "submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift").write_bytes(source.read_bytes())
     path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
-    if not path.is_file():
-        print("EditLocally: ChatInterfaceStateContextMenus.swift not found, skip")
-        return
     t = path.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: edit locally v2"
+    sentinel = "// AorusGram: edit locally v3"
     anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
-    guard_marker = "let aorusEditIsSticker = aorusEditMsg.media.contains"
-    cached_guard_marker = "!messages[0].media.contains(where: { media in"
-    unused_body_line = "            let aorusEditBody = aorusEditMsg.text\n"
-    if unused_body_line in t:
-        t = t.replace(unused_body_line, "")
+    if sentinel not in t:
+        # Migrate an already branded checkout as well as a pristine CI tree.
+        for previous in ("// AorusGram: edit locally v2", "// AorusGram: edit locally v1"):
+            if previous in t:
+                start = t.rfind("\n", 0, t.index(previous)) + 1
+                end = t.find(anchor, start)
+                if end < 0: raise RuntimeError("EditLocally: cannot locate the old menu boundary")
+                t = t[:start] + t[end:]
+                break
+        if t.count(anchor) != 1: raise RuntimeError("EditLocally: Delete menu anchor is missing or ambiguous")
+        injection = r'''
+        // AorusGram: edit locally v3
+        if UserDefaults.standard.bool(forKey: "aorusgram_feature_edit_locally"), !isEmbeddedMode, !isReplyThreadHead, !isPinnedMessages, !isMigrated, !messages.isEmpty {
+            let aorusEditMsg = messages[0]
+            let aorusEditMid = aorusEditMsg.id
+            let aorusEditKey = "aorusgram_local_edit_\(aorusEditMid.peerId.toInt64())_\(aorusEditMid.id)"
+            if AorusLocalMessageEditing.canEdit(aorusEditMsg, hasOriginal: UserDefaults.standard.string(forKey: aorusEditKey) != nil) {
+                let aorusEditOrig = UserDefaults.standard.string(forKey: aorusEditKey)
+                if let aorusEditOrig = aorusEditOrig {
+                    actions.append(.action(ContextMenuActionItem(text: aorusL("Оригинал", "Original"), icon: { theme in
+                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+                    }, action: { [weak context] action in
+                        action.dismissWithResult(.default)
+                        guard let context = context else { return }
+                        let _ = context.account.postbox.transaction { transaction -> Void in
+                            transaction.updateMessage(aorusEditMid, update: { current in
+                                let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)
+                                let aorusAttrs = current.attributes.filter { !($0 is TextEntitiesMessageAttribute) && !($0 is RichTextMessageAttribute) }
+                                return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusEditOrig, attributes: aorusAttrs, media: current.media))
+                            })
+                        }.start()
+                        UserDefaults.standard.removeObject(forKey: aorusEditKey)
+                    })))
+                } else {
+                    actions.append(.action(ContextMenuActionItem(text: aorusL("Изменить локально", "Edit Locally"), icon: { theme in
+                        return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+                    }, action: { action, f in
+                        UserDefaults.standard.set("\(aorusEditMid.peerId.toInt64())_\(aorusEditMid.id)", forKey: "aorusgram_local_edit_active_message")
+                        interfaceInteraction.setupEditMessage(aorusEditMid, { transition in
+                            f(.custom(transition))
+                        })
+                    })))
+                }
+            }
+        }
+
+'''
+        t = t.replace(anchor, injection + anchor, 1)
         path.write_text(t, encoding="utf-8")
-        print("EditLocally: removed unused legacy aorusEditBody")
-    if sentinel in t:
-        block_start = t.index(sentinel)
-        block_end = t.find(anchor, block_start)
-        if block_end == -1:
-            # Warn, never raise. This runs only against an already-patched CI cache, where a
-            # drifted anchor is a migration problem for ONE feature — raising here aborted the
-            # whole 149-patch run before Bazel even started. The verifier still fails the build
-            # on the missing marker, with a message that says which one.
-            print("EditLocally: WARNING cached block has no delete anchor — migration skipped")
-            return
-        cached_block = t[block_start:block_end]
-        if guard_marker in cached_block or cached_guard_marker in cached_block:
-            print("EditLocally: context menu already injected")
-        else:
-            feature_gate = (
-                "        if UserDefaults.standard.bool(forKey: "
-                "\"aorusgram_feature_edit_locally\") {\n"
-            )
-            guarded_feature_gate = (
-                "        if UserDefaults.standard.bool(forKey: "
-                "\"aorusgram_feature_edit_locally\") && !messages[0].media.contains(where: { media in\n"
-                "                guard let file = media as? TelegramMediaFile else { return false }\n"
-                "                return file.isSticker || file.isAnimatedSticker || file.isVideoSticker\n"
-                "            }) {\n"
-            )
-            if feature_gate not in cached_block:
-                print("EditLocally: WARNING cached v2 feature gate not found — migration skipped")
-                return
-            cached_block = cached_block.replace(feature_gate, guarded_feature_gate, 1)
-            t = t[:block_start] + cached_block + t[block_end:]
-            path.write_text(t, encoding="utf-8")
-            print("EditLocally: migrated cached context menu with sticker guard")
-    else:
-        if "// AorusGram: edit locally v1" in t:
-            print("WARNING: EditLocally legacy v1 already present in cached tree; cache bump required for native composer menu")
-        else:
-            if anchor not in t:
-                print("EditLocally: delete-block anchor not found — skipped")
-            else:
-                injection = (
-                    "        " + sentinel + "\n"
-                    "        if UserDefaults.standard.bool(forKey: \"aorusgram_feature_edit_locally\") {\n"
-                    "            let aorusEditMsg = messages[0]\n"
-                    "            let aorusEditMid = aorusEditMsg.id\n"
-                    "            let aorusEditKey = \"aorusgram_local_edit_\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
-                    "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
-                    "                guard let file = media as? TelegramMediaFile else { return false }\n"
-                    "                return file.isSticker || file.isAnimatedSticker || file.isVideoSticker\n"
-                    "            })\n"
-                    "            if !aorusEditIsSticker {\n"
-                    "                let aorusEditOrig = UserDefaults.standard.string(forKey: aorusEditKey)\n"
-                    "                if let aorusEditOrig = aorusEditOrig {\n"
-                    "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Оригинал\", \"Original\"), icon: { theme in\n"
-                    "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
-                    "                    }, action: { [weak context] action in\n"
-                    "                        action.dismissWithResult(.default)\n"
-                    "                        guard let context = context else { return }\n"
-                    "                        let _ = context.account.postbox.transaction { transaction -> Void in\n"
-                    "                            transaction.updateMessage(aorusEditMid, update: { current in\n"
-                    "                                let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
-                    "                                let aorusAttrs = current.attributes.filter { !($0 is TextEntitiesMessageAttribute) && !($0 is RichTextMessageAttribute) }\n"
-                    "                                return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusEditOrig, attributes: aorusAttrs, media: current.media))\n"
-                    "                            })\n"
-                    "                        }.start()\n"
-                    "                        UserDefaults.standard.removeObject(forKey: aorusEditKey)\n"
-                    "                    })))\n"
-                    "                } else {\n"
-                    "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Изменить локально\", \"Edit Locally\"), icon: { theme in\n"
-                    "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
-                    "                    }, action: { action, f in\n"
-                    "                        UserDefaults.standard.set(\"\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\", forKey: \"aorusgram_local_edit_active_message\")\n"
-                    "                        interfaceInteraction.setupEditMessage(aorusEditMid, { transition in\n"
-                    "                            f(.custom(transition))\n"
-                    "                        })\n"
-                    "                    })))\n"
-                    "                }\n"
-                    "            }\n"
-                    "        }\n"
-                    "\n"
-                )
-                t = t.replace(anchor, injection + anchor, 1)
-                path.write_text(t, encoding="utf-8")
-                print("EditLocally: injected AorusGram native edit-locally action above Delete")
+        print("EditLocally: installed shared text/caption eligibility")
 
     submit_path = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift"
     if not submit_path.is_file():
@@ -2645,6 +2604,10 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                    let _ = (strongSelf.context.account.postbox.messageAtId(editMessage.messageId)\n"
                 "                    |> deliverOnMainQueue).startStandalone(next: { [weak self] currentMessage in\n"
                 "                        guard let strongSelf = self, let currentMessage = currentMessage else { return }\n"
+                "                        guard AorusLocalMessageEditing.canEdit(currentMessage, hasOriginal: UserDefaults.standard.string(forKey: aorusOriginalKey) != nil) else {\n"
+                "                            UserDefaults.standard.removeObject(forKey: \"aorusgram_local_edit_active_message\")\n"
+                "                            return\n"
+                "                        }\n"
                 "                        let aorusText: String = richText == nil ? text.string : \"\"\n"
                 "                        let aorusCurrentEntities: [MessageTextEntity] = currentMessage.textEntitiesAttribute?.entities ?? []\n"
                 "                        let aorusCurrentEntitiesDescription: String = String(describing: aorusCurrentEntities)\n"
@@ -11137,6 +11100,7 @@ public struct AorusStoredStarsTransaction: Codable, Equatable {
     public let text: String
     public let isResale: Bool
     public let isUpgrade: Bool?
+    public var isTopUp: Bool? = nil
 }
 
 // AorusGram local "fake stars" — a purely local override of the displayed Telegram Stars
@@ -11289,7 +11253,7 @@ public enum AorusFakeStarsStore {
         }
         // One-time migration for purchases created before the cumulative counter existed.
         var migrated: [String: Int64] = [:]
-        for item in storedTransactions() {
+        for item in storedTransactions() where item.isTopUp != true {
             let key = String(item.accountPeerId)
             let (value, overflow) = (migrated[key] ?? 0).addingReportingOverflow(item.amount)
             migrated[key] = overflow ? Int64.max : value
@@ -11329,7 +11293,7 @@ public enum AorusFakeStarsStore {
         var migrated: [String: [String: Int64]] = [:]
         var migratedTotals: [String: Int64] = [:]
         var oldestDay: [String: Int64] = [:]
-        for item in storedTransactions() {
+        for item in storedTransactions() where item.isTopUp != true {
             let accountKey = String(item.accountPeerId)
             let day = utcDay(item.date)
             let dayKey = String(day)
@@ -11418,6 +11382,36 @@ public enum AorusFakeStarsStore {
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
+    /// Credit and receipt are persisted under the same balance/purchase locks. Overflow
+    /// rejects the purchase instead of reporting success for fewer stars than the selected lot.
+    @discardableResult
+    public static func topUp(accountPeerId: PeerId, count: Int64) -> Bool {
+        guard count > 0 else { return false }
+        purchaseLock.lock()
+        balanceLock.lock()
+        guard isEnabled else { balanceLock.unlock(); purchaseLock.unlock(); return false }
+        let (updated, overflow) = amount.addingReportingOverflow(count)
+        guard !overflow else { balanceLock.unlock(); purchaseLock.unlock(); return false }
+        // Preserve legacy cumulative spending/rating before a top-up can trim the bounded archive.
+        _ = storedSpentTotals()
+        _ = storedDailySpending()
+        _ = localRatingData
+        var receipt = AorusStoredStarsTransaction(
+            id: "stx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""),
+            amount: count, date: Int32(Date().timeIntervalSince1970), accountPeerId: accountPeerId.toInt64(),
+            peerId: accountPeerId.toInt64(), giftData: nil, premiumMonths: nil, text: "", isResale: false, isUpgrade: false
+        )
+        receipt.isTopUp = true
+        var rows = storedTransactions()
+        rows.insert(receipt, at: 0)
+        writeAmount(updated)
+        persistTransactions(rows)
+        balanceLock.unlock()
+        purchaseLock.unlock()
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+        return true
+    }
+
     public static func statisticsBalances(accountPeerId: PeerId) -> StarsRevenueStats.Balances {
         let currentValue = amount
         let spentValue = storedSpentTotals()[String(accountPeerId.toInt64())] ?? 0
@@ -11446,9 +11440,20 @@ public enum AorusFakeStarsStore {
     }
 
     public static func nativeTransactions(accountPeerId: PeerId, mode: StarsTransactionsContext.Mode, transaction: Transaction) -> [StarsContext.State.Transaction] {
-        if case .incoming = mode { return [] }
-        return storedTransactions().filter { $0.accountPeerId == accountPeerId.toInt64() }.compactMap { stored -> StarsContext.State.Transaction? in
-            guard let peer = transaction.getPeer(PeerId(stored.peerId)) else { return nil }
+        return storedTransactions().filter { stored in
+            guard stored.accountPeerId == accountPeerId.toInt64() else { return false }
+            switch mode {
+            case .all: return true
+            case .incoming: return stored.isTopUp == true
+            case .outgoing: return stored.isTopUp != true
+            }
+        }.compactMap { stored -> StarsContext.State.Transaction? in
+            let peer: StarsContext.State.Transaction.Peer
+            if stored.isTopUp == true {
+                peer = .appStore
+            } else if let storedPeer = transaction.getPeer(PeerId(stored.peerId)) {
+                peer = .peer(EnginePeer(storedPeer))
+            } else { return nil }
             let gift = stored.giftData.flatMap { try? JSONDecoder().decode(StarGift.self, from: $0) }
             // `.isLocal` is reserved by Telegram for temporary App Store rows and the
             // native lists deliberately disable taps for it. Mark only actual StarGift
@@ -11460,9 +11465,9 @@ public enum AorusFakeStarsStore {
             return StarsContext.State.Transaction(
                 flags: flags,
                 id: stored.id,
-                count: CurrencyAmount(amount: StarsAmount(value: -stored.amount, nanos: 0), currency: .stars),
+                count: CurrencyAmount(amount: StarsAmount(value: stored.isTopUp == true ? stored.amount : -stored.amount, nanos: 0), currency: .stars),
                 date: stored.date,
-                peer: .peer(EnginePeer(peer)),
+                peer: peer,
                 title: nil,
                 description: stored.text.isEmpty ? nil : stored.text,
                 photo: nil,
@@ -13982,6 +13987,8 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
         t = t.replace(expanded_old, expanded_new, 1)
 
     if t != original:
+        from aorus_stars_topup import patch as patch_local_top_up
+        t = patch_local_top_up(tg, original, t)
         f.write_text(t, encoding="utf-8")
         print("StarsPurchaseRedirects: patched Stars purchase route screen")
     else:
@@ -30901,6 +30908,8 @@ def main() -> None:
     patch_fake_stars_all_gifts(tg)
     from aorus_fake_gram import patch as patch_fake_gram
     patch_fake_gram(tg)
+    from aorus_local_stars_state import patch as patch_local_stars_state
+    patch_local_stars_state(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)

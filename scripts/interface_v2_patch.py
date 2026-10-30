@@ -676,6 +676,11 @@ def _inset_editing_field(path: Path, label: str) -> None:
     step with the pane behind them.
     """
     text = _read(path, path.name)
+    # Migrate branded working copies too: Telegram 13.1 already supplies section insets.
+    if "leftInset + AorusGlassPane.blockSideInset" in text or "rightInset + AorusGlassPane.blockSideInset" in text:
+        text = text.replace("leftInset + AorusGlassPane.blockSideInset", "max(leftInset, AorusGlassPane.blockSideInset)")
+        text = text.replace("rightInset + AorusGlassPane.blockSideInset", "max(rightInset, AorusGlassPane.blockSideInset)")
+        path.write_text(text, encoding="utf-8")
     if "AorusGlassPane.blockSideInset" in text:
         print(f"InterfaceV2: editing {label} field already inset")
         return
@@ -685,10 +690,10 @@ def _inset_editing_field(path: Path, label: str) -> None:
         _EDITING_FIELD_UPDATE_ANCHOR
         + "        // AorusGram: Interface 2.0 draws this run of fields as a card on the profile\n"
         "        // page instead of a band across it. The pane of glass behind them is inset by\n"
-        "        // AorusGlassPane.blockSideInset, so the row is inset by the same amount -- one\n"
-        "        // shared constant, because a pane and its rows disagreeing by a point shows.\n"
-        "        let leftInset = AorusGlassPane.isEnabled ? leftInset + AorusGlassPane.blockSideInset : leftInset\n"
-        "        let rightInset = AorusGlassPane.isEnabled ? rightInset + AorusGlassPane.blockSideInset : rightInset\n",
+        "        // AorusGlassPane.blockSideInset, retaining larger native section/safe-area insets.\n"
+        "        // 13.1 already supplies section insets: never add the margin a second time.\n"
+        "        let leftInset = AorusGlassPane.isEnabled ? max(leftInset, AorusGlassPane.blockSideInset) : leftInset\n"
+        "        let rightInset = AorusGlassPane.isEnabled ? max(rightInset, AorusGlassPane.blockSideInset) : rightInset\n",
         f"editing {label} field inset",
     )
     path.write_text(text, encoding="utf-8")
@@ -714,6 +719,11 @@ def _patch_editing_fields_glass(tg: Path) -> None:
 
     path = base / "PeerInfoHeaderEditingContentNode.swift"
     text = _read(path, "PeerInfoHeaderEditingContentNode.swift")
+    # Migrate branded working copies too: Telegram 13.1 already supplies section insets.
+    if "leftInset + AorusGlassPane.blockSideInset" in text or "rightInset + AorusGlassPane.blockSideInset" in text:
+        text = text.replace("leftInset + AorusGlassPane.blockSideInset", "max(leftInset, AorusGlassPane.blockSideInset)")
+        text = text.replace("rightInset + AorusGlassPane.blockSideInset", "max(rightInset, AorusGlassPane.blockSideInset)")
+        path.write_text(text, encoding="utf-8")
     if "aorusFieldsGlassView" in text:
         print("InterfaceV2: editing header fields already glass")
         return
@@ -765,8 +775,8 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "        var removeKeys: [PeerInfoHeaderTextFieldNodeKey] = []\n",
         "        if aorusGlass && !fieldKeys.isEmpty {\n"
         "            // 13.1.1 insets each side on its own -- the fields follow the band of a Duo strip.\n"
-        "            let aorusLeftInset = leftInset + AorusGlassPane.blockSideInset\n"
-        "            let aorusRightInset = rightInset + AorusGlassPane.blockSideInset\n"
+        "            let aorusLeftInset = max(leftInset, AorusGlassPane.blockSideInset)\n"
+        "            let aorusRightInset = max(rightInset, AorusGlassPane.blockSideInset)\n"
         "            let aorusGlassFrame = CGRect(\n"
         "                origin: CGPoint(x: aorusLeftInset, y: aorusFieldsTop),\n"
         "                size: CGSize(width: max(1.0, width - aorusLeftInset - aorusRightInset), height: max(0.0, contentHeight - aorusFieldsTop))\n"

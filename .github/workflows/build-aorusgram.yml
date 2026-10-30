@@ -93,6 +93,9 @@ jobs:
       - name: Local GRAM ledger preflight
         run: python3 aorusgram/scripts/fake_gram_check.py aorusgram
 
+      - name: Local Stars catalog and message eligibility preflight
+        run: python3 aorusgram/scripts/client_work_check.py aorusgram
+
       - name: Native voice PCM and DSP preflight
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram
 
@@ -880,6 +883,8 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusPluginAccountUpdates.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarRating.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGramAmount.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarsTopUp.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusFakeGramStore.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusAttachmentDraft.swift $TG/submodules/TelegramCore/Sources/
@@ -1259,6 +1264,9 @@ jobs:
 
       - name: Native GRAM contract preflight
         run: python3 aorusgram/scripts/fake_gram_check.py aorusgram --telegram-source telegram-ios
+
+      - name: Native local Stars checkout and profile field preflight
+        run: python3 aorusgram/scripts/client_work_check.py aorusgram --telegram-source telegram-ios
 
       - name: Validate tab settings and light surfaces
         run: python3 aorusgram/scripts/tab_settings_check.py aorusgram --telegram-source telegram-ios

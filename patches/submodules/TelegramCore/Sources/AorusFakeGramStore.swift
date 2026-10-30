@@ -10,7 +10,7 @@ public enum AorusFakeGramStore {
     private static let lock = NSRecursiveLock()
 
     private struct Purchase: Codable {
-        let id: String
+        var id: String
         let account: Int64
         let recipient: Int64
         let amount: Int64
@@ -31,9 +31,24 @@ public enum AorusFakeGramStore {
     private static func read() -> Ledger {
         if let cached { return cached }
         let data = UserDefaults.standard.data(forKey: storageKey) ?? readKeychain()
-        let value = data.flatMap { try? JSONDecoder().decode(Ledger.self, from: $0) } ?? Ledger()
+        var value = data.flatMap { try? JSONDecoder().decode(Ledger.self, from: $0) } ?? Ledger()
+        var migrated = false
+        for index in value.purchases.indices where value.purchases[index].id.hasPrefix("aorus-gram-") {
+            value.purchases[index].id = transactionId()
+            migrated = true
+        }
         cached = value
+        if migrated { write(value) }
         return value
+    }
+
+    // The opaque, URL-safe receipt format used by the client's Stars transactions as well.
+    // Persist once; regenerating IDs while drawing a list would duplicate rows and break details.
+    private static func transactionId() -> String {
+        return "stx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private static func write(_ value: Ledger) {
@@ -84,7 +99,7 @@ public enum AorusFakeGramStore {
         let accountKey = String(accountPeerId.toInt64())
         let (spent, overflow) = (value.spent[accountKey] ?? 0).addingReportingOverflow(price)
         value.spent[accountKey] = overflow ? Int64.max : spent
-        value.purchases.insert(Purchase(id: "aorus-gram-" + UUID().uuidString, account: accountPeerId.toInt64(), recipient: recipientPeerId.toInt64(), amount: price, date: Int32(Date().timeIntervalSince1970), gift: giftData, text: text), at: 0)
+        value.purchases.insert(Purchase(id: transactionId(), account: accountPeerId.toInt64(), recipient: recipientPeerId.toInt64(), amount: price, date: Int32(Date().timeIntervalSince1970), gift: giftData, text: text), at: 0)
         value.purchases = Array(value.purchases.prefix(200))
         write(value)
         lock.unlock()

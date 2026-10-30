@@ -35,6 +35,12 @@ extension AorusFakeGramStore {
     static var mirrored: Data?
     static func forgetDefaults() { testDefaults.removeObject(forKey: storageKey); cached = nil }
     static func forgetCache() { cached = nil }
+    static func seedLegacyID() {
+        var value = read()
+        value.purchases[0].id = "aorus-gram-legacy"
+        write(value)
+        cached = nil
+    }
 }
 var checks = 0
 func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
@@ -63,6 +69,12 @@ expect(accepted == 100 && AorusFakeGramStore.amount == 0, "concurrent debits can
 expect(testDefaults.integer(forKey: "aorusgram_fake_stars_amount") == 123, "GRAM purchases never debit Stars")
 let rows = AorusFakeGramStore.nativeTransactions(accountPeerId: own, mode: .all, transaction: Transaction())
 expect(rows.count == 100 && Set(rows.map { $0.id }).count == 100, "one distinct receipt per accepted purchase")
+expect(rows.allSatisfy { $0.id.hasPrefix("stx") && $0.id.count == 153 && $0.id.dropFirst(3).allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") } }, "receipts use the native opaque URL-safe format")
+AorusFakeGramStore.seedLegacyID()
+let migrated = AorusFakeGramStore.nativeTransactions(accountPeerId: own, mode: .all, transaction: Transaction())
+expect(migrated[0].id.hasPrefix("stx"), "old branded UUID receipts migrate")
+AorusFakeGramStore.forgetCache()
+expect(AorusFakeGramStore.nativeTransactions(accountPeerId: own, mode: .all, transaction: Transaction()).map { $0.id } == migrated.map { $0.id }, "migrated receipt IDs remain stable on reload")
 expect(rows.allSatisfy { $0.count.currency == .ton && $0.count.amount.value == -1 && $0.starGift?.slug == gift.slug && $0.description == "hello" }, "receipts keep exact GRAM currency and gift metadata")
 expect(AorusFakeGramStore.nativeTransactions(accountPeerId: other, mode: .all, transaction: Transaction()).isEmpty, "account histories are isolated")
 expect(AorusFakeGramStore.nativeTransactions(accountPeerId: own, mode: .incoming, transaction: Transaction()).isEmpty, "purchases are outgoing only")
