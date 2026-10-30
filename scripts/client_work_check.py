@@ -1,21 +1,40 @@
 #!/usr/bin/env python3
 """Execute local message eligibility, regional lots and the production Stars credit ledger."""
 import argparse
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import platform
+import traceback
 import aorus_branding
 from fake_gram_check import STUBS
 from telegram13_list_check import block
+
+
+def checked(command):
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout, end="", flush=True)
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+    if result.returncode:
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as report:
+                report.write("## Local client contract failure\n\n````text\n")
+                report.write((result.stdout + result.stderr)[-24000:])
+                report.write("\n````\n")
+        raise subprocess.CalledProcessError(result.returncode, command)
 
 
 def run(swiftc, directory, name, source):
     path = directory / (name + ".swift")
     path.write_text(source)
     executable = directory / name
-    subprocess.run([swiftc, "-module-cache-path", str(directory / "cache"), str(path), "-o", str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    checked([swiftc, "-module-cache-path", str(directory / "cache"), str(path), "-o", str(executable)])
+    checked([str(executable)])
 
 
 def eligibility(root):
@@ -239,14 +258,29 @@ print("Native Stars local checkout: \(checks) checks passed")
 '''
 
 
+def phone_region_api(swiftc, headers, work):
+    # Resolve selectors with the actual pinned Objective-C headers and the Apple SDK.
+    headers = headers.resolve()
+    (work / "module.modulemap").write_text('module libphonenumber { umbrella "' + str(headers / 'libphonenumber') + '" export * }\n')
+    probe = work / "PhoneRegionProbe.swift"
+    probe.write_text('import Foundation\nimport libphonenumber\nfunc region(_ digits: String) -> String? { let util = NBPhoneNumberUtil(); guard let number = try? util.parse("+" + digits, defaultRegion: nil) else { return nil }; return util.getRegionCode(for: number) }\n')
+    sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
+    checked([swiftc, "-typecheck", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", "-I", str(work), "-I", str(headers), str(probe)])
+    print("Native phone-region API type-check passed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", type=Path)
     parser.add_argument("--swiftc", default="swiftc")
     parser.add_argument("--telegram-source", type=Path)
+    parser.add_argument("--phone-headers", type=Path, help="Only check the native phone-region API against these public headers")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="aorus-client-work-") as directory:
         work = Path(directory)
+        if args.phone_headers:
+            phone_region_api(args.swiftc, args.phone_headers, work)
+            return
         run(args.swiftc, work, "eligibility", eligibility(args.repo))
         run(args.swiftc, work, "prices", prices(args.repo))
         run(args.swiftc, work, "ledger", ledger())
@@ -254,16 +288,16 @@ def main():
             run(args.swiftc, work, "geometry", geometry(args.telegram_source))
             run(args.swiftc, work, "checkout", checkout(args.telegram_source))
             if platform.system() == "Darwin":
-                # Type-check against the actual Objective-C headers, including Swift's imported
-                # selector spelling. This needs no StoreKit transaction or linked phone library.
                 headers = args.telegram_source.resolve() / "submodules/libphonenumber/PublicHeaders"
-                (work / "module.modulemap").write_text('module libphonenumber { umbrella "' + str(headers / 'libphonenumber') + '" export * }\n')
-                probe = work / "PhoneRegionProbe.swift"
-                probe.write_text('import Foundation\nimport libphonenumber\nfunc region(_ digits: String) -> String? { let util = NBPhoneNumberUtil(); guard let number = try? util.parse("+" + digits, defaultRegion: nil) else { return nil }; return util.getRegionCode(for: number) }\n')
-                sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-                subprocess.run([args.swiftc, "-typecheck", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", "-I", str(work), "-I", str(headers), str(probe)], check=True)
-                print("Native phone-region API type-check passed")
+                phone_region_api(args.swiftc, headers, work)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as report:
+                report.write("\n````text\n" + traceback.format_exc() + "\n````\n")
+        raise

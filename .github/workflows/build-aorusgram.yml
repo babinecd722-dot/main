@@ -32,6 +32,18 @@ jobs:
         with:
           path: aorusgram
 
+      - name: Checkout pinned phone-region API headers
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: TelegramMessenger/Telegram-iOS
+          ref: ${{ env.TELEGRAM_IOS_COMMIT }}
+          path: telegram-phone-headers
+          sparse-checkout: submodules/libphonenumber/PublicHeaders
+          persist-credentials: false
+
+      - name: Native phone-region API preflight
+        run: python3 aorusgram/scripts/client_work_check.py aorusgram --phone-headers telegram-phone-headers/submodules/libphonenumber/PublicHeaders
+
       - name: Release security preflight
         run: python3 aorusgram/scripts/release_security_check.py aorusgram
 
