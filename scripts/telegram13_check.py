@@ -58,6 +58,7 @@ def gift_test_source(tg):
     scan = upgrade[upgrade.index("                for media in message.media {"):upgrade.index("            })")]
     labels = re.findall(r"\b(\w+): ", cases[1])
     bindings = [name if name in ("isUpgrade", "isTransferred", "text", "entities", "nameHidden") else "_" for name in labels]
+    price_bindings = [name if name == "resaleAmount" else "_" for name in labels]
     return r'''
 import Foundation
 struct PeerId: Equatable { let value: Int64; func toInt64() -> Int64 { value } }
@@ -65,7 +66,7 @@ enum EnginePeer { typealias Id = PeerId }
 struct MessageTextEntity: Equatable { let offset: Int; let length: Int }
 enum StarGift { struct Gift { let id: Int64 }; struct UniqueGift {}; case generic(Gift), unique(UniqueGift) }
 struct StarsAmount { let value: Int64; let nanos: Int32 }
-struct CurrencyAmount { enum Currency { case stars }; let amount: StarsAmount; let currency: Currency }
+struct CurrencyAmount { enum Currency { case stars, ton }; let amount: StarsAmount; let currency: Currency }
 enum TelegramMediaActionType {
 ''' + "\n".join(cases) + r'''
 }
@@ -75,6 +76,7 @@ let generic = StarGift.Gift(id: 42)
 let unique = StarGift.UniqueGift()
 let ownedGift = StarGift.unique(unique)
 let accountPeerId = PeerId(value: 1), recipientPeerId = PeerId(value: 2), senderPeerId = PeerId(value: 1)
+var currency = CurrencyAmount.Currency.stars
 let stars: Int64 = 500, instanceId: Int64 = 101
 let purchaseDate: Int32 = 12345
 let savedToProfile = true
@@ -93,12 +95,20 @@ func metadata(_ action: TelegramMediaActionType) -> (Bool, Bool, String?, [Messa
     guard case let .starGiftUnique(''' + ", ".join(bindings) + r''') = action else { fatalError("collectible action") }
     return (isUpgrade, isTransferred, text, entities, nameHidden)
 }
+func paidAmount(_ action: TelegramMediaActionType) -> CurrencyAmount? {
+    guard case let .starGiftUnique(''' + ", ".join(price_bindings) + r''') = action else { return nil }
+    return resaleAmount
+}
 let transferred = metadata(''' + calls[0] + r''')
 expect(!transferred.0 && transferred.1, "transfer retains native action flags")
 expect(transferred.2 == nil && transferred.3 == nil && !transferred.4, "transfer has no purchase caption")
 let purchased = metadata(''' + calls[1] + r''')
 expect(!purchased.0 && !purchased.1, "purchase retains native action flags")
 expect(purchased.2 == text && purchased.3 == entities && purchased.4 == hideName, "purchase retains caption, entities and sender visibility")
+expect(paidAmount(''' + calls[1] + r''')?.currency == .stars, "Stars purchases keep their currency")
+currency = .ton
+expect(paidAmount(''' + calls[1] + r''')?.currency == .ton, "GRAM purchases keep their currency in the local gift card")
+
 let message = Message(timestamp: purchaseDate, media: [TelegramMediaAction(action: .starGift(gift: .generic(generic), convertStars: nil, text: text, entities: entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: true, upgradeStars: 100, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: accountPeerId, senderId: accountPeerId, savedId: instanceId, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: accountPeerId, number: nil))])
 expect(!scanMessage(message) && original != nil, "upgrade finds its original gift card")
 let upgraded = metadata(''' + calls[2] + r''')

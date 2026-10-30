@@ -49,6 +49,7 @@ private enum MiscSection: Int32 {
     case premium
     case fakeGifts
     case fakeStars
+    case fakeGram
     case calls
     case autoReplyS
     case antiSearch
@@ -62,6 +63,8 @@ private struct MiscState: Equatable {
     var localPremium: Bool
     var fakeStars: Bool
     var fakeStarsAmount: String
+    var fakeGram: Bool
+    var fakeGramAmount: String
     var autoReply: Bool
     var antiSearch: Bool
     var anonymousStickers: Bool
@@ -86,6 +89,8 @@ private final class MiscArguments {
     let openFakeGifts: () -> Void
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
+    let setFakeGram: (Bool) -> Void
+    let setFakeGramAmount: (String) -> Void
     let openVoiceTwin: () -> Void
     let openQuickReplies: () -> Void
     let setAutoReply: (Bool) -> Void
@@ -109,11 +114,13 @@ private final class MiscArguments {
     let openChatLock: () -> Void
     let setActionConfirmation: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setAnonymousNumber: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setFakeGram: @escaping (Bool) -> Void, setFakeGramAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setAnonymousNumber: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
+        self.setFakeGram = setFakeGram
+        self.setFakeGramAmount = setFakeGramAmount
         self.openVoiceTwin = openVoiceTwin
         self.openQuickReplies = openQuickReplies
         self.setAutoReply = setAutoReply
@@ -148,6 +155,10 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStars(PresentationTheme, String, Bool)
     case fakeStarsCount(PresentationTheme, String, String)
     case fakeStarsInfo(PresentationTheme, String)
+    case fakeGramHeader(PresentationTheme, String)
+    case fakeGram(PresentationTheme, String, Bool)
+    case fakeGramCount(PresentationTheme, String, String)
+    case fakeGramInfo(PresentationTheme, String)
     case callsHeader(PresentationTheme, String)
     case voiceTwin(PresentationTheme, String)
     case autoReply(PresentationTheme, String, Bool)
@@ -188,6 +199,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeGifts.rawValue
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
+        case .fakeGramHeader, .fakeGram, .fakeGramCount, .fakeGramInfo:
+            return MiscSection.fakeGram.rawValue
         case .callsHeader, .voiceTwin:
             return MiscSection.calls.rawValue
         case .autoReply:
@@ -218,6 +231,10 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStars:        return 21
         case .fakeStarsCount:   return 22
         case .fakeStarsInfo:    return 23
+        case .fakeGramHeader:  return 60
+        case .fakeGram:        return 61
+        case .fakeGramCount:   return 62
+        case .fakeGramInfo:    return 63
         case .callsHeader:      return 24
         case .voiceTwin:        return 25
         case .autoReply:        return 26
@@ -254,8 +271,9 @@ private enum MiscEntry: ItemListNodeEntry {
 
     static func < (lhs: MiscEntry, rhs: MiscEntry) -> Bool {
         func order(_ entry: MiscEntry) -> Int32 {
-            if case .anonymousNumber = entry { return 79 }
-            return entry.stableId * 2
+            if case .anonymousNumber = entry { return 395 }
+            if (60...63).contains(entry.stableId) { return 231 + entry.stableId - 60 }
+            return entry.stableId * 10
         }
         return order(lhs) < order(rhs)
     }
@@ -278,6 +296,14 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .fakeStarsCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .fakeStarsInfo(lt, ls):
             if case let .fakeStarsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .fakeGramHeader(lt, ls):
+            if case let .fakeGramHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .fakeGram(lt, ls, lv):
+            if case let .fakeGram(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .fakeGramCount(lt, ls, lv):
+            if case let .fakeGramCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .fakeGramInfo(lt, ls):
+            if case let .fakeGramInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .callsHeader(lt, ls):
             if case let .callsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTwin(lt, ls):
@@ -385,6 +411,36 @@ private enum MiscEntry: ItemListNodeEntry {
             )
         case let .fakeStarsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .fakeGramHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .fakeGram(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFakeGram($0) })
+        case let .fakeGramCount(_, placeholder, value):
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: ""),
+                text: value,
+                placeholder: placeholder,
+                type: .regular(capitalization: false, autocorrection: false),
+                returnKeyType: .done,
+                sectionId: section,
+                textUpdated: { text in
+                    args.setFakeGramAmount(text)
+                },
+                shouldUpdateText: { text in
+                    return text.isEmpty || AorusLocalGramAmount.parse(text) != nil
+                },
+                action: {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+            )
+        case let .fakeGramInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .callsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .voiceTwin(_, title):
@@ -486,6 +542,14 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
     }
     entries.append(.fakeStarsInfo(theme, aorusL("Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся.", "Shows the entered Stars balance locally, only for you. No real stars are created or spent.")))
 
+    entries.append(.fakeGramHeader(theme, aorusL("GRAM (БЫВШИЕ TON)", "GRAM (FORMERLY TON)")))
+    entries.append(.fakeGram(theme, aorusL("Фейковые GRAM (TON)", "Fake GRAM (TON)"), state.fakeGram))
+    // The amount row animates in/out with the toggle (the list uses animateChanges).
+    if state.fakeGram {
+        entries.append(.fakeGramCount(theme, aorusL("Количество", "Amount"), state.fakeGramAmount))
+    }
+    entries.append(.fakeGramInfo(theme, aorusL("Показывает указанный баланс GRAM (TON) локально, только у вас. Реальные GRAM не создаются и не тратятся.", "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.")))
+
     // Voice Twin (Calls) moved to the main AorusGram screen. Auto-Reply stays
     // here as a separate headerless block.
     entries.append(.autoReply(theme, aorusL("Быстрые ответы", "Quick Replies"), state.autoReply))
@@ -540,6 +604,8 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         localPremium: AorusLocalPremium.isEnabled,
         fakeStars: initialFakeStars,
         fakeStarsAmount: initialFakeStarsAmount,
+        fakeGram: AorusFakeGramStore.isEnabled,
+        fakeGramAmount: AorusLocalGramAmount.text(AorusFakeGramStore.amount),
         autoReply: AorusGramManager.shared.autoReply,
         antiSearch: AorusAntiSearchStore.isEnabled,
         anonymousStickers: UserDefaults.standard.bool(forKey: "aorusgram_anonymous_stickers_enabled"),
@@ -580,6 +646,20 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         }
     }
 
+    let fakeGramObserver = NotificationCenter.default.addObserver(
+        forName: AorusFakeGramStore.changedNotification,
+        object: nil,
+        queue: .main
+    ) { _ in
+        updateState { current in
+            var next = current
+            next.fakeGram = AorusFakeGramStore.isEnabled
+            let amount = AorusFakeGramStore.amount
+            next.fakeGramAmount = AorusLocalGramAmount.text(amount)
+            return next
+        }
+    }
+
     let chatLockObserver = NotificationCenter.default.addObserver(
         forName: AorusChatLock.changedNotification,
         object: nil,
@@ -597,6 +677,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
     }
     actionsDisposable.add(ActionDisposable {
         NotificationCenter.default.removeObserver(fakeStarsObserver)
+        NotificationCenter.default.removeObserver(fakeGramObserver)
         NotificationCenter.default.removeObserver(chatLockObserver)
     })
 
@@ -632,6 +713,24 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             updateState { current in
                 var next = current
                 next.fakeStarsAmount = digits
+                return next
+            }
+        },
+        setFakeGram: { value in
+            AorusFakeGramStore.setEnabled(value)
+            updateState { current in
+                var next = current
+                next.fakeGram = value
+                return next
+            }
+        },
+        setFakeGramAmount: { text in
+            // Preserve up to nine fractional digits; an empty field means zero.
+            guard let amount = text.isEmpty ? 0 : AorusLocalGramAmount.parse(text) else { return }
+            AorusFakeGramStore.setAmount(amount)
+            updateState { current in
+                var next = current
+                next.fakeGramAmount = text
                 return next
             }
         },

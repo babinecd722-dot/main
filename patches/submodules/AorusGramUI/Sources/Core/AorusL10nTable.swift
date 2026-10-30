@@ -53,6 +53,9 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (EX TON)",
+        "Fake GRAM (TON)": "GRAM (TON) fittizi",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra il saldo di GRAM indicato in locale, solo per te. Non vengono create né spese GRAM reali.",
         "Move Left": "Sposta a sinistra",
         "Move Right": "Sposta a destra",
         "Dot": "Punto",
@@ -1072,6 +1075,9 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (DAWNIEJ TON)",
+        "Fake GRAM (TON)": "Fałszywe GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Pokazuje podany stan GRAM lokalnie, tylko u ciebie. Prawdziwe GRAM nie są tworzone ani wydawane.",
         "Move Left": "Przesuń w lewo",
         "Move Right": "Przesuń w prawo",
         "Dot": "Kropka",
@@ -2091,6 +2097,9 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (VOORHEEN TON)",
+        "Fake GRAM (TON)": "Nep-GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Toont het opgegeven GRAM-saldo lokaal, alleen voor jou. Er worden geen echte GRAM gemaakt of uitgegeven.",
         "Move Left": "Naar links verplaatsen",
         "Move Right": "Naar rechts verplaatsen",
         "Dot": "Stip",
@@ -3110,6 +3119,9 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ABANS TON)",
+        "Fake GRAM (TON)": "GRAM (TON) falsos",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra el saldo de GRAM indicat localment, només per a tu. No es creen ni es gasten GRAM reals.",
         "Move Left": "Mou a l’esquerra",
         "Move Right": "Mou a la dreta",
         "Dot": "Punt",
@@ -4129,6 +4141,9 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (SEBELUMNYA TON)",
+        "Fake GRAM (TON)": "GRAM (TON) palsu",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Menampilkan saldo GRAM yang dimasukkan secara lokal, hanya untukmu. Tidak ada GRAM asli yang dibuat atau dipakai.",
         "Move Left": "Pindahkan ke Kiri",
         "Move Right": "Pindahkan ke Kanan",
         "Dot": "Titik",
@@ -5148,6 +5163,9 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (DAHULUNYA TON)",
+        "Fake GRAM (TON)": "GRAM (TON) palsu",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Menunjukkan baki GRAM yang dimasukkan secara setempat, hanya untuk anda. Tiada GRAM sebenar dicipta atau dibelanjakan.",
         "Move Left": "Alih ke Kiri",
         "Move Right": "Alih ke Kanan",
         "Dot": "Titik",
@@ -6167,6 +6185,9 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (БЫЛЫЯ TON)",
+        "Fake GRAM (TON)": "Фэйкавыя GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Паказвае названы баланс GRAM лакальна, толькі ў вас. Сапраўдныя GRAM не ствараюцца і не марнуюцца.",
         "Move Left": "Перамясціць улева",
         "Move Right": "Перамясціць управа",
         "Dot": "Кропка",
@@ -7186,6 +7207,9 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (AVVALGI TON)",
+        "Fake GRAM (TON)": "Soxta GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Kiritilgan GRAM balansini faqat sizda, lokal ko‘rsatadi. Haqiqiy GRAM yaratilmaydi va sarflanmaydi.",
         "Move Left": "Chapga surish",
         "Move Right": "O‘ngga surish",
         "Dot": "Nuqta",
@@ -8205,6 +8229,9 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (이전 TON)",
+        "Fake GRAM (TON)": "가짜 GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "입력한 GRAM 잔액을 나에게만, 로컬로 표시합니다. 실제 GRAM은 만들어지거나 사용되지 않습니다.",
         "Move Left": "왼쪽으로 이동",
         "Move Right": "오른쪽으로 이동",
         "Dot": "점",
@@ -9224,6 +9251,9 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (سابقًا TON)",
+        "Fake GRAM (TON)": "GRAM (TON) وهمية",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "يعرض رصيد GRAM المُدخل محليًا، لك وحدك. لا تُنشأ GRAM حقيقية ولا تُنفق.",
         "Move Left": "نقل إلى اليسار",
         "Move Right": "نقل إلى اليمين",
         "Dot": "نقطة",
@@ -10243,6 +10273,9 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (نام پیشین TON)",
+        "Fake GRAM (TON)": "GRAM (TON) جعلی",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "موجودی GRAMٔ واردشده را به‌صورت محلی و فقط برای شما نشان می‌دهد. GRAMٔ واقعی ساخته یا خرج نمی‌شود.",
         "Move Left": "انتقال به چپ",
         "Move Right": "انتقال به راست",
         "Dot": "نقطه",
@@ -11262,6 +11295,9 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (БҰРЫНҒЫ TON)",
+        "Fake GRAM (TON)": "Жалған GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Енгізілген GRAM балансын тек сізде, жергілікті көрсетеді. Нақты GRAM жасалмайды және жұмсалмайды.",
         "Move Left": "Солға жылжыту",
         "Move Right": "Оңға жылжыту",
         "Dot": "Нүкте",
@@ -12281,6 +12317,9 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM（原 TON）",
+        "Fake GRAM (TON)": "虚拟 GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "仅在本地、仅对你显示所填的GRAM余额。不会创建或消耗真实GRAM。",
         "Move Left": "向左移动",
         "Move Right": "向右移动",
         "Dot": "圆点",
@@ -13301,6 +13340,9 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM（原 TON）",
+        "Fake GRAM (TON)": "虛擬 GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "僅在本地、僅對你顯示所填的GRAM餘額。不會建立或消耗真實GRAM。",
         "Move Left": "向左移動",
         "Move Right": "向右移動",
         "Dot": "圓點",
@@ -14320,6 +14362,9 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM（旧 TON）",
+        "Fake GRAM (TON)": "仮想 GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "入力したGRAMの残高を自分にだけローカルで表示します。実際のGRAMは発行も消費もされません。",
         "Move Left": "左へ移動",
         "Move Right": "右へ移動",
         "Dot": "点",
@@ -15339,6 +15384,9 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ENTINEN TON)",
+        "Fake GRAM (TON)": "Valheelliset GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Näyttää syötetyn GRAM-saldon paikallisesti vain sinulle. Oikeita GRAM ei luoda eikä kuluteta.",
         "Move Left": "Siirrä vasemmalle",
         "Move Right": "Siirrä oikealle",
         "Dot": "Piste",
@@ -16358,6 +16406,9 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (לשעבר TON)",
+        "Fake GRAM (TON)": "GRAM (TON) מדומים",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "מציג את יתרת הGRAM שהוזנה מקומית, רק עבורכם. לא נוצרים ולא נצרכים GRAM אמיתיים.",
         "Move Left": "הזזה שמאלה",
         "Move Right": "הזזה ימינה",
         "Dot": "נקודה",
@@ -17377,6 +17428,9 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (BIVŠI TON)",
+        "Fake GRAM (TON)": "Lažni GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Prikazuje uneseno stanje GRAM lokalno, samo vama. Pravi GRAM se ne stvaraju niti troše.",
         "Move Left": "Pomakni ulijevo",
         "Move Right": "Pomakni udesno",
         "Dot": "Točka",
@@ -18396,6 +18450,9 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (БИВШИ TON)",
+        "Fake GRAM (TON)": "Лажни GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Приказује унето стање GRAM локално, само вама. Прави GRAM се не стварају нити троше.",
         "Move Left": "Помери улево",
         "Move Right": "Помери удесно",
         "Dot": "Тачка",
@@ -19415,6 +19472,9 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (DŘÍVE TON)",
+        "Fake GRAM (TON)": "Falešné GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zobrazí zadaný zůstatek GRAM místně, jen vám. Skutečné GRAM se nevytvářejí ani neutrácejí.",
         "Move Left": "Přesunout doleva",
         "Move Right": "Přesunout doprava",
         "Dot": "Tečka",
@@ -20434,6 +20494,9 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (PREDTÝM TON)",
+        "Fake GRAM (TON)": "Falošné GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zobrazí zadaný zostatok GRAM miestne, len vám. Skutočné GRAM sa nevytvárajú ani neutrácajú.",
         "Move Left": "Presunúť doľava",
         "Move Right": "Presunúť doprava",
         "Dot": "Bodka",
@@ -21453,6 +21516,9 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (FOSTUL TON)",
+        "Fake GRAM (TON)": "GRAM (TON) fictivi",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Afișează soldul de GRAM introdus local, doar pentru tine. Nu se creează și nu se cheltuiesc GRAM reale.",
         "Move Left": "Mută la stânga",
         "Move Right": "Mută la dreapta",
         "Dot": "Punct",
@@ -22472,6 +22538,9 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (KORÁBBAN TON)",
+        "Fake GRAM (TON)": "Hamis GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "A megadott GRAM-egyenleget helyileg, csak neked jeleníti meg. Valódi GRAM nem jön létre és nem fogy el.",
         "Move Left": "Mozgatás balra",
         "Move Right": "Mozgatás jobbra",
         "Dot": "Pont",
@@ -23491,6 +23560,9 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (TIDLIGERE TON)",
+        "Fake GRAM (TON)": "Falske GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Viser den angitte GRAM-saldoen lokalt, bare for deg. Ingen ekte GRAM opprettes eller brukes.",
         "Move Left": "Flytt til venstre",
         "Move Right": "Flytt til høyre",
         "Dot": "Prikk",
@@ -24510,6 +24582,9 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (TIDIGARE TON)",
+        "Fake GRAM (TON)": "Falska GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Visar det angivna GRAM-saldot lokalt, bara för dig. Inga riktiga GRAM skapas eller förbrukas.",
         "Move Left": "Flytta åt vänster",
         "Move Right": "Flytta åt höger",
         "Dot": "Punkt",
@@ -25529,6 +25604,9 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (TRƯỚC ĐÂY LÀ TON)",
+        "Fake GRAM (TON)": "GRAM (TON) giả",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Hiển thị số dư GRAM đã nhập một cách cục bộ, chỉ mình bạn thấy. Không tạo hay tiêu GRAM thật.",
         "Move Left": "Di chuyển sang trái",
         "Move Right": "Di chuyển sang phải",
         "Dot": "Chấm",
@@ -26548,6 +26626,9 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (КОЛИШНІ TON)",
+        "Fake GRAM (TON)": "Фейкові GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Показує вказаний баланс GRAM локально, лише у вас. Справжні GRAM не створюються і не витрачаються.",
         "Move Left": "Перемістити ліворуч",
         "Move Right": "Перемістити праворуч",
         "Dot": "Крапка",
@@ -27576,6 +27657,9 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ANTES TON)",
+        "Fake GRAM (TON)": "GRAM (TON) falsos",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Muestra el saldo de GRAM indicado localmente, solo para ti. No se crean ni se gastan GRAM reales.",
         "Move Left": "Mover a la izquierda",
         "Move Right": "Mover a la derecha",
         "Dot": "Punto",
@@ -28604,6 +28688,9 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ANTIGO TON)",
+        "Fake GRAM (TON)": "GRAM (TON) falsos",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra o saldo de GRAM informado localmente, só para você. Nenhuma estrela real é criada ou gasta.",
         "Move Left": "Mover para a esquerda",
         "Move Right": "Mover para a direita",
         "Dot": "Ponto",
@@ -29632,6 +29719,9 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (EHEMALS TON)",
+        "Fake GRAM (TON)": "Gefälschte GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zeigt das eingegebene GRAM-Guthaben lokal an, nur für dich. Es werden keine echten GRAM erzeugt oder ausgegeben.",
         "Move Left": "Nach links verschieben",
         "Move Right": "Nach rechts verschieben",
         "Dot": "Punkt",
@@ -30660,6 +30750,9 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ANCIENNEMENT TON)",
+        "Fake GRAM (TON)": "GRAM (TON) fictifs",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Affiche le solde d’GRAM saisi localement, uniquement pour vous. Aucune étoile réelle n’est créée ni dépensée.",
         "Move Left": "Déplacer à gauche",
         "Move Right": "Déplacer à droite",
         "Dot": "Point",
@@ -31688,6 +31781,9 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "GRAM (FORMERLY TON)": "GRAM (ESKİ TON)",
+        "Fake GRAM (TON)": "Sahte GRAM (TON)",
+        "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Girilen GRAM bakiyesini yalnızca sizde, yerel olarak gösterir. Gerçek GRAM oluşturulmaz veya harcanmaz.",
         "Move Left": "Sola Taşı",
         "Move Right": "Sağa Taşı",
         "Dot": "Nokta",

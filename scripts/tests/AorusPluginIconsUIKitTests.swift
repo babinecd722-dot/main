@@ -295,6 +295,7 @@ private enum AorusPluginIconsUIKitTests {
         stage("checking presentation traits and toolbar colours")
         checks += await runTabPreviewRegression(window: window)
         checks += runAvatarDismissRegression()
+        checks += runProfileTransitionRegression()
         checks += runLightPageRegression()
         let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks

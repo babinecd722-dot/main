@@ -10672,7 +10672,7 @@ public enum AorusFakeGiftsStore {
         return all().contains(where: { $0.showInProfile && $0.ownerPeerId == ownerPeerId })
     }
 
-    public static func recordLocalGiftMessage(account: Account, recipientPeerId: PeerId, gift: StarGift, stars: Int64, text: String, entities: [MessageTextEntity], hideName: Bool) {
+    public static func recordLocalGiftMessage(account: Account, recipientPeerId: PeerId, gift: StarGift, stars: Int64, text: String, entities: [MessageTextEntity], hideName: Bool, currency: CurrencyAmount.Currency = .stars) {
         let accountPeerId = account.peerId
         let timestamp = Int32(Date().timeIntervalSince1970)
         let instanceId = addPurchasedGift(
@@ -10684,7 +10684,9 @@ public enum AorusFakeGiftsStore {
             entities: entities,
             hideName: hideName
         )
-        AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
+        if currency == .stars {
+            AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
+        }
         // Every local purchase delivers the very same gift card Telegram builds for a real
         // one: a collectible posts messageActionStarGiftUnique, an ordinary gift posts
         // messageActionStarGift. Buying for yourself addresses Saved Messages, because a
@@ -10693,7 +10695,7 @@ public enum AorusFakeGiftsStore {
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
-            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName)
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: currency), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName)
         case let .generic(genericGift):
             // A gift bought for oneself is one's own to upgrade, from its card as from the
             // profile: the card names the stored instance, which is the reference the gift
@@ -16604,6 +16606,9 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarRes
         if !lent {
             // As the expansion leaves its followers; one that never began has not touched them.
             self.ghostLayerNode.alpha = 1.0
+            self.avatarNode.frame = self.avatarFrame
+            self.applyGhost(transition: .immediate)
+            self.requestNavigationLayout?(.immediate)
         }
     }
 
@@ -16620,6 +16625,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarRes
     }
 
     private func applyGhost(transition: ContainedViewLayoutTransition) {
+        guard !self.isLentToExpansion else { return }
         guard let theme = self.ghostTheme else {
             return
         }
@@ -16659,6 +16665,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarRes
                 return
             }
             self.ghostVisibilityPending = false
+            guard !self.isLentToExpansion else { return }
             guard self.wantsGhost != self.ghostVisible else {
                 return
             }
@@ -16766,6 +16773,9 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarRes
         super.layout()
         // Each subnode in the place this state puts it. While the ghost comes or goes these are
         // the places its animation is already heading for, so they leave it running.
+        // The renderer owns both views while they are lent; a bar relayout must not
+        // overwrite their flight geometry or put the avatar back under the profile.
+        guard !self.isLentToExpansion else { return }
         self.ghostLayerNode.frame = CGRect(origin: CGPoint(), size: self.bounds.size)
         self.updateGlass(size: self.ghostSize, transition: .immediate)
         self.avatarNode.frame = self.avatarFrame
@@ -30863,6 +30873,8 @@ def main() -> None:
     patch_interface_v2(tg)
     # After Interface 2.0, which makes the chat's expansion loan a local to set the followers on.
     patch_ghost_expansion_followers(tg)
+    from aorus_profile_transition import patch as patch_profile_transition
+    patch_profile_transition(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)
@@ -30887,6 +30899,8 @@ def main() -> None:
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_fake_stars_all_gifts(tg)
+    from aorus_fake_gram import patch as patch_fake_gram
+    patch_fake_gram(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)
