@@ -11190,6 +11190,18 @@ public enum AorusFakeStarsStore {
         aorusKeychainSet(data, account: keychainAmountAccount)
     }
 
+    /// Normalize decimal input without overflowing or resetting a large balance to zero.
+    public static func parseAmount(_ text: String) -> Int64 {
+        var result: Int64 = 0
+        for character in text {
+            guard let digit = character.wholeNumberValue, digit >= 0, digit <= 9 else { continue }
+            let value = Int64(digit)
+            guard result <= (Int64.max - value) / 10 else { return Int64.max }
+            result = result * 10 + value
+        }
+        return result
+    }
+
     public static func setAmount(_ value: Int64) {
         balanceLock.lock()
         writeAmount(value)
@@ -31083,6 +31095,9 @@ def main() -> None:
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)
     patch_interface_v2_run_switch(tg)
+
+    from aorus_large_stars import patch as patch_large_stars
+    patch_large_stars(tg)
 
     # Last: discovers every file the patches above left calling aorusL() and gives its
     # package the AorusGramUI dep and the import.

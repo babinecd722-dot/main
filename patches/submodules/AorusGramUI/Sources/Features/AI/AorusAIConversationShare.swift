@@ -672,7 +672,9 @@ final class AorusAISharePreviewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
-        backdrop.backgroundColor = UIColor(white: 0.0, alpha: 0.82)
+        // An opaque stage hides the conversation while the share preview is visible.
+        // Its separate alpha animates back to zero with the sheet; the chat keeps its theme.
+        backdrop.backgroundColor = UIColor(red: 0.067, green: 0.067, blue: 0.075, alpha: 1.0)
         backdrop.alpha = 0.0
         backdrop.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(backdropTapped)))
         view.addSubview(backdrop)

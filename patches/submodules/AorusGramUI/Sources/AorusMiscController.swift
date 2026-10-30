@@ -706,9 +706,8 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             }
         },
         setFakeStarsAmount: { text in
-            // Keep digits only; an empty field means zero.
-            let digits = text.filter { $0.isNumber }
-            let amount = Int64(digits) ?? 0
+            let amount = AorusFakeStarsStore.parseAmount(text)
+            let digits = text.isEmpty ? "" : String(amount)
             AorusFakeStarsStore.setAmount(amount)
             updateState { current in
                 var next = current

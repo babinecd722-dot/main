@@ -13,6 +13,7 @@ private enum AorusPluginIconsUIKitTests {
         func stage(_ message: String) { print("UIKit icons: " + message); fflush(stdout) }
         stage("starting")
         var checks = 0
+        checks += await runAISharePreviewRegression()
         func expect(_ value: Bool, _ message: String) {
             checks += 1
             if !value { fatalError(message) }

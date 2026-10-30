@@ -133,8 +133,19 @@ extension AorusFakeStarsStore { static var mirror: [String: Data] = [:] }
 var checks = 0
 func expect(_ value: Bool, _ name: String) { checks += 1; precondition(value, name) }
 let own = PeerId(1), other = PeerId(2)
+for (text, amount): (String, Int64) in [("",0),("2147483647",2147483647),("2147483648",2147483648),("9 223 372 036 854 775 807",Int64.max),("9223372036854775808",Int64.max),(String(repeating: "9", count: 1000),Int64.max),("١٢٣٤٥٦٧٨٩٠",1234567890),("1234567890123456789",1234567890123456789)] {
+    expect(AorusFakeStarsStore.parseAmount(text) == amount, "large/localized amount input: " + String(text.prefix(30)))
+}
 expect(!AorusFakeStarsStore.topUp(accountPeerId: own, count: 100), "disabled mode cannot credit")
 AorusFakeStarsStore.setEnabled(true)
+AorusFakeStarsStore.setAmount(2147483648)
+expect(AorusFakeStarsStore.amount == 2147483648 && AorusFakeStarsStore.spend(1) && AorusFakeStarsStore.amount == 2147483647, "balance and spending cross the Int32 boundary exactly")
+AorusFakeStarsStore.credit(1)
+expect(AorusFakeStarsStore.amount == 2147483648, "credit crosses the Int32 boundary exactly")
+AorusFakeStarsStore.setAmount(Int64.max)
+AorusFakeStarsStore.credit(1)
+expect(AorusFakeStarsStore.amount == Int64.max && !AorusFakeStarsStore.topUp(accountPeerId: own, count: 100), "large balance cannot overflow on credit or top-up")
+expect(AorusFakeStarsStore.spend(Int64.max) && AorusFakeStarsStore.amount == 0, "full-width balance can be spent without overflow")
 AorusFakeStarsStore.setAmount(10)
 expect(!AorusFakeStarsStore.topUp(accountPeerId: own, count: 0) && !AorusFakeStarsStore.topUp(accountPeerId: own, count: -1), "invalid lots rejected")
 expect(AorusFakeStarsStore.topUp(accountPeerId: own, count: 100), "native lot credit")
@@ -284,6 +295,15 @@ def phone_region_api(swiftc, headers, work):
     print("Native phone-region API type-check passed")
 
 
+def share_preview_api(swiftc, repo, work):
+    from ai_share_preview_fixtures import share_preview_test_source
+    probe = work / "AISharePreviewProbe.swift"
+    probe.write_text(share_preview_test_source(repo))
+    sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
+    checked([swiftc, "-typecheck", "-parse-as-library", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(probe)])
+    print("Native PDF share preview UIKit API type-check passed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", type=Path)
@@ -295,6 +315,7 @@ def main():
         work = Path(directory)
         if args.phone_headers:
             phone_region_api(args.swiftc, args.phone_headers, work)
+            share_preview_api(args.swiftc, args.repo, work)
             return
         run(args.swiftc, work, "eligibility", eligibility(args.repo))
         run(args.swiftc, work, "prices", prices(args.repo))
@@ -305,6 +326,7 @@ def main():
             if platform.system() == "Darwin":
                 headers = args.telegram_source.resolve() / "submodules/libphonenumber/PublicHeaders"
                 phone_region_api(args.swiftc, headers, work)
+                share_preview_api(args.swiftc, args.repo, work)
 
 
 if __name__ == "__main__":
