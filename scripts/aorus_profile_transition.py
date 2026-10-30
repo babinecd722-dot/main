@@ -4,6 +4,14 @@ from aorus_fake_gram import replace
 
 
 def patch(tg: Path) -> None:
+    avatar = tg / "submodules/TelegramUI/Components/Chat/ChatAvatarNavigationNode/Sources/ChatAvatarNavigationNode.swift"
+    text = avatar.read_text()
+    if "// AorusGram: avatar snapshots use container-local coordinates" not in text:
+        text = replace(text, "            snapshotView.frame = self.frame\n", '''            // AorusGram: avatar snapshots use container-local coordinates. The outer
+            // node is offset inside the ghost capsule; that offset is not part of the image.
+            snapshotView.frame = self.avatarNode.frame
+''', "avatar snapshot coordinates")
+        avatar.write_text(text)
     path = tg / "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift"
     text = path.read_text()
     if "aorusCompanionHost" in text:

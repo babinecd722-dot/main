@@ -15,6 +15,11 @@ def profile_transition_test_source(tg: Path) -> str:
     capsule = block(controller, "final class AorusGhostAvatarNavigationNode:")
     layout = block(capsule, "    override func layout()")
     assert "guard !self.isLentToExpansion else { return }" in layout
+    avatar = (tg / "submodules/TelegramUI/Components/Chat/ChatAvatarNavigationNode/Sources/ChatAvatarNavigationNode.swift").read_text()
+    snapshot = block(avatar, "        if let snapshotView = snapshotState.snapshotView {")
+    # Execute the installed placement with distinct parent/local origins, not a zero-origin fixture
+    # that would hide the ghost capsule's extra 40 points.
+    placement = snapshot[:snapshot.index("            snapshotView.layer.animateAlpha(")] + "\n        }\n"
     return r'''import UIKit
 private struct ExpansionClock { let time: CGFloat; let isOpening: Bool }
 private struct GhostFrame { let photo: CGRect?; let companionContent: CGFloat }
@@ -67,9 +72,24 @@ private struct GhostChoreography {
 ''' + restore + r'''
     }
 }
+@MainActor private final class AvatarSnapshotProbe {
+    let frame = CGRect(x: 40, y: 0, width: 44, height: 44)
+    let avatarNode = UIView(frame: CGRect(x: 3, y: 3, width: 38, height: 38))
+    let containerNode = SnapshotContainer()
+    final class SnapshotContainer { let view = UIView() }
+    struct SnapshotState { let snapshotView: UIView? }
+    func install(_ snapshotState: SnapshotState) {
+''' + placement + r'''
+    }
+}
 @MainActor func runProfileTransitionRegression() -> Int {
     var checks = 0
     func expect(_ value: Bool, _ label: String) { checks += 1; precondition(value, label) }
+    let snapshotProbe = AvatarSnapshotProbe()
+    let snapshot = UIView()
+    snapshotProbe.install(AvatarSnapshotProbe.SnapshotState(snapshotView: snapshot))
+    expect(snapshot.frame == snapshotProbe.avatarNode.frame, "avatar snapshot uses the inner container's coordinates")
+    expect(snapshot.frame.minX != snapshotProbe.frame.minX, "the ghost's 40-point offset is never applied twice")
     for opening in [false, true] { for expanded in [false, true] {
         let screen = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         let bar = UIView(frame: CGRect(x: 286, y: 54, width: 84, height: 44))
