@@ -181,6 +181,9 @@ def geometry(tg):
         rectangle = next(line.split(" = ", 1)[1] for line in source.splitlines() if "self.backgroundNode.frame = CGRect(" in line)
         functions.append("func row" + name + "(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, height: CGFloat) -> CGRect {\n" + left + "\n" + right + "\nreturn " + rectangle + "\n}")
     return '''import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 enum AorusGlassPane { static let blockSideInset: CGFloat = 16; static var isEnabled = true }
 ''' + "\n".join(functions) + '''
 func pane(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, aorusFieldsTop: CGFloat, contentHeight: CGFloat) -> CGRect {
