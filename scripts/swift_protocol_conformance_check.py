@@ -140,7 +140,9 @@ FUNC_RE = re.compile(
 VAR_RE = re.compile(
     r"(?:^|\n)[ \t]*"
     r"(?:(?:@\w+(?:\([^)]*\))?[ \t]+)*)"
-    r"(?:(?:public|internal|fileprivate|private|open|final|static|class|override|nonisolated|lazy|weak|unowned)[ \t]+)*"
+    # An access level may narrow the setter alone (`private(set) var`); the getter still
+    # satisfies a protocol's `{ get }`.
+    r"(?:(?:(?:public|internal|fileprivate|private|open)(?:\(set\))?|final|static|class|override|nonisolated|lazy|weak|unowned)[ \t]+)*"
     r"(?:var|let)[ \t]+(\w+)[ \t]*:"
 )
 

@@ -520,7 +520,8 @@ private final class AorusAIPDFActivityItem: NSObject, UIActivityItemSource {
 
 /// Sharing a conversation: the PDF is made, the system share sheet comes up, and above it the
 /// first slide floats on a dark backdrop with a soft white glow behind it — what the reader is
-/// about to send. When the sheet goes, the slide drops away off the bottom of the screen.
+/// about to send. The slide rises with the sheet, and when the sheet goes it dissolves: it sinks a
+/// little, shrinks and blurs as it fades.
 final class AorusAIConversationShare {
     private weak var presenter: UIViewController?
     private var previewController: AorusAISharePreviewController?
@@ -609,7 +610,7 @@ final class AorusAIConversationShare {
             }
             previewController.present(activity, animated: true)
             previewController.track(sheet: activity)
-            previewController.animateIn()
+            previewController.animateInWithSheet()
         }
     }
 
@@ -645,6 +646,7 @@ final class AorusAISharePreviewController: UIViewController {
     private weak var sheet: UIViewController?
     private var isAnimatingOut = false
     private var isOut = false
+    private var sheetWaitDeadline: CFTimeInterval?
     private var outCompletions: [() -> Void] = []
     private var observesInteraction = false
     var onDismissRequest: (() -> Void)?
@@ -713,6 +715,10 @@ final class AorusAISharePreviewController: UIViewController {
 
     fileprivate func tick() {
         guard !isAnimatingOut else { return }
+        if let deadline = sheetWaitDeadline, sheetHasStarted || CACurrentMediaTime() > deadline {
+            sheetWaitDeadline = nil
+            animateIn()
+        }
         // The slide goes as the sheet starts to go, not once it has gone: the system says the
         // share is over only after the sheet's own dismissal has finished.
         if let sheet, sheet.isBeingDismissed {
@@ -735,6 +741,23 @@ final class AorusAISharePreviewController: UIViewController {
             }
         }
         layoutCard()
+    }
+
+    /// Whether the sheet is on screen and on its way up: on a phone its top edge has left the bottom
+    /// of the screen; a popover on a large screen appears where it stands.
+    private var sheetHasStarted: Bool {
+        guard let sheet, let presented = sheet.presentationController?.presentedView, presented.window != nil, let container = presented.superview else {
+            return false
+        }
+        let layer = presented.layer.presentation() ?? presented.layer
+        let frame = container.convert(layer.frame, to: view)
+        guard frame.height > 1.0 else {
+            return false
+        }
+        if traitCollection.userInterfaceIdiom == .pad, frame.maxY < view.bounds.height - 40.0 {
+            return layer.opacity > 0.01
+        }
+        return frame.minY < view.bounds.height - 1.0
     }
 
     private var sheetTop: CGFloat {
@@ -781,7 +804,14 @@ final class AorusAISharePreviewController: UIViewController {
         glow.layer.shadowOpacity = Float(card.alpha) * (isDark ? 0.22 : 0.3)
     }
 
-    func animateIn() {
+    /// Comes in with the sheet. The share sheet gathers what it offers before it rises, and the
+    /// slide used to come at once -- up on its own before the sheet had moved. It now starts on the
+    /// first frame the sheet is on its way, or, should the sheet not come, a moment later.
+    func animateInWithSheet() {
+        sheetWaitDeadline = CACurrentMediaTime() + 1.2
+    }
+
+    private func animateIn() {
         view.layoutIfNeeded()
         glow.transform = CGAffineTransform(translationX: 0.0, y: 70.0).scaledBy(x: 0.86, y: 0.86)
         UIView.animate(withDuration: 0.3, delay: 0.0, options: [.curveEaseOut]) {
@@ -793,8 +823,9 @@ final class AorusAISharePreviewController: UIViewController {
         }
     }
 
-    /// The slide drops out of sight past the bottom of the screen, and the backdrop goes with it.
-    /// Asked again while it is already going, or gone, it calls back when it is out.
+    /// The slide dissolves as the sheet goes: it sinks a little toward the sheet, shrinks and blurs
+    /// while it fades, its glow with it, and the backdrop clears behind it. Asked again while it is
+    /// already going, or gone, it calls back when it is out.
     func animateOut(completion: @escaping () -> Void) {
         if isOut {
             completion()
@@ -803,13 +834,22 @@ final class AorusAISharePreviewController: UIViewController {
         outCompletions.append(completion)
         guard !isAnimatingOut else { return }
         isAnimatingOut = true
+        sheetWaitDeadline = nil
         displayLink?.invalidate()
         displayLink = nil
-        let distance = view.bounds.height - glow.frame.minY + 40.0
-        UIView.animate(withDuration: 0.42, delay: 0.0, options: [.curveEaseIn, .beginFromCurrentState]) {
-            self.glow.transform = CGAffineTransform(translationX: 0.0, y: distance).rotated(by: 0.04)
+        let duration: TimeInterval = 0.42
+        let sink = min(90.0, max(40.0, glow.bounds.height * 0.16))
+        UIView.animate(withDuration: duration, delay: 0.0, options: [.curveEaseInOut, .beginFromCurrentState]) {
+            self.glow.transform = CGAffineTransform(translationX: 0.0, y: sink).scaledBy(x: 0.9, y: 0.9)
+            self.glow.alpha = 0.0
         }
-        UIView.animate(withDuration: 0.36, delay: 0.08, options: [.curveEaseOut, .beginFromCurrentState]) {
+        if let blur = CALayer.blur() {
+            let radius: CGFloat = 14.0
+            blur.setValue(radius as NSNumber, forKey: "inputRadius")
+            card.layer.filters = [blur]
+            card.layer.animate(from: 0.0 as NSNumber, to: radius as NSNumber, keyPath: "filters.gaussianBlur.inputRadius", timingFunction: CAMediaTimingFunctionName.easeIn.rawValue, duration: duration)
+        }
+        UIView.animate(withDuration: duration, delay: 0.04, options: [.curveEaseOut, .beginFromCurrentState]) {
             self.backdrop.alpha = 0.0
         } completion: { _ in
             self.isOut = true

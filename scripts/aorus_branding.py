@@ -10560,7 +10560,7 @@ public enum AorusFakeGiftsStore {
     public static func transfer(reference: StarGiftReference, gift: StarGift, account: Account, recipientPeerId: PeerId) -> Bool {
         guard let target = stored(reference: reference) else { return false }
         let senderPeerId = account.peerId
-        let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
+        let ownedGift = unlisted(giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64()))
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
@@ -10609,7 +10609,7 @@ public enum AorusFakeGiftsStore {
     // Add a freshly-opened gift, rewriting the unique gift's owner to the user so the
     // native detail shows them as the owner.
     public static func addGift(_ gift: StarGift, selfPeerId: Int64, date: Int32) {
-        guard let baseData = try? JSONEncoder().encode(gift) else { return }
+        guard let baseData = try? JSONEncoder().encode(unlisted(gift)) else { return }
         let ownedData = dataWithOwner(baseData, ownerPeerId: selfPeerId) ?? baseData
         let stored = AorusStoredGift(giftData: ownedData, referencePeerId: selfPeerId, senderPeerId: 0, date: date, comment: "", showInProfile: true)
         var gifts = all()
@@ -10632,7 +10632,7 @@ public enum AorusFakeGiftsStore {
     /// Stores a gift bought locally, and answers the instance it was stored as.
     @discardableResult
     public static func addPurchasedGift(_ gift: StarGift, accountPeerId: Int64, ownerPeerId: Int64, date: Int32, comment: String, entities: [MessageTextEntity] = [], hideName: Bool) -> Int64? {
-        guard let baseData = try? JSONEncoder().encode(gift) else { return nil }
+        guard let baseData = try? JSONEncoder().encode(unlisted(gift)) else { return nil }
         let ownedData = dataWithOwner(baseData, ownerPeerId: ownerPeerId) ?? baseData
         let storedOwner = ownerPeerId == accountPeerId ? 0 : ownerPeerId
         let stored = AorusStoredGift(
@@ -10689,7 +10689,7 @@ public enum AorusFakeGiftsStore {
         // one: a collectible posts messageActionStarGiftUnique, an ordinary gift posts
         // messageActionStarGift. Buying for yourself addresses Saved Messages, because a
         // message whose peer is the account is exactly that chat.
-        let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
+        let ownedGift = unlisted(giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64()))
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
@@ -10750,6 +10750,19 @@ public enum AorusFakeGiftsStore {
             return nil
         }
         return data
+    }
+
+    // A collectible that changes hands is nobody's listing any more: Telegram takes a gift off
+    // sale when it is bought or transferred. A gift bought from resale arrives with the seller's
+    // price on it, and the server is still selling that collectible -- the purchase was local -- so
+    // the gift screen showed the new owner's gift on sale, with the server's price to buy it at.
+    // Unlisted is nil, not an empty list: the gift screen takes any list on someone else's gift for
+    // a listing and asks the server for its buy form, and JSON reads an absent list back as empty.
+    public static func unlisted(_ gift: StarGift) -> StarGift {
+        guard case let .unique(uniqueGift) = gift else {
+            return gift
+        }
+        return .unique(uniqueGift.withResellAmounts(nil).withResellForTonOnly(false))
     }
 
     // Public: return a copy of the gift whose owner is rewritten to ownerPeerId. Used when
@@ -10830,7 +10843,10 @@ public enum AorusFakeGiftsStore {
         // An ordinary gift that states an upgrade price can become a collectible, and the
         // native screen only offers the button when the wrapper says so. This was hardcoded
         // to false, which is why a stock gift had no Upgrade at all.
-        let aorusUpgradePrice = stored.convertedLocally ? nil : stored.gift.flatMap { AorusFakeGiftsStore.upgradePrice($0) }
+        // Upgrading, converting and transferring are the owner's: a gift bought for someone else
+        // offers none of them on their profile, as their card in the chat offers none.
+        let isOwnGift = stored.ownerPeerId == 0
+        let aorusUpgradePrice = (stored.convertedLocally || !isOwnGift) ? nil : stored.gift.flatMap { AorusFakeGiftsStore.upgradePrice($0) }
         var dict: [String: Any] = [
             "gift": giftObject,
             "date": Int(stored.date),
@@ -10842,7 +10858,7 @@ public enum AorusFakeGiftsStore {
         if let aorusUpgradePrice {
             dict["upgradeStars"] = Int(aorusUpgradePrice)
         }
-        if !stored.convertedLocally, AorusFakeStarsStore.isEnabled, case let .generic(gift)? = stored.gift {
+        if isOwnGift, !stored.convertedLocally, AorusFakeStarsStore.isEnabled, case let .generic(gift)? = stored.gift {
             dict["convertStars"] = gift.convertStars
         }
         if renderedSenderPeerId != 0 {
@@ -10858,7 +10874,9 @@ public enum AorusFakeGiftsStore {
                 // Telegram uses a non-nil transferStars value to expose its native
                 // Transfer action and the three-button collectible header. Local gifts
                 // transfer without a Stars fee through the established local route.
-                dict["transferStars"] = 0
+                if isOwnGift {
+                    dict["transferStars"] = 0
+                }
             case .generic:
                 if stored.referencePeerId != 0 {
                     dict["reference"] = ["type": 1, "peerId": ["iv": stored.referencePeerId], "id": stored.instanceId] as [String: Any]
@@ -10877,9 +10895,11 @@ public enum AorusFakeGiftsStore {
             dict["collectionIds"] = stored.collectionIds.map { Int($0) }
         }
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
-              let wrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
+              let decodedWrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
             return nil
         }
+        // On sale only at a price listed here (`unlisted`).
+        let wrapper = stored.resellStars > 0 ? decodedWrapper : decodedWrapper.withGift(unlisted(decodedWrapper.gift))
         guard renderedSenderPeerId != 0,
               let senderPeer,
               senderPeer.id.toInt64() == renderedSenderPeerId else {
@@ -16496,9 +16516,10 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
 
 import ComponentFlow
 import GlassBackgroundComponent
+import NavigationBarComponent
 
 // AorusGram: embedded ghost/avatar capsule node
-final class AorusGhostAvatarNavigationNode: ASDisplayNode {
+final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode {
     let avatarNode: ChatAvatarNavigationNode
     private var glassView: GlassBackgroundView?
     // The ghost and its pill, without the avatar: what goes out of sight while the profile opens.
@@ -16517,6 +16538,9 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     // Lays the chat's navigation bar out again, so it takes this node's new width with the same
     // transition the ghost comes and goes with.
     var requestNavigationLayout: ((ContainedViewLayoutTransition) -> Void)?
+    // A new one with each width: Telegram 13.1.1's bar measures a node only when its button changes,
+    // and this is the change.
+    private(set) var aorusNavigationBarLayoutRevision: Int = 0
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
@@ -16564,16 +16588,23 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     /// Telegram 13.1.1 opens the profile from the chat's header by expansion: the avatar flies to
     /// the profile on a circle of its own (the expansion lends it and gives it back), and the chat's
     /// bar is drawn above both screens for as long as it runs. The rest of this node stays in that
-    /// bar -- so the ghost and its pill go out of sight as the expansion starts and come back with
-    /// the chat, instead of standing over the profile while it opens.
+    /// bar: the ghost and its pill follow the avatar there, and the expansion fades them with it --
+    /// out as the profile opens, in as the avatar lands back in the chat -- instead of leaving them
+    /// over the profile, or bringing them back only once the chat is on screen again.
+    var expansionFollowers: [UIView] {
+        return [self.ghostLayerNode.view]
+    }
+
     func setLentToExpansion(_ lent: Bool) {
         guard self.isLentToExpansion != lent else {
             return
         }
         self.isLentToExpansion = lent
-        let transition: ContainedViewLayoutTransition = .animated(duration: lent ? 0.12 : 0.2, curve: .easeInOut)
-        transition.updateAlpha(node: self.ghostLayerNode, alpha: lent ? 0.0 : 1.0)
         self.ghostButtonNode.isUserInteractionEnabled = self.ghostVisible && !lent
+        if !lent {
+            // As the expansion leaves its followers; one that never began has not touched them.
+            self.ghostLayerNode.alpha = 1.0
+        }
     }
 
     func updateGhost(peerId: PeerId?, theme: PresentationTheme, transition: ContainedViewLayoutTransition, action: @escaping (PeerId, ASButtonNode) -> Void) {
@@ -16640,6 +16671,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         self.ghostVisible = isVisible
         self.ghostButtonNode.isUserInteractionEnabled = isVisible && !self.isLentToExpansion
         self.invalidateCalculatedLayout()
+        self.aorusNavigationBarLayoutRevision += 1
         transition.updateFrame(node: self.avatarNode, frame: self.avatarFrame)
         self.updateGlass(size: self.ghostSize, transition: transition)
         if isVisible {
@@ -16851,7 +16883,7 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
             (
                 "        var companion: CGRect?\n",
                 "        // AorusGram: the ghost stays in the chat's bar, which the expansion draws above both\n"
-                "        // screens; it goes out of sight until the expansion gives the chat back.\n"
+                "        // screens; it is not to be pressed until the expansion gives the chat back.\n"
                 "        (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.setLentToExpansion(true)\n"
                 "        var companion: CGRect?\n",
                 "ghost out of sight",
@@ -16881,6 +16913,242 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
             t = t.replace(old, new, 1)
         expansion.write_text(t, encoding="utf-8")
         print("PerChatGhost: the profile's expansion leaves the ghost's capsule out and centres on the avatar")
+
+
+
+def patch_navigation_bar_resizing_nodes(tg: Path) -> None:
+    """Telegram 13.1.1's bar measures a screen's node again when that node changes its width.
+
+    The bar draws its buttons as components and lays one out again only when it is a different
+    button: a node button is the same button for as long as it holds the same node. The chat's
+    avatar item is the ghost's capsule node, 44 points wide alone and 84 with the ghost beside it,
+    and the ghost mostly comes once the chat is already laid out (its peer arrives, Ghost Mode is
+    turned on). The bar kept the 44 points it had measured, the avatar moved 40 points to the
+    right inside it -- half off the screen -- and the ghost stood where the avatar had been.
+
+    A node that changes its width says so with a revision (`AorusNavigationBarResizingNode`). The
+    bar reads it into the node's button as it makes its content, and the button and its component
+    compare it with the rest: a new width lays the bar out again, with the transition the node asked
+    for, and measures the node anew. It is not part of the button's content, so the bar takes it for
+    a new size of the same items and not for a change of items, which it would morph in place.
+    """
+    sources = tg / "submodules/TelegramUI/Components/NavigationBarComponent/Sources"
+    content_path = sources / "NavigationBarComponentContent.swift"
+    text = content_path.read_text(encoding="utf-8")
+    marker = "public protocol AorusNavigationBarResizingNode"
+    if marker in text:
+        print("NavigationBarResizingNodes: already patched")
+        return
+    for old, new, what in (
+        (
+            "        public let action: (UIView) -> Void\n"
+            "        public let contextAction: ((UIView, ContextGesture?) -> Void)?\n"
+            "\n"
+            "        public init(id: AnyHashable, content: Content,",
+            "        public let action: (UIView) -> Void\n"
+            "        public let contextAction: ((UIView, ContextGesture?) -> Void)?\n"
+            "        /// AorusGram: the layout revision of a node that changes its width in place\n"
+            "        /// (`AorusNavigationBarResizingNode`), read as the content is made.\n"
+            "        public var aorusNodeLayoutRevision: Int?\n"
+            "\n"
+            "        public init(id: AnyHashable, content: Content,",
+            "button revision",
+        ),
+        (
+            "            return Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction)\n",
+            "            var button = Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction)\n"
+            "            button.aorusNodeLayoutRevision = self.aorusNodeLayoutRevision\n"
+            "            return button\n",
+            "overflow copy",
+        ),
+        (
+            "            if lhs.staysInRow != rhs.staysInRow {\n"
+            "                return false\n"
+            "            }\n"
+            "            return true\n",
+            "            if lhs.staysInRow != rhs.staysInRow {\n"
+            "                return false\n"
+            "            }\n"
+            "            if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {\n"
+            "                return false\n"
+            "            }\n"
+            "            return true\n",
+            "button equality",
+        ),
+    ):
+        if text.count(old) != 1:
+            raise RuntimeError(f"NavigationBarResizingNodes: {what} anchor found {text.count(old)} times")
+        text = text.replace(old, new, 1)
+    text = text.rstrip("\n") + "\n\n" + (
+        "/// AorusGram: a screen's node that changes its width where it is (the chat's avatar with the ghost\n"
+        "/// beside it, or without). The bar measures a node when its button changes; a new revision with\n"
+        "/// each new width is that change.\n"
+        "public protocol AorusNavigationBarResizingNode: AnyObject {\n"
+        "    var aorusNavigationBarLayoutRevision: Int { get }\n"
+        "}\n"
+    )
+    content_path.write_text(text, encoding="utf-8")
+
+    button_path = sources / "NavigationButtonComponent.swift"
+    text = button_path.read_text(encoding="utf-8")
+    for old, new, what in (
+        (
+            "    let borrowsNode: Bool\n\n    init(",
+            "    let borrowsNode: Bool\n"
+            "    /// AorusGram: the node's layout revision (`NavigationBarComponent.Button.aorusNodeLayoutRevision`):\n"
+            "    /// a new one measures the node again.\n"
+            "    let aorusNodeLayoutRevision: Int?\n\n    init(",
+            "component revision",
+        ),
+        (
+            "        borrowsNode: Bool = false\n    ) {\n",
+            "        borrowsNode: Bool = false,\n        aorusNodeLayoutRevision: Int? = nil\n    ) {\n",
+            "component init",
+        ),
+        (
+            "        self.borrowsNode = borrowsNode\n    }\n",
+            "        self.borrowsNode = borrowsNode\n        self.aorusNodeLayoutRevision = aorusNodeLayoutRevision\n    }\n",
+            "component init body",
+        ),
+        (
+            "        if lhs.borrowsNode != rhs.borrowsNode {\n            return false\n        }\n        return true\n",
+            "        if lhs.borrowsNode != rhs.borrowsNode {\n            return false\n        }\n"
+            "        if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {\n            return false\n        }\n        return true\n",
+            "component equality",
+        ),
+    ):
+        if text.count(old) != 1:
+            raise RuntimeError(f"NavigationBarResizingNodes: {what} anchor found {text.count(old)} times")
+        text = text.replace(old, new, 1)
+    button_path.write_text(text, encoding="utf-8")
+
+    content_view_path = sources / "NavigationBarContentView.swift"
+    text = content_view_path.read_text(encoding="utf-8")
+    old = "                borrowsNode: self.borrowsNodes\n            )),\n"
+    if text.count(old) != 1:
+        raise RuntimeError(f"NavigationBarResizingNodes: button view anchor found {text.count(old)} times")
+    text = text.replace(old, "                borrowsNode: self.borrowsNodes,\n                aorusNodeLayoutRevision: button.aorusNodeLayoutRevision\n            )),\n", 1)
+    content_view_path.write_text(text, encoding="utf-8")
+
+    item_path = tg / "submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarItemContent.swift"
+    text = item_path.read_text(encoding="utf-8")
+    for old, new, what in (
+        (
+            "    return NavigationBarComponent.Button(\n        id: AnyHashable(ObjectIdentifier(item)),\n",
+            "    var button = NavigationBarComponent.Button(\n        id: AnyHashable(ObjectIdentifier(item)),\n",
+            "item button",
+        ),
+        (
+            "        action: { _ in\n            item.performActionOnTarget()\n        }\n    )\n}\n",
+            "        action: { _ in\n            item.performActionOnTarget()\n        }\n    )\n"
+            "    // AorusGram: a node that changes its width in place is measured again when it does.\n"
+            "    button.aorusNodeLayoutRevision = (item.customDisplayNode as? AorusNavigationBarResizingNode)?.aorusNavigationBarLayoutRevision\n"
+            "    return button\n}\n",
+            "item revision",
+        ),
+    ):
+        if text.count(old) != 1:
+            raise RuntimeError(f"NavigationBarResizingNodes: {what} anchor found {text.count(old)} times")
+        text = text.replace(old, new, 1)
+    item_path.write_text(text, encoding="utf-8")
+    print("NavigationBarResizingNodes: the bar measures a node again when it changes its width")
+
+
+def patch_ghost_expansion_followers(tg: Path) -> None:
+    """The ghost fades with the chat's avatar while the profile opens from the header and closes.
+
+    13.1.1's expansion flies the chat's avatar to the profile on a circle and fades it there, as the
+    profile's photo takes over, and back in as it lands in the chat again. The ghost beside it stays
+    in the chat's bar, which Interface 2.0 keeps above both screens throughout. It was faded out on
+    its own as the expansion began and back in only when the expansion had given the chat back: on
+    closing, the avatar was home and the ghost came a moment later.
+
+    The source now names views that follow its avatar (`aorusCompanionFollowers`), and the expansion
+    gives them the avatar's own opacity wherever it sets it -- frame by frame under a finger, on the
+    same keyframes otherwise -- and leaves them opaque when it ends. After the Interface 2.0 pass,
+    which turns the chat's loan into the local this sets the followers on.
+    """
+    sources = tg / "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources"
+    providing = sources / "NavigationExpansionProviding.swift"
+    text = providing.read_text(encoding="utf-8")
+    if "aorusCompanionFollowers" in text:
+        print("GhostExpansionFollowers: already patched")
+        return
+    old = (
+        "    /// The companion's own content (the chat's avatar node), hidden while the destination's photo stands in for it.\n"
+        "    public let companionView: UIView?\n"
+    )
+    if text.count(old) != 1:
+        raise RuntimeError("GhostExpansionFollowers: companion view anchor not found in NavigationExpansionProviding.swift")
+    text = text.replace(old, old + (
+        "    /// AorusGram: views that fade with the companion's content (the ghost beside the chat's avatar).\n"
+        "    public var aorusCompanionFollowers: [UIView] = []\n"
+    ), 1)
+    providing.write_text(text, encoding="utf-8")
+
+    renderer = sources / "NavigationExpansionRendererImpl.swift"
+    text = renderer.read_text(encoding="utf-8")
+    for old, new, what in (
+        (
+            "        sourceLoan.companionView?.alpha = 0.0\n",
+            "        sourceLoan.companionView?.alpha = 0.0\n"
+            "        for follower in sourceLoan.aorusCompanionFollowers {\n"
+            "            follower.alpha = 0.0\n"
+            "        }\n",
+            "begin hidden",
+        ),
+        (
+            "                companionView.alpha = choreography.frame(ExpansionClock(time: time, isOpening: isOpening), press: sourceLoan.press).companionContent\n",
+            "                companionView.alpha = choreography.frame(ExpansionClock(time: time, isOpening: isOpening), press: sourceLoan.press).companionContent\n"
+            "                for follower in sourceLoan.aorusCompanionFollowers {\n"
+            "                    follower.alpha = companionView.alpha\n"
+            "                }\n",
+            "begin on the circle",
+        ),
+        (
+            "        if self.companionHome != nil {\n            sourceLoan.companionView?.alpha = f.companionContent\n        }\n",
+            "        if self.companionHome != nil {\n            sourceLoan.companionView?.alpha = f.companionContent\n"
+            "            for follower in sourceLoan.aorusCompanionFollowers {\n"
+            "                follower.alpha = f.companionContent\n"
+            "            }\n"
+            "        }\n",
+            "frame",
+        ),
+        (
+            "            add(companionView.layer, \"opacity\", frames.map { number($0.companionContent) })\n",
+            "            add(companionView.layer, \"opacity\", frames.map { number($0.companionContent) })\n"
+            "            for follower in sourceLoan.aorusCompanionFollowers {\n"
+            "                add(follower.layer, \"opacity\", frames.map { number($0.companionContent) })\n"
+            "            }\n",
+            "keyframes",
+        ),
+        (
+            "        self.sourceLoan?.companionView?.alpha = 1.0\n",
+            "        self.sourceLoan?.companionView?.alpha = 1.0\n"
+            "        for follower in self.sourceLoan?.aorusCompanionFollowers ?? [] {\n"
+            "            follower.alpha = 1.0\n"
+            "        }\n",
+            "end",
+        ),
+    ):
+        if text.count(old) != 1:
+            raise RuntimeError(f"GhostExpansionFollowers: renderer {what} anchor found {text.count(old)} times")
+        text = text.replace(old, new, 1)
+    renderer.write_text(text, encoding="utf-8")
+
+    source = tg / "submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift"
+    text = source.read_text(encoding="utf-8")
+    old = "        loan.aorusGlassRisesIn = titleView.glassPillFrame == nil\n        return loan\n"
+    if text.count(old) != 1:
+        raise RuntimeError("GhostExpansionFollowers: the chat's loan anchor not found (after the Interface 2.0 pass)")
+    text = text.replace(old, (
+        "        loan.aorusGlassRisesIn = titleView.glassPillFrame == nil\n"
+        "        // AorusGram: the ghost beside the avatar fades with it.\n"
+        "        loan.aorusCompanionFollowers = (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.expansionFollowers ?? []\n"
+        "        return loan\n"
+    ), 1)
+    source.write_text(text, encoding="utf-8")
+    print("GhostExpansionFollowers: the ghost fades with the chat's avatar through the profile's expansion")
 
 
 def patch_voice_twin_recorder(tg: Path) -> None:
@@ -30553,6 +30821,7 @@ def main() -> None:
     patch_ghost_mode_block_read(tg)
     patch_ghost_mode_stealth_stories(tg)
     patch_per_chat_ghost_mode(tg)
+    patch_navigation_bar_resizing_nodes(tg)
     patch_voice_twin_recorder(tg)
     patch_voice_twin_video_notes(tg)
     patch_voice_twin_calls(tg)
@@ -30592,6 +30861,8 @@ def main() -> None:
     # cornered from the round-button flag that pass inserts, and the section pane goes in behind
     # nodes that pass has to have pointed at a clear fill first.
     patch_interface_v2(tg)
+    # After Interface 2.0, which makes the chat's expansion loan a local to set the followers on.
+    patch_ghost_expansion_followers(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)

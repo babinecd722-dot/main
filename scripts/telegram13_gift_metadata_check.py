@@ -20,8 +20,9 @@ def gift_source(tg):
     end = profiles.index('            public enum DecodingError', start)
     profile = block(profiles, 'enum CodingKeys:') + profiles[start:end]
     profile += block(profiles, 'public init (') + block(profiles, 'public init(from decoder: Decoder)')
+    profile += block(profiles, 'public func withGift(')
     methods = '\n'.join(block(store, marker) for marker in (
-        'public static func key(for gift:', 'private static func dataWithOwner(',
+        'public static func key(for gift:', 'private static func dataWithOwner(', 'public static func unlisted(',
         'public static func addPurchasedGift(', 'public static func wrapper(for stored:'))
     purchase = block(store, 'public static func recordLocalGiftMessage(')
     call = balanced(purchase, purchase.index('addPurchasedGift('))
@@ -84,6 +85,8 @@ public enum GiftModel: Codable {
         var attributes = [Attribute()]
         var resellAmounts: [Int64]?
         var resellForTonOnly = false
+        func withResellAmounts(_ value: [Int64]?) -> UniqueGift { var copy = self; copy.resellAmounts = value; return copy }
+        func withResellForTonOnly(_ value: Bool) -> UniqueGift { var copy = self; copy.resellForTonOnly = value; return copy }
     }
     case generic(Gift), unique(UniqueGift)
     enum CodingKeys: String, CodingKey { case type, value }
@@ -139,6 +142,23 @@ for gift in [generic, unique] { for recipient in [sender, PeerId(2)] { for hidde
     let legacy = try decoder.decode(AorusStoredGift.self, from: JSONSerialization.data(withJSONObject: json))
     expect(legacy.comment == text && legacy.commentEntities.isEmpty && legacy.instanceId == id, "legacy stored gifts migrate without changing identity or content")
 } } } }
+// A collectible bought from resale comes with the seller's listing; it changes hands off sale, and
+// only its owner is offered the transfer.
+let listed = StarGift.unique(StarGift.UniqueGift(id: 12, slug: "gift-12", ownerPeerId: 9, resellAmounts: [100], resellForTonOnly: true))
+for recipient in [sender, PeerId(2)] {
+    let id = AorusFakeGiftsStore.purchase(gift: listed, accountPeerId: sender, recipientPeerId: recipient, text: "", entities: [], hideName: false)!
+    let value = AorusFakeGiftsStore.values.first { $0.instanceId == id }!
+    if case let .unique(stored) = try decoder.decode(StarGift.self, from: value.giftData) {
+        expect(stored.resellAmounts == nil && !stored.resellForTonOnly, "a collectible bought from resale is stored off sale")
+    } else {
+        expect(false, "a collectible is stored as a collectible")
+    }
+    let wrapper = AorusFakeGiftsStore.wrapper(for: value)!
+    if case let .unique(rendered) = wrapper.gift {
+        expect(rendered.resellAmounts == nil, "a local collectible is not on sale on any profile")
+    }
+    expect((wrapper.transferStars != nil) == (recipient == sender), "only the owner is offered the transfer")
+}
 let styled = [MessageTextEntity(range: 0..<5, type: .Spoiler)]
 var manual = AorusStoredGift(giftData: try encoder.encode(unique), senderPeerId: 1, date: 1234, comment: "Hello", commentEntities: styled, showInProfile: true)
 let wrappedManual = AorusFakeGiftsStore.wrapper(for: manual)!

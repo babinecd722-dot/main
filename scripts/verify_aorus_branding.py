@@ -3905,6 +3905,23 @@ def main() -> None:
             "self?.navigationBar?.requestContainerLayout?(transition)",
             "theme: presentationInterfaceState.theme, transition: transition, action:",
         )),
+        # 13.1.1's bar measures a node only when its button changes: the ghost's capsule says when
+        # its width does, or the avatar is left 40 points to the right, half off the screen.
+        ("submodules/TelegramUI/Sources/ChatController.swift", (
+            "final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode {",
+            "self.aorusNavigationBarLayoutRevision += 1",
+        )),
+        ("submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarItemContent.swift", ("button.aorusNodeLayoutRevision = (item.customDisplayNode as? AorusNavigationBarResizingNode)?.aorusNavigationBarLayoutRevision",)),
+        ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponentContent.swift", ("if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {", "button.aorusNodeLayoutRevision = self.aorusNodeLayoutRevision")),
+        ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationButtonComponent.swift", ("if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {",)),
+        ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarContentView.swift", ("aorusNodeLayoutRevision: button.aorusNodeLayoutRevision",)),
+        # The ghost fades with the chat's avatar through the profile's expansion, both ways.
+        ("submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift", ("loan.aorusCompanionFollowers = (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.expansionFollowers ?? []",)),
+        ("submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift", (
+            "follower.alpha = f.companionContent",
+            "add(follower.layer, \"opacity\", frames.map { number($0.companionContent) })",
+            "for follower in self.sourceLoan?.aorusCompanionFollowers ?? [] {",
+        )),
         ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
         ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
         ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
