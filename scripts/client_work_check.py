@@ -13,6 +13,12 @@ from fake_gram_check import STUBS
 from telegram13_list_check import block
 
 
+def annotate_failure(message):
+    if os.environ.get("GITHUB_ACTIONS"):
+        escaped = message[-24000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print("::error title=Local client contract::" + escaped, flush=True)
+
+
 def checked(command):
     result = subprocess.run(command, capture_output=True, text=True)
     if result.stdout:
@@ -20,6 +26,7 @@ def checked(command):
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr, flush=True)
     if result.returncode:
+        annotate_failure(result.stdout + result.stderr)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a") as report:
@@ -296,6 +303,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
+        annotate_failure(traceback.format_exc())
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a") as report:
