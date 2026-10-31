@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import AorusBadge
+import AorusFeatureAccess
 
 // Single entry point called once from AppDelegate before Telegram creates the
 // AccountManager or any authorized/unauthorized network.
@@ -15,6 +16,7 @@ public final class AorusGramBootstrap {
     public func setup(accountPath: String? = nil) {
         guard !didSetup else { return }
         didSetup = true
+        AorusProtectedAccess.installAuthority { AorusLicenseAccess.isAllowed }
 
         // Call-log export was removed. Clean both locations used by earlier builds
         // without delaying launch; current builds never recreate these directories.

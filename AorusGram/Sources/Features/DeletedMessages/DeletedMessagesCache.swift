@@ -375,6 +375,7 @@ final class DeletedMessagesCache {
     /// Returns rows that are either deleted (status=1) OR edited (original_text NOT NULL).
     /// The UI surfaces both — for edits we show current text + 'Оригинал:' line.
     func deletedMessages(accountKey: Int64, peerId: Int64, limit: Int = 200) -> [DeletedMessage] {
+        guard AorusGramConfig.isEnabled(.deletedMessages) else { return [] }
         var results: [DeletedMessage] = []
         queue.sync { [weak self] in
             guard let self, let db = self.db else { return }
@@ -433,6 +434,7 @@ final class DeletedMessagesCache {
 
     /// Total number of items shown in the "Deleted" view: deletions + edits.
     func allDeletedCount(accountKey: Int64) -> Int {
+        guard AorusGramConfig.isEnabled(.deletedMessages) else { return 0 }
         var count = 0
         queue.sync { [weak self] in
             guard let self, let db = self.db else { return }

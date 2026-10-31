@@ -455,10 +455,13 @@ final class AorusRevealTextItem: ListViewItem, ItemListItem {
 /// UIKit owns the complete swipe interaction; the outer ItemList still owns
 /// stable item IDs, grouped insets and insertion/removal animations.
 private final class AorusRevealTextItemNode: ListViewItemNode {
+    private let backgroundNode = ASDisplayNode()
     private lazy var row = AorusSwipeDeleteRow()
 
     init() {
         super.init(layerBacked: false, rotated: false, seeThrough: false)
+        backgroundNode.isLayerBacked = true
+        addSubnode(backgroundNode)
     }
 
     override func didLoad() {
@@ -497,6 +500,11 @@ private final class AorusRevealTextItemNode: ListViewItemNode {
                 guard let self else { return }
                 _ = self.view // ItemList applies on the main queue.
                 let palette = AorusAIPalette.resolve(item.theme)
+                let glass = AorusGlassPane.isEnabled
+                // ItemList discovers ASDisplayNode markers, not UIKit cells.
+                // One marker per row joins this section to its native glass run.
+                self.backgroundNode.backgroundColor = glass ? item.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor : nil
+                self.backgroundNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: size.height)
                 self.row.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: size.height)
                 self.row.overrideUserInterfaceStyle = palette.isDark ? .dark : .light
                 self.row.configure(
@@ -504,11 +512,11 @@ private final class AorusRevealTextItemNode: ListViewItemNode {
                     deleteTitle: item.deleteTitle,
                     font: Font.regular(17.0),
                     foreground: item.action == nil ? palette.label : palette.accent,
-                    fill: palette.elevated,
+                    fill: glass ? .clear : palette.elevated,
                     highlight: item.theme.list.itemHighlightedBackgroundColor,
                     separator: palette.separator,
                     corners: position.maskedCorners,
-                    radius: itemListHasRoundedBlockLayout(params) ? 11.0 : 0.0,
+                    radius: glass ? AorusGlassPane.blockCornerRadius : (itemListHasRoundedBlockLayout(params) ? 11.0 : 0.0),
                     drawsSeparator: position.drawsSeparator,
                     onSelect: item.action,
                     onDelete: item.deleteAction

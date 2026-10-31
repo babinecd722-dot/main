@@ -20,12 +20,14 @@ final class AorusGroupedTableView: UITableView {
         didSet { setNeedsLayout() }
     }
     private var paneContainer: UIView?
+    private var contentBackground: UIView?
     private var panes: [UIView & AorusListGlassPane] = []
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let appearance = nativePanes else {
-            if let container = paneContainer, backgroundView === container { backgroundView = nil }
+            if let container = paneContainer, backgroundView === container { backgroundView = contentBackground }
+            contentBackground = nil
             paneContainer = nil
             panes.removeAll()
             return
@@ -35,12 +37,17 @@ final class AorusGroupedTableView: UITableView {
             container = current
         } else {
             container = UIView(frame: bounds)
-            container.isUserInteractionEnabled = false
+            contentBackground = backgroundView
+            container.isUserInteractionEnabled = contentBackground?.isUserInteractionEnabled ?? false
             container.clipsToBounds = true
+            if let contentBackground {
+                container.addSubview(contentBackground)
+            }
             paneContainer = container
             backgroundView = container
         }
         container.frame = bounds
+        contentBackground?.frame = container.bounds
 
         // UIKit owns section bounds and cell insets, including automatic row
         // heights and safe areas. Keep full section ends, so scrolling through
@@ -52,6 +59,12 @@ final class AorusGroupedTableView: UITableView {
             // The same invisible marker native ItemList rows use: the pane
             // supplies the material; a row must not paint an opaque plate over it.
             cell.backgroundColor = appearance.cardColor
+            // A grouped UIKit cell can supply its own material/stroke on recent
+            // iOS. The section pane below is the sole owner of the glass.
+            cell.backgroundView = nil
+            if #available(iOS 14.0, *) {
+                cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+            }
             sections[index.section] = convert(cell.bounds, from: cell)
         }
         var runs: [CGRect] = []
@@ -74,7 +87,7 @@ final class AorusGroupedTableView: UITableView {
                 pane = appearance.makePane()
                 pane.isUserInteractionEnabled = false
                 panes.append(pane)
-                container.addSubview(pane)
+                container.insertSubview(pane, at: 0)
             }
             pane.frame = convert(run, to: container)
             pane.updateListPane(size: pane.bounds.size, cornerRadius: appearance.cornerRadius, isDark: appearance.isDark, isVisible: !appearance.isWhitePage)

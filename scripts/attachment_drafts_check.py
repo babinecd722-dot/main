@@ -272,7 +272,7 @@ def geometry_fixture_source(tg):
     composer = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift').read_text()
     strip = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusAttachmentDraftStrip.swift').read_text()
     start = composer.index('        var textFieldInsets = self.textFieldInsets(metrics: metrics, bottomInset: bottomInset)\n', composer.index('        var effectiveActionButtonsSize = '))
-    glass = block(composer, '        if !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && mediaRecordingState == nil && !AorusOldInterface.isEnabled {')
+    glass = block(composer, '        if AorusProtectedAccess.isAllowed && mediaRecordingState == nil && !AorusOldInterface.isEnabled {')
     end = composer.index(glass, start) + len(glass)
     segments = [(start, composer[start:end])]
     for marker in ('        let baseWidth = width - leftInset - leftMenuInset - rightInset - rightSlowModeInset', '        let aorusAttachmentHeight: CGFloat =', '        let textInputWidth = baseWidth - textFieldInsets.left - textFieldInsets.right'):
@@ -280,7 +280,9 @@ def geometry_fixture_source(tg):
         segments.append((position, composer[position:composer.index('\n', position)]))
     body = '\n'.join(text for _, text in sorted(segments))
     height = block(strip, '    public static func height(width: CGFloat)')
-    return '''import Foundation
+    entitlement = (tg / 'submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift').read_text()
+    return entitlement + '''
+import Foundation
 struct UIEdgeInsets { var top: CGFloat = 0; var left: CGFloat = 0; var bottom: CGFloat = 0; var right: CGFloat = 0 }
 enum AorusOldInterface { static var isEnabled = false }
 enum AorusAttachmentDraftStrip {
@@ -323,9 +325,12 @@ let defaults = UserDefaults.standard, key = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b0
 let previous = defaults.object(forKey: key)
 defer { if let previous { defaults.set(previous, forKey: key) } else { defaults.removeObject(forKey: key) } }
 let composer = Composer()
+var geometryLicensed = false
+AorusProtectedAccess.installAuthority { geometryLicensed }
 for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] { for sendWidth: CGFloat in [39, 88, 120] {
     AorusOldInterface.isEnabled = old
     defaults.set(!glass, forKey: key)
+    geometryLicensed = glass
     let draft: Draft? = count == 0 ? nil : Draft(items: Array(0..<count))
     let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls, sendWidth: sendWidth)
     expect(inputWidth > 0 && inputWidth < width, "native controls leave a usable input field")

@@ -33,6 +33,15 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         cell.backgroundColor = .purple
+        // Reproduce UIKit's independent per-cell material/stroke under a
+        // section pane. The adapter must remove this second renderer.
+        if #available(iOS 14.0, *) {
+            var background = UIBackgroundConfiguration.listGroupedCell()
+            background.backgroundColor = .purple
+            background.strokeColor = .yellow
+            background.strokeWidth = 2
+            cell.backgroundConfiguration = background
+        }
         return cell
     }
 }
@@ -114,6 +123,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     let whiteTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
     let groups = AorusGroupedTableView(frame: CGRect(x: 0, y: 80, width: 320, height: 200), style: .insetGrouped)
     let baseline = UITableView(frame: CGRect(x: 0, y: 300, width: 320, height: 200), style: .insetGrouped)
+    let emptyBackdrop = UIView()
+    groups.backgroundView = emptyBackdrop
     let dataSource = InterfaceGroupDataSource()
     for table in [groups, baseline] {
         table.dataSource = dataSource
@@ -128,13 +139,17 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         let path = IndexPath(row: index, section: 0)
         guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { preconditionFailure("grouped fixture row missing") }
         expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
+        if #available(iOS 14.0, *) {
+            expect(cell.backgroundConfiguration?.strokeWidth == 0 && cell.backgroundConfiguration?.backgroundEffect == nil, "section glass is the sole material/stroke owner")
+        }
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }
     func glassPane() -> InterfaceNativePane {
         guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { preconditionFailure("native section pane missing") }
         return pane
     }
-    expect(groups.backgroundView?.subviews.count == 1, "one native glass pane per UIKit section")
+    expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 1, "one native glass pane per UIKit section")
+    expect(emptyBackdrop.superview === groups.backgroundView, "glass never removes the plugin empty-state view")
     expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius, "native ItemList tint and authoritative corner radius")
     expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
     dataSource.count = 1
@@ -158,7 +173,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     InterfaceGlassPane.isEnabled = false
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
-    expect(groups.nativePanes == nil && groups.backgroundView == nil, "ordinary interface returns to UIKit's own grouped drawing")
+    expect(groups.nativePanes == nil && groups.backgroundView === emptyBackdrop, "ordinary interface restores the original background and UIKit drawing")
     InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
     for size in [CGSize(width: 90, height: 30), CGSize(width: 180, height: 52), CGSize(width: 70, height: 44)] {

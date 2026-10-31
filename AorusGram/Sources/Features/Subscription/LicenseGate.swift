@@ -596,7 +596,14 @@ final class LicenseGate {
         guard lockSweepTimer == nil else { return }
         lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             let ud = UserDefaults.standard
-            guard ud.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else { return }
+            guard !AorusLicenseAccess.canUnlock else { return }
+            // A view inspector may hide a window without changing entitlement.
+            // Restore the cover without disturbing purchase/activation navigation.
+            if self.lockKind != .none, let window = self.lockWindow {
+                window.alpha = 1.0
+                window.isUserInteractionEnabled = true
+                if window.isHidden { window.isHidden = false }
+            }
             var backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) ?? [:]
             var changed = false
             for (key, _) in self.aorusBooleanFlags(in: ud) {

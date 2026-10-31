@@ -178,7 +178,7 @@ print("Local Stars top-up ledger: \(checks) checks and 100 concurrent credits pa
 def geometry(tg):
     menu = (tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift").read_text()
     assert "// AorusGram: edit locally v3" in menu
-    assert '!aorusIsWallPost && UserDefaults.standard.bool(forKey: "aorusgram_feature_edit_locally")' in menu, "Wall/local-edit patch composition is missing"
+    assert '!aorusIsWallPost && AorusProtectedAccess.boolPreference("aorusgram_feature_edit_locally")' in menu, "Wall/local-edit entitlement composition is missing"
     base = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
     parent = (base / "PeerInfoHeaderEditingContentNode.swift").read_text()
     start = parent.index("            let aorusLeftInset =")

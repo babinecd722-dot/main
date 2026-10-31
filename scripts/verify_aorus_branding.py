@@ -277,7 +277,7 @@ def main() -> None:
     else:
         multipart_text = multipart_fetch.read_text(encoding="utf-8")
         accelerator_line = (
-            'self.parallelParts = UserDefaults.standard.bool(forKey: '
+            'self.parallelParts = AorusProtectedAccess.boolPreference('
             '"aorusgram_feature_download_accel") ? 16 : 8'
         )
         if multipart_text.count(accelerator_line) != 1:
@@ -2589,7 +2589,7 @@ def main() -> None:
     for marker in (
         "// AorusGram: built-in device microphone preference",
         "aorusApplyDeviceMicrophone(for type: ManagedAudioSessionType)",
-        'UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")',
+        'AorusProtectedAccess.boolPreference("aorusgram_device_microphone")',
         "self.aorusApplyDeviceMicrophone(for: type)",
         "DeviceMicrophone: restored Telegram input routing",
     ):
@@ -2614,7 +2614,7 @@ def main() -> None:
         recorder = tg / relative_path
         recorder_text = recorder.read_text(encoding="utf-8") if recorder.is_file() else ""
         for marker in (
-            'UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")',
+            'AorusProtectedAccess.boolPreference("aorusgram_device_microphone")',
             ".portType == .builtInMic",
             "session.setPreferredInput(builtInMicrophone)",
             "session.setPreferredInput(nil)",
@@ -2881,9 +2881,9 @@ def main() -> None:
     tab_node = tg / "submodules" / "TabBarUI" / "Sources" / "TabBarContollerNode.swift"
     tab_node_text = tab_node.read_text(encoding="utf-8") if tab_node.is_file() else ""
     for marker in (
-        'sidePlacement != nil || UserDefaults.standard.bool(forKey: "aorusgram_hide_search_button") ? nil',
-        'hideTitles: UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")',
-        'compactPanel: UserDefaults.standard.bool(forKey: "aorusgram_compact_tab_bar")',
+        'sidePlacement != nil || AorusProtectedAccess.boolPreference("aorusgram_hide_search_button") ? nil',
+        'hideTitles: AorusProtectedAccess.boolPreference("aorusgram_hide_tab_titles")',
+        'compactPanel: AorusProtectedAccess.boolPreference("aorusgram_compact_tab_bar")',
     ):
         if marker not in tab_node_text:
             err.append(f"TabBarVisibility: tab composition is missing {marker}")
@@ -3927,9 +3927,9 @@ def main() -> None:
             "add(follower.layer, \"opacity\", frames.map { number($0.companionContent) })",
             "for follower in self.sourceLoan?.aorusCompanionFollowers ?? [] {",
         )),
-        ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
-        ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
-        ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
         # AorusGram's own screens follow the app's theme as it changes, from the shared context the
         # app hands AorusLiveTheme as its first account context is made (docs/appearance.md).
         ("submodules/TelegramUI/Sources/AccountContext.swift", ("AorusLiveTheme.attach(sharedContext)",)),

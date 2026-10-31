@@ -140,6 +140,10 @@ def main():
                  "submodules/TelegramUI/Components/Settings/CollectibleItemInfoScreen/Sources/CollectibleItemInfoScreen.swift"]
         before = {p: (tg / p).read_bytes() for p in paths}
         patch(tg)
+        # Compare the completed patch composition, including the final runtime
+        # entitlement boundary, rather than restoring an unguarded store.
+        from aorus_feature_access import patch as patch_access
+        patch_access(tg)
         assert all((tg / p).read_bytes() == value for p, value in before.items()), "Patcher must be replay-stable"
         checked([args.swiftc, "-frontend", "-parse"] + [str(tg / p) for p in paths])
         picker = (tg / paths[1]).read_text()

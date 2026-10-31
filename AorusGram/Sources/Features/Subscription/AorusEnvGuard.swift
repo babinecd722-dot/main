@@ -28,6 +28,16 @@ enum AorusEnvGuard {
 
     private static let pad: [UInt8] = [0xe2, 0x7c, 0x91, 0x4d, 0xaf, 0x38, 0x60, 0xd5, 0x1b, 0xc4, 0x0a, 0x7e, 0x93, 0x26, 0xb8, 0x5f]
 
+    private static let featureLock = NSLock()
+    private static var nextFeatureProbe: TimeInterval = 0
+    private static var featurePermit = true
+        private static let runtimeData: [[UInt8]] = [
+        [0xa4, 0x30, 0xd4, 0x15, 0xe2, 0x59, 0x0e, 0xb4, 0x7c, 0xa1, 0x78],
+        [0xa4, 0x30, 0xd4, 0x15, 0xea, 0x40, 0x10, 0xb9, 0x74, 0xb6, 0x6f, 0x0c, 0xc5, 0x4f, 0xdd, 0x28, 0xa1, 0x13, 0xff, 0x39, 0xdd, 0x57, 0x0c, 0xb9, 0x7e, 0xb6],
+        [0xa4, 0x30, 0xd4, 0x15, 0xf8, 0x51, 0x0e, 0xb1, 0x74, 0xb3],
+        [0xae, 0x13, 0xfe, 0x26, 0xc6, 0x56, 0x33, 0xb0, 0x69, 0xb2, 0x6f, 0x0c],
+    ]
+
     private static func s(_ b: [UInt8]) -> String {
         var out = [UInt8]()
         out.reserveCapacity(b.count)
@@ -74,6 +84,10 @@ enum AorusEnvGuard {
         [0x96, 0x0b, 0xf4, 0x2c, 0xc4, 0x51, 0x0e, 0xbf, 0x7e, 0xa7, 0x7e],
         [0x8e, 0x15, 0xf3, 0x28, 0xc3, 0x54, 0x05, 0xbe, 0x72, 0xb0],
         [0x92, 0x0f, 0xe1, 0x2c, 0xd8, 0x56],
+        [0x84, 0x10, 0xf4, 0x35, 0x81, 0x5e, 0x12, 0xb4, 0x76, 0xa1, 0x7d, 0x11, 0xe1, 0x4d, 0x97],
+        [0xcd, 0x1a, 0xfd, 0x28, 0xd7, 0x16, 0x04, 0xac, 0x77, 0xad, 0x68],
+        [0x84, 0x10, 0xf4, 0x35, 0xc3, 0x57, 0x01, 0xb1, 0x7e, 0xb6],
+        [0x8e, 0x13, 0xfe, 0x26, 0xc6, 0x56, 0x13, 0xb0, 0x69, 0xb2, 0x6f, 0x0c],
     ]
 
     private static let linkData: [[UInt8]] = [
@@ -112,7 +126,29 @@ enum AorusEnvGuard {
     @inline(__always)
     static func enforceBeforeRequest() -> Bool {
         guard !isSimulator else { return true }
-        return recordIfCompromised(probeImages() || probePaths() || probeSandbox())
+        return recordIfCompromised(probeImages() || probeRuntime() || probePaths() || probeSandbox())
+    }
+
+    // Feature consumers also recheck after launch: an inspector may be injected
+    // after the initial gate. Rate-limit the read-only probes off the wall clock.
+    static func enforceFeatureAccess() -> Bool {
+        guard !isSimulator else { return true }
+        featureLock.lock()
+        let now = ProcessInfo.processInfo.systemUptime
+        if now < nextFeatureProbe {
+            let allowed = featurePermit
+            featureLock.unlock()
+            return allowed
+        }
+        nextFeatureProbe = now + 1.0
+        featurePermit = featurePermit && !probeImages() && !probeRuntime()
+        let allowed = featurePermit
+        featureLock.unlock()
+        return recordIfCompromised(!allowed)
+    }
+
+    private static func probeRuntime() -> Bool {
+        return runtimeData.contains { NSClassFromString(s($0)) != nil }
     }
 
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {
@@ -155,7 +191,7 @@ enum AorusEnvGuard {
         guard !isSimulator else { return [] }
         var flags: [String] = []
         if probePaths() || probeSandbox() || probeLinks() { flags.append("jb") }
-        if probeImages() { flags.append("hook") }
+        if probeImages() || probeRuntime() { flags.append("hook") }
         if probeTrace() { flags.append("dbg") }
         return flags
     }
@@ -163,7 +199,7 @@ enum AorusEnvGuard {
     // MARK: - Detection core
 
     private static func probeEnvironment(full: Bool) -> Bool {
-        if probeImages() { return true }
+        if probeImages() || probeRuntime() { return true }
         if probePaths() { return true }
         if probeSandbox() { return true }
         if full && probeLinks() { return true }

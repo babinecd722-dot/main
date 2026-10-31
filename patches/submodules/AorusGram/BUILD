@@ -64,6 +64,7 @@ swift_library(
         ":AorusVideoMaskAssets",
     ],
     deps = [
+        "//submodules/AorusFeatureAccess:AorusFeatureAccess",
         ":LibXray",
         "//submodules/AorusVoiceDSP:AorusVoiceDSP",
         ":LibXraySystemLibraries",

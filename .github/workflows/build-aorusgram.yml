@@ -962,6 +962,10 @@ jobs:
           mkdir -p $TG/submodules/AorusBadge
           cp -r $PATCHES/submodules/AorusBadge/. $TG/submodules/AorusBadge/
 
+          # Foundation-only entitlement bridge, also consumed below TelegramCore.
+          mkdir -p $TG/submodules/AorusFeatureAccess
+          cp -r $PATCHES/submodules/AorusFeatureAccess/. $TG/submodules/AorusFeatureAccess/
+
           # 1c. Copy AorusMaskPicker module (mask strip shown inside calls and round videos).
           # Leaf module, UIKit only: the call screen sits far below AorusGramUI and must not
           # depend on the settings UI just to draw a row of thumbnails.
@@ -1303,6 +1307,9 @@ jobs:
       - name: Telegram 13 native compatibility preflight
         run: python3 aorusgram/scripts/telegram13_check.py telegram-ios
 
+      - name: Feature entitlement bypass regression
+        run: python3 aorusgram/scripts/feature_access_check.py aorusgram --telegram-source telegram-ios
+
       - name: Native voice capture integration preflight
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram --telegram-source telegram-ios
 
@@ -1365,6 +1372,11 @@ jobs:
       # own check then runs as Make.py will run it.
       - name: Postbox import check (AorusGram's Postbox and TelegramApi users listed)
         run: python3 aorusgram/scripts/postbox_allowlist.py telegram-ios --pristine telegram-ios-pristine
+
+      # Replay tests may run individual source patchers; audit their final
+      # composition without silently repairing an unguarded tree.
+      - name: Final entitlement boundary audit
+        run: python3 aorusgram/scripts/feature_access_check.py aorusgram --telegram-source telegram-ios --audit-only
 
       - name: Install Bazel
         run: brew install bazel 2>/dev/null || true

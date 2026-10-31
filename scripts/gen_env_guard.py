@@ -41,7 +41,9 @@ MARKERS = [
     "substrate", "substitute", "libhooker", "frida", "cynject",
     "cycript", "rocketbootstrap", "shadow.dylib", "tweakinject",
     "libellekit", "pspawn",
+    "flex.framework/", "/flex.dylib", "flexloader", "lookinserver",
 ]
+RUNTIME_CLASSES = ["FLEXManager", "FLEXExplorerViewController", "FLEXWindow", "LookinServer"]
 SYMLINKS = ["/Applications", "/Library/Ringtones", "/Library/Wallpaper", "/usr/share", "/var/stash"]
 SANDBOX_PREFIXES = ["/private/.age_", "/.age_"]
 PTRACE = "ptrace"
@@ -93,6 +95,11 @@ enum AorusEnvGuard {{
 
     private static let pad: [UInt8] = [{pad}]
 
+    private static let featureLock = NSLock()
+    private static var nextFeatureProbe: TimeInterval = 0
+    private static var featurePermit = true
+    {arr("runtimeData", RUNTIME_CLASSES)}
+
     private static func s(_ b: [UInt8]) -> String {{
         var out = [UInt8]()
         out.reserveCapacity(b.count)
@@ -131,7 +138,29 @@ enum AorusEnvGuard {{
     @inline(__always)
     static func enforceBeforeRequest() -> Bool {{
         guard !isSimulator else {{ return true }}
-        return recordIfCompromised(probeImages() || probePaths() || probeSandbox())
+        return recordIfCompromised(probeImages() || probeRuntime() || probePaths() || probeSandbox())
+    }}
+
+    // Feature consumers also recheck after launch: an inspector may be injected
+    // after the initial gate. Rate-limit the read-only probes off the wall clock.
+    static func enforceFeatureAccess() -> Bool {{
+        guard !isSimulator else {{ return true }}
+        featureLock.lock()
+        let now = ProcessInfo.processInfo.systemUptime
+        if now < nextFeatureProbe {{
+            let allowed = featurePermit
+            featureLock.unlock()
+            return allowed
+        }}
+        nextFeatureProbe = now + 1.0
+        featurePermit = featurePermit && !probeImages() && !probeRuntime()
+        let allowed = featurePermit
+        featureLock.unlock()
+        return recordIfCompromised(!allowed)
+    }}
+
+    private static func probeRuntime() -> Bool {{
+        return runtimeData.contains {{ NSClassFromString(s($0)) != nil }}
     }}
 
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {{
@@ -174,7 +203,7 @@ enum AorusEnvGuard {{
         guard !isSimulator else {{ return [] }}
         var flags: [String] = []
         if probePaths() || probeSandbox() || probeLinks() {{ flags.append("jb") }}
-        if probeImages() {{ flags.append("hook") }}
+        if probeImages() || probeRuntime() {{ flags.append("hook") }}
         if probeTrace() {{ flags.append("dbg") }}
         return flags
     }}
@@ -182,7 +211,7 @@ enum AorusEnvGuard {{
     // MARK: - Detection core
 
     private static func probeEnvironment(full: Bool) -> Bool {{
-        if probeImages() {{ return true }}
+        if probeImages() || probeRuntime() {{ return true }}
         if probePaths() {{ return true }}
         if probeSandbox() {{ return true }}
         if full && probeLinks() {{ return true }}

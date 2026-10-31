@@ -31126,6 +31126,10 @@ def main() -> None:
     from aorus_telegram13 import patch_camera_selection, patch_bazel9_imports
     patch_camera_selection(tg)
     patch_bazel9_imports(tg)
+    # Last, including after copy-protection/ghost/local-edit generators: a UI
+    # cover and a mutable defaults mirror are never a feature authorization.
+    from aorus_feature_access import patch as patch_feature_access
+    patch_feature_access(tg)
 
 
 if __name__ == "__main__":

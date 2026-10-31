@@ -58,6 +58,9 @@ final class AorusSwipeDeleteRow: UIView, UITableViewDataSource, UITableViewDeleg
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        if #available(iOS 14.0, *) {
+            cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+        }
         cell.backgroundColor = fill
         cell.textLabel?.text = title
         cell.textLabel?.font = font
