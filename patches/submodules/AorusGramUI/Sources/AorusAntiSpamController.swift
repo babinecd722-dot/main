@@ -209,11 +209,11 @@ private enum ASEntry: ItemListNodeEntry {
         case let .blockedEmpty(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .blockedPeer(_, _, peerId, name):
-            return ASRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.unblock(peerId) })
+            return AorusRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.unblock(peerId) })
         case let .keywordsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .keyword(_, _, word):
-            return ASRevealTextItem(theme: presentationData.theme, title: word, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeKeyword(word) })
+            return AorusRevealTextItem(theme: presentationData.theme, title: word, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeKeyword(word) })
         case let .keywordInput(_, placeholder, value):
             return ASKeywordInputItem(theme: presentationData.theme, text: value, placeholder: placeholder, sectionId: section, textUpdated: { args.setNewKeyword($0) }, action: { args.commitNewKeyword() })
         case let .keywordsInfo(_, text):
@@ -221,7 +221,7 @@ private enum ASEntry: ItemListNodeEntry {
         case let .exceptionsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .exceptionPeer(_, _, peerId, name):
-            return ASRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeException(peerId) })
+            return AorusRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeException(peerId) })
         case let .addException(_, text):
             return ItemListActionItem(presentationData: presentationData, title: text, kind: .neutral, alignment: .natural, sectionId: section, style: .blocks, action: { args.addException() })
         case let .exceptionsInfo(_, text):
@@ -396,171 +396,6 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
 
                 self.applyItem(item)
                 self.layoutTextField()
-            })
-        }
-    }
-}
-
-private final class ASRevealTextItem: ListViewItem, ItemListItem {
-    let theme: PresentationTheme
-    let title: String
-    let deleteTitle: String
-    let sectionId: ItemListSectionId
-    let requestsNoInset: Bool = false
-    let deleteAction: () -> Void
-
-    init(theme: PresentationTheme, title: String, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: @escaping () -> Void) {
-        self.theme = theme
-        self.title = title
-        self.deleteTitle = deleteTitle
-        self.sectionId = sectionId
-        self.deleteAction = deleteAction
-    }
-
-    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void,
-                                 params: ListViewItemLayoutParams,
-                                 synchronousLoads: Bool,
-                                 neighbors: ListViewItemNeighbors,
-                                 completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        async {
-            let node = ASRevealTextItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            Queue.mainQueue().async {
-                completion(node, { return (nil, { _ in apply() }) })
-            }
-        }
-    }
-
-    func updateNode(async: @escaping (@escaping () -> Void) -> Void,
-                    node: @escaping () -> ListViewItemNode,
-                    params: ListViewItemLayoutParams,
-                    neighbors: ListViewItemNeighbors,
-                    animation: ListViewItemUpdateAnimation,
-                    completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        Queue.mainQueue().async {
-            if let nodeValue = node() as? ASRevealTextItemNode {
-                let makeLayout = nodeValue.asyncLayout()
-                async {
-                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-                    Queue.mainQueue().async { completion(layout, { _ in apply() }) }
-                }
-            }
-        }
-    }
-}
-
-private final class ASRevealTextItemNode: ItemListRevealOptionsItemNode {
-    private let backgroundNode = ASDisplayNode()
-    private let topStripeNode = ASDisplayNode()
-    private let bottomStripeNode = ASDisplayNode()
-    private let maskNode = ASImageNode()
-    private weak var titleLabel: UILabel?
-    private var item: ASRevealTextItem?
-    private var layoutParams: ListViewItemLayoutParams?
-
-    init() {
-        backgroundNode.isLayerBacked = true
-        topStripeNode.isLayerBacked = true
-        bottomStripeNode.isLayerBacked = true
-        super.init(layerBacked: false, rotated: false, seeThrough: false)
-        addSubnode(backgroundNode)
-        addSubnode(topStripeNode)
-        addSubnode(bottomStripeNode)
-        addSubnode(maskNode)
-    }
-
-    override func didLoad() {
-        super.didLoad()
-        let title = UILabel()
-        title.numberOfLines = 1
-        title.adjustsFontSizeToFitWidth = true
-        title.minimumScaleFactor = 0.75
-        view.addSubview(title)
-        titleLabel = title
-        if let item {
-            applyItem(item)
-        }
-        layoutText()
-    }
-
-    private func applyItem(_ item: ASRevealTextItem) {
-        titleLabel?.text = item.title
-        titleLabel?.textColor = item.theme.list.itemPrimaryTextColor
-        titleLabel?.font = Font.regular(17.0)
-    }
-
-    private func layoutText() {
-        guard let params = layoutParams else { return }
-        let offset = self.revealOffset
-        let left = params.leftInset + 16.0
-        titleLabel?.frame = CGRect(x: offset + left, y: 12.0, width: params.width - left - params.rightInset - 16.0, height: 24.0)
-    }
-
-    override func updateRevealOffset(offset: CGFloat, transition: ContainedViewLayoutTransition) {
-        super.updateRevealOffset(offset: offset, transition: transition)
-        layoutText()
-    }
-
-    override func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {
-        setRevealOptionsOpened(false, animated: true)
-        revealOptionsInteractivelyClosed()
-        item?.deleteAction()
-    }
-
-    func asyncLayout() -> (ASRevealTextItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
-            let contentSize = CGSize(width: params.width, height: 48.0)
-            let insets = itemListNeighborsGroupedInsets(neighbors, params)
-            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
-            return (layout, { [weak self] in
-                guard let self else { return }
-                self.item = item
-                self.layoutParams = params
-                self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
-                self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-                self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-
-                let hasCorners = itemListHasRoundedBlockLayout(params)
-                var topCorners = false
-                var bottomCorners = false
-                switch neighbors.top {
-                case .sameSection(false):
-                    self.topStripeNode.isHidden = true
-                default:
-                    topCorners = true
-                    self.topStripeNode.isHidden = hasCorners
-                }
-                let bottomInset: CGFloat
-                let bottomOffset: CGFloat
-                switch neighbors.bottom {
-                case .sameSection(false):
-                    bottomInset = params.leftInset + 16.0
-                    bottomOffset = -UIScreenPixel
-                    self.bottomStripeNode.isHidden = false
-                default:
-                    bottomInset = 0.0
-                    bottomOffset = 0.0
-                    bottomCorners = true
-                    self.bottomStripeNode.isHidden = hasCorners
-                }
-
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
-                let bgY = -min(insets.top, UIScreenPixel)
-                let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
-                self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
-                self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
-
-                self.applyItem(item)
-                self.layoutText()
-                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
-                self.updateRevealOptionsSeparatorNodes(top: self.topStripeNode, bottom: self.bottomStripeNode, topIsHidden: self.topStripeNode.isHidden, bottomIsHidden: self.bottomStripeNode.isHidden, topHiddenByPreviousRevealOptions: neighbors.topHasActiveRevealOptions, bottomHiddenByNextRevealOptions: neighbors.bottomHasActiveRevealOptions)
-                let trashIcon = UIImage(systemName: "trash.fill")
-                let revealIcon: ItemListRevealOptionIcon = trashIcon.map { .image(image: $0) } ?? .none
-                self.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.deleteTitle, icon: revealIcon, color: item.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor)]))
             })
         }
     }

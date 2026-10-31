@@ -96,7 +96,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         glyph.tintColor = accent
         titleLabel.textColor = theme.list.itemPrimaryTextColor
         subtitleLabel.textColor = theme.list.itemSecondaryTextColor
-        field.backgroundColor = theme.list.itemBlocksBackgroundColor
+        field.backgroundColor = aorusUIKitBlockColor(theme)
         field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
         textView.textColor = theme.list.itemPrimaryTextColor
         textView.tintColor = accent
@@ -136,7 +136,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
 
-        field.backgroundColor = theme.list.itemBlocksBackgroundColor
+        field.backgroundColor = aorusUIKitBlockColor(theme)
         field.layer.cornerRadius = 22
         field.layer.cornerCurve = .continuous
         field.layer.borderWidth = 1

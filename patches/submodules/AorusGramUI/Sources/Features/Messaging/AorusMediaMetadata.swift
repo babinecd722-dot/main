@@ -475,7 +475,7 @@ public enum AorusMediaMetadata {
 }
 
 private final class AorusMediaMetadataViewController: UIViewController, UITableViewDataSource {
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private let isRu: Bool
     private var sections: [AorusMetadataSection] = []
 

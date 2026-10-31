@@ -24107,6 +24107,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
        ('aorusgram_app_badge') and reloads live when AorusGramUI posts the
        'aorusgram_app_badge_changed' notification. 'off' → nil image → hidden.
     """
+    from aorus_personal_badge import patch_personal_badge
+    patch_personal_badge(tg)
+
     # --- 1. Alternative imagesets ---------------------------------------------
     for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):
         _install_badge_imageset(tg, asset)
@@ -24139,6 +24142,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
         '        if choice == "off" {\n'
         "            return nil\n"
         "        }\n"
+        '        if choice == "personal" {\n'
+        '            return AorusPersonalBadge.image()\n'
+        '        }\n'
         '        if choice == "atunnel" {\n'
         '            return UIImage(bundleImageName: "Components/AppBadgeATunnel")\n'
         "        }\n"
@@ -24162,6 +24168,17 @@ def patch_app_badge_switcher(tg: Path) -> None:
     )
     if "aorusReloadAppBadge" not in t and methods_anchor in t:
         t = t.replace(methods_anchor, methods_new + methods_anchor, 1)
+
+    # A prepared checkout may already carry the earlier switcher. Add the new
+    # choice there too; a repeated setup must not silently keep the old picker.
+    if '        if choice == "personal" {' not in t:
+        personal_anchor = '        if choice == "atunnel" {\n'
+        if personal_anchor not in t:
+            raise RuntimeError("AppBadgeSwitcher: personal badge chooser anchor missing")
+        t = t.replace(personal_anchor,
+                      '        if choice == "personal" {\n'
+                      '            return AorusPersonalBadge.image()\n'
+                      '        }\n' + personal_anchor, 1)
 
     # (c2) The layout pass places the badge the same way.
     layout_frame = "                    self.badgeView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0), y: 5.0), size: image.size)\n"

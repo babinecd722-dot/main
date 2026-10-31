@@ -402,7 +402,7 @@ final class AorusRevealTextItem: ListViewItem, ItemListItem {
     let requestsNoInset: Bool = false
     let deleteAction: () -> Void
     let action: (() -> Void)?
-    var selectable: Bool { return self.action != nil }
+    var selectable: Bool { return false }
 
     func selected(listView: ListView) {
         listView.clearHighlightAnimated(true)
@@ -452,28 +452,18 @@ final class AorusRevealTextItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class AorusRevealTextItemNode: ItemListRevealOptionsItemNode {
-    private let backgroundNode = ASDisplayNode()
-    private let topStripeNode = ASDisplayNode()
-    private let bottomStripeNode = ASDisplayNode()
-    private let maskNode = ASImageNode()
-    private weak var titleLabel: UILabel?
-    private var item: AorusRevealTextItem?
-    private var layoutParams: ListViewItemLayoutParams?
+/// UIKit owns the complete swipe interaction; the outer ItemList still owns
+/// stable item IDs, grouped insets and insertion/removal animations.
+private final class AorusRevealTextItemNode: ListViewItemNode {
+    private lazy var row = AorusSwipeDeleteRow()
 
     init() {
-        backgroundNode.isLayerBacked = true
-        topStripeNode.isLayerBacked = true
-        bottomStripeNode.isLayerBacked = true
         super.init(layerBacked: false, rotated: false, seeThrough: false)
-        addSubnode(backgroundNode)
-        addSubnode(topStripeNode)
-        addSubnode(bottomStripeNode)
-        addSubnode(maskNode)
     }
 
-    override func updateAnimationDuration() -> Double? {
-        return 0.18
+    override func didLoad() {
+        super.didLoad()
+        view.addSubview(row)
     }
 
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
@@ -488,96 +478,35 @@ private final class AorusRevealTextItemNode: ItemListRevealOptionsItemNode {
         self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.16, removeOnCompletion: false)
     }
 
-    override func didLoad() {
-        super.didLoad()
-        let title = UILabel()
-        title.numberOfLines = 1
-        title.adjustsFontSizeToFitWidth = true
-        title.minimumScaleFactor = 0.75
-        view.addSubview(title)
-        titleLabel = title
-        if let item {
-            applyItem(item)
-        }
-        layoutText()
-    }
-
-    private func applyItem(_ item: AorusRevealTextItem) {
-        titleLabel?.text = item.title
-        titleLabel?.textColor = item.action == nil ? item.theme.list.itemPrimaryTextColor : item.theme.list.itemAccentColor
-        titleLabel?.font = Font.regular(17.0)
-    }
-
-    private func layoutText() {
-        guard let params = layoutParams else { return }
-        let offset = self.revealOffset
-        let left = params.leftInset + 16.0
-        titleLabel?.frame = CGRect(x: offset + left, y: 12.0, width: params.width - left - params.rightInset - 16.0, height: 24.0)
-    }
-
-    override func updateRevealOffset(offset: CGFloat, transition: ContainedViewLayoutTransition) {
-        super.updateRevealOffset(offset: offset, transition: transition)
-        layoutText()
-    }
-
-    override func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {
-        setRevealOptionsOpened(false, animated: true)
-        revealOptionsInteractivelyClosed()
-        item?.deleteAction()
-    }
-
     func asyncLayout() -> (AorusRevealTextItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
         return { item, params, neighbors in
-            let contentSize = CGSize(width: params.width, height: 48.0)
+            let size = CGSize(width: params.width, height: 48.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
-            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
-            return (layout, { [weak self] in
+            var first = true
+            var last = true
+            if case .sameSection(false) = neighbors.top { first = false }
+            if case .sameSection(false) = neighbors.bottom { last = false }
+            let position: AorusAIGroupPosition = first ? (last ? .single : .first) : (last ? .last : .middle)
+            return (ListViewItemNodeLayout(contentSize: size, insets: insets), { [weak self] in
                 guard let self else { return }
-                self.item = item
-                self.layoutParams = params
-                self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
-                self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-                self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-
-                let hasCorners = itemListHasRoundedBlockLayout(params)
-                var topCorners = false
-                var bottomCorners = false
-                switch neighbors.top {
-                case .sameSection(false):
-                    self.topStripeNode.isHidden = true
-                default:
-                    topCorners = true
-                    self.topStripeNode.isHidden = hasCorners
-                }
-                let bottomInset: CGFloat
-                let bottomOffset: CGFloat
-                switch neighbors.bottom {
-                case .sameSection(false):
-                    bottomInset = params.leftInset + 16.0
-                    bottomOffset = -UIScreenPixel
-                    self.bottomStripeNode.isHidden = false
-                default:
-                    bottomInset = 0.0
-                    bottomOffset = 0.0
-                    bottomCorners = true
-                    self.bottomStripeNode.isHidden = hasCorners
-                }
-
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
-                let bgY = -min(insets.top, UIScreenPixel)
-                let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
-                self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
-                self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
-
-                self.applyItem(item)
-                self.layoutText()
-                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
-                self.updateRevealOptionsSeparatorNodes(top: self.topStripeNode, bottom: self.bottomStripeNode, topIsHidden: self.topStripeNode.isHidden, bottomIsHidden: self.bottomStripeNode.isHidden, topHiddenByPreviousRevealOptions: neighbors.topHasActiveRevealOptions, bottomHiddenByNextRevealOptions: neighbors.bottomHasActiveRevealOptions)
-                let trashIcon = UIImage(systemName: "trash.fill")
-                let revealIcon: ItemListRevealOptionIcon = trashIcon.map { .image(image: $0) } ?? .none
-                self.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.deleteTitle, icon: revealIcon, color: item.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor)]))
+                _ = self.view // ItemList applies on the main queue.
+                let palette = AorusAIPalette.resolve(item.theme)
+                self.row.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: size.height)
+                self.row.overrideUserInterfaceStyle = palette.isDark ? .dark : .light
+                self.row.configure(
+                    title: item.title,
+                    deleteTitle: item.deleteTitle,
+                    font: Font.regular(17.0),
+                    foreground: item.action == nil ? palette.label : palette.accent,
+                    fill: palette.elevated,
+                    highlight: item.theme.list.itemHighlightedBackgroundColor,
+                    separator: palette.separator,
+                    corners: position.maskedCorners,
+                    radius: itemListHasRoundedBlockLayout(params) ? 11.0 : 0.0,
+                    drawsSeparator: position.drawsSeparator,
+                    onSelect: item.action,
+                    onDelete: item.deleteAction
+                )
             })
         }
     }

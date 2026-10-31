@@ -194,6 +194,13 @@ def main():
             light_page.write_text(light_surface_test_source(args.telegram_source))
             tab_model = args.repo / "patches/submodules/Display/Source/AorusTabBarLayout.swift"
             tab_identity = args.repo / "patches/submodules/Display/Source/AorusTabBarIdentity.swift"
+            from interface_controls_fixtures import interface_controls_source
+            interface_controls = work / "InterfaceControls.swift"
+            interface_controls.write_text(interface_controls_source(args.repo))
+            personal_badge = args.repo / "patches/submodules/Display/Source/AorusPersonalBadge.swift"
+            personal_name = args.repo / "patches/submodules/Display/Source/AorusPersonalBadgeName.swift"
+            swipe_row = args.repo / "patches/submodules/AorusGramUI/Sources/UI/AorusSwipeDeleteRow.swift"
+            grouped_table = args.repo / "patches/submodules/AorusGramUI/Sources/UI/AorusGroupedTableView.swift"
             stub = work / "AppBundle.swift"
             stub.write_text(APP_BUNDLE)
             renderer = work / "AorusPluginIconValues.swift"
@@ -254,6 +261,7 @@ def main():
                         ]},
                     },
                 }))
+                (app / "Benzin-Bold.ttf").write_bytes((args.repo / "AorusGram/Resources/Fonts/Benzin-Bold.ttf").read_bytes())
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
@@ -270,7 +278,7 @@ def main():
                 draft_transition.write_text(draft_transition_source(args.telegram_source))
                 draft_transition_object = work / "NativeDraftTransition.o"
                 subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(draft_transition), "-o", str(draft_transition_object)], check=True)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(profile_transition), str(share_preview), str(username_keyboard), str(classic_interaction), str(light_page), str(tab_model), str(tab_identity), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(draft_transition_object), *signal_objects, str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(profile_transition), str(share_preview), str(username_keyboard), str(classic_interaction), str(light_page), str(tab_model), str(tab_identity), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(draft_transition_object), *signal_objects, str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), str(interface_controls), str(personal_badge), str(personal_name), str(swipe_row), str(grouped_table), str(args.repo / "scripts/tests/AorusInterfaceControlsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 data_container = subprocess.run(["xcrun", "simctl", "get_app_container", device["udid"], bundle_id, "data"], capture_output=True, text=True, check=True).stdout.strip()

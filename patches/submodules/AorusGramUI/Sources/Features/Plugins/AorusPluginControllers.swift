@@ -99,7 +99,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     private let context: AccountContext
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private let emptyView = AorusPluginsEmptyView()
     private var manifests: [AorusPluginManifest] = []
     private var observer: NSObjectProtocol?
@@ -460,7 +460,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private var observer: NSObjectProtocol?
 
     init(context: AccountContext, record: AorusPluginRecord) {
@@ -555,7 +555,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
         cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
         if indexPath.section == 0 {
             // One switch: on is running, now and at every launch after it.
@@ -700,7 +700,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     private var themeSubscription: AorusLiveThemeSubscription?
     private let mode: Mode
     private var record: AorusPluginRecord
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private var observer: NSObjectProtocol?
     /// Where this plugin stands in the Market, for the author's own copy. What My Plugins knew
     /// comes along and is shown only if the Market cannot be asked; otherwise the status place
@@ -885,7 +885,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         let row = sections[indexPath.section].rows[indexPath.row]
         let cell = UITableViewCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = aorusUIKitBlockColor(theme)
         cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
         cell.detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
         cell.accessoryType = .disclosureIndicator
@@ -1186,7 +1186,7 @@ private final class AorusPluginLongTextController: ViewController {
         aorusUpdateChrome(presentationData)
         guard isNodeLoaded else { return }
         displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
-        textView.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        textView.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
         textView.textColor = presentationData.theme.list.itemPrimaryTextColor
         textView.tintColor = presentationData.theme.list.itemAccentColor
     }
@@ -1196,7 +1196,7 @@ private final class AorusPluginLongTextController: ViewController {
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
         displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
-        textView.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        textView.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
         textView.textColor = presentationData.theme.list.itemPrimaryTextColor
         textView.tintColor = presentationData.theme.list.itemAccentColor
         textView.font = aorusUIFont(17)
@@ -2335,7 +2335,7 @@ private final class AorusPluginHistoryControl: UIView {
 private final class AorusPluginSettingsController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private let context: AccountContext; private var presentationData: PresentationData; private let record: AorusPluginRecord
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped); private var fields: [AorusPluginSettingField] = []; private var values: [String: AorusPluginJSONValue]
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped); private var fields: [AorusPluginSettingField] = []; private var values: [String: AorusPluginJSONValue]
     private let emptyLabel = UILabel()
     private var schemaSandbox: AorusPluginSandbox?
     private var schemaObserver: NSObjectProtocol?
@@ -2397,6 +2397,9 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         let field = fields[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
+        cell.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
+        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
         cell.textLabel?.text = field.title
         cell.detailTextLabel?.text = displayValue(for: field) ?? field.summary
         if field.kind == .section {
@@ -2615,7 +2618,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private let requested: Set<AorusPluginPermission>
     private var granted: Set<AorusPluginPermission>
 
@@ -2666,6 +2669,9 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
         let permission = AorusPluginPermission.allCases[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
+        cell.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
+        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
         cell.textLabel?.text = permissionTitle(permission)
         cell.detailTextLabel?.text = permissionDescription(permission, requested: requested.contains(permission))
         cell.detailTextLabel?.numberOfLines = 0
@@ -3652,7 +3658,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private var page: AorusPluginUIPage
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private var integrationObserver: NSObjectProtocol?
     /// The page is the root of a tab in the bottom bar. A tab whose page the plugin withdraws
     /// leaves the bar with it; there is nothing for the page to close.
@@ -3668,7 +3674,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
 
     private var palette: AorusPluginPagePalette {
         let list = presentationData.theme.list
-        return AorusPluginPagePalette(accent: list.itemAccentColor, primary: list.itemPrimaryTextColor, secondary: list.itemSecondaryTextColor, background: list.itemBlocksBackgroundColor, groupBackground: list.blocksBackgroundColor)
+        return AorusPluginPagePalette(accent: list.itemAccentColor, primary: list.itemPrimaryTextColor, secondary: list.itemSecondaryTextColor, background: aorusUIKitBlockColor(presentationData.theme), groupBackground: list.blocksBackgroundColor)
     }
 
     init(context: AccountContext, pluginId: String, page: AorusPluginUIPage) {
@@ -3770,7 +3776,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         }
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
         cell.textLabel?.text = row.title
         cell.textLabel?.textColor = row.destructive ? presentationData.theme.list.itemDestructiveColor : presentationData.theme.list.itemPrimaryTextColor
         cell.detailTextLabel?.text = detail(for: row)
@@ -3907,7 +3913,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         }
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = bleeds ? .clear : presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = bleeds ? .clear : aorusUIKitBlockColor(presentationData.theme)
         cell.selectionStyle = tappable && !bleeds ? .default : .none
         content.translatesAutoresizingMaskIntoConstraints = false
         cell.contentView.addSubview(content)
@@ -4340,7 +4346,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     private let record: AorusPluginRecord
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private var rows: [(String, String, Bool)] = []
 
     init(context: AccountContext, record: AorusPluginRecord) {
@@ -4441,7 +4447,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         let row = rows[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = aorusUIKitBlockColor(presentationData.theme)
         cell.selectionStyle = .none
         cell.textLabel?.text = row.0
         cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
@@ -4615,6 +4621,7 @@ private final class AorusPluginCell: UITableViewCell {
 
     func configure(manifest: AorusPluginManifest, record: AorusPluginRecord?, theme: PresentationTheme) {
         representedId = manifest.id
+        backgroundColor = aorusUIKitBlockColor(theme)
         textLabel?.text = manifest.name
         textLabel?.textColor = theme.list.itemPrimaryTextColor
         detailTextLabel?.textColor = theme.list.itemSecondaryTextColor

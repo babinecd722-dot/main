@@ -262,6 +262,7 @@ public final class PresentationThemeRootController {
 }
 
 public final class PresentationThemeActionSheet {
+    public let opaqueItemBackgroundColor = UIColor.white
     public let primaryTextColor = UIColor.black
 }
 

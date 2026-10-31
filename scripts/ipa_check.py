@@ -23,7 +23,12 @@ def main():
         info = plistlib.loads(archive.read(plists[0]))
         if info["CFBundleIdentifier"] != "com.aorusgram" or str(info["CFBundleVersion"]) != args.build:
             raise RuntimeError("IPA identity or build number does not match this build")
-        executable = plists[0].rsplit("/", 1)[0] + "/" + info["CFBundleExecutable"]
+        app_root = plists[0].rsplit("/", 1)[0]
+        font = app_root + "/Benzin-Bold.ttf"
+        expected_font = Path(__file__).resolve().parent.parent / "AorusGram/Resources/Fonts/Benzin-Bold.ttf"
+        if font not in archive.namelist() or archive.read(font) != expected_font.read_bytes():
+            raise RuntimeError("IPA must embed the attached Benzin Bold in the main bundle")
+        executable = app_root + "/" + info["CFBundleExecutable"]
         with archive.open(executable) as file:
             header = file.read(8)
         if len(header) != 8 or struct.unpack("<II", header) != (0xfeedfacf, 0x100000c):

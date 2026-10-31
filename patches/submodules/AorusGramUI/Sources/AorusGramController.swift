@@ -1075,6 +1075,7 @@ private func appBadgeLabel(_ id: String, _ l10n: AorusL10n) -> String {
     switch id {
     case "titanium": return l10n.appBadgeTitanium
     case "atunnel":  return l10n.appBadgeATunnel
+    case "personal": return l10n.appBadgePersonal
     case "off":      return l10n.appBadgeOff
     default:         return l10n.appBadgeAorus
     }
@@ -1688,6 +1689,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 ("titanium",  l10n.appBadgeTitanium),
                 ("atunnel",   l10n.appBadgeATunnel),
                 ("off",       l10n.appBadgeOff),
+                ("personal",  l10n.appBadgePersonal),
             ]
             let optionItems: [ActionSheetButtonItem] = options.map { id, name in
                 return ActionSheetButtonItem(title: name, color: .accent, font: id == current ? .bold : .default, action: { [weak sheet] in

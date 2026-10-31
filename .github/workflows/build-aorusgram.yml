@@ -378,6 +378,9 @@ jobs:
           sed -E '/^import Display$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusUIFont.swift \
             > /tmp/aorus-plugin-ui/AorusUIFont.swift
+          sed -E '/^import TelegramPresentationData$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/UI/AorusUIKitSurfaces.swift \
+            > /tmp/aorus-plugin-ui/AorusUIKitSurfaces.swift
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
@@ -403,7 +406,9 @@ jobs:
             /tmp/aorus-plugin-ui/AorusPluginPublishing.swift \
             /tmp/aorus-plugin-ui/AorusPluginGenerate.swift \
             /tmp/aorus-plugin-ui/AorusPluginPageViews.swift \
-            /tmp/aorus-plugin-ui/AorusUIFont.swift
+            /tmp/aorus-plugin-ui/AorusUIFont.swift \
+            /tmp/aorus-plugin-ui/AorusUIKitSurfaces.swift \
+            aorusgram/patches/submodules/AorusGramUI/Sources/UI/AorusGroupedTableView.swift
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusBuildKeyProvider.swift \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \
@@ -1151,6 +1156,8 @@ jobs:
           cp $PATCHES/submodules/Display/Source/AorusRGBColors.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusMessageDetails.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusRoundVideoCountdownView.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusPersonalBadgeName.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusPersonalBadge.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 

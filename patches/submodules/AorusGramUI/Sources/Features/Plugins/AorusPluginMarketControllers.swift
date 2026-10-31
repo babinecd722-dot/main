@@ -865,7 +865,7 @@ final class AorusPluginMarketRatingView: UIView {
     }
 
     func update(stats: AorusPluginMarketStats, vote: AorusPluginMarketVote, theme: PresentationTheme, animated: Bool) {
-        background.backgroundColor = theme.list.itemBlocksBackgroundColor
+        background.backgroundColor = aorusUIKitBlockColor(theme)
         separators.forEach { $0.backgroundColor = theme.list.itemBlocksSeparatorColor }
         segments[0].update(value: stats.likes, chosen: vote == .like, theme: theme, animated: animated)
         segments[1].update(value: stats.dislikes, chosen: vote == .dislike, theme: theme, animated: animated)
@@ -942,7 +942,7 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
     init(theme: PresentationTheme, placeholder: String) {
         self.placeholder = placeholder
         super.init(frame: .zero)
-        backgroundColor = theme.list.itemBlocksBackgroundColor
+        backgroundColor = aorusUIKitBlockColor(theme)
         layer.cornerRadius = Self.height / 2
         layer.cornerCurve = .continuous
         // The magnifier is the field's own leading view, so a touch on it, as anywhere on the
@@ -981,7 +981,7 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
 
     /// The same field in another theme, with what was typed in it kept.
     func update(theme: PresentationTheme) {
-        backgroundColor = theme.list.itemBlocksBackgroundColor
+        backgroundColor = aorusUIKitBlockColor(theme)
         iconView.tintColor = theme.list.itemSecondaryTextColor
         textField.textColor = theme.list.itemPrimaryTextColor
         textField.tintColor = theme.list.itemAccentColor
@@ -1016,7 +1016,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 
     private var theme: PresentationTheme
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private let refresh = UIRefreshControl()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let messageView = UIStackView()
@@ -1289,7 +1289,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         if showsMine && indexPath.section == 0 {
             let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
             aorusApplyAppFont(to: cell)
-            cell.backgroundColor = theme.list.itemBlocksBackgroundColor
+            cell.backgroundColor = aorusUIKitBlockColor(theme)
             cell.textLabel?.text = AorusPluginMarketText.myPlugins
             cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
             cell.detailTextLabel?.text = String(owned.count)
@@ -1353,7 +1353,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // same one.
         filterButton.setImage(AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed), for: .normal)
         UIView.animate(withDuration: window == nil ? 0 : 0.2) {
-            self.filterButton.backgroundColor = changed ? self.theme.list.itemAccentColor : self.theme.list.itemBlocksBackgroundColor
+            self.filterButton.backgroundColor = changed ? self.theme.list.itemAccentColor : aorusUIKitBlockColor(self.theme)
             self.filterButton.tintColor = changed ? .white : self.theme.list.itemAccentColor
         }
         filterButton.accessibilityValue = sort.title
@@ -1435,6 +1435,9 @@ final class AorusPluginPillButton: UIButton {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        // Size is only known here, and changes with localization and Dynamic Type.
+        layer.cornerRadius = min(bounds.width, bounds.height) / 2
+        clipsToBounds = true
         spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
     }
 
@@ -1619,7 +1622,7 @@ final class AorusPluginMarketCell: UITableViewCell {
         // animates; a reused cell showing another card takes its new look at once.
         let sameCard = representedId == card.id
         representedId = card.id
-        backgroundColor = theme.list.itemBlocksBackgroundColor
+        backgroundColor = aorusUIKitBlockColor(theme)
         nameLabel.text = card.name
         nameLabel.textColor = theme.list.itemPrimaryTextColor
         statsView.update(stats: card.stats, theme: theme)
@@ -1931,7 +1934,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 
     private func cardView(_ inner: UIView) -> UIView {
         let background = UIView()
-        background.backgroundColor = theme.list.itemBlocksBackgroundColor
+        background.backgroundColor = aorusUIKitBlockColor(theme)
         background.layer.cornerRadius = 22
         background.layer.cornerCurve = .continuous
         inner.translatesAutoresizingMaskIntoConstraints = false
@@ -2355,7 +2358,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 final class AorusPluginMarketMineController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
     private var owned: [AorusPluginMarketOwnedPlugin]
     private let banner = UILabel()
     private var storeObserver: NSObjectProtocol?
@@ -2511,7 +2514,7 @@ final class AorusPluginMarketMineCell: UITableViewCell {
 
     func configure(_ plugin: AorusPluginMarketOwnedPlugin, theme: PresentationTheme) {
         representedId = plugin.id
-        backgroundColor = theme.list.itemBlocksBackgroundColor
+        backgroundColor = aorusUIKitBlockColor(theme)
         nameLabel.text = plugin.newest.name
         nameLabel.textColor = theme.list.itemPrimaryTextColor
         statusStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
