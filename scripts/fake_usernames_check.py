@@ -123,6 +123,10 @@ def main():
         launch = ["env", "XDG_CONFIG_HOME=" + str(preferences), str(work / "check")]
         checked(launch)
         checked(launch + ["restore"])
+        from username_input_fixtures import live_price_source
+        (work / "main.swift").write_text(live_price_source(repo))
+        checked(command + [str(core / "AorusFakeUsernamesStore.swift"), str(core / "AorusLocalGramAmount.swift"), str(work / "main.swift"), "-o", str(work / "live-price")])
+        checked(["env", "XDG_CONFIG_HOME=" + str(preferences), str(work / "live-price")])
         checked([args.swiftc, "-frontend", "-parse"] + [str(ui / name) for name in ["AorusFakeUsernamesController.swift", "AorusQuickRepliesController.swift", "AorusMiscController.swift", "AccountBackupController.swift"]])
 
     if args.telegram_source:
@@ -164,6 +168,8 @@ def main():
             checked([args.swiftc, "-frontend", "-parse"] + [str(fresh / p) for p in paths])
             print("Fresh Telegram 13.1.1 source injection and replay passed")
         print("Native profile, collectible receipt, classic picker and replay contracts passed")
+        from interaction_check import verify
+        verify(tg, args.swiftc)
 
 
 if __name__ == "__main__":

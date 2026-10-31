@@ -31100,6 +31100,8 @@ def main() -> None:
     patch_large_stars(tg)
     from aorus_fake_usernames import patch as patch_fake_usernames
     patch_fake_usernames(tg)
+    from aorus_interaction_repairs import patch as patch_interaction_repairs
+    patch_interaction_repairs(tg)
 
     # Last: discovers every file the patches above left calling aorusL() and gives its
     # package the AorusGramUI dep and the import.

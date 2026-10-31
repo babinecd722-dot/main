@@ -27,8 +27,13 @@ usernames, too. If real names occupy more slots later, the visible local subset
 shrinks without deleting saved entries.
 
 Prices are generated once at 10–10,000 TON and stored as exact `Int64` nanounits.
-The detail screen edits positive values with up to nine decimal places, accepts
-dot or comma, and rejects overflow. Updating a price preserves the purchase date.
+The detail screen saves positive values immediately while typing, with up to nine
+decimal places and either dot or comma. There is no save button. An incomplete,
+empty, zero or overflowing draft never overwrites the last valid price; ending
+editing restores its canonical text. The purchase date stays unchanged. The native
+field uses a theme-colored `GRAM` suffix on the right, with space reserved outside
+the editable text. Both username screens dismiss the keyboard on a background tap
+without cancelling or delaying text-field, button, scrolling or swipe interactions.
 Telegram's native receipt displays a consistent simulated USD equivalent at
 2 USD/TON; this is not a live exchange-rate quote. The profile, settings and native
 receipt use the same account-scoped store. Delete works from a native swipe with
@@ -47,6 +52,11 @@ installed native profile-row logic and classic menu callback. It also validates
 fresh source injection and replay, parses installed native Swift sources, and
 checks that account backups no longer install their animated illustration. The
 shared `.tgs` resource is preserved.
+
+Additional checks execute the production live-price callbacks (15 cases), native
+suffix geometry (288 cases), and the real UIKit keyboard and classic hit-test
+fixtures in the simulator workflow. These are interaction regressions, not a claim
+that every animation has been visually reviewed on a running account.
 
 The media-picker repair restores `MoreButtonNode.action` from Telegram 12.0
 (`29b266d5adb0d3a32b93f5506210fe7d20b8f81f`), forwarding both taps and context

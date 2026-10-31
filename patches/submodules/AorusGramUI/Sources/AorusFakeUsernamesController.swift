@@ -9,6 +9,39 @@ import PresentationDataUtils
 import AccountContext
 import UndoUI
 
+private final class UsernameListController: ItemListController, UIGestureRecognizerDelegate {
+    override func loadDisplayNode() {
+        super.loadDisplayNode()
+        let tap = UITapGestureRecognizer(target: self, action: #selector(self.dismissUsernameInput(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesBegan = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = self
+        self.displayNode.view.addGestureRecognizer(tap)
+    }
+
+    @objc private func dismissUsernameInput(_ gesture: UITapGestureRecognizer) {
+        if gesture.state == .ended { self.view.endEditing(true) }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        return self.acceptsBackgroundDismissal(from: touch.view)
+    }
+
+    fileprivate func acceptsBackgroundDismissal(from touchedView: UIView?) -> Bool {
+        var view = touchedView
+        while let current = view {
+            if current is UITextField || current is UITextView || current is UIControl { return false }
+            view = current.superview
+        }
+        return true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+}
+
 private func usernameError(_ error: AorusFakeUsernamesStore.Failure, strings: PresentationStrings) -> String {
     switch error {
     case .tooShort: return aorusL("Минимальная длина коллекционного юзернейма — 4 символа.", "Collectible usernames must have at least 4 characters.")
@@ -35,12 +68,14 @@ private final class UsernameArguments {
     let submit: () -> Void
     let open: (String) -> Void
     let remove: (String) -> Void
-    init(toggle: @escaping (Bool) -> Void, input: @escaping (String) -> Void, submit: @escaping () -> Void, open: @escaping (String) -> Void, remove: @escaping (String) -> Void) {
+    let inputEnded: (() -> Void)?
+    init(toggle: @escaping (Bool) -> Void, input: @escaping (String) -> Void, submit: @escaping () -> Void, open: @escaping (String) -> Void, remove: @escaping (String) -> Void, inputEnded: (() -> Void)? = nil) {
         self.toggle = toggle
         self.input = input
         self.submit = submit
         self.open = open
         self.remove = remove
+        self.inputEnded = inputEnded
     }
 }
 
@@ -71,7 +106,9 @@ private struct UsernameListEntry: ItemListNodeEntry {
         case let .toggle(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: args.toggle)
         case let .input(placeholder, text, price):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: price ? "GRAM (TON)" : ""), text: text, placeholder: placeholder, type: price ? .decimal : .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: section, textUpdated: args.input, action: args.submit)
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: text, placeholder: placeholder, label: price ? "GRAM" : nil, type: price ? .decimal : .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: section, textUpdated: args.input, updatedFocus: { focused in
+                if !focused { args.inputEnded?() }
+            }, action: args.submit)
         case let .button(title):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.submit)
         case let .header(text):
@@ -154,7 +191,7 @@ public func aorusFakeUsernamesController(context: AccountContext) -> ViewControl
             (ItemListNodeState(presentationData: ItemListPresentationData(data), entries: entries, style: .blocks, animateChanges: true), args))
     }
     |> afterDisposed { disposables.dispose() }
-    let controller = ItemListController(context: context, state: signal)
+    let controller = UsernameListController(context: context, state: signal)
     weakController = controller
     return controller
 }
@@ -166,42 +203,45 @@ private func aorusFakeUsernamePriceController(context: AccountContext, username:
     let state = Atomic(value: initial)
     let promise = ValuePromise(initial, ignoreRepeated: true)
     weak var weakController: ItemListController?
+    let finishInput: () -> Void = {
+        let text = state.with { $0 }.trimmingCharacters(in: .whitespacesAndNewlines)
+        let saved = AorusFakeUsernamesStore.state(account: account).entries.first { $0.username == username }
+        if !text.isEmpty, AorusLocalGramAmount.parse(text).map({ $0 > 0 }) != true {
+            usernameToast(usernameError(.invalidPrice, strings: context.sharedContext.currentPresentationData.with { $0 }.strings), context: context, controller: weakController)
+        }
+        // A partial/empty draft never erases the last valid price. Normalize only
+        // when editing ends, preserving the caret and decimal separator while typing.
+        let normalized = saved.map { AorusLocalGramAmount.text($0.price) } ?? ""
+        _ = state.swap(normalized)
+        promise.set(normalized)
+    }
     let args = UsernameArguments(toggle: { _ in }, input: { text in
         _ = state.swap(text)
         promise.set(text)
-    }, submit: {
-        let text = state.with { $0 }.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let price = AorusLocalGramAmount.parse(text), price > 0 else {
-            usernameToast(usernameError(.invalidPrice, strings: context.sharedContext.currentPresentationData.with { $0 }.strings), context: context, controller: weakController)
-            return
-        }
+        guard let price = AorusLocalGramAmount.parse(text), price > 0 else { return }
+        guard let saved = AorusFakeUsernamesStore.state(account: account).entries.first(where: { $0.username == username }), saved.price != price else { return }
         if let error = AorusFakeUsernamesStore.updatePrice(price, username: username, account: account) {
             usernameToast(usernameError(error, strings: context.sharedContext.currentPresentationData.with { $0 }.strings), context: context, controller: weakController)
-        } else {
-            weakController?.view.endEditing(true)
-            let normalized = AorusLocalGramAmount.text(price)
-            _ = state.swap(normalized)
-            promise.set(normalized)
-            usernameToast(context.sharedContext.currentPresentationData.with { $0 }.strings.Common_Done, context: context, controller: weakController)
         }
+    }, submit: {
+        weakController?.view.endEditing(true)
     }, open: { _ in }, remove: { _ in
         AorusFakeUsernamesStore.remove(username, account: account)
         _ = weakController?.navigationController?.popViewController(animated: true)
-    })
+    }, inputEnded: finishInput)
     let signal = combineLatest(promise.get(), context.sharedContext.presentationData)
     |> deliverOnMainQueue
     |> map { text, data -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let theme = data.theme
         let entries: [UsernameListEntry] = [
             UsernameListEntry(stableId: "priceHeader", order: 0, section: 0, theme: theme, content: .header(aorusL("ЦЕНА", "PRICE"))),
-            UsernameListEntry(stableId: "priceInput", order: 1, section: 0, theme: theme, content: .input("GRAM (TON)", text, true)),
-            UsernameListEntry(stableId: "save", order: 2, section: 0, theme: theme, content: .button(aorusL("Изменить", "Change"))),
+            UsernameListEntry(stableId: "priceInput", order: 1, section: 0, theme: theme, content: .input("GRAM", text, true)),
             UsernameListEntry(stableId: "delete", order: 3, section: 1, theme: theme, content: .delete(aorusL("Удалить юзернейм", "Delete username"), username))
         ]
         return (ItemListControllerState(presentationData: ItemListPresentationData(data), title: .text("@" + username), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: data.strings.Common_Back)),
             (ItemListNodeState(presentationData: ItemListPresentationData(data), entries: entries, style: .blocks, animateChanges: true), args))
     }
-    let controller = ItemListController(context: context, state: signal)
+    let controller = UsernameListController(context: context, state: signal)
     weakController = controller
     return controller
 }

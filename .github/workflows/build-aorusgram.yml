@@ -41,7 +41,7 @@ jobs:
           sparse-checkout: submodules/libphonenumber/PublicHeaders
           persist-credentials: false
 
-      - name: Native phone-region and PDF share API preflight
+      - name: Native phone-region and UIKit API preflight
         run: python3 aorusgram/scripts/client_work_check.py aorusgram --phone-headers telegram-phone-headers/submodules/libphonenumber/PublicHeaders
 
       - name: Release security preflight

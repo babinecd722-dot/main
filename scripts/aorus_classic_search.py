@@ -78,6 +78,12 @@ def _search_bar_methods() -> str:
         "public func transitionOut(to node: SearchBarPlaceholderNode, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void) {",
         "private func aorusClassicTransitionOut(to node: SearchBarPlaceholderNode, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void) {",
     )
+    # Keep 12.0's geometry/timing, but a completed fade from an earlier close
+    # must not hide Clear after 13.1.1 reactivates the same search controller.
+    fade = "completion: { _ in\n                self.clearButton.isHidden = true"
+    transition_out = _edit(transition_out, fade, "completion: { _ in\n                if self.aorusUsesClassicTransition && !self.isAnimatingOut { return }\n                self.clearButton.isHidden = true", "classic clear close completion")
+    completion = "        let intermediateCompletion: () -> Void = { [weak node, weak self] in\n"
+    transition_out = _edit(transition_out, completion, completion + "            if let self, !self.isAnimatingOut { return }\n", "classic placeholder close completion")
     return (
         "    // " + MARK + ": 12.0 had the modern and the legacy field only, and moved either between\n"
         "    // its placeholder and the bar with these two methods, release-12.0's own.\n"
@@ -635,7 +641,8 @@ def verify_classic_search(tg: Path) -> list[str]:
         for marker in markers:
             if marker not in text:
                 errors.append(f"ClassicSearch: missing {marker!r} in {path.name}")
-    # The two transitions are release-12.0's, word for word but for the placeholder's names.
+    # Retain the full 12.0 transition contract, including the placeholder adapters
+    # and the explicit stale-clear-completion guard installed above.
     search_bar = tg / "submodules/SearchBarNode/Sources/SearchBarNode.swift"
     if search_bar.is_file() and _search_bar_methods() not in search_bar.read_text(encoding="utf-8"):
         errors.append("ClassicSearch: SearchBarNode does not carry 12.0's transitions as the reference has them")

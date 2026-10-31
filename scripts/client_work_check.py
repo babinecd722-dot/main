@@ -299,9 +299,12 @@ def share_preview_api(swiftc, repo, work):
     from ai_share_preview_fixtures import share_preview_test_source
     probe = work / "AISharePreviewProbe.swift"
     probe.write_text(share_preview_test_source(repo))
+    from username_input_fixtures import username_keyboard_source
+    keyboard_probe = work / "UsernameKeyboardProbe.swift"
+    keyboard_probe.write_text(username_keyboard_source(repo))
     sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-    checked([swiftc, "-typecheck", "-parse-as-library", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(probe)])
-    print("Native PDF share preview UIKit API type-check passed")
+    checked([swiftc, "-typecheck", "-parse-as-library", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(probe), str(keyboard_probe)])
+    print("Native PDF share preview and username keyboard UIKit API type-check passed")
 
 
 def main():

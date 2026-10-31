@@ -14,6 +14,8 @@ private enum AorusPluginIconsUIKitTests {
         stage("starting")
         var checks = 0
         checks += await runAISharePreviewRegression()
+        checks += await runUsernameKeyboardRegression()
+        checks += runClassicInteractionRegression()
         func expect(_ value: Bool, _ message: String) {
             checks += 1
             if !value { fatalError(message) }

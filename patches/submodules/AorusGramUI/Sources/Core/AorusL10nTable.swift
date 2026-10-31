@@ -53,7 +53,6 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
-        "Change": "Modifica",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "I nomi utente collezionabili e i prezzi sono visibili solo a te. I nomi reali e la proprietà restano invariati.",
         "Collectible usernames must have at least 4 characters.": "I nomi utente collezionabili devono contenere almeno 4 caratteri.",
         "Delete username": "Elimina nome utente",
@@ -1088,7 +1087,6 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
-        "Change": "Zmień",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcjonerskie nazwy użytkownika i ceny są widoczne tylko dla Ciebie. Prawdziwe nazwy i własność pozostają bez zmian.",
         "Collectible usernames must have at least 4 characters.": "Kolekcjonerskie nazwy użytkownika muszą mieć co najmniej 4 znaki.",
         "Delete username": "Usuń nazwę użytkownika",
@@ -2123,7 +2121,6 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
-        "Change": "Wijzigen",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Verzamelbare gebruikersnamen en prijzen zijn alleen voor jou zichtbaar. Echte namen en eigendom blijven ongewijzigd.",
         "Collectible usernames must have at least 4 characters.": "Verzamelbare gebruikersnamen moeten minstens 4 tekens bevatten.",
         "Delete username": "Gebruikersnaam verwijderen",
@@ -3158,7 +3155,6 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
-        "Change": "Canvia",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Els noms d’usuari col·leccionables i els preus només són visibles per a tu. Els noms reals i la propietat no canvien.",
         "Collectible usernames must have at least 4 characters.": "Els noms d’usuari col·leccionables han de tenir almenys 4 caràcters.",
         "Delete username": "Suprimeix el nom d’usuari",
@@ -4193,7 +4189,6 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
-        "Change": "Ubah",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya terlihat oleh Anda. Nama asli dan kepemilikan tidak berubah.",
         "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi harus memiliki setidaknya 4 karakter.",
         "Delete username": "Hapus nama pengguna",
@@ -5228,7 +5223,6 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
-        "Change": "Ubah",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya kelihatan kepada anda. Nama sebenar dan pemilikan tidak berubah.",
         "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi mesti mempunyai sekurang-kurangnya 4 aksara.",
         "Delete username": "Padam nama pengguna",
@@ -6263,7 +6257,6 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
-        "Change": "Змяніць",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Калекцыйныя імёны карыстальніка і цэны бачны толькі вам. Сапраўдныя імёны і права ўласнасці не змяняюцца.",
         "Collectible usernames must have at least 4 characters.": "Калекцыйнае імя карыстальніка павінна мець не менш за 4 сімвалы.",
         "Delete username": "Выдаліць імя карыстальніка",
@@ -7298,7 +7291,6 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
-        "Change": "O‘zgartirish",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolleksion foydalanuvchi nomlari va narxlar faqat sizga ko‘rinadi. Haqiqiy nomlar va egalik huquqi o‘zgarmaydi.",
         "Collectible usernames must have at least 4 characters.": "Kolleksion foydalanuvchi nomi kamida 4 belgidan iborat bo‘lishi kerak.",
         "Delete username": "Foydalanuvchi nomini o‘chirish",
@@ -8333,7 +8325,6 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
-        "Change": "변경",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "수집용 사용자명과 가격은 나에게만 표시됩니다. 실제 사용자명과 소유권은 변경되지 않습니다.",
         "Collectible usernames must have at least 4 characters.": "수집용 사용자명은 4자 이상이어야 합니다.",
         "Delete username": "사용자명 삭제",
@@ -9368,7 +9359,6 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
-        "Change": "تغيير",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "أسماء المستخدمين القابلة للاقتناء والأسعار مرئية لك فقط. لا تتغير الأسماء الحقيقية أو الملكية.",
         "Collectible usernames must have at least 4 characters.": "يجب أن تتكون أسماء المستخدمين القابلة للاقتناء من 4 أحرف على الأقل.",
         "Delete username": "حذف اسم المستخدم",
@@ -10403,7 +10393,6 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
-        "Change": "تغییر",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "نام‌های کاربری کلکسیونی و قیمت‌ها فقط برای شما نمایش داده می‌شوند. نام‌های واقعی و مالکیت تغییری نمی‌کنند.",
         "Collectible usernames must have at least 4 characters.": "نام کاربری کلکسیونی باید حداقل ۴ نویسه داشته باشد.",
         "Delete username": "حذف نام کاربری",
@@ -11438,7 +11427,6 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
-        "Change": "Өзгерту",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Коллекциялық пайдаланушы аттары мен бағалар тек сізге көрінеді. Нақты аттар мен иелік құқығы өзгермейді.",
         "Collectible usernames must have at least 4 characters.": "Коллекциялық пайдаланушы аты кемінде 4 таңбадан тұруы керек.",
         "Delete username": "Пайдаланушы атын жою",
@@ -12473,7 +12461,6 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
-        "Change": "更改",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏用户名和价格仅对你可见。真实用户名及所有权不会改变。",
         "Collectible usernames must have at least 4 characters.": "收藏用户名至少需要 4 个字符。",
         "Delete username": "删除用户名",
@@ -13509,7 +13496,6 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
-        "Change": "變更",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏使用者名稱和價格僅供你查看。真實名稱和所有權不會變更。",
         "Collectible usernames must have at least 4 characters.": "收藏使用者名稱至少需要 4 個字元。",
         "Delete username": "刪除使用者名稱",
@@ -14544,7 +14530,6 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
-        "Change": "変更",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "コレクション用ユーザー名と価格は自分にだけ表示されます。実際の名前や所有権は変わりません。",
         "Collectible usernames must have at least 4 characters.": "コレクション用ユーザー名は4文字以上である必要があります。",
         "Delete username": "ユーザー名を削除",
@@ -15579,7 +15564,6 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
-        "Change": "Muuta",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Keräiltävät käyttäjänimet ja hinnat näkyvät vain sinulle. Oikeat nimet ja omistajuus eivät muutu.",
         "Collectible usernames must have at least 4 characters.": "Keräiltävissä käyttäjänimissä on oltava vähintään 4 merkkiä.",
         "Delete username": "Poista käyttäjänimi",
@@ -16614,7 +16598,6 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
-        "Change": "שינוי",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "שמות משתמש לאספנות והמחירים מוצגים רק לך. שמות אמיתיים והבעלות אינם משתנים.",
         "Collectible usernames must have at least 4 characters.": "שם משתמש לאספנות חייב להכיל לפחות 4 תווים.",
         "Delete username": "מחיקת שם משתמש",
@@ -17649,7 +17632,6 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
-        "Change": "Promijeni",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcionarska korisnička imena i cijene vidljivi su samo vama. Stvarna imena i vlasništvo ostaju nepromijenjeni.",
         "Collectible usernames must have at least 4 characters.": "Kolekcionarska korisnička imena moraju imati najmanje 4 znaka.",
         "Delete username": "Izbriši korisničko ime",
@@ -18684,7 +18666,6 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
-        "Change": "Промени",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекционарска корисничка имена и цене видљиви су само вама. Стварна имена и власништво остају непромењени.",
         "Collectible usernames must have at least 4 characters.": "Колекционарска корисничка имена морају имати најмање 4 знака.",
         "Delete username": "Обриши корисничко име",
@@ -19719,7 +19700,6 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
-        "Change": "Změnit",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sběratelská uživatelská jména a ceny vidíte jen vy. Skutečná jména ani vlastnictví se nemění.",
         "Collectible usernames must have at least 4 characters.": "Sběratelská uživatelská jména musí mít alespoň 4 znaky.",
         "Delete username": "Smazat uživatelské jméno",
@@ -20754,7 +20734,6 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
-        "Change": "Zmeniť",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Zberateľské používateľské mená a ceny vidíte iba vy. Skutočné mená ani vlastníctvo sa nemenia.",
         "Collectible usernames must have at least 4 characters.": "Zberateľské používateľské mená musia mať aspoň 4 znaky.",
         "Delete username": "Odstrániť používateľské meno",
@@ -21789,7 +21768,6 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
-        "Change": "Modifică",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Numele de utilizator de colecție și prețurile sunt vizibile doar pentru tine. Numele reale și proprietatea rămân neschimbate.",
         "Collectible usernames must have at least 4 characters.": "Numele de utilizator de colecție trebuie să aibă cel puțin 4 caractere.",
         "Delete username": "Șterge numele de utilizator",
@@ -22824,7 +22802,6 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
-        "Change": "Módosítás",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "A gyűjthető felhasználóneveket és az árakat csak te látod. A valódi nevek és a tulajdonjog nem változnak.",
         "Collectible usernames must have at least 4 characters.": "A gyűjthető felhasználóneveknek legalább 4 karakterből kell állniuk.",
         "Delete username": "Felhasználónév törlése",
@@ -23859,7 +23836,6 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
-        "Change": "Endre",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlebrukernavn og priser er bare synlige for deg. Ekte navn og eierskap forblir uendret.",
         "Collectible usernames must have at least 4 characters.": "Samlebrukernavn må ha minst 4 tegn.",
         "Delete username": "Slett brukernavn",
@@ -24894,7 +24870,6 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
-        "Change": "Ändra",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlingsbara användarnamn och priser visas bara för dig. Riktiga namn och ägande ändras inte.",
         "Collectible usernames must have at least 4 characters.": "Samlingsbara användarnamn måste ha minst 4 tecken.",
         "Delete username": "Ta bort användarnamn",
@@ -25929,7 +25904,6 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
-        "Change": "Thay đổi",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Tên người dùng sưu tầm và giá chỉ hiển thị với bạn. Tên thật và quyền sở hữu không thay đổi.",
         "Collectible usernames must have at least 4 characters.": "Tên người dùng sưu tầm phải có ít nhất 4 ký tự.",
         "Delete username": "Xóa tên người dùng",
@@ -26964,7 +26938,6 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
-        "Change": "Змінити",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекційні імена користувача та ціни бачите лише ви. Справжні імена та право власності не змінюються.",
         "Collectible usernames must have at least 4 characters.": "Колекційне ім’я користувача має містити щонайменше 4 символи.",
         "Delete username": "Видалити ім’я користувача",
@@ -28008,7 +27981,6 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
-        "Change": "Cambiar",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Los nombres de usuario coleccionables y los precios solo son visibles para ti. Los nombres reales y la propiedad no cambian.",
         "Collectible usernames must have at least 4 characters.": "Los nombres de usuario coleccionables deben tener al menos 4 caracteres.",
         "Delete username": "Eliminar nombre de usuario",
@@ -29052,7 +29024,6 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
-        "Change": "Alterar",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Os nomes de utilizador colecionáveis e os preços só são visíveis para si. Os nomes reais e a propriedade não mudam.",
         "Collectible usernames must have at least 4 characters.": "Os nomes de utilizador colecionáveis devem ter pelo menos 4 caracteres.",
         "Delete username": "Eliminar nome de utilizador",
@@ -30096,7 +30067,6 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
-        "Change": "Ändern",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sammelbare Nutzernamen und Preise sind nur für dich sichtbar. Echte Namen und Eigentumsrechte bleiben unverändert.",
         "Collectible usernames must have at least 4 characters.": "Sammelbare Nutzernamen müssen mindestens 4 Zeichen enthalten.",
         "Delete username": "Nutzernamen löschen",
@@ -31140,7 +31110,6 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
-        "Change": "Modifier",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Les noms d’utilisateur de collection et les prix ne sont visibles que par vous. Les vrais noms et la propriété restent inchangés.",
         "Collectible usernames must have at least 4 characters.": "Les noms d’utilisateur de collection doivent comporter au moins 4 caractères.",
         "Delete username": "Supprimer le nom d’utilisateur",
@@ -32184,7 +32153,6 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
-        "Change": "Değiştir",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Koleksiyonluk kullanıcı adları ve fiyatlar yalnızca size görünür. Gerçek adlar ve sahiplik değişmez.",
         "Collectible usernames must have at least 4 characters.": "Koleksiyonluk kullanıcı adları en az 4 karakter olmalıdır.",
         "Delete username": "Kullanıcı adını sil",
