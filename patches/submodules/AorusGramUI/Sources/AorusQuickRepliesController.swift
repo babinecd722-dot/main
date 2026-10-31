@@ -466,6 +466,12 @@ private final class AorusRevealTextItemNode: ListViewItemNode {
         view.addSubview(row)
     }
 
+    override func updateAnimationDuration() -> Double? {
+        // Match the row's insertion animation rather than ItemList's default
+        // height spring, which otherwise makes the native swipe row jump.
+        return 0.18
+    }
+
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
         self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18)
     }

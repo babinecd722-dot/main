@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import os
 import re
 import sys
 from pathlib import Path
@@ -4703,6 +4704,9 @@ def main() -> None:
         print("VERIFY FAILED:", file=sys.stderr)
         for e in err:
             print(" ", e, file=sys.stderr)
+            if os.environ.get("GITHUB_ACTIONS"):
+                message = e.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                print("::error title=Branding verification::" + message, flush=True)
         sys.exit(1)
     print("verify_aorus_branding: OK")
 
