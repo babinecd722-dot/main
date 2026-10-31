@@ -3,8 +3,8 @@
 import argparse
 from pathlib import Path
 import re
-import subprocess
 import tempfile
+from client_work_check import checked
 
 
 def segment_options_test_source(repo: Path) -> str:
@@ -40,12 +40,18 @@ def main():
         options = Path(temp) / 'main.swift'
         options.write_text(segment_options_test_source(repo))
         options_binary = temp + '/segments'
-        subprocess.run([args.swiftc, '-warnings-as-errors', '-O', '-module-cache-path', temp + '/cache', str(options), '-o', options_binary], check=True)
-        subprocess.run([options_binary], check=True)
+        checked([args.swiftc, '-warnings-as-errors', '-O', '-module-cache-path', temp + '/cache', str(options), '-o', options_binary])
+        checked([options_binary])
         binary = str(Path(temp) / 'tabs')
         source = tg / 'submodules/Display/Source' if tg else repo / 'patches/submodules/Display/Source'
-        subprocess.run([args.swiftc, '-swift-version', '5', '-module-cache-path', temp + '/cache', str(source / 'AorusTabBarLayout.swift'), str(repo / 'scripts/tests/AorusTabBarLayoutTests.swift'), '-o', binary], check=True)
-        subprocess.run([binary], check=True)
+        # Compile the finished model with its real Foundation-only dependency.
+        # It lives in this fixture executable rather than a separate Bazel module.
+        model = Path(temp) / 'AorusTabBarLayout.swift'
+        model.write_text((source / 'AorusTabBarLayout.swift').read_text().replace('import AorusFeatureAccess\n', ''))
+        access = repo / 'patches/submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift'
+        flags = ['-D', 'AORUS_RUNTIME_ACCESS'] if tg else []
+        checked([args.swiftc, '-swift-version', '5', *flags, '-module-cache-path', temp + '/cache', str(access), str(model), str(repo / 'scripts/tests/AorusTabBarLayoutTests.swift'), '-o', binary])
+        checked([binary])
     key = (repo / 'AorusGram/Sources/Features/Subscription/ConcealedKeyView.swift').read_text()
     assert 'InvisibleInkDustNode(textNode: nil' in key and 'revealAtLocation' in key
     assert 'UIButton' not in key and 'UIBlurEffect' not in key and 'UIVisualEffectView' not in key

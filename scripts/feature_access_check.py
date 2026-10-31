@@ -3,10 +3,10 @@
 import argparse
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tempfile
 from aorus_feature_access import BOOL_READ, LOCK_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL, patch
+from client_work_check import checked
 
 
 def check_patch(repo: Path) -> str:
@@ -92,13 +92,13 @@ def main():
         source = args.repo / "patches/submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift"
         (work / "main.swift").write_bytes((args.repo / "scripts/tests/AorusFeatureAccessTests.swift").read_bytes())
         (work / "LocalSubmit.swift").write_text(local_submit)
-        subprocess.run(["swiftc", str(source), str(work / "LocalSubmit.swift"), str(work / "main.swift"), "-o", str(work / "check")], check=True)
-        subprocess.run([str(work / "check")], check=True)
+        checked(["swiftc", str(source), str(work / "LocalSubmit.swift"), str(work / "main.swift"), "-o", str(work / "check")])
+        checked([str(work / "check")])
         if sys.platform == "darwin":
             (work / "main.swift").write_bytes((args.repo / "scripts/tests/AorusEnvAccessTests.swift").read_bytes())
             guard = args.repo / "AorusGram/Sources/Features/Subscription/AorusEnvGuard.swift"
-            subprocess.run(["swiftc", str(guard), str(work / "main.swift"), "-o", str(work / "guard-check")], check=True)
-            subprocess.run([str(work / "guard-check")], check=True)
+            checked(["swiftc", str(guard), str(work / "main.swift"), "-o", str(work / "guard-check")])
+            checked([str(work / "guard-check")])
 
 
 if __name__ == "__main__":

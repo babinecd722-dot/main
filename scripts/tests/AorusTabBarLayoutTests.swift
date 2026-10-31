@@ -14,6 +14,8 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
 
 @main struct TabLayoutTests {
     static func main() throws {
+        var licensed = true
+        AorusProtectedAccess.installAuthority { licensed }
         let defaults = AorusTabBarLayout()
         expect(defaults.order.isEmpty && defaults.badges == .number && defaults.haptic == .off, "native defaults")
         expect(defaults.colors.active == nil && defaults.colors.inactive == nil && !defaults.selectedTitleOnly, "native colours and labels")
@@ -86,6 +88,12 @@ private func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         expect(events.value == 0, "no notification for unchanged settings")
         AorusTabBarSettings.update { $0.colors.active = "abcDEF"; $0.colors.inactive = "RGB"; $0.setVisibleOrder(["settings", "chats"]) }
         expect(events.value == 1 && AorusTabBarSettings.current.appearance(dark: false).active == "ABCDEF" && AorusTabBarSettings.current.appearance(dark: true).inactive == "RGB", "shared colours and cache invalidation")
+        #if AORUS_RUNTIME_ACCESS
+        licensed = false
+        expect(AorusTabBarSettings.current == defaults, "saved premium layout cannot authorize itself after revocation")
+        licensed = true
+        expect(AorusTabBarSettings.current.colors.active == "ABCDEF", "client renewal preserves saved settings for every account")
+        #endif
         AorusTabBarSettings.update { $0.order = [] }
         expect(AorusTabBarSettings.current.sorted(["chats", "settings"]) == ["chats", "settings"], "order reset uses native source order")
         AorusTabBarSettings.update { $0 = defaults }
