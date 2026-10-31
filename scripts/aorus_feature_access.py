@@ -14,7 +14,7 @@ ALIAS = r"(?:UserDefaults\.standard|defaults|ud)"
 LOCK_READ = re.compile(r'(!?)(' + ALIAS + r')\.bool\(\s*forKey:\s*"' + LOCK_KEY + r'"\)')
 BOOL_READ = re.compile(r'(' + ALIAS + r')\.bool\(\s*forKey:\s*"(aorusgram_[^"]+)"\)')
 QUICK_REPLIES = re.compile(r'(' + ALIAS + r')\.stringArray\(\s*forKey:\s*"aorusgram_quick_replies"\)')
-OPTIONAL_BOOL = re.compile(r'\((' + ALIAS + r')\.object\(\s*forKey:\s*"(aorusgram_[^"]+)"\)\s+as\?\s+Bool\)\s*\?\?\s*(true|false)')
+OPTIONAL_BOOL = re.compile(r'(?<![\w.])\((' + ALIAS + r')\.object\(\s*forKey:\s*"(aorusgram_[^"]+)"\)\s+as\?\s+Bool\)\s*\?\?\s*(true|false)')
 BARE_OPTIONAL_BOOL = re.compile(r'(' + ALIAS + r')\.object\(\s*forKey:\s*"(aorusgram_[^"]+)"\)\s+as\?\s+Bool\s*\?\?\s*(true|false)')
 
 
@@ -71,9 +71,19 @@ def patch(tg: Path) -> None:
             text = BARE_OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
             text = BOOL_READ.sub(preference, text)
             text = QUICK_REPLIES.sub(BRIDGE + '.stringArrayPreference("aorusgram_quick_replies")', text)
-            # A forged pending-edit token must not submit an edit after expiry.
-            text = re.sub(r'(if\s+)(UserDefaults\.standard\.string\(forKey:\s*"aorusgram_local_edit_active_message"\))',
-                          r'\1' + BRIDGE + r'.isAllowed, \2', text)
+            if source.name == "ChatControllerLoadDisplayNode.swift":
+                # An unauthorized local edit must return, never fall through to
+                # Telegram's server edit RPC (even for one's own message).
+                pending = re.compile(r'if (?:AorusProtectedAccess\.isAllowed, )?(UserDefaults\.standard\.string\(forKey: "aorusgram_local_edit_active_message"\) == aorusLocalEditToken) \{\n([ \t]*)')
+                def local_submit(match):
+                    result = "if " + match[1] + " {\n" + match[2]
+                    if not text[match.end():].startswith("guard " + BRIDGE + ".isAllowed"):
+                        result += "guard " + BRIDGE + ".isAllowed else { return }\n" + match[2]
+                    return result
+                text = pending.sub(local_submit, text)
+            else:
+                text = re.sub(r'(if\s+)(UserDefaults\.standard\.string\(forKey:\s*"aorusgram_local_edit_active_message"\))',
+                              r'\1' + BRIDGE + r'.isAllowed, \2', text)
             if source.name == "AorusLocalMessageEditing.swift" and "guard AorusProtectedAccess.isAllowed" not in text:
                 text = re.sub(r'(public static func canEdit\([^\n]+\) -> Bool \{)',
                               r'\1\n        guard AorusProtectedAccess.isAllowed else { return false }', text, count=1)
