@@ -19,6 +19,8 @@ for feature in features {
 var licensed = false
 var localWrites = 0
 var nativeWrites = 0
+var pendingLocalWrite: (() -> Void)?
+var localContentEditable = true
 let pendingKey = "aorusgram_local_edit_active_message"
 let previousPending = UserDefaults.standard.object(forKey: pendingKey)
 defer {
@@ -32,7 +34,13 @@ expect(localWrites == 0 && nativeWrites == 0, "an unlicensed local edit cannot f
 expect(!AorusProtectedAccess.isAllowed, "hidden activation window does not grant entitlement")
 licensed = true
 dispatchLocalEdit(aorusLocalEditToken: "local-token")
+pendingLocalWrite?()
 expect(localWrites == 1 && nativeWrites == 0, "licensed local edits stay local")
+localContentEditable = false
+dispatchLocalEdit(aorusLocalEditToken: "local-token")
+pendingLocalWrite?()
+expect(UserDefaults.standard.string(forKey: pendingKey) == "local-token", "unsupported content cannot silently change a local edit into a server edit")
+localContentEditable = true
 expect(AorusProtectedAccess.stringArrayPreference("aorusgram_quick_replies", in: defaults) == ["hello"], "valid client license restores saved replies")
 for feature in features {
     expect(AorusProtectedAccess.boolPreference(feature, in: defaults), "valid client license authorizes its preferences")
@@ -40,7 +48,10 @@ for feature in features {
 expect(AorusProtectedAccess.boolPreference("aorusgram_missing", default: true, in: defaults), "licensed default-on feature")
 defaults.set(false, forKey: features[0])
 expect(!AorusProtectedAccess.boolPreference(features[0], in: defaults), "a license never forces a disabled feature on")
+dispatchLocalEdit(aorusLocalEditToken: "local-token")
 licensed = false
+pendingLocalWrite?()
+expect(UserDefaults.standard.string(forKey: pendingKey) == "local-token", "expiry during an asynchronous lookup preserves local-only routing")
 dispatchLocalEdit(aorusLocalEditToken: "local-token")
 expect(localWrites == 1 && nativeWrites == 0, "revocation blocks both local writes and server fallback")
 dispatchLocalEdit(aorusLocalEditToken: "ordinary-token")

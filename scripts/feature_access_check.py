@@ -27,9 +27,19 @@ let unlocked = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e
         (ui / "BUILD").write_text('swift_library(\n    name = "TelegramUI",\n    deps = [],\n)\n')
         submit = ui / "Sources/Chat/ChatControllerLoadDisplayNode.swift"
         submit.write_text('''import Foundation
+enum AorusLocalMessageEditing {
+    static func canEdit(_ message: Int, hasOriginal: Bool) -> Bool { AorusProtectedAccess.isAllowed && localContentEditable }
+}
 func dispatchLocalEdit(aorusLocalEditToken: String) {
     if UserDefaults.standard.string(forKey: "aorusgram_local_edit_active_message") == aorusLocalEditToken {
-        localWrites += 1
+        pendingLocalWrite = {
+            let currentMessage = 0
+            guard AorusLocalMessageEditing.canEdit(currentMessage, hasOriginal: false) else {
+                UserDefaults.standard.removeObject(forKey: "aorusgram_local_edit_active_message")
+                return
+            }
+            localWrites += 1
+        }
         return
     }
     nativeWrites += 1

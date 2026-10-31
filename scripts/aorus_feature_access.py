@@ -81,6 +81,11 @@ def patch(tg: Path) -> None:
                         result += "guard " + BRIDGE + ".isAllowed else { return }\n" + match[2]
                     return result
                 text = pending.sub(local_submit, text)
+                # The asynchronous message lookup can finish after revocation.
+                # Preserve its local-mode token on authorization failure; erasing
+                # it would let a subsequent tap take Telegram's server-edit path.
+                rejected = re.compile(r'(guard AorusLocalMessageEditing\.canEdit\(currentMessage,[^\n]+ else \{\n)[ \t]*UserDefaults\.standard\.removeObject\(forKey: "aorusgram_local_edit_active_message"\)\n')
+                text = rejected.sub(r'\1', text)
             else:
                 text = re.sub(r'(if\s+)(UserDefaults\.standard\.string\(forKey:\s*"aorusgram_local_edit_active_message"\))',
                               r'\1' + BRIDGE + r'.isAllowed, \2', text)
