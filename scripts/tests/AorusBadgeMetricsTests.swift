@@ -48,7 +48,8 @@ func runBadgeMetricsRegression() -> Int {
     for (identifier, top, profile, safeAreaTop, zooms) in islands {
         expect(AorusBadgeMetrics.appBadgeIslandTop(modelIdentifier: identifier) == top, "\(identifier) has its island where the table puts it")
         for zoom in [1.0] + zooms {
-            for badge in badges {
+            // The personal badge keeps its physical size under Display Zoom.
+            for badge in badges + [CGSize(width: 112.0 / zoom, height: 22.0 / zoom)] {
                 // A larger zoom can resolve the screen to another phone's profile; the hardware decides.
                 for resolved in [profile, .iPhoneX] {
                     let originY = resolved.appBadgeOriginY(badgeHeight: badge.height, safeAreaTop: safeAreaTop / zoom, zoom: zoom, modelIdentifier: identifier)

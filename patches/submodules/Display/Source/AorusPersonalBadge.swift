@@ -63,7 +63,16 @@ public enum AorusPersonalBadge {
                 .paragraphStyle: paragraph
             ])
         }
-        cachedImage = image
-        return image
+        // The sensor housing does not grow with Display Zoom. Keep this badge's
+        // physical dimensions fixed while the rest of the interface scales up.
+        let zoom = max(1.0, UIScreen.main.nativeScale / UIScreen.main.scale)
+        let displayedImage: UIImage
+        if zoom > 1.0, let bitmap = image.cgImage {
+            displayedImage = UIImage(cgImage: bitmap, scale: image.scale * zoom, orientation: image.imageOrientation)
+        } else {
+            displayedImage = image
+        }
+        cachedImage = displayedImage
+        return displayedImage
     }
 }

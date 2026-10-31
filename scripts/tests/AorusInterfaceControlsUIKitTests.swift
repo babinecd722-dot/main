@@ -46,7 +46,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     AorusPersonalBadge.updateUser(username: "alice", firstName: "Alice", lastName: nil)
     AorusPersonalBadge.updateTheme(isDark: true)
     let dark = AorusPersonalBadge.image()
-    expect(dark.size == CGSize(width: 112, height: 22), "personal badge fits the sensor housing")
+    let displayZoom = max(1.0, UIScreen.main.nativeScale / UIScreen.main.scale)
+    expect(abs(dark.size.width * displayZoom - 112.0) < 0.001 && abs(dark.size.height * displayZoom - 22.0) < 0.001, "personal badge fits the sensor housing at every Display Zoom")
     expect(UIFont(name: "Benzin-Bold", size: 11) != nil, "attached Benzin Bold is registered, not a fallback")
     expect(AorusPersonalBadge.image() === dark, "unchanged badge reuses its bitmap")
     func corner(_ image: UIImage) -> [UInt8] {
