@@ -4,6 +4,8 @@ import SwiftSignalKit
 import Display
 import TelegramPresentationData
 import AccountContext
+import GlassBackgroundComponent
+import ComponentFlow
 
 /// The theme the app is drawn in, for AorusGram's own screens, as it changes.
 ///
@@ -62,5 +64,63 @@ extension ViewController {
     func aorusUpdateChrome(_ presentationData: PresentationData) {
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         self.setNavigationBarPresentationData(NavigationBarPresentationData(presentationData: presentationData), animated: false)
+    }
+}
+
+/// The same material, tint, radius and white-page policy used by Telegram's
+/// Interface 2.0 ItemListControllerNode, over UIKit's native row geometry.
+func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor {
+    return theme.aorusGlassListTheme.list.blocksBackgroundColor
+}
+
+func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {
+    table.backgroundColor = aorusPluginPageColor(theme)
+    guard AorusGlassPane.isEnabled else {
+        table.nativePanes = nil
+        return
+    }
+    table.nativePanes = aorusNativeListPanes(theme: theme, isClear: true)
+}
+
+func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {
+    surface.configure(fill: theme.list.itemBlocksBackgroundColor, legacyCornerRadius: legacyCornerRadius, legacyBorderWidth: legacyBorderWidth,
+                      nativePanes: AorusGlassPane.isEnabled ? aorusNativeListPanes(theme: theme, isClear: !isCapsule) : nil,
+                      isCapsule: isCapsule)
+}
+
+private func aorusNativeListPanes(theme: PresentationTheme, isClear: Bool) -> AorusGroupedTableView.NativePanes {
+    let nativeTheme = theme.aorusGlassListTheme
+    let originalCardColor = theme.list.itemBlocksBackgroundColor
+    return AorusGroupedTableView.NativePanes(
+        cornerRadius: AorusGlassPane.blockCornerRadius,
+        isDark: nativeTheme.overallDarkAppearance,
+        isWhitePage: !nativeTheme.overallDarkAppearance && AorusGlassPane.isWhitePage(nativeTheme.list.blocksBackgroundColor),
+        cardColor: nativeTheme.list.itemBlocksBackgroundColor,
+        isCardColor: { color in
+            return AorusGlassPane.isBlockMarker(color)
+                || (originalCardColor.cgColor.alpha > 0 && color.isEqual(originalCardColor))
+        },
+        makePane: { AorusUIKitListGlassPane(isClear: isClear) }
+    )
+}
+
+private final class AorusUIKitListGlassPane: UIView, AorusListGlassPane {
+    private let glass = GlassBackgroundView(frame: .zero)
+    private let isClear: Bool
+
+    init(isClear: Bool) {
+        self.isClear = isClear
+        super.init(frame: .zero)
+        glass.isUserInteractionEnabled = false
+        addSubview(glass)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool) {
+        glass.frame = CGRect(origin: .zero, size: size)
+        glass.update(size: size, cornerRadius: cornerRadius, isDark: isDark,
+                     tintColor: GlassBackgroundView.TintColor(kind: isClear ? .clear : .panel),
+                     isInteractive: false, isVisible: isVisible, transition: .immediate)
     }
 }

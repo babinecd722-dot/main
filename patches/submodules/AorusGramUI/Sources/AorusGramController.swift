@@ -1688,8 +1688,8 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 ("aorusgram", l10n.appBadgeAorus),
                 ("titanium",  l10n.appBadgeTitanium),
                 ("atunnel",   l10n.appBadgeATunnel),
-                ("off",       l10n.appBadgeOff),
                 ("personal",  l10n.appBadgePersonal),
+                ("off",       l10n.appBadgeOff),
             ]
             let optionItems: [ActionSheetButtonItem] = options.map { id, name in
                 return ActionSheetButtonItem(title: name, color: .accent, font: id == current ? .bold : .default, action: { [weak sheet] in

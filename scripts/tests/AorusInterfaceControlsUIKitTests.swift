@@ -1,17 +1,39 @@
 import UIKit
 
 struct InterfaceSurfaceTheme {
-    struct List { let itemBlocksBackgroundColor: UIColor }
-    struct ActionSheet { let opaqueItemBackgroundColor: UIColor }
+    struct List {
+        let itemBlocksBackgroundColor: UIColor
+        let blocksBackgroundColor: UIColor
+    }
     let list: List
-    let actionSheet: ActionSheet
+    let overallDarkAppearance: Bool
+    var aorusGlassListTheme: InterfaceSurfaceTheme {
+        guard InterfaceGlassPane.isEnabled else { return self }
+        return InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: InterfaceGlassPane.marker, blocksBackgroundColor: overallDarkAppearance ? .black : .white), overallDarkAppearance: overallDarkAppearance)
+    }
+}
+
+final class InterfaceNativePane: UIView, AorusListGlassPane {
+    let isClear: Bool
+    private(set) var lastRadius: CGFloat = 0
+    private(set) var lastSize: CGSize = .zero
+    private(set) var lastIsDark = true
+    private(set) var lastIsVisible = true
+    init(isClear: Bool) { self.isClear = isClear; super.init(frame: .zero) }
+    required init?(coder: NSCoder) { fatalError() }
+    func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool) {
+        lastSize = size; lastRadius = cornerRadius
+        lastIsDark = isDark; lastIsVisible = isVisible
+    }
 }
 
 private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     var count = 3
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        return UITableViewCell(style: .default, reuseIdentifier: nil)
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        cell.backgroundColor = .purple
+        return cell
     }
 }
 
@@ -50,21 +72,33 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(abs(dark.size.width * displayZoom - 112.0) < 0.001 && abs(dark.size.height * displayZoom - 22.0) < 0.001, "personal badge fits the sensor housing at every Display Zoom")
     expect(UIFont(name: "Benzin-Bold", size: 11) != nil, "attached Benzin Bold is registered, not a fallback")
     expect(AorusPersonalBadge.image() === dark, "unchanged badge reuses its bitmap")
-    func corner(_ image: UIImage) -> [UInt8] {
+    func pixel(_ image: UIImage, x: Int, y: Int) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: 4)
         bytes.withUnsafeMutableBytes { buffer in
             let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-            context.translateBy(x: 0, y: -21)
+            context.translateBy(x: -CGFloat(x), y: -CGFloat(y))
             context.draw(image.cgImage!, in: CGRect(x: 0, y: 0, width: 112, height: 22))
         }
         return bytes
     }
-    expect(Array(corner(dark).prefix(3)) == [0, 0, 0], "dark background is black")
+    expect(Array(pixel(dark, x: 2, y: 11).prefix(3)) == [0, 0, 0], "dark background is black")
+    expect(pixel(dark, x: 0, y: 0)[3] == 0 && pixel(dark, x: 111, y: 21)[3] == 0, "personal badge has transparent native end-cap corners")
+    let nativeBadge = UIImage(bundleImageName: "Components/AppBadge")!
+    expect(nativeBadge.size.height == 22 && nativeBadge.size.width > 80, "fixture loads actual existing badge artwork")
+    let referenceShape = UIGraphicsImageRenderer(size: CGSize(width: 112, height: 22)).image { _ in
+        nativeBadge.withTintColor(.black, renderingMode: .alwaysOriginal)
+            .resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 11, bottom: 0, right: 11), resizingMode: .stretch)
+            .draw(in: CGRect(x: 0, y: 0, width: 112, height: 22))
+    }
+    for y in 0..<22 { for x in [0, 1, 2, 4, 7, 10, 101, 104, 107, 109, 110, 111] {
+        expect(pixel(dark, x: x, y: y)[3] == pixel(referenceShape, x: x, y: y)[3], "personal badge preserves the native artwork silhouette")
+    } }
     let before = notifications
     AorusPersonalBadge.updateTheme(isDark: false)
     let light = AorusPersonalBadge.image()
     expect(notifications == before + 1, "theme change publishes immediately")
-    expect(Array(corner(light).prefix(3)) == [255, 255, 255], "light background is white")
+    expect(Array(pixel(light, x: 2, y: 11).prefix(3)) == [255, 255, 255], "light background is white")
+    expect(pixel(light, x: 0, y: 0)[3] == 0 && pixel(light, x: 111, y: 21)[3] == 0, "theme switch preserves transparent rounded corners")
     expect(light.pngData() != dark.pngData(), "theme redraw changes the actual bitmap")
     AorusPersonalBadge.updateUser(username: nil, firstName: "Alice", lastName: nil)
     let noUsername = AorusPersonalBadge.image()
@@ -76,30 +110,56 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     AorusPersonalBadge.updateUser(username: nil, firstName: String(repeating: "Ш", count: 128), lastName: nil)
     expect(AorusPersonalBadge.image().size == dark.size, "long names cannot overflow the housing")
 
-    for fallback in [UIColor.white, UIColor.black] {
-        let marked = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: UIColor(white: 0, alpha: 1.0 / 255.0)), actionSheet: .init(opaqueItemBackgroundColor: fallback))
-        expect(aorusUIKitBlockColor(marked).isEqual(fallback), "UIKit never paints the invisible Interface 2.0 marker")
-    }
-    let ordinary = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple), actionSheet: .init(opaqueItemBackgroundColor: .white))
-    expect(aorusUIKitBlockColor(ordinary).isEqual(UIColor.purple), "opaque custom theme cards keep their own colour")
+    let nativeTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .darkGray), overallDarkAppearance: true)
+    let whiteTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
     let groups = AorusGroupedTableView(frame: CGRect(x: 0, y: 80, width: 320, height: 200), style: .insetGrouped)
+    let baseline = UITableView(frame: CGRect(x: 0, y: 300, width: 320, height: 200), style: .insetGrouped)
     let dataSource = InterfaceGroupDataSource()
-    groups.dataSource = dataSource
-    groups.rowHeight = 44
-    window.addSubview(groups)
-    defer { groups.removeFromSuperview() }
-    groups.reloadData()
-    groups.layoutIfNeeded()
-    for index in 0..<3 {
-        guard let cell = groups.cellForRow(at: IndexPath(row: index, section: 0)) else { preconditionFailure("grouped fixture row missing") }
-        let expected: CACornerMask = index == 0 ? [.layerMinXMinYCorner, .layerMaxXMinYCorner] : (index == 2 ? [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] : [])
-        expect(cell.layer.cornerRadius > 0 && cell.clipsToBounds && cell.layer.maskedCorners == expected, "section only rounds its outer corners")
+    for table in [groups, baseline] {
+        table.dataSource = dataSource
+        table.rowHeight = 44
+        table.contentInsetAdjustmentBehavior = .never
+        window.addSubview(table)
     }
+    defer { withExtendedLifetime(dataSource) {}; groups.removeFromSuperview(); baseline.removeFromSuperview() }
+    aorusConfigureTable(groups, theme: nativeTheme)
+    for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
+    for index in 0..<3 {
+        let path = IndexPath(row: index, section: 0)
+        guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { preconditionFailure("grouped fixture row missing") }
+        expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
+        expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
+    }
+    func glassPane() -> InterfaceNativePane {
+        guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { preconditionFailure("native section pane missing") }
+        return pane
+    }
+    expect(groups.backgroundView?.subviews.count == 1, "one native glass pane per UIKit section")
+    expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius, "native ItemList tint and authoritative corner radius")
+    expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
     dataSource.count = 1
+    for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
+    expect(glassPane().lastSize.height == groups.rectForRow(at: IndexPath(row: 0, section: 0)).height, "single-row pane follows native row geometry after deletion")
+    dataSource.count = 50
     groups.reloadData()
+    groups.contentOffset.y = 400
+    groups.setNeedsLayout(); groups.layoutIfNeeded()
+    expect(glassPane().frame.minY <= -InterfaceGlassPane.blockCornerRadius, "scrolling through a section never creates a visible rounded top")
+    expect(glassPane().bounds.height <= groups.bounds.height + 4 * InterfaceGlassPane.blockCornerRadius, "long sections retain a bounded native material surface")
+    aorusConfigureTable(groups, theme: whiteTheme)
     groups.layoutIfNeeded()
-    let remaining = groups.cellForRow(at: IndexPath(row: 0, section: 0))!
-    expect(remaining.layer.maskedCorners == [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner], "deleting rows restores every corner of a single-row section")
+    expect(!glassPane().lastIsDark && !glassPane().lastIsVisible, "same white-page policy as native Interface 2.0 ItemList")
+    let surface = AorusUIKitSurfaceView(frame: CGRect(x: 0, y: 0, width: 280, height: 90))
+    aorusConfigureSurface(surface, theme: nativeTheme)
+    surface.layoutIfNeeded()
+    let surfacePane = surface.subviews.compactMap { $0 as? InterfaceNativePane }.first!
+    expect(surfacePane.isClear && surfacePane.lastRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0, "standalone plugin cards use the native material, never a second hand-rounded plate")
+    expect(surface.isUserInteractionEnabled, "a field container never disables its text view or send button")
+    InterfaceGlassPane.isEnabled = false
+    aorusConfigureTable(groups, theme: nativeTheme)
+    groups.layoutIfNeeded()
+    expect(groups.nativePanes == nil && groups.backgroundView == nil, "ordinary interface returns to UIKit's own grouped drawing")
+    InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
     for size in [CGSize(width: 90, height: 30), CGSize(width: 180, height: 52), CGSize(width: 70, height: 44)] {
         pill.frame = CGRect(origin: .zero, size: size)

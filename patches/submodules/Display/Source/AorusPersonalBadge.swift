@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import CoreText
+import AppBundle
 
 /// Main-queue state shared by the active account, the app theme and Window1.
 /// Identity is deliberately not persisted: switching accounts never displays another name.
@@ -45,19 +46,34 @@ public enum AorusPersonalBadge {
         _ = registeredFont
         // Fits the existing sensor-housing badge metrics, including Display Zoom.
         let size = CGSize(width: 112.0, height: 22.0)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { context in
-            (isDark ? UIColor.black : UIColor.white).setFill()
-            context.fill(CGRect(origin: .zero, size: size))
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = UIScreen.main.scale
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let image = renderer.image { _ in
+            let fill = isDark ? UIColor.black : UIColor.white
+            let rect = CGRect(origin: .zero, size: size)
+            if let nativeBadge = UIImage(bundleImageName: "Components/AppBadge"), nativeBadge.size.height > 0 {
+                // Reuse the actual badge artwork's alpha silhouette, preserving its
+                // end caps while stretching only the middle for the account name.
+                nativeBadge.withTintColor(fill, renderingMode: .alwaysOriginal)
+                    .resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: nativeBadge.size.height / 2, bottom: 0, right: nativeBadge.size.height / 2), resizingMode: .stretch)
+                    .draw(in: rect)
+            } else {
+                fill.setFill()
+                UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2).fill()
+            }
             let text = name as NSString
             let baseFont = UIFont(name: "Benzin-Bold", size: 11.0) ?? UIFont.boldSystemFont(ofSize: 11.0)
+            let textInset = size.height / 2
+            let textWidth = size.width - 2 * textInset
             let measured = text.size(withAttributes: [.font: baseFont]).width
-            let pointSize = max(7.0, min(11.0, 11.0 * 104.0 / max(1.0, measured)))
+            let pointSize = max(7.0, min(11.0, 11.0 * textWidth / max(1.0, measured)))
             let font = baseFont.withSize(pointSize)
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = .center
             paragraph.lineBreakMode = .byTruncatingTail
-            text.draw(in: CGRect(x: 4.0, y: (size.height - font.lineHeight) / 2.0, width: 104.0, height: font.lineHeight), withAttributes: [
+            text.draw(in: CGRect(x: textInset, y: (size.height - font.lineHeight) / 2.0, width: textWidth, height: font.lineHeight), withAttributes: [
                 .font: font,
                 .foregroundColor: isDark ? UIColor.white : UIColor.black,
                 .paragraphStyle: paragraph

@@ -69,7 +69,11 @@ public protocol AppBundleImageResolver: AnyObject {
 public func setAppBundleImageResolver(_ resolver: AppBundleImageResolver?) {}
 public func getAppBundle() -> Bundle { Bundle.main }
 public extension UIImage {
-    convenience init?(bundleImageName: String) { self.init() }
+    convenience init?(bundleImageName: String) {
+        if bundleImageName == "Components/AppBadge", let url = Bundle.main.url(forResource: "AppBadge@3x", withExtension: "png"), let image = UIImage(contentsOfFile: url.path), let bitmap = image.cgImage {
+            self.init(cgImage: bitmap, scale: 3, orientation: .up)
+        } else { self.init() }
+    }
 }
 public func generateImage(_ size: CGSize, opaque: Bool = false, scale: CGFloat? = nil, rotatedContext: (CGSize, CGContext) -> Void) -> UIImage? {
     UIGraphicsBeginImageContextWithOptions(size, opaque, scale ?? 0)
@@ -208,7 +212,8 @@ def main():
             from interface_controls_fixtures import interface_controls_source
             interface_controls = work / "InterfaceControls.swift"
             interface_controls.write_text(interface_controls_source(args.repo))
-            personal_badge = args.repo / "patches/submodules/Display/Source/AorusPersonalBadge.swift"
+            personal_badge = work / "AorusPersonalBadge.swift"
+            personal_badge.write_text((args.repo / "patches/submodules/Display/Source/AorusPersonalBadge.swift").read_text().replace("import AppBundle\n", ""))
             personal_name = args.repo / "patches/submodules/Display/Source/AorusPersonalBadgeName.swift"
             swipe_row = args.repo / "patches/submodules/AorusGramUI/Sources/UI/AorusSwipeDeleteRow.swift"
             grouped_table = args.repo / "patches/submodules/AorusGramUI/Sources/UI/AorusGroupedTableView.swift"
@@ -273,6 +278,7 @@ def main():
                     },
                 }))
                 (app / "Benzin-Bold.ttf").write_bytes((args.repo / "AorusGram/Resources/Fonts/Benzin-Bold.ttf").read_bytes())
+                (app / "AppBadge@3x.png").write_bytes((args.repo / "patches/assets/AppBadge@3x.png").read_bytes())
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)

@@ -44,7 +44,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
     private let glyph = UIImageView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
-    private let field = UIView()
+    private let field = AorusUIKitSurfaceView()
     private let textView = UITextView()
     private let placeholder = UILabel()
     private let sendButton = UIButton(type: .system)
@@ -91,12 +91,14 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
     /// Every colour the sheet is drawn in; what is typed and where the request stands are kept.
     private func applyTheme() {
         overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
-        view.backgroundColor = theme.list.blocksBackgroundColor
+        view.backgroundColor = aorusPluginPageColor(theme)
         let accent = theme.list.itemAccentColor
         glyph.tintColor = accent
         titleLabel.textColor = theme.list.itemPrimaryTextColor
         subtitleLabel.textColor = theme.list.itemSecondaryTextColor
-        field.backgroundColor = aorusUIKitBlockColor(theme)
+        aorusConfigureSurface(field, theme: theme, legacyCornerRadius: 22, legacyBorderWidth: 1)
+        textView.layer.cornerRadius = field.nativeCornerRadius ?? 0
+        textView.layer.cornerCurve = .continuous
         field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
         textView.textColor = theme.list.itemPrimaryTextColor
         textView.tintColor = accent
@@ -120,7 +122,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
     override func viewDidLoad() {
         super.viewDidLoad()
         overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
-        view.backgroundColor = theme.list.blocksBackgroundColor
+        view.backgroundColor = aorusPluginPageColor(theme)
         let accent = theme.list.itemAccentColor
 
         glyph.image = UIImage(systemName: "sparkles", withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .semibold))
@@ -136,8 +138,9 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
 
-        field.backgroundColor = aorusUIKitBlockColor(theme)
-        field.layer.cornerRadius = 22
+        aorusConfigureSurface(field, theme: theme, legacyCornerRadius: 22, legacyBorderWidth: 1)
+        textView.layer.cornerRadius = field.nativeCornerRadius ?? 0
+        textView.layer.cornerCurve = .continuous
         field.layer.cornerCurve = .continuous
         field.layer.borderWidth = 1
         field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor

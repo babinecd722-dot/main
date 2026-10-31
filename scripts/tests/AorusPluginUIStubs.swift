@@ -395,3 +395,9 @@ private final class AorusPluginStubGlass: UIView, AorusPluginGlassBackground {
 private final class AorusPluginStubAvatar: UIView, AorusPluginMarketAvatar {
     func show(author: AorusPluginMarketAuthor?, fallbackName: String) {}
 }
+
+func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {}
+
+func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {}
+
+func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor { theme.list.blocksBackgroundColor }
