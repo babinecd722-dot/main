@@ -108,6 +108,9 @@ jobs:
       - name: Local Stars catalog and message eligibility preflight
         run: python3 aorusgram/scripts/client_work_check.py aorusgram
 
+      - name: Local collectible username preflight
+        run: python3 aorusgram/scripts/fake_usernames_check.py aorusgram
+
       - name: Native voice PCM and DSP preflight
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram
 
@@ -898,6 +901,7 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarsTopUp.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusFakeGramStore.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusFakeUsernamesStore.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusAttachmentDraft.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusAttachmentDraftCleanup.swift $TG/submodules/TelegramCore/Sources/
@@ -1282,6 +1286,9 @@ jobs:
 
       - name: Large Stars balance boundary preflight
         run: python3 aorusgram/scripts/large_stars_check.py --telegram-source telegram-ios
+
+      - name: Collectible usernames and classic gallery preflight
+        run: python3 aorusgram/scripts/fake_usernames_check.py aorusgram --telegram-source telegram-ios
 
       - name: Validate tab settings and light surfaces
         run: python3 aorusgram/scripts/tab_settings_check.py aorusgram --telegram-source telegram-ios

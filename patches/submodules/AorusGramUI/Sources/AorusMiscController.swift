@@ -50,6 +50,7 @@ private enum MiscSection: Int32 {
     case fakeGifts
     case fakeStars
     case fakeGram
+    case usernames
     case calls
     case autoReplyS
     case antiSearch
@@ -86,6 +87,7 @@ private struct MiscState: Equatable {
 
 private final class MiscArguments {
     let setLocalPremium: (Bool) -> Void
+    let openFakeUsernames: () -> Void
     let openFakeGifts: () -> Void
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
@@ -114,8 +116,9 @@ private final class MiscArguments {
     let openChatLock: () -> Void
     let setActionConfirmation: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setFakeGram: @escaping (Bool) -> Void, setFakeGramAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setAnonymousNumber: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeUsernames: @escaping () -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setFakeGram: @escaping (Bool) -> Void, setFakeGramAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setAnonymousNumber: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
+        self.openFakeUsernames = openFakeUsernames
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
@@ -155,6 +158,8 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStars(PresentationTheme, String, Bool)
     case fakeStarsCount(PresentationTheme, String, String)
     case fakeStarsInfo(PresentationTheme, String)
+    case usernamesHeader(PresentationTheme, String)
+    case fakeUsernames(PresentationTheme, String)
     case fakeGramHeader(PresentationTheme, String)
     case fakeGram(PresentationTheme, String, Bool)
     case fakeGramCount(PresentationTheme, String, String)
@@ -201,6 +206,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeStars.rawValue
         case .fakeGramHeader, .fakeGram, .fakeGramCount, .fakeGramInfo:
             return MiscSection.fakeGram.rawValue
+        case .usernamesHeader, .fakeUsernames:
+            return MiscSection.usernames.rawValue
         case .callsHeader, .voiceTwin:
             return MiscSection.calls.rawValue
         case .autoReply:
@@ -231,6 +238,8 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStars:        return 21
         case .fakeStarsCount:   return 22
         case .fakeStarsInfo:    return 23
+        case .usernamesHeader: return 64
+        case .fakeUsernames: return 65
         case .fakeGramHeader:  return 60
         case .fakeGram:        return 61
         case .fakeGramCount:   return 62
@@ -272,7 +281,7 @@ private enum MiscEntry: ItemListNodeEntry {
     static func < (lhs: MiscEntry, rhs: MiscEntry) -> Bool {
         func order(_ entry: MiscEntry) -> Int32 {
             if case .anonymousNumber = entry { return 395 }
-            if (60...63).contains(entry.stableId) { return 231 + entry.stableId - 60 }
+            if (60...65).contains(entry.stableId) { return 231 + entry.stableId - 60 }
             return entry.stableId * 10
         }
         return order(lhs) < order(rhs)
@@ -296,6 +305,10 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .fakeStarsCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .fakeStarsInfo(lt, ls):
             if case let .fakeStarsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .usernamesHeader(lt, ls):
+            if case let .usernamesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .fakeUsernames(lt, ls):
+            if case let .fakeUsernames(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .fakeGramHeader(lt, ls):
             if case let .fakeGramHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .fakeGram(lt, ls, lv):
@@ -411,6 +424,10 @@ private enum MiscEntry: ItemListNodeEntry {
             )
         case let .fakeStarsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .usernamesHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .fakeUsernames(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openFakeUsernames)
         case let .fakeGramHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .fakeGram(_, title, value):
@@ -549,6 +566,9 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
         entries.append(.fakeGramCount(theme, aorusL("Количество", "Amount"), state.fakeGramAmount))
     }
     entries.append(.fakeGramInfo(theme, aorusL("Показывает указанный баланс GRAM (TON) локально, только у вас. Реальные GRAM не создаются и не тратятся.", "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.")))
+
+    entries.append(.usernamesHeader(theme, aorusL("ЮЗЕРНЕЙМ", "USERNAME")))
+    entries.append(.fakeUsernames(theme, aorusL("Фейковые юзернеймы", "Fake usernames")))
 
     // Voice Twin (Calls) moved to the main AorusGram screen. Auto-Reply stays
     // here as a separate headerless block.
@@ -689,6 +709,9 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 next.localPremium = value
                 return next
             }
+        },
+        openFakeUsernames: {
+            weakController?.push(aorusFakeUsernamesController(context: context))
         },
         openFakeGifts: {
             guard let controller = weakController,

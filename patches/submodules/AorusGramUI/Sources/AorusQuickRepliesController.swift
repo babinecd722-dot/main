@@ -185,7 +185,7 @@ private enum QREntry: ItemListNodeEntry {
         case let .input(_, placeholder, value):
             return QRInputItem(theme: presentationData.theme, text: value, placeholder: placeholder, sectionId: section, textUpdated: { args.setDraft($0) }, action: { args.commitDraft() })
         case let .reply(_, id, text):
-            return QRRevealTextItem(theme: presentationData.theme, title: text, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeReply(Int(id)) })
+            return AorusRevealTextItem(theme: presentationData.theme, title: text, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeReply(Int(id)) })
         }
     }
 }
@@ -394,20 +394,28 @@ private final class QRInputItemNode: ListViewItemNode, UITextFieldDelegate {
 
 // MARK: - Swipe-to-delete reply row
 
-private final class QRRevealTextItem: ListViewItem, ItemListItem {
+final class AorusRevealTextItem: ListViewItem, ItemListItem {
     let theme: PresentationTheme
     let title: String
     let deleteTitle: String
     let sectionId: ItemListSectionId
     let requestsNoInset: Bool = false
     let deleteAction: () -> Void
+    let action: (() -> Void)?
+    var selectable: Bool { return self.action != nil }
 
-    init(theme: PresentationTheme, title: String, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: @escaping () -> Void) {
+    func selected(listView: ListView) {
+        listView.clearHighlightAnimated(true)
+        self.action?()
+    }
+
+    init(theme: PresentationTheme, title: String, deleteTitle: String, sectionId: ItemListSectionId, action: (() -> Void)? = nil, deleteAction: @escaping () -> Void) {
         self.theme = theme
         self.title = title
         self.deleteTitle = deleteTitle
         self.sectionId = sectionId
         self.deleteAction = deleteAction
+        self.action = action
     }
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void,
@@ -416,7 +424,7 @@ private final class QRRevealTextItem: ListViewItem, ItemListItem {
                                  neighbors: ListViewItemNeighbors,
                                  completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
-            let node = QRRevealTextItemNode()
+            let node = AorusRevealTextItemNode()
             let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
             node.contentSize = layout.contentSize
             node.insets = layout.insets
@@ -433,7 +441,7 @@ private final class QRRevealTextItem: ListViewItem, ItemListItem {
                     animation: ListViewItemUpdateAnimation,
                     completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
         Queue.mainQueue().async {
-            if let nodeValue = node() as? QRRevealTextItemNode {
+            if let nodeValue = node() as? AorusRevealTextItemNode {
                 let makeLayout = nodeValue.asyncLayout()
                 async {
                     let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
@@ -444,13 +452,13 @@ private final class QRRevealTextItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
+private final class AorusRevealTextItemNode: ItemListRevealOptionsItemNode {
     private let backgroundNode = ASDisplayNode()
     private let topStripeNode = ASDisplayNode()
     private let bottomStripeNode = ASDisplayNode()
     private let maskNode = ASImageNode()
     private weak var titleLabel: UILabel?
-    private var item: QRRevealTextItem?
+    private var item: AorusRevealTextItem?
     private var layoutParams: ListViewItemLayoutParams?
 
     init() {
@@ -494,9 +502,9 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
         layoutText()
     }
 
-    private func applyItem(_ item: QRRevealTextItem) {
+    private func applyItem(_ item: AorusRevealTextItem) {
         titleLabel?.text = item.title
-        titleLabel?.textColor = item.theme.list.itemPrimaryTextColor
+        titleLabel?.textColor = item.action == nil ? item.theme.list.itemPrimaryTextColor : item.theme.list.itemAccentColor
         titleLabel?.font = Font.regular(17.0)
     }
 
@@ -518,7 +526,7 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
         item?.deleteAction()
     }
 
-    func asyncLayout() -> (QRRevealTextItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
+    func asyncLayout() -> (AorusRevealTextItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
         return { item, params, neighbors in
             let contentSize = CGSize(width: params.width, height: 48.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)

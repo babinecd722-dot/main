@@ -3662,8 +3662,8 @@ def main() -> None:
             err.append("InterfaceV2: the backup screen still opens its opaque SwiftUI port")
         if "accountBackupControllerLegacy" not in backup_text:
             err.append("InterfaceV2: the backup screen has no glass list to fall back to")
-        if ".header(theme)" not in backup_text:
-            err.append("InterfaceV2: the backup screen has no illustration header")
+        if "entries.append(.header(" in backup_text:
+            err.append("InterfaceV2: account backups must not display the animated illustration")
 
     backup_header = tg / "submodules/AorusGramUI/Sources/AorusBackupHeaderItem.swift"
     if not backup_header.is_file():

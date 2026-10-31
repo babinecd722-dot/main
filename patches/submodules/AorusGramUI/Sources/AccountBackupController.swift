@@ -77,7 +77,6 @@ private func aorusFormatUserId(_ userId: Int64) -> String {
 // MARK: - Sections
 
 private enum BackupSection: Int32 {
-    case header
     case actions
     case info
     case status
@@ -168,8 +167,6 @@ private final class BackupArguments {
 // MARK: - Entries
 
 private enum BackupEntry: ItemListNodeEntry {
-    case header(PresentationTheme)
-
     case backupAction(PresentationTheme, String, Bool)
     case restoreAction(PresentationTheme, String, Bool)
     case deleteAction(PresentationTheme, String, Bool)
@@ -184,8 +181,6 @@ private enum BackupEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .header:
-            return BackupSection.header.rawValue
         case .backupAction, .restoreAction, .deleteAction:
             return BackupSection.actions.rawValue
         case .info:
@@ -199,7 +194,6 @@ private enum BackupEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
-        case .header:          return 0
         case .backupAction:    return 1
         case .restoreAction:   return 2
         case .deleteAction:    return 3
@@ -217,8 +211,6 @@ private enum BackupEntry: ItemListNodeEntry {
 
     static func == (lhs: BackupEntry, rhs: BackupEntry) -> Bool {
         switch lhs {
-        case let .header(lt):
-            if case let .header(rt) = rhs { return lt === rt }
         case let .backupAction(lt, ls, lv):
             if case let .backupAction(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .restoreAction(lt, ls, lv):
@@ -242,8 +234,6 @@ private enum BackupEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let args = arguments as! BackupArguments
         switch self {
-        case let .header(theme):
-            return AorusBackupHeaderItem(theme: theme, animationName: "Passcode", sectionId: section)
         case let .backupAction(theme, title, enabled):
             let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
             return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("key.fill", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.backup() } })
@@ -273,10 +263,6 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
     let mgr = AccountBackupManager.shared
     let hasBackup = mgr.hasBackup()
     var entries: [BackupEntry] = []
-
-    // The illustration every native settings screen opens with, in its own section so the first
-    // rounded block starts below it rather than around it.
-    entries.append(.header(theme))
 
     entries.append(.backupAction(theme, l10n.backupAction, !state.busy))
     entries.append(.restoreAction(theme, l10n.restoreAction, hasBackup && !state.busy))

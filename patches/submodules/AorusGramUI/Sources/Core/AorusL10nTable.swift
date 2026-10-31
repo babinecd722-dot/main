@@ -53,6 +53,19 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Change": "Modifica",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "I nomi utente collezionabili e i prezzi sono visibili solo a te. I nomi reali e la proprietà restano invariati.",
+        "Collectible usernames must have at least 4 characters.": "I nomi utente collezionabili devono contenere almeno 4 caratteri.",
+        "Delete username": "Elimina nome utente",
+        "Enter a price above zero with at most 9 decimal places.": "Inserisci un prezzo maggiore di zero con al massimo 9 cifre decimali.",
+        "Fake usernames": "Nomi utente fittizi",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Limite locale raggiunto: 10 nomi utente collezionabili, inclusi quelli reali attivi.",
+        "PRICE": "PREZZO",
+        "This username has been deleted.": "Questo nome utente è stato eliminato.",
+        "This username is already in your profile or list.": "Questo nome utente è già nel profilo o nella lista.",
+        "USERNAME": "NOME UTENTE",
+        "Use only Latin letters, digits and underscores.": "Usa solo lettere latine, cifre e trattini bassi.",
+        "Usernames can have at most 32 characters.": "I nomi utente possono contenere al massimo 32 caratteri.",
         "GRAM (FORMERLY TON)": "GRAM (EX TON)",
         "Fake GRAM (TON)": "GRAM (TON) fittizi",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra il saldo di GRAM indicato in locale, solo per te. Non vengono create né spese GRAM reali.",
@@ -1075,6 +1088,19 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Change": "Zmień",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcjonerskie nazwy użytkownika i ceny są widoczne tylko dla Ciebie. Prawdziwe nazwy i własność pozostają bez zmian.",
+        "Collectible usernames must have at least 4 characters.": "Kolekcjonerskie nazwy użytkownika muszą mieć co najmniej 4 znaki.",
+        "Delete username": "Usuń nazwę użytkownika",
+        "Enter a price above zero with at most 9 decimal places.": "Wpisz cenę większą od zera, z maksymalnie 9 miejscami po przecinku.",
+        "Fake usernames": "Fikcyjne nazwy użytkownika",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Osiągnięto lokalny limit: 10 kolekcjonerskich nazw, wliczając aktywne prawdziwe nazwy.",
+        "PRICE": "CENA",
+        "This username has been deleted.": "Ta nazwa użytkownika została usunięta.",
+        "This username is already in your profile or list.": "Ta nazwa jest już w profilu lub na liście.",
+        "USERNAME": "NAZWA UŻYTKOWNIKA",
+        "Use only Latin letters, digits and underscores.": "Używaj tylko liter łacińskich, cyfr i podkreśleń.",
+        "Usernames can have at most 32 characters.": "Nazwy użytkownika mogą mieć najwyżej 32 znaki.",
         "GRAM (FORMERLY TON)": "GRAM (DAWNIEJ TON)",
         "Fake GRAM (TON)": "Fałszywe GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Pokazuje podany stan GRAM lokalnie, tylko u ciebie. Prawdziwe GRAM nie są tworzone ani wydawane.",
@@ -2097,6 +2123,19 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Change": "Wijzigen",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Verzamelbare gebruikersnamen en prijzen zijn alleen voor jou zichtbaar. Echte namen en eigendom blijven ongewijzigd.",
+        "Collectible usernames must have at least 4 characters.": "Verzamelbare gebruikersnamen moeten minstens 4 tekens bevatten.",
+        "Delete username": "Gebruikersnaam verwijderen",
+        "Enter a price above zero with at most 9 decimal places.": "Voer een prijs boven nul in met maximaal 9 decimalen.",
+        "Fake usernames": "Fictieve gebruikersnamen",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Lokale limiet bereikt: 10 verzamelbare gebruikersnamen, inclusief actieve echte namen.",
+        "PRICE": "PRIJS",
+        "This username has been deleted.": "Deze gebruikersnaam is verwijderd.",
+        "This username is already in your profile or list.": "Deze gebruikersnaam staat al in je profiel of lijst.",
+        "USERNAME": "GEBRUIKERSNAAM",
+        "Use only Latin letters, digits and underscores.": "Gebruik alleen Latijnse letters, cijfers en onderstrepingstekens.",
+        "Usernames can have at most 32 characters.": "Gebruikersnamen mogen maximaal 32 tekens bevatten.",
         "GRAM (FORMERLY TON)": "GRAM (VOORHEEN TON)",
         "Fake GRAM (TON)": "Nep-GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Toont het opgegeven GRAM-saldo lokaal, alleen voor jou. Er worden geen echte GRAM gemaakt of uitgegeven.",
@@ -3119,6 +3158,19 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Change": "Canvia",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Els noms d’usuari col·leccionables i els preus només són visibles per a tu. Els noms reals i la propietat no canvien.",
+        "Collectible usernames must have at least 4 characters.": "Els noms d’usuari col·leccionables han de tenir almenys 4 caràcters.",
+        "Delete username": "Suprimeix el nom d’usuari",
+        "Enter a price above zero with at most 9 decimal places.": "Introdueix un preu superior a zero amb un màxim de 9 decimals.",
+        "Fake usernames": "Noms d’usuari ficticis",
+        "Local limit reached: 10 collectible usernames, including active real names.": "S’ha assolit el límit local: 10 noms d’usuari col·leccionables, inclosos els reals actius.",
+        "PRICE": "PREU",
+        "This username has been deleted.": "Aquest nom d’usuari s’ha suprimit.",
+        "This username is already in your profile or list.": "Aquest nom d’usuari ja és al perfil o a la llista.",
+        "USERNAME": "NOM D’USUARI",
+        "Use only Latin letters, digits and underscores.": "Fes servir només lletres llatines, dígits i guions baixos.",
+        "Usernames can have at most 32 characters.": "Els noms d’usuari poden tenir com a màxim 32 caràcters.",
         "GRAM (FORMERLY TON)": "GRAM (ABANS TON)",
         "Fake GRAM (TON)": "GRAM (TON) falsos",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra el saldo de GRAM indicat localment, només per a tu. No es creen ni es gasten GRAM reals.",
@@ -4141,6 +4193,19 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Change": "Ubah",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya terlihat oleh Anda. Nama asli dan kepemilikan tidak berubah.",
+        "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi harus memiliki setidaknya 4 karakter.",
+        "Delete username": "Hapus nama pengguna",
+        "Enter a price above zero with at most 9 decimal places.": "Masukkan harga di atas nol dengan maksimal 9 angka desimal.",
+        "Fake usernames": "Nama pengguna palsu",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Batas lokal tercapai: 10 nama pengguna koleksi, termasuk nama asli yang aktif.",
+        "PRICE": "HARGA",
+        "This username has been deleted.": "Nama pengguna ini telah dihapus.",
+        "This username is already in your profile or list.": "Nama pengguna ini sudah ada di profil atau daftar.",
+        "USERNAME": "NAMA PENGGUNA",
+        "Use only Latin letters, digits and underscores.": "Gunakan hanya huruf Latin, angka, dan garis bawah.",
+        "Usernames can have at most 32 characters.": "Nama pengguna boleh memiliki maksimal 32 karakter.",
         "GRAM (FORMERLY TON)": "GRAM (SEBELUMNYA TON)",
         "Fake GRAM (TON)": "GRAM (TON) palsu",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Menampilkan saldo GRAM yang dimasukkan secara lokal, hanya untukmu. Tidak ada GRAM asli yang dibuat atau dipakai.",
@@ -5163,6 +5228,19 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Change": "Ubah",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya kelihatan kepada anda. Nama sebenar dan pemilikan tidak berubah.",
+        "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi mesti mempunyai sekurang-kurangnya 4 aksara.",
+        "Delete username": "Padam nama pengguna",
+        "Enter a price above zero with at most 9 decimal places.": "Masukkan harga melebihi sifar dengan maksimum 9 tempat perpuluhan.",
+        "Fake usernames": "Nama pengguna palsu",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Had setempat dicapai: 10 nama pengguna koleksi, termasuk nama sebenar yang aktif.",
+        "PRICE": "HARGA",
+        "This username has been deleted.": "Nama pengguna ini telah dipadamkan.",
+        "This username is already in your profile or list.": "Nama pengguna ini sudah ada dalam profil atau senarai.",
+        "USERNAME": "NAMA PENGGUNA",
+        "Use only Latin letters, digits and underscores.": "Gunakan huruf Latin, angka dan garis bawah sahaja.",
+        "Usernames can have at most 32 characters.": "Nama pengguna boleh mempunyai maksimum 32 aksara.",
         "GRAM (FORMERLY TON)": "GRAM (DAHULUNYA TON)",
         "Fake GRAM (TON)": "GRAM (TON) palsu",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Menunjukkan baki GRAM yang dimasukkan secara setempat, hanya untuk anda. Tiada GRAM sebenar dicipta atau dibelanjakan.",
@@ -6185,6 +6263,19 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Change": "Змяніць",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Калекцыйныя імёны карыстальніка і цэны бачны толькі вам. Сапраўдныя імёны і права ўласнасці не змяняюцца.",
+        "Collectible usernames must have at least 4 characters.": "Калекцыйнае імя карыстальніка павінна мець не менш за 4 сімвалы.",
+        "Delete username": "Выдаліць імя карыстальніка",
+        "Enter a price above zero with at most 9 decimal places.": "Увядзіце цану большую за нуль, не больш за 9 знакаў пасля коскі.",
+        "Fake usernames": "Фэйкавыя імёны карыстальніка",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Дасягнуты лакальны ліміт: 10 калекцыйных імёнаў з улікам актыўных сапраўдных імёнаў.",
+        "PRICE": "ЦАНА",
+        "This username has been deleted.": "Гэта імя карыстальніка ўжо выдалена.",
+        "This username is already in your profile or list.": "Гэта імя ўжо ёсць у профілі або спісе.",
+        "USERNAME": "ІМЯ КАРЫСТАЛЬНІКА",
+        "Use only Latin letters, digits and underscores.": "Выкарыстоўвайце толькі лацінскія літары, лічбы і знак падкрэслівання.",
+        "Usernames can have at most 32 characters.": "Імя карыстальніка можа мець не больш за 32 сімвалы.",
         "GRAM (FORMERLY TON)": "GRAM (БЫЛЫЯ TON)",
         "Fake GRAM (TON)": "Фэйкавыя GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Паказвае названы баланс GRAM лакальна, толькі ў вас. Сапраўдныя GRAM не ствараюцца і не марнуюцца.",
@@ -7207,6 +7298,19 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Change": "O‘zgartirish",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolleksion foydalanuvchi nomlari va narxlar faqat sizga ko‘rinadi. Haqiqiy nomlar va egalik huquqi o‘zgarmaydi.",
+        "Collectible usernames must have at least 4 characters.": "Kolleksion foydalanuvchi nomi kamida 4 belgidan iborat bo‘lishi kerak.",
+        "Delete username": "Foydalanuvchi nomini o‘chirish",
+        "Enter a price above zero with at most 9 decimal places.": "Noldan katta, kasrdan keyin ko‘pi bilan 9 raqamli narx kiriting.",
+        "Fake usernames": "Soxta foydalanuvchi nomlari",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Mahalliy limitga yetildi: faol haqiqiy nomlar bilan birga 10 ta kolleksion nom.",
+        "PRICE": "NARX",
+        "This username has been deleted.": "Bu foydalanuvchi nomi o‘chirilgan.",
+        "This username is already in your profile or list.": "Bu nom allaqachon profil yoki ro‘yxatda bor.",
+        "USERNAME": "FOYDALANUVCHI NOMI",
+        "Use only Latin letters, digits and underscores.": "Faqat lotin harflari, raqamlar va pastki chiziqdan foydalaning.",
+        "Usernames can have at most 32 characters.": "Foydalanuvchi nomi ko‘pi bilan 32 belgidan iborat bo‘lishi mumkin.",
         "GRAM (FORMERLY TON)": "GRAM (AVVALGI TON)",
         "Fake GRAM (TON)": "Soxta GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Kiritilgan GRAM balansini faqat sizda, lokal ko‘rsatadi. Haqiqiy GRAM yaratilmaydi va sarflanmaydi.",
@@ -8229,6 +8333,19 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Change": "변경",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "수집용 사용자명과 가격은 나에게만 표시됩니다. 실제 사용자명과 소유권은 변경되지 않습니다.",
+        "Collectible usernames must have at least 4 characters.": "수집용 사용자명은 4자 이상이어야 합니다.",
+        "Delete username": "사용자명 삭제",
+        "Enter a price above zero with at most 9 decimal places.": "0보다 크고 소수점 이하 최대 9자리인 가격을 입력하세요.",
+        "Fake usernames": "가상 사용자명",
+        "Local limit reached: 10 collectible usernames, including active real names.": "로컬 한도 도달: 활성 실제 이름을 포함하여 수집용 사용자명은 10개까지입니다.",
+        "PRICE": "가격",
+        "This username has been deleted.": "이 사용자명은 삭제되었습니다.",
+        "This username is already in your profile or list.": "이 사용자명은 이미 프로필이나 목록에 있습니다.",
+        "USERNAME": "사용자명",
+        "Use only Latin letters, digits and underscores.": "라틴 문자, 숫자, 밑줄만 사용하세요.",
+        "Usernames can have at most 32 characters.": "사용자명은 최대 32자입니다.",
         "GRAM (FORMERLY TON)": "GRAM (이전 TON)",
         "Fake GRAM (TON)": "가짜 GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "입력한 GRAM 잔액을 나에게만, 로컬로 표시합니다. 실제 GRAM은 만들어지거나 사용되지 않습니다.",
@@ -9251,6 +9368,19 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Change": "تغيير",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "أسماء المستخدمين القابلة للاقتناء والأسعار مرئية لك فقط. لا تتغير الأسماء الحقيقية أو الملكية.",
+        "Collectible usernames must have at least 4 characters.": "يجب أن تتكون أسماء المستخدمين القابلة للاقتناء من 4 أحرف على الأقل.",
+        "Delete username": "حذف اسم المستخدم",
+        "Enter a price above zero with at most 9 decimal places.": "أدخل سعرًا أكبر من الصفر مع 9 منازل عشرية كحد أقصى.",
+        "Fake usernames": "أسماء مستخدمين وهمية",
+        "Local limit reached: 10 collectible usernames, including active real names.": "تم بلوغ الحد المحلي: 10 أسماء مستخدمين قابلة للاقتناء، بما فيها الأسماء الحقيقية النشطة.",
+        "PRICE": "السعر",
+        "This username has been deleted.": "تم حذف اسم المستخدم هذا.",
+        "This username is already in your profile or list.": "اسم المستخدم موجود بالفعل في ملفك الشخصي أو القائمة.",
+        "USERNAME": "اسم المستخدم",
+        "Use only Latin letters, digits and underscores.": "استخدم فقط الأحرف اللاتينية والأرقام والشرطة السفلية.",
+        "Usernames can have at most 32 characters.": "يمكن أن تتكون أسماء المستخدمين من 32 حرفًا كحد أقصى.",
         "GRAM (FORMERLY TON)": "GRAM (سابقًا TON)",
         "Fake GRAM (TON)": "GRAM (TON) وهمية",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "يعرض رصيد GRAM المُدخل محليًا، لك وحدك. لا تُنشأ GRAM حقيقية ولا تُنفق.",
@@ -10273,6 +10403,19 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Change": "تغییر",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "نام‌های کاربری کلکسیونی و قیمت‌ها فقط برای شما نمایش داده می‌شوند. نام‌های واقعی و مالکیت تغییری نمی‌کنند.",
+        "Collectible usernames must have at least 4 characters.": "نام کاربری کلکسیونی باید حداقل ۴ نویسه داشته باشد.",
+        "Delete username": "حذف نام کاربری",
+        "Enter a price above zero with at most 9 decimal places.": "قیمتی بیشتر از صفر با حداکثر ۹ رقم اعشار وارد کنید.",
+        "Fake usernames": "نام‌های کاربری ساختگی",
+        "Local limit reached: 10 collectible usernames, including active real names.": "به سقف محلی رسیدید: ۱۰ نام کاربری کلکسیونی، شامل نام‌های واقعی فعال.",
+        "PRICE": "قیمت",
+        "This username has been deleted.": "این نام کاربری حذف شده است.",
+        "This username is already in your profile or list.": "این نام کاربری از قبل در نمایه یا فهرست شما وجود دارد.",
+        "USERNAME": "نام کاربری",
+        "Use only Latin letters, digits and underscores.": "فقط از حروف لاتین، ارقام و زیرخط استفاده کنید.",
+        "Usernames can have at most 32 characters.": "نام کاربری می‌تواند حداکثر ۳۲ نویسه داشته باشد.",
         "GRAM (FORMERLY TON)": "GRAM (نام پیشین TON)",
         "Fake GRAM (TON)": "GRAM (TON) جعلی",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "موجودی GRAMٔ واردشده را به‌صورت محلی و فقط برای شما نشان می‌دهد. GRAMٔ واقعی ساخته یا خرج نمی‌شود.",
@@ -11295,6 +11438,19 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Change": "Өзгерту",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Коллекциялық пайдаланушы аттары мен бағалар тек сізге көрінеді. Нақты аттар мен иелік құқығы өзгермейді.",
+        "Collectible usernames must have at least 4 characters.": "Коллекциялық пайдаланушы аты кемінде 4 таңбадан тұруы керек.",
+        "Delete username": "Пайдаланушы атын жою",
+        "Enter a price above zero with at most 9 decimal places.": "Нөлден жоғары, үтірден кейін ең көбі 9 цифры бар бағаны енгізіңіз.",
+        "Fake usernames": "Жалған пайдаланушы аттары",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Жергілікті шекке жетті: белсенді нақты аттарды қоса алғанда 10 коллекциялық ат.",
+        "PRICE": "БАҒА",
+        "This username has been deleted.": "Бұл пайдаланушы аты жойылған.",
+        "This username is already in your profile or list.": "Бұл ат профильде немесе тізімде бар.",
+        "USERNAME": "ПАЙДАЛАНУШЫ АТЫ",
+        "Use only Latin letters, digits and underscores.": "Тек латын әріптерін, цифрларды және астын сызу таңбасын пайдаланыңыз.",
+        "Usernames can have at most 32 characters.": "Пайдаланушы аты ең көбі 32 таңбадан тұра алады.",
         "GRAM (FORMERLY TON)": "GRAM (БҰРЫНҒЫ TON)",
         "Fake GRAM (TON)": "Жалған GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Енгізілген GRAM балансын тек сізде, жергілікті көрсетеді. Нақты GRAM жасалмайды және жұмсалмайды.",
@@ -12317,6 +12473,19 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Change": "更改",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏用户名和价格仅对你可见。真实用户名及所有权不会改变。",
+        "Collectible usernames must have at least 4 characters.": "收藏用户名至少需要 4 个字符。",
+        "Delete username": "删除用户名",
+        "Enter a price above zero with at most 9 decimal places.": "请输入大于零且最多有 9 位小数的价格。",
+        "Fake usernames": "虚拟用户名",
+        "Local limit reached: 10 collectible usernames, including active real names.": "已达到本地上限：包括已启用的真实名称在内，最多 10 个收藏用户名。",
+        "PRICE": "价格",
+        "This username has been deleted.": "此用户名已被删除。",
+        "This username is already in your profile or list.": "此用户名已存在于你的个人资料或列表中。",
+        "USERNAME": "用户名",
+        "Use only Latin letters, digits and underscores.": "仅可使用拉丁字母、数字和下划线。",
+        "Usernames can have at most 32 characters.": "用户名最多可包含 32 个字符。",
         "GRAM (FORMERLY TON)": "GRAM（原 TON）",
         "Fake GRAM (TON)": "虚拟 GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "仅在本地、仅对你显示所填的GRAM余额。不会创建或消耗真实GRAM。",
@@ -13340,6 +13509,19 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Change": "變更",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏使用者名稱和價格僅供你查看。真實名稱和所有權不會變更。",
+        "Collectible usernames must have at least 4 characters.": "收藏使用者名稱至少需要 4 個字元。",
+        "Delete username": "刪除使用者名稱",
+        "Enter a price above zero with at most 9 decimal places.": "請輸入大於零且最多有 9 位小數的價格。",
+        "Fake usernames": "虛擬使用者名稱",
+        "Local limit reached: 10 collectible usernames, including active real names.": "已達本機上限：包括已啟用的真實名稱在內，最多 10 個收藏使用者名稱。",
+        "PRICE": "價格",
+        "This username has been deleted.": "此使用者名稱已被刪除。",
+        "This username is already in your profile or list.": "此名稱已存在於你的個人資料或清單中。",
+        "USERNAME": "使用者名稱",
+        "Use only Latin letters, digits and underscores.": "僅可使用拉丁字母、數字和底線。",
+        "Usernames can have at most 32 characters.": "使用者名稱最多可包含 32 個字元。",
         "GRAM (FORMERLY TON)": "GRAM（原 TON）",
         "Fake GRAM (TON)": "虛擬 GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "僅在本地、僅對你顯示所填的GRAM餘額。不會建立或消耗真實GRAM。",
@@ -14362,6 +14544,19 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Change": "変更",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "コレクション用ユーザー名と価格は自分にだけ表示されます。実際の名前や所有権は変わりません。",
+        "Collectible usernames must have at least 4 characters.": "コレクション用ユーザー名は4文字以上である必要があります。",
+        "Delete username": "ユーザー名を削除",
+        "Enter a price above zero with at most 9 decimal places.": "0より大きく、小数点以下9桁以内の価格を入力してください。",
+        "Fake usernames": "仮想ユーザー名",
+        "Local limit reached: 10 collectible usernames, including active real names.": "ローカル上限に達しました。有効な実際の名前を含め、コレクション用ユーザー名は10個までです。",
+        "PRICE": "価格",
+        "This username has been deleted.": "このユーザー名は削除されました。",
+        "This username is already in your profile or list.": "このユーザー名は既にプロフィールまたはリストにあります。",
+        "USERNAME": "ユーザー名",
+        "Use only Latin letters, digits and underscores.": "ラテン文字、数字、アンダースコアのみ使用できます。",
+        "Usernames can have at most 32 characters.": "ユーザー名は最大32文字です。",
         "GRAM (FORMERLY TON)": "GRAM（旧 TON）",
         "Fake GRAM (TON)": "仮想 GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "入力したGRAMの残高を自分にだけローカルで表示します。実際のGRAMは発行も消費もされません。",
@@ -15384,6 +15579,19 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Change": "Muuta",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Keräiltävät käyttäjänimet ja hinnat näkyvät vain sinulle. Oikeat nimet ja omistajuus eivät muutu.",
+        "Collectible usernames must have at least 4 characters.": "Keräiltävissä käyttäjänimissä on oltava vähintään 4 merkkiä.",
+        "Delete username": "Poista käyttäjänimi",
+        "Enter a price above zero with at most 9 decimal places.": "Anna nollaa suurempi hinta, jossa on enintään 9 desimaalia.",
+        "Fake usernames": "Kuvitteelliset käyttäjänimet",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Paikallinen raja saavutettu: 10 keräiltävää käyttäjänimeä, mukaan lukien aktiiviset oikeat nimet.",
+        "PRICE": "HINTA",
+        "This username has been deleted.": "Tämä käyttäjänimi on poistettu.",
+        "This username is already in your profile or list.": "Tämä käyttäjänimi on jo profiilissasi tai luettelossa.",
+        "USERNAME": "KÄYTTÄJÄNIMI",
+        "Use only Latin letters, digits and underscores.": "Käytä vain latinalaisia kirjaimia, numeroita ja alaviivoja.",
+        "Usernames can have at most 32 characters.": "Käyttäjänimessä voi olla enintään 32 merkkiä.",
         "GRAM (FORMERLY TON)": "GRAM (ENTINEN TON)",
         "Fake GRAM (TON)": "Valheelliset GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Näyttää syötetyn GRAM-saldon paikallisesti vain sinulle. Oikeita GRAM ei luoda eikä kuluteta.",
@@ -16406,6 +16614,19 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Change": "שינוי",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "שמות משתמש לאספנות והמחירים מוצגים רק לך. שמות אמיתיים והבעלות אינם משתנים.",
+        "Collectible usernames must have at least 4 characters.": "שם משתמש לאספנות חייב להכיל לפחות 4 תווים.",
+        "Delete username": "מחיקת שם משתמש",
+        "Enter a price above zero with at most 9 decimal places.": "יש להזין מחיר גדול מאפס עם עד 9 ספרות אחרי הנקודה.",
+        "Fake usernames": "שמות משתמש מדומים",
+        "Local limit reached: 10 collectible usernames, including active real names.": "הגעת למגבלה המקומית: 10 שמות משתמש לאספנות, כולל שמות אמיתיים פעילים.",
+        "PRICE": "מחיר",
+        "This username has been deleted.": "שם המשתמש הזה נמחק.",
+        "This username is already in your profile or list.": "שם המשתמש הזה כבר מופיע בפרופיל או ברשימה שלך.",
+        "USERNAME": "שם משתמש",
+        "Use only Latin letters, digits and underscores.": "יש להשתמש רק באותיות לטיניות, ספרות וקווים תחתונים.",
+        "Usernames can have at most 32 characters.": "שם משתמש יכול להכיל עד 32 תווים.",
         "GRAM (FORMERLY TON)": "GRAM (לשעבר TON)",
         "Fake GRAM (TON)": "GRAM (TON) מדומים",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "מציג את יתרת הGRAM שהוזנה מקומית, רק עבורכם. לא נוצרים ולא נצרכים GRAM אמיתיים.",
@@ -17428,6 +17649,19 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Change": "Promijeni",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcionarska korisnička imena i cijene vidljivi su samo vama. Stvarna imena i vlasništvo ostaju nepromijenjeni.",
+        "Collectible usernames must have at least 4 characters.": "Kolekcionarska korisnička imena moraju imati najmanje 4 znaka.",
+        "Delete username": "Izbriši korisničko ime",
+        "Enter a price above zero with at most 9 decimal places.": "Unesite cijenu veću od nule s najviše 9 decimalnih mjesta.",
+        "Fake usernames": "Lažna korisnička imena",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Dosegnuto je lokalno ograničenje: 10 kolekcionarskih imena, uključujući aktivna stvarna imena.",
+        "PRICE": "CIJENA",
+        "This username has been deleted.": "Ovo je korisničko ime izbrisano.",
+        "This username is already in your profile or list.": "Ovo korisničko ime već je u profilu ili na popisu.",
+        "USERNAME": "KORISNIČKO IME",
+        "Use only Latin letters, digits and underscores.": "Koristite samo latinična slova, znamenke i podvlake.",
+        "Usernames can have at most 32 characters.": "Korisnička imena mogu imati najviše 32 znaka.",
         "GRAM (FORMERLY TON)": "GRAM (BIVŠI TON)",
         "Fake GRAM (TON)": "Lažni GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Prikazuje uneseno stanje GRAM lokalno, samo vama. Pravi GRAM se ne stvaraju niti troše.",
@@ -18450,6 +18684,19 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Change": "Промени",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекционарска корисничка имена и цене видљиви су само вама. Стварна имена и власништво остају непромењени.",
+        "Collectible usernames must have at least 4 characters.": "Колекционарска корисничка имена морају имати најмање 4 знака.",
+        "Delete username": "Обриши корисничко име",
+        "Enter a price above zero with at most 9 decimal places.": "Унесите цену већу од нуле са највише 9 децималних места.",
+        "Fake usernames": "Лажна корисничка имена",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Достигнуто је локално ограничење: 10 колекционарских имена, укључујући активна стварна имена.",
+        "PRICE": "ЦЕНА",
+        "This username has been deleted.": "Ово корисничко име је обрисано.",
+        "This username is already in your profile or list.": "Ово корисничко име већ постоји у профилу или на листи.",
+        "USERNAME": "КОРИСНИЧКО ИМЕ",
+        "Use only Latin letters, digits and underscores.": "Користите само латинична слова, цифре и доње црте.",
+        "Usernames can have at most 32 characters.": "Корисничка имена могу имати највише 32 знака.",
         "GRAM (FORMERLY TON)": "GRAM (БИВШИ TON)",
         "Fake GRAM (TON)": "Лажни GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Приказује унето стање GRAM локално, само вама. Прави GRAM се не стварају нити троше.",
@@ -19472,6 +19719,19 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Change": "Změnit",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sběratelská uživatelská jména a ceny vidíte jen vy. Skutečná jména ani vlastnictví se nemění.",
+        "Collectible usernames must have at least 4 characters.": "Sběratelská uživatelská jména musí mít alespoň 4 znaky.",
+        "Delete username": "Smazat uživatelské jméno",
+        "Enter a price above zero with at most 9 decimal places.": "Zadejte cenu vyšší než nula s nejvýše 9 desetinnými místy.",
+        "Fake usernames": "Fiktivní uživatelská jména",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Dosažen místní limit: 10 sběratelských jmen včetně aktivních skutečných jmen.",
+        "PRICE": "CENA",
+        "This username has been deleted.": "Toto uživatelské jméno bylo smazáno.",
+        "This username is already in your profile or list.": "Toto uživatelské jméno už je v profilu nebo seznamu.",
+        "USERNAME": "UŽIVATELSKÉ JMÉNO",
+        "Use only Latin letters, digits and underscores.": "Používejte pouze latinská písmena, číslice a podtržítka.",
+        "Usernames can have at most 32 characters.": "Uživatelská jména mohou mít nejvýše 32 znaků.",
         "GRAM (FORMERLY TON)": "GRAM (DŘÍVE TON)",
         "Fake GRAM (TON)": "Falešné GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zobrazí zadaný zůstatek GRAM místně, jen vám. Skutečné GRAM se nevytvářejí ani neutrácejí.",
@@ -20494,6 +20754,19 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Change": "Zmeniť",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Zberateľské používateľské mená a ceny vidíte iba vy. Skutočné mená ani vlastníctvo sa nemenia.",
+        "Collectible usernames must have at least 4 characters.": "Zberateľské používateľské mená musia mať aspoň 4 znaky.",
+        "Delete username": "Odstrániť používateľské meno",
+        "Enter a price above zero with at most 9 decimal places.": "Zadajte cenu vyššiu ako nula s najviac 9 desatinnými miestami.",
+        "Fake usernames": "Fiktívne používateľské mená",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Dosiahnutý miestny limit: 10 zberateľských mien vrátane aktívnych skutočných mien.",
+        "PRICE": "CENA",
+        "This username has been deleted.": "Toto používateľské meno bolo odstránené.",
+        "This username is already in your profile or list.": "Toto používateľské meno už je v profile alebo zozname.",
+        "USERNAME": "POUŽÍVATEĽSKÉ MENO",
+        "Use only Latin letters, digits and underscores.": "Používajte iba latinské písmená, číslice a podčiarkovníky.",
+        "Usernames can have at most 32 characters.": "Používateľské mená môžu mať najviac 32 znakov.",
         "GRAM (FORMERLY TON)": "GRAM (PREDTÝM TON)",
         "Fake GRAM (TON)": "Falošné GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zobrazí zadaný zostatok GRAM miestne, len vám. Skutočné GRAM sa nevytvárajú ani neutrácajú.",
@@ -21516,6 +21789,19 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Change": "Modifică",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Numele de utilizator de colecție și prețurile sunt vizibile doar pentru tine. Numele reale și proprietatea rămân neschimbate.",
+        "Collectible usernames must have at least 4 characters.": "Numele de utilizator de colecție trebuie să aibă cel puțin 4 caractere.",
+        "Delete username": "Șterge numele de utilizator",
+        "Enter a price above zero with at most 9 decimal places.": "Introdu un preț mai mare decât zero, cu cel mult 9 zecimale.",
+        "Fake usernames": "Nume de utilizator fictive",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Limita locală a fost atinsă: 10 nume de colecție, inclusiv numele reale active.",
+        "PRICE": "PREȚ",
+        "This username has been deleted.": "Acest nume de utilizator a fost șters.",
+        "This username is already in your profile or list.": "Acest nume de utilizator este deja în profil sau în listă.",
+        "USERNAME": "NUME DE UTILIZATOR",
+        "Use only Latin letters, digits and underscores.": "Folosește doar litere latine, cifre și linii de subliniere.",
+        "Usernames can have at most 32 characters.": "Numele de utilizator pot avea cel mult 32 de caractere.",
         "GRAM (FORMERLY TON)": "GRAM (FOSTUL TON)",
         "Fake GRAM (TON)": "GRAM (TON) fictivi",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Afișează soldul de GRAM introdus local, doar pentru tine. Nu se creează și nu se cheltuiesc GRAM reale.",
@@ -22538,6 +22824,19 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Change": "Módosítás",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "A gyűjthető felhasználóneveket és az árakat csak te látod. A valódi nevek és a tulajdonjog nem változnak.",
+        "Collectible usernames must have at least 4 characters.": "A gyűjthető felhasználóneveknek legalább 4 karakterből kell állniuk.",
+        "Delete username": "Felhasználónév törlése",
+        "Enter a price above zero with at most 9 decimal places.": "Adj meg nullánál nagyobb árat, legfeljebb 9 tizedesjeggyel.",
+        "Fake usernames": "Fiktív felhasználónevek",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Elérted a helyi korlátot: 10 gyűjthető név, a valódi aktív nevekkel együtt.",
+        "PRICE": "ÁR",
+        "This username has been deleted.": "Ezt a felhasználónevet törölték.",
+        "This username is already in your profile or list.": "Ez a felhasználónév már szerepel a profilodban vagy a listán.",
+        "USERNAME": "FELHASZNÁLÓNÉV",
+        "Use only Latin letters, digits and underscores.": "Csak latin betűket, számjegyeket és aláhúzásjelet használj.",
+        "Usernames can have at most 32 characters.": "A felhasználónevek legfeljebb 32 karakterből állhatnak.",
         "GRAM (FORMERLY TON)": "GRAM (KORÁBBAN TON)",
         "Fake GRAM (TON)": "Hamis GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "A megadott GRAM-egyenleget helyileg, csak neked jeleníti meg. Valódi GRAM nem jön létre és nem fogy el.",
@@ -23560,6 +23859,19 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Change": "Endre",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlebrukernavn og priser er bare synlige for deg. Ekte navn og eierskap forblir uendret.",
+        "Collectible usernames must have at least 4 characters.": "Samlebrukernavn må ha minst 4 tegn.",
+        "Delete username": "Slett brukernavn",
+        "Enter a price above zero with at most 9 decimal places.": "Skriv inn en pris over null med høyst 9 desimaler.",
+        "Fake usernames": "Fiktive brukernavn",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Lokal grense nådd: 10 samlebrukernavn, inkludert aktive ekte navn.",
+        "PRICE": "PRIS",
+        "This username has been deleted.": "Dette brukernavnet er slettet.",
+        "This username is already in your profile or list.": "Dette brukernavnet finnes allerede i profilen eller listen din.",
+        "USERNAME": "BRUKERNAVN",
+        "Use only Latin letters, digits and underscores.": "Bruk bare latinske bokstaver, sifre og understreker.",
+        "Usernames can have at most 32 characters.": "Brukernavn kan ha høyst 32 tegn.",
         "GRAM (FORMERLY TON)": "GRAM (TIDLIGERE TON)",
         "Fake GRAM (TON)": "Falske GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Viser den angitte GRAM-saldoen lokalt, bare for deg. Ingen ekte GRAM opprettes eller brukes.",
@@ -24582,6 +24894,19 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Change": "Ändra",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlingsbara användarnamn och priser visas bara för dig. Riktiga namn och ägande ändras inte.",
+        "Collectible usernames must have at least 4 characters.": "Samlingsbara användarnamn måste ha minst 4 tecken.",
+        "Delete username": "Ta bort användarnamn",
+        "Enter a price above zero with at most 9 decimal places.": "Ange ett pris över noll med högst 9 decimaler.",
+        "Fake usernames": "Fiktiva användarnamn",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Lokal gräns nådd: 10 samlingsbara användarnamn, inklusive aktiva riktiga namn.",
+        "PRICE": "PRIS",
+        "This username has been deleted.": "Det här användarnamnet har tagits bort.",
+        "This username is already in your profile or list.": "Det här användarnamnet finns redan i din profil eller lista.",
+        "USERNAME": "ANVÄNDARNAMN",
+        "Use only Latin letters, digits and underscores.": "Använd endast latinska bokstäver, siffror och understreck.",
+        "Usernames can have at most 32 characters.": "Användarnamn får ha högst 32 tecken.",
         "GRAM (FORMERLY TON)": "GRAM (TIDIGARE TON)",
         "Fake GRAM (TON)": "Falska GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Visar det angivna GRAM-saldot lokalt, bara för dig. Inga riktiga GRAM skapas eller förbrukas.",
@@ -25604,6 +25929,19 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Change": "Thay đổi",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Tên người dùng sưu tầm và giá chỉ hiển thị với bạn. Tên thật và quyền sở hữu không thay đổi.",
+        "Collectible usernames must have at least 4 characters.": "Tên người dùng sưu tầm phải có ít nhất 4 ký tự.",
+        "Delete username": "Xóa tên người dùng",
+        "Enter a price above zero with at most 9 decimal places.": "Nhập giá lớn hơn 0 với tối đa 9 chữ số thập phân.",
+        "Fake usernames": "Tên người dùng giả",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Đã đạt giới hạn cục bộ: 10 tên người dùng sưu tầm, bao gồm tên thật đang hoạt động.",
+        "PRICE": "GIÁ",
+        "This username has been deleted.": "Tên người dùng này đã bị xóa.",
+        "This username is already in your profile or list.": "Tên người dùng này đã có trong hồ sơ hoặc danh sách.",
+        "USERNAME": "TÊN NGƯỜI DÙNG",
+        "Use only Latin letters, digits and underscores.": "Chỉ dùng chữ cái Latinh, chữ số và dấu gạch dưới.",
+        "Usernames can have at most 32 characters.": "Tên người dùng có tối đa 32 ký tự.",
         "GRAM (FORMERLY TON)": "GRAM (TRƯỚC ĐÂY LÀ TON)",
         "Fake GRAM (TON)": "GRAM (TON) giả",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Hiển thị số dư GRAM đã nhập một cách cục bộ, chỉ mình bạn thấy. Không tạo hay tiêu GRAM thật.",
@@ -26626,6 +26964,19 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Change": "Змінити",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекційні імена користувача та ціни бачите лише ви. Справжні імена та право власності не змінюються.",
+        "Collectible usernames must have at least 4 characters.": "Колекційне ім’я користувача має містити щонайменше 4 символи.",
+        "Delete username": "Видалити ім’я користувача",
+        "Enter a price above zero with at most 9 decimal places.": "Введіть ціну більшу за нуль, не більше 9 знаків після коми.",
+        "Fake usernames": "Фейкові імена користувача",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Досягнуто локального ліміту: 10 колекційних імен з урахуванням активних справжніх імен.",
+        "PRICE": "ЦІНА",
+        "This username has been deleted.": "Це ім’я користувача вже видалено.",
+        "This username is already in your profile or list.": "Це ім’я вже є у профілі або списку.",
+        "USERNAME": "ІМ’Я КОРИСТУВАЧА",
+        "Use only Latin letters, digits and underscores.": "Використовуйте лише латинські літери, цифри та знак підкреслення.",
+        "Usernames can have at most 32 characters.": "Ім’я користувача може містити не більше 32 символів.",
         "GRAM (FORMERLY TON)": "GRAM (КОЛИШНІ TON)",
         "Fake GRAM (TON)": "Фейкові GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Показує вказаний баланс GRAM локально, лише у вас. Справжні GRAM не створюються і не витрачаються.",
@@ -27657,6 +28008,19 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Change": "Cambiar",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Los nombres de usuario coleccionables y los precios solo son visibles para ti. Los nombres reales y la propiedad no cambian.",
+        "Collectible usernames must have at least 4 characters.": "Los nombres de usuario coleccionables deben tener al menos 4 caracteres.",
+        "Delete username": "Eliminar nombre de usuario",
+        "Enter a price above zero with at most 9 decimal places.": "Introduce un precio mayor que cero con un máximo de 9 decimales.",
+        "Fake usernames": "Nombres de usuario ficticios",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Límite local alcanzado: 10 nombres de usuario coleccionables, incluidos los nombres reales activos.",
+        "PRICE": "PRECIO",
+        "This username has been deleted.": "Este nombre de usuario se ha eliminado.",
+        "This username is already in your profile or list.": "Este nombre de usuario ya está en tu perfil o lista.",
+        "USERNAME": "NOMBRE DE USUARIO",
+        "Use only Latin letters, digits and underscores.": "Usa solo letras latinas, dígitos y guiones bajos.",
+        "Usernames can have at most 32 characters.": "Los nombres de usuario pueden tener un máximo de 32 caracteres.",
         "GRAM (FORMERLY TON)": "GRAM (ANTES TON)",
         "Fake GRAM (TON)": "GRAM (TON) falsos",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Muestra el saldo de GRAM indicado localmente, solo para ti. No se crean ni se gastan GRAM reales.",
@@ -28688,6 +29052,19 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Change": "Alterar",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Os nomes de utilizador colecionáveis e os preços só são visíveis para si. Os nomes reais e a propriedade não mudam.",
+        "Collectible usernames must have at least 4 characters.": "Os nomes de utilizador colecionáveis devem ter pelo menos 4 caracteres.",
+        "Delete username": "Eliminar nome de utilizador",
+        "Enter a price above zero with at most 9 decimal places.": "Introduza um preço superior a zero com um máximo de 9 casas decimais.",
+        "Fake usernames": "Nomes de utilizador fictícios",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Limite local atingido: 10 nomes de utilizador colecionáveis, incluindo nomes reais ativos.",
+        "PRICE": "PREÇO",
+        "This username has been deleted.": "Este nome de utilizador foi eliminado.",
+        "This username is already in your profile or list.": "Este nome de utilizador já está no perfil ou na lista.",
+        "USERNAME": "NOME DE UTILIZADOR",
+        "Use only Latin letters, digits and underscores.": "Utilize apenas letras latinas, algarismos e sublinhados.",
+        "Usernames can have at most 32 characters.": "Os nomes de utilizador podem ter no máximo 32 caracteres.",
         "GRAM (FORMERLY TON)": "GRAM (ANTIGO TON)",
         "Fake GRAM (TON)": "GRAM (TON) falsos",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Mostra o saldo de GRAM informado localmente, só para você. Nenhuma estrela real é criada ou gasta.",
@@ -29719,6 +30096,19 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Change": "Ändern",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sammelbare Nutzernamen und Preise sind nur für dich sichtbar. Echte Namen und Eigentumsrechte bleiben unverändert.",
+        "Collectible usernames must have at least 4 characters.": "Sammelbare Nutzernamen müssen mindestens 4 Zeichen enthalten.",
+        "Delete username": "Nutzernamen löschen",
+        "Enter a price above zero with at most 9 decimal places.": "Gib einen Preis über null mit höchstens 9 Nachkommastellen ein.",
+        "Fake usernames": "Fiktive Nutzernamen",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Lokales Limit erreicht: 10 sammelbare Nutzernamen einschließlich aktiver echter Namen.",
+        "PRICE": "PREIS",
+        "This username has been deleted.": "Dieser Nutzername wurde gelöscht.",
+        "This username is already in your profile or list.": "Dieser Nutzername ist bereits im Profil oder in der Liste.",
+        "USERNAME": "NUTZERNAME",
+        "Use only Latin letters, digits and underscores.": "Verwende nur lateinische Buchstaben, Ziffern und Unterstriche.",
+        "Usernames can have at most 32 characters.": "Nutzernamen dürfen höchstens 32 Zeichen enthalten.",
         "GRAM (FORMERLY TON)": "GRAM (EHEMALS TON)",
         "Fake GRAM (TON)": "Gefälschte GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Zeigt das eingegebene GRAM-Guthaben lokal an, nur für dich. Es werden keine echten GRAM erzeugt oder ausgegeben.",
@@ -30750,6 +31140,19 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Change": "Modifier",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Les noms d’utilisateur de collection et les prix ne sont visibles que par vous. Les vrais noms et la propriété restent inchangés.",
+        "Collectible usernames must have at least 4 characters.": "Les noms d’utilisateur de collection doivent comporter au moins 4 caractères.",
+        "Delete username": "Supprimer le nom d’utilisateur",
+        "Enter a price above zero with at most 9 decimal places.": "Saisissez un prix supérieur à zéro avec au plus 9 décimales.",
+        "Fake usernames": "Noms d’utilisateur fictifs",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Limite locale atteinte : 10 noms d’utilisateur de collection, y compris les vrais noms actifs.",
+        "PRICE": "PRIX",
+        "This username has been deleted.": "Ce nom d’utilisateur a été supprimé.",
+        "This username is already in your profile or list.": "Ce nom d’utilisateur figure déjà dans votre profil ou votre liste.",
+        "USERNAME": "NOM D’UTILISATEUR",
+        "Use only Latin letters, digits and underscores.": "Utilisez uniquement des lettres latines, des chiffres et des tirets bas.",
+        "Usernames can have at most 32 characters.": "Les noms d’utilisateur peuvent comporter au plus 32 caractères.",
         "GRAM (FORMERLY TON)": "GRAM (ANCIENNEMENT TON)",
         "Fake GRAM (TON)": "GRAM (TON) fictifs",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Affiche le solde d’GRAM saisi localement, uniquement pour vous. Aucune étoile réelle n’est créée ni dépensée.",
@@ -31781,6 +32184,19 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Change": "Değiştir",
+        "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Koleksiyonluk kullanıcı adları ve fiyatlar yalnızca size görünür. Gerçek adlar ve sahiplik değişmez.",
+        "Collectible usernames must have at least 4 characters.": "Koleksiyonluk kullanıcı adları en az 4 karakter olmalıdır.",
+        "Delete username": "Kullanıcı adını sil",
+        "Enter a price above zero with at most 9 decimal places.": "Sıfırdan büyük, en fazla 9 ondalık basamaklı bir fiyat girin.",
+        "Fake usernames": "Sahte kullanıcı adları",
+        "Local limit reached: 10 collectible usernames, including active real names.": "Yerel sınıra ulaşıldı: etkin gerçek adlar dahil 10 koleksiyonluk kullanıcı adı.",
+        "PRICE": "FİYAT",
+        "This username has been deleted.": "Bu kullanıcı adı silindi.",
+        "This username is already in your profile or list.": "Bu kullanıcı adı profilinizde veya listede zaten var.",
+        "USERNAME": "KULLANICI ADI",
+        "Use only Latin letters, digits and underscores.": "Yalnızca Latin harfleri, rakamlar ve alt çizgi kullanın.",
+        "Usernames can have at most 32 characters.": "Kullanıcı adları en fazla 32 karakter olabilir.",
         "GRAM (FORMERLY TON)": "GRAM (ESKİ TON)",
         "Fake GRAM (TON)": "Sahte GRAM (TON)",
         "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent.": "Girilen GRAM bakiyesini yalnızca sizde, yerel olarak gösterir. Gerçek GRAM oluşturulmaz veya harcanmaz.",
