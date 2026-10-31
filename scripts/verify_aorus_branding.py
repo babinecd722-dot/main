@@ -268,7 +268,7 @@ def main() -> None:
         timestamp_text = timestamp_status.read_text(encoding="utf-8")
         if timestamp_text.count("aorusgram_feature_message_seconds") != 5:
             err.append("MessageSeconds: all five central timestamp call sites must use the setting")
-        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 5:
+        if timestamp_text.count("withSeconds: AorusProtectedAccess.boolPreference") != 5:
             err.append("MessageSeconds: Telegram's locale-aware formatter is not used consistently")
 
     multipart_fetch = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "MultipartFetch.swift"
@@ -2614,7 +2614,7 @@ def main() -> None:
         recorder = tg / relative_path
         recorder_text = recorder.read_text(encoding="utf-8") if recorder.is_file() else ""
         for marker in (
-            'AorusProtectedAccess.boolPreference("aorusgram_device_microphone")',
+            'UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")',
             ".portType == .builtInMic",
             "session.setPreferredInput(builtInMicrophone)",
             "session.setPreferredInput(nil)",
