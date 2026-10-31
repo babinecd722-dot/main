@@ -40,11 +40,13 @@ final class AorusGroupedTableView: UITableView {
             contentBackground = backgroundView
             container.isUserInteractionEnabled = contentBackground?.isUserInteractionEnabled ?? false
             container.clipsToBounds = true
+            paneContainer = container
+            backgroundView = container
+            // UITableView detaches its previous background in the setter above.
+            // Adopt it afterwards so the empty state stays in the hierarchy.
             if let contentBackground {
                 container.addSubview(contentBackground)
             }
-            paneContainer = container
-            backgroundView = container
         }
         container.frame = bounds
         contentBackground?.frame = container.bounds
