@@ -140,7 +140,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { preconditionFailure("grouped fixture row missing") }
         expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
         if #available(iOS 14.0, *) {
-            expect(cell.backgroundConfiguration?.strokeWidth == 0 && cell.backgroundConfiguration?.backgroundEffect == nil, "section glass is the sole material/stroke owner")
+            expect(cell.backgroundConfiguration?.strokeWidth == 0 && cell.backgroundConfiguration?.visualEffect == nil, "section glass is the sole material/stroke owner")
         }
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }

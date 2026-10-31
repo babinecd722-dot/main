@@ -5,11 +5,16 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
-from aorus_feature_access import BOOL_READ, LOCK_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL, patch
+from aorus_feature_access import BOOL_READ, LOCK_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL, patch, rewrite_preferences
 from client_work_check import checked
 
 
 def check_patch(repo: Path) -> str:
+    from aorus_old_interface import _edit
+    old = 'if !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && mediaRecordingState == nil {'
+    new = old[:-1] + '&& !AorusOldInterface.isEnabled {'
+    protected = rewrite_preferences(new)
+    assert _edit(protected, old, new, "licensed classic composition") == protected
     with tempfile.TemporaryDirectory() as directory:
         tg = Path(directory)
         owner = tg / "submodules/TelegramCore"

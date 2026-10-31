@@ -206,6 +206,8 @@ def main() -> None:
     paths = [path for path in (args.telegram_source / "submodules").rglob("*") if path.suffix in (".swift", ".m", ".h") or path.name == "BUILD"]
     before = {path: hashlib.sha256(path.read_bytes()).digest() for path in paths}
     patch_old_interface(args.telegram_source)
+    from aorus_feature_access import patch as patch_access
+    patch_access(args.telegram_source)
     changed = [str(path.relative_to(args.telegram_source)) for path in paths if hashlib.sha256(path.read_bytes()).digest() != before[path]]
     if changed:
         raise RuntimeError("Classic replay changed installed source:\n" + "\n".join(changed))

@@ -43,6 +43,27 @@ def _wire(tg: Path, source: Path, module: str) -> None:
     build.write_text(text)
 
 
+def rewrite_preferences(text: str, *, ui: bool = False) -> str:
+    authority = "AorusLicenseAccess" if ui else BRIDGE
+    text = LOCK_READ.sub(lambda m: authority + ".isAllowed" if m[1] else "(!" + authority + ".isAllowed)", text)
+    if not ui:
+        def preference(m, optional=False):
+            # License metadata is not a feature preference.
+            if m[2].startswith("aorusgram_lic"):
+                return m[0]
+            args = '"' + m[2] + '"'
+            if optional:
+                args += ", default: " + m[3]
+            if m[1] != "UserDefaults.standard":
+                args += ", in: " + m[1]
+            return BRIDGE + ".boolPreference(" + args + ")"
+        text = OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
+        text = BARE_OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
+        text = BOOL_READ.sub(preference, text)
+        text = QUICK_REPLIES.sub(BRIDGE + '.stringArrayPreference("aorusgram_quick_replies")', text)
+    return text
+
+
 def patch(tg: Path) -> None:
     root = Path(__file__).resolve().parent.parent
     shutil.copytree(root / "patches/submodules/AorusFeatureAccess", tg / "submodules/AorusFeatureAccess", dirs_exist_ok=True)
@@ -54,23 +75,8 @@ def patch(tg: Path) -> None:
         text = source.read_text()
         original = text
         ui = relative.startswith("submodules/AorusGramUI/")
-        authority = "AorusLicenseAccess" if ui else BRIDGE
-        text = LOCK_READ.sub(lambda m: authority + ".isAllowed" if m[1] else "(!" + authority + ".isAllowed)", text)
+        text = rewrite_preferences(text, ui=ui)
         if not ui:
-            def preference(m, optional=False):
-                # License metadata is not a feature preference.
-                if m[2].startswith("aorusgram_lic"):
-                    return m[0]
-                args = '"' + m[2] + '"'
-                if optional:
-                    args += ", default: " + m[3]
-                if m[1] != "UserDefaults.standard":
-                    args += ", in: " + m[1]
-                return BRIDGE + ".boolPreference(" + args + ")"
-            text = OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
-            text = BARE_OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
-            text = BOOL_READ.sub(preference, text)
-            text = QUICK_REPLIES.sub(BRIDGE + '.stringArrayPreference("aorusgram_quick_replies")', text)
             if source.name == "ChatControllerLoadDisplayNode.swift":
                 # An unauthorized local edit must return, never fall through to
                 # Telegram's server edit RPC (even for one's own message).

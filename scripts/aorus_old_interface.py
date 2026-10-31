@@ -78,6 +78,16 @@ def _edit(text: str, old: str, new: str, label: str, count: int = 1) -> str:
     normalized = re.sub(r"^[ \t]*let (?:glass|isGlass|style|systemStyle|fieldStyle) = [^\n]* // AorusGram: classic components\n", "", text, flags=re.MULTILINE)
     if new in normalized:
         return text
+    # Runtime entitlement rewriting runs after classic rendering. Recognize
+    # that completed form when this patch is replayed; never restore raw flags.
+    from aorus_feature_access import rewrite_preferences
+    for ui in (False, True):
+        protected_new = rewrite_preferences(new, ui=ui)
+        if protected_new != new and protected_new in normalized:
+            return text
+        protected_old = rewrite_preferences(old, ui=ui)
+        if protected_old != old and protected_old in text:
+            return _replace(text, protected_old, protected_new, label, count)
     return _replace(text, old, new, label, count)
 
 

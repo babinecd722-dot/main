@@ -1314,7 +1314,12 @@ jobs:
         run: python3 aorusgram/scripts/voice_twin_check.py aorusgram --telegram-source telegram-ios
 
       - name: Classic interface preflight
-        run: python3 aorusgram/scripts/classic_components_check.py aorusgram --telegram-source telegram-ios
+        run: |
+          PYTHONPATH=aorusgram/scripts python3 - <<'PY'
+          import sys
+          from client_work_check import checked
+          checked([sys.executable, "aorusgram/scripts/classic_components_check.py", "aorusgram", "--telegram-source", "telegram-ios"])
+          PY
 
       - name: Wall menus and classic presentation preflight
         run: python3 aorusgram/scripts/wall_menu_check.py aorusgram --telegram-source telegram-ios
