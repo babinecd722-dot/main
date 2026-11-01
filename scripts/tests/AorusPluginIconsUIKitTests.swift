@@ -289,6 +289,7 @@ private enum AorusPluginIconsUIKitTests {
         guard let window = (UIApplication.shared.delegate as? AorusPluginIconsTestApplication)?.window else {
             fatalError("The native theme regression requires the application's visible window")
         }
+        stage("checking grouped plugin controls and personal badge")
         checks += runInterfaceControlsRegression(window: window)
         checks += runBubbleBitmapRegression()
         stage("checking round video and device badges")

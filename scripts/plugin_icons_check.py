@@ -44,7 +44,11 @@ def simulator_failure_diagnostics(device_id: str, since: float) -> None:
         for path in sorted(reports, key=lambda value: value.name)[-3:]:
             try:
                 print("UIKit simulator crash report: " + path.name, flush=True)
-                print(path.read_text(errors="replace")[:24000], flush=True)
+                report = path.read_text(errors="replace")[:24000]
+                print(report, flush=True)
+                if os.environ.get("GITHUB_ACTIONS"):
+                    message = (path.name + "\n" + report[:14000]).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                    print("::error title=UIKit simulator crash::" + message, flush=True)
             except OSError as failure:
                 print("Cannot read UIKit crash report: " + str(failure), flush=True)
     try:
@@ -337,7 +341,7 @@ def main():
                     while not completion_path.exists() and time.monotonic() < deadline:
                         time.sleep(0.2)
                     if not completion_path.exists():
-                        raise RuntimeError("The UIKit application exited without completing its assertions")
+                        raise RuntimeError("The UIKit application exited without completing its assertions\n" + (result.stdout + result.stderr)[-16000:])
                     completion = json.loads(completion_path.read_text())
                     if completion.get("completed") is not True or completion.get("checks", 0) <= 0 or completion.get("themeChecks", 0) <= 0:
                         raise RuntimeError("The UIKit application wrote an incomplete assertion result")
