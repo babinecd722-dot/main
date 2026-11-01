@@ -80,7 +80,9 @@ func aorusPluginTableStyle() -> UITableView.Style {
 }
 
 func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
-    return active ? .white : theme.aorusGlassListTheme.list.itemPrimaryTextColor
+    if active { return .white }
+    let palette = theme.aorusGlassListTheme
+    return AorusGlassPane.isEnabled ? palette.list.itemPrimaryTextColor : palette.list.itemAccentColor
 }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {

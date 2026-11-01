@@ -61,6 +61,9 @@ jobs:
           python3 aorusgram/scripts/tests/test_aorus_l10n_check.py
           python3 aorusgram/scripts/aorus_l10n_check.py aorusgram
 
+      - name: Native interface fixture preflight
+        run: python3 aorusgram/scripts/tests/test_interface_controls_fixtures.py
+
       # Parsing does not resolve initializers, so a UIKit subclass missing `init(coder:)`
       # is syntactically perfect and fails an hour into the build — twice now.
       - name: UIKit initializer preflight

@@ -410,5 +410,5 @@ extension PresentationTheme {
     var aorusGlassListTheme: PresentationTheme { self }
 }
 func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
-    active ? .white : theme.list.itemPrimaryTextColor
+    active ? .white : theme.list.itemAccentColor
 }

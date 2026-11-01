@@ -4,6 +4,28 @@ import re
 from round_video_uikit_fixtures import declaration
 
 
+def native_item_list_radii(source: str) -> tuple[str, str]:
+    """Read the stock radii before or after our classic/Interface 2.0 patches."""
+    try:
+        body = declaration(source, 'public static func cornersImage(')
+    except (ValueError, IndexError) as exc:
+        raise RuntimeError('Native ItemList corner reference changed') from exc
+    # The classic patch adds a guard to the native glass branch. Interface 2.0
+    # and the classic interface are mutually exclusive; its native radii remain
+    # the same. Accept these two known expressions, never an arbitrary condition.
+    radii = re.search(
+        r'\blet\s+cornerRadius\s*:\s*CGFloat\s*=\s*glass'
+        r'(?:\s*&&\s*!AorusOldInterface\.isEnabled)?\s*\?\s*'
+        r'([0-9]+(?:\.[0-9]+)?)\s*:\s*([0-9]+(?:\.[0-9]+)?)'
+        r'[ \t]*;?[ \t]*(?://[^\n]*)?(?=\n|$)', body)
+    rounded_path = re.search(
+        r'UIBezierPath\s*\(\s*roundedRect:\s*bounds\s*,\s*byRoundingCorners:\s*corners\s*,'
+        r'\s*cornerRadii:\s*CGSize\s*\(\s*width:\s*cornerRadius\s*,\s*height:\s*cornerRadius\s*\)', body)
+    if radii is None or rounded_path is None:
+        raise RuntimeError('Native ItemList corner reference changed')
+    return radii[1], radii[2]
+
+
 def interface_controls_source(repo: Path, tg: Path) -> str:
     source = (repo / 'patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketControllers.swift').read_text()
     surface = (repo / 'patches/submodules/AorusGramUI/Sources/UI/AorusUIKitSurfaces.swift').read_text()
@@ -34,12 +56,10 @@ struct InterfaceNativeLayout {
     }
 ''' + margins + '\n}\n' + reference
     corners = (tg / 'submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift').read_text()
-    radii = re.search(r'let cornerRadius: CGFloat = glass \? ([0-9.]+) : ([0-9.]+)', corners)
-    if radii is None or 'UIBezierPath(roundedRect: bounds, byRoundingCorners:' not in corners:
-        raise RuntimeError('Native ItemList corner reference changed')
+    glass_radius, plain_radius = native_item_list_radii(corners)
     corner_reference = ('enum InterfaceItemListReference {\n'
-                        f'    static let glassRadius: CGFloat = {radii[1]}\n'
-                        f'    static let plainRadius: CGFloat = {radii[2]}\n'
+                        f'    static let glassRadius: CGFloat = {glass_radius}\n'
+                        f'    static let plainRadius: CGFloat = {plain_radius}\n'
                         '}\n')
     defaults = '''
 enum InterfaceGlassPane {
@@ -51,4 +71,5 @@ enum InterfaceGlassPane {
 }
 '''.replace('RADIUS', radius)
     search = declaration(source, 'final class AorusPluginMarketSearchField: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('aorusUIFont(', 'UIFont.systemFont(ofSize:')
-    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, surface, defaults, corner_reference, layout, policy))
+    filter_control = declaration(source, 'final class AorusPluginFilterControl: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme')
+    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, filter_control, surface, defaults, corner_reference, layout, policy))

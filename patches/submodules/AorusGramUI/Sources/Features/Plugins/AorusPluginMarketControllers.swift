@@ -1011,6 +1011,49 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
     }
 }
 
+/// Keep the material outside UIButton's UIKit-managed image hierarchy. UIKit
+/// may reorder its own content; it must never move the glyph under its lens.
+final class AorusPluginFilterControl: UIView {
+    let button = UIButton(type: .system)
+    private let surface = AorusUIKitSurfaceView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        backgroundColor = .clear
+        surface.isOpaque = false
+        surface.isUserInteractionEnabled = false
+        addSubview(surface)
+        button.isOpaque = false
+        button.layer.cornerRadius = AorusPluginMarketSearchField.height / 2
+        addSubview(button)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        surface.frame = bounds
+        button.frame = bounds
+        button.layer.cornerRadius = bounds.height / 2
+    }
+
+    func update(theme: PresentationTheme, active: Bool, image: UIImage) {
+        let palette = theme.aorusGlassListTheme
+        overrideUserInterfaceStyle = palette.overallDarkAppearance ? .dark : .light
+        aorusConfigureSurface(surface, theme: theme, isCapsule: true,
+                              legacyCornerRadius: AorusPluginMarketSearchField.height / 2)
+        surface.isHidden = active
+        let ink = aorusPluginFilterInk(theme, active: active)
+        button.backgroundColor = active ? palette.list.itemAccentColor : .clear
+        button.tintColor = ink
+        button.setImage(image.withRenderingMode(.alwaysTemplate), for: .normal)
+        button.imageView?.tintColor = ink
+        button.imageView?.contentMode = .center
+        setNeedsLayout()
+    }
+}
+
 /// The Market tab: the author's own plugins when there are any, then every approved plugin,
 /// each with its icon, its name and a button that says what installing it would do.
 final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDelegate {
@@ -1033,8 +1076,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private static let sortKey = "aorusgram.market.sort"
     private var sort = AorusPluginMarketSort(rawValue: UserDefaults.standard.string(forKey: AorusPluginMarketView.sortKey) ?? "") ?? .newest
     private let searchField: AorusPluginMarketSearchField
-    private let filterButton = UIButton(type: .system)
-    private let filterSurface = AorusUIKitSurfaceView()
+    private let filterControl = AorusPluginFilterControl(frame: .zero)
+    private var filterButton: UIButton { filterControl.button }
     private let filterHeader = UIView()
     private var filterHeaderInsets: UIEdgeInsets?
     private let noResults = UILabel()
@@ -1074,14 +1117,10 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // One line over the list: the search field, and beside it the order the plugins are
         // listed in, a round glyph that fills while the order is not the usual one.
         searchField.onChange = { [weak self] _ in self?.applyFilters() }
-        filterButton.layer.cornerRadius = AorusPluginMarketSearchField.height / 2
-        filterSurface.isUserInteractionEnabled = false
-        filterSurface.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        filterButton.insertSubview(filterSurface, at: 0)
         filterButton.accessibilityLabel = aorusL("Фильтры", "Filters")
         if #available(iOS 14.0, *) { filterButton.showsMenuAsPrimaryAction = true }
         filterHeader.addSubview(searchField)
-        filterHeader.addSubview(filterButton)
+        filterHeader.addSubview(filterControl)
         noResults.text = aorusL("Ничего не найдено", "Nothing found")
         noResults.font = aorusUIFont(16)
         noResults.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
@@ -1203,8 +1242,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
             let side = AorusPluginMarketSearchField.height
             let top = Self.searchTopInset
             filterHeader.frame = CGRect(x: 0, y: 0, width: columnWidth, height: top + side + Self.searchBottomInset)
-            filterButton.frame = CGRect(x: columnWidth - insets.right - side, y: top, width: side, height: side)
-            searchField.frame = CGRect(x: insets.left, y: top, width: max(0, filterButton.frame.minX - 8 - insets.left), height: side)
+            filterControl.frame = CGRect(x: columnWidth - insets.right - side, y: top, width: side, height: side)
+            searchField.frame = CGRect(x: insets.left, y: top, width: max(0, filterControl.frame.minX - 8 - insets.left), height: side)
             tableView.tableHeaderView = filterHeader
         }
         noResults.frame = CGRect(x: 24, y: filterHeader.frame.maxY + 36, width: max(0, columnWidth - 48), height: 24)
@@ -1359,18 +1398,9 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     /// The order button: a round block beside the field, filled with the accent while the order
     /// is not the usual one, so a list in another order never passes for the usual one.
     private func updateFilters() {
-        filterButton.overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
         let changed = sort != .newest
-        // A funnel, filled while the order is not the usual one; the search inside a chat draws the
-        // same one.
-        filterButton.setImage(AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed), for: .normal)
-        filterSurface.frame = filterButton.bounds
-        filterSurface.isHidden = changed
-        aorusConfigureSurface(filterSurface, theme: theme, isCapsule: true, legacyCornerRadius: AorusPluginMarketSearchField.height / 2)
-        UIView.animate(withDuration: window == nil ? 0 : 0.2) {
-            self.filterButton.backgroundColor = changed ? self.theme.aorusGlassListTheme.list.itemAccentColor : .clear
-            self.filterButton.tintColor = aorusPluginFilterInk(self.theme, active: changed)
-        }
+        filterControl.update(theme: theme, active: changed,
+                             image: AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed))
         filterButton.accessibilityValue = sort.title
         guard #available(iOS 14.0, *) else { return }
         filterButton.menu = UIMenu(title: aorusL("Порядок плагинов", "Sort plugins"), children: AorusPluginMarketSort.allCases.map { choice in

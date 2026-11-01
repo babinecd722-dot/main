@@ -407,6 +407,51 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty, "conventional search contains no glass material")
     expect(searchSurface.layer.cornerRadius == 20, "conventional search retains its native capsule")
     InterfaceGlassPane.isEnabled = true
+    stage("filter foreground stays above its material")
+    let filter = AorusPluginFilterControl(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
+    guard let filterImage = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)),
+          let filterActiveImage = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)) else { fail("native filter glyph missing") }
+    if #available(iOS 14.0, *) {
+        filter.button.showsMenuAsPrimaryAction = true
+        filter.button.menu = UIMenu(children: [UIAction(title: "Sort", handler: { _ in })])
+    }
+    let filterDark = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .darkGray, blocksBackgroundColor: .black, itemPrimaryTextColor: .white), overallDarkAppearance: true)
+    let filterLight = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .white, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
+    for glassEnabled in [true, false] {
+        InterfaceGlassPane.isEnabled = glassEnabled
+        if !glassEnabled {
+            expect(aorusPluginFilterInk(filterLight, active: false).isEqual(filterLight.list.itemAccentColor),
+                   "ordinary filter restores the native accent instead of a forced black glyph")
+        }
+        for theme in [filterDark, filterLight] {
+            for active in [false, true, false] {
+                filter.update(theme: theme, active: active, image: active ? filterActiveImage : filterImage)
+                filter.layoutIfNeeded()
+                filter.button.layoutIfNeeded()
+                guard let backdrop = filter.subviews.compactMap({ $0 as? AorusUIKitSurfaceView }).first,
+                      let backIndex = filter.subviews.firstIndex(where: { $0 === backdrop }),
+                      let frontIndex = filter.subviews.firstIndex(where: { $0 === filter.button }),
+                      let glyph = filter.button.imageView else { fail("filter foreground hierarchy missing") }
+                expect(backIndex < frontIndex && backdrop.superview === filter && filter.button.superview === filter,
+                       "filter material and button are ordered siblings after every image/theme update")
+                expect(glyph.isDescendant(of: filter.button) && !glyph.isDescendant(of: backdrop),
+                       "glass never contains the filter glyph that it would refract")
+                expect(backdrop.frame == filter.bounds && filter.button.frame == filter.bounds,
+                       "foreground and background keep the same native control bounds")
+                expect(backdrop.isHidden == active, "active filter uses its accent fill instead of a lens")
+                let expectedInk = aorusPluginFilterInk(theme, active: active)
+                expect(filter.button.tintColor.isEqual(expectedInk) && glyph.tintColor.isEqual(expectedInk),
+                       "filter glyph keeps the native light/dark foreground colour")
+                expect(filter.button.image(for: .normal)?.renderingMode == .alwaysTemplate,
+                       "black source pixels remain a tintable mask, never an opaque foreground")
+                expect(filter.button.bounds.contains(filter.button.convert(glyph.bounds, from: glyph)), "filter glyph fits inside its native button")
+                let target = filter.hitTest(CGPoint(x: 20, y: 20), with: nil)
+                expect(target === filter.button || target?.isDescendant(of: filter.button) == true,
+                       "the native menu button, not its backdrop, receives taps")
+            }
+        }
+    }
+    InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
     stage("buttons and native swipe")
     for size in [CGSize(width: 90, height: 30), CGSize(width: 180, height: 52), CGSize(width: 70, height: 44)] {
