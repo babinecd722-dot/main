@@ -943,6 +943,7 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
         self.placeholder = placeholder
         super.init(frame: .zero)
         backgroundColor = .clear
+        overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
         nativeBackground.isUserInteractionEnabled = false
         nativeBackground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(nativeBackground)
@@ -984,6 +985,7 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
 
     /// The same field in another theme, with what was typed in it kept.
     func update(theme: PresentationTheme) {
+        overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
         aorusConfigureSurface(nativeBackground, theme: theme, isCapsule: true, legacyCornerRadius: Self.height / 2)
         iconView.tintColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
         textField.textColor = theme.aorusGlassListTheme.list.itemPrimaryTextColor
@@ -1357,6 +1359,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     /// The order button: a round block beside the field, filled with the accent while the order
     /// is not the usual one, so a list in another order never passes for the usual one.
     private func updateFilters() {
+        filterButton.overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
         let changed = sort != .newest
         // A funnel, filled while the order is not the usual one; the search inside a chat draws the
         // same one.

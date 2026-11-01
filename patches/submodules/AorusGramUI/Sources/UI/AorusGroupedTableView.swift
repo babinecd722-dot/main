@@ -105,7 +105,7 @@ final class AorusUIKitOpaqueListPane: UIView, AorusListGlassPane {
     init(color: UIColor) {
         super.init(frame: .zero)
         backgroundColor = color
-        layer.cornerCurve = .continuous
+        layer.cornerCurve = .circular
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool) {

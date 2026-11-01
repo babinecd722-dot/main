@@ -33,6 +33,14 @@ struct InterfaceNativeLayout {
         return (edge == .left ? stripLeft : stripRight) ? CGRect.zero : nil
     }
 ''' + margins + '\n}\n' + reference
+    corners = (tg / 'submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift').read_text()
+    radii = re.search(r'let cornerRadius: CGFloat = glass \? ([0-9.]+) : ([0-9.]+)', corners)
+    if radii is None or 'UIBezierPath(roundedRect: bounds, byRoundingCorners:' not in corners:
+        raise RuntimeError('Native ItemList corner reference changed')
+    corner_reference = ('enum InterfaceItemListReference {\n'
+                        f'    static let glassRadius: CGFloat = {radii[1]}\n'
+                        f'    static let plainRadius: CGFloat = {radii[2]}\n'
+                        '}\n')
     defaults = '''
 enum InterfaceGlassPane {
     static var isEnabled = true
@@ -43,4 +51,4 @@ enum InterfaceGlassPane {
 }
 '''.replace('RADIUS', radius)
     search = declaration(source, 'final class AorusPluginMarketSearchField: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('aorusUIFont(', 'UIFont.systemFont(ofSize:')
-    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, surface, defaults, layout, policy))
+    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, surface, defaults, corner_reference, layout, policy))

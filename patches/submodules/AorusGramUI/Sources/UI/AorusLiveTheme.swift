@@ -84,6 +84,7 @@ func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
 }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {
+    table.overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
     table.backgroundColor = aorusPluginPageColor(theme)
     table.nativePanes = aorusNativeListPanes(theme: theme, isClear: true)
 }

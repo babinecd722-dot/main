@@ -225,7 +225,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     }
     expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 1, "one native glass pane per UIKit section")
     expect(emptyBackdrop.superview === groups.backgroundView, "glass never removes the plugin empty-state view")
-    expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius, "native ItemList tint and authoritative corner radius")
+    expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius && InterfaceGlassPane.blockCornerRadius == InterfaceItemListReference.glassRadius, "native ItemList tint and authoritative corner radius")
     expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
     expect(groups.separatorStyle == .none && separators().count == 2, "only interior joins are drawn, without UIKit section-edge rules")
     for line in separators() {
@@ -361,7 +361,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
     guard let opaquePane = groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first else { fail("conventional section missing") }
-    expect(opaquePane.layer.cornerRadius == 11 && opaquePane.backgroundColor?.isEqual(UIColor.purple) == true, "ordinary groups have the native solid fill and rounded corners")
+    expect(opaquePane.layer.cornerRadius == InterfaceItemListReference.plainRadius && opaquePane.layer.cornerCurve == .circular && opaquePane.backgroundColor?.isEqual(UIColor.purple) == true, "ordinary groups have the native solid fill and rounded corners")
     expect(groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty == true, "ordinary groups do not retain a glass renderer")
     liveCell.backgroundColor = .gray
     liveCell.setHighlighted(true, animated: false)
@@ -387,6 +387,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     let search = AorusPluginMarketSearchField(theme: nativeTheme, placeholder: "Search")
     search.frame = CGRect(x: 0, y: 0, width: 260, height: 40)
     search.layoutIfNeeded()
+    expect(search.overrideUserInterfaceStyle == .dark && groups.overrideUserInterfaceStyle == .dark, "system controls follow the app palette rather than the phone appearance")
     expect(search.textField.textColor?.isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor) == true, "search ink follows the native list palette")
     expect(aorusPluginFilterInk(nativeTheme, active: false).isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor), "inactive filter has the same visible ink as native list controls")
     expect(aorusPluginFilterInk(nativeTheme, active: true).isEqual(UIColor.white), "active filter uses contrasting ink on its accent fill")
@@ -396,6 +397,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     search.textField.text = "kept query"
     search.update(theme: whiteTheme)
     searchSurface.layoutIfNeeded()
+    expect(search.overrideUserInterfaceStyle == .light, "theme changes update the search clear button and other system ink")
     expect(search.textField.text == "kept query" && searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.lastIsVisible == false, "white-page search matches native glass visibility and preserves the query")
     InterfaceGlassPane.isEnabled = false
     search.update(theme: nativeTheme)
