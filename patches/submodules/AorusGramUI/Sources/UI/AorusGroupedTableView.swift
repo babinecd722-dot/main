@@ -56,13 +56,13 @@ final class AorusGroupedTableView: UITableView {
         // the middle never invents a rounded top at the first visible row.
         var sections: [Int: CGRect] = [:]
         for cell in visibleCells {
-            guard let index = super.indexPath(for: cell),
-                  let color = cell.backgroundColor, appearance.isCardColor(color) else { continue }
-            // The same invisible marker native ItemList rows use: the pane
-            // supplies the material; a row must not paint an opaque plate over it.
-            if !color.isEqual(appearance.cardColor) {
-                cell.backgroundColor = appearance.cardColor
+            guard let index = super.indexPath(for: cell) else { continue }
+            var isCard = cell.backgroundColor.map(appearance.isCardColor) ?? false
+            if #available(iOS 14.0, *),
+               let configuredColor = cell.backgroundConfiguration?.backgroundColor {
+                isCard = isCard || appearance.isCardColor(configuredColor)
             }
+            guard isCard else { continue }
             // A grouped UIKit cell can supply its own material/stroke on recent
             // iOS. The section pane below is the sole owner of the glass.
             if #available(iOS 14.0, *) {
@@ -70,7 +70,9 @@ final class AorusGroupedTableView: UITableView {
                 // layout. Do it only when replacing a real material/stroke,
                 // never once per pass through layoutSubviews.
                 let current = cell.backgroundConfiguration
-                let hasFill = (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
+                let hasFill = current?.backgroundColor.map {
+                    $0.cgColor.alpha > 0 && !$0.isEqual(appearance.cardColor)
+                } ?? false
                 let hasImage: Bool
                 if #available(iOS 15.0, *) { hasImage = current?.image != nil }
                 else { hasImage = false }
@@ -80,6 +82,12 @@ final class AorusGroupedTableView: UITableView {
                 }
             } else if cell.backgroundView != nil {
                 cell.backgroundView = nil
+            }
+            // Installing a background configuration can reset backgroundColor.
+            // Apply the ItemList marker afterwards, so subsequent layout passes
+            // still recognize this row and retain its section's material.
+            if cell.backgroundColor?.isEqual(appearance.cardColor) != true {
+                cell.backgroundColor = appearance.cardColor
             }
             sections[index.section] = convert(cell.bounds, from: cell)
         }
