@@ -7,7 +7,9 @@ def activity_source(tg: Path) -> str:
     source = (tg / 'submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift').read_text()
     request = declaration(source, 'func requestActivity(')
     recording = source[source.index('            case .recordingInstantVideo:'):source.index('            case let .uploadingInstantVideo')]
-    return '''import Foundation
+    entitlement = (tg / 'submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift').read_text()
+    return entitlement + '''
+import Foundation
 import CoreFoundation
 import SwiftSignalKit
 struct PeerId: Equatable { let id: Int64; init(_ id: Int64) { self.id = id }; func toInt64() -> Int64 { id } }

@@ -8,6 +8,8 @@ import SwiftSignalKit
         if !value { fatalError(message) }
     }
     static func main() {
+        var licensed = true
+        AorusProtectedAccess.installAuthority { licensed }
         let peerId = PeerId(42)
         let overrideKey = "aorusgram_ghost_peer_override_42"
         let legacyKey = "aorusgram_ghost_peer_42"
@@ -59,6 +61,13 @@ import SwiftSignalKit
         let disposable = requestActivity(postbox: Postbox(peer: TelegramUser()), network: saved, accountPeerId: peerId, peerId: peerId, threadId: nil, activity: .recordingInstantVideo, aorusRoundVideoRecording: true).start()
         expect(saved.requests.isEmpty, "Saved Messages does not publish recording activity")
         disposable.dispose()
+        licensed = false
+        UserDefaults.standard.set(true, forKey: globalKey)
+        let unlicensed = Network()
+        let normalTyping = requestActivity(postbox: Postbox(peer: TelegramUser(), presence: .init(status: .present(timestamp + 600))), network: unlicensed, accountPeerId: PeerId(1), peerId: peerId, threadId: nil, activity: .typingText, aorusRoundVideoRecording: false).start()
+        expect(unlicensed.requests.count == 1, "a forged Ghost Mode preference cannot suppress native activity without a license")
+        normalTyping.dispose()
+        licensed = true
         print("Native round recording activity passed: \(checks) assertions")
     }
 }

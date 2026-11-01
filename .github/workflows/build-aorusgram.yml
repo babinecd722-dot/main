@@ -1334,8 +1334,12 @@ jobs:
 
       - name: Native round video sending preflight
         run: |
-          python3 aorusgram/scripts/round_video_check.py aorusgram --telegram-source telegram-ios
-          python3 aorusgram/scripts/plugin_market_permissions_check.py aorusgram
+          PYTHONPATH=aorusgram/scripts python3 - <<'PY'
+          import sys
+          from client_work_check import checked
+          checked([sys.executable, "aorusgram/scripts/round_video_check.py", "aorusgram", "--telegram-source", "telegram-ios"])
+          checked([sys.executable, "aorusgram/scripts/plugin_market_permissions_check.py", "aorusgram"])
+          PY
 
       - name: Plugin icons and UIKit preflight
         run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
