@@ -40,7 +40,14 @@ private final class InterfaceWrappingCell: UITableViewCell {
             view.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(view)
         }
+        // The label must yield horizontal space to the switch. With both
+        // views at their default compression priority, the fitting solver can
+        // distribute the deficit between them in more than one way.
+        let toggleSize = toggle.sizeThatFits(.zero)
+        precondition(toggleSize.width > 0 && toggleSize.height > 0)
         NSLayoutConstraint.activate([
+            toggle.widthAnchor.constraint(equalToConstant: toggleSize.width),
+            toggle.heightAnchor.constraint(equalToConstant: toggleSize.height),
             label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             label.trailingAnchor.constraint(equalTo: toggle.leadingAnchor, constant: -12),
             label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
@@ -249,7 +256,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
             let rect = view.convert(view.bounds, to: cell.contentView)
             expect(cell.contentView.bounds.contains(rect), "self-sizing text and switch remain inside the block")
         }
-        expect(!cell.contentView.hasAmbiguousLayout && !cell.label.hasAmbiguousLayout, "wrapping layout is fully constrained")
+        expect(!cell.contentView.hasAmbiguousLayout && !cell.label.hasAmbiguousLayout && !cell.toggle.hasAmbiguousLayout,
+               "wrapping layout is fully constrained at viewport \(width): content=\(cell.contentView.hasAmbiguousLayout), label=\(cell.label.hasAmbiguousLayout), switch=\(cell.toggle.hasAmbiguousLayout)")
     }
     expect(heights[0] > heights[1], "narrow native column remeasures wrapping text instead of clipping it")
     dataSource.wraps = false
