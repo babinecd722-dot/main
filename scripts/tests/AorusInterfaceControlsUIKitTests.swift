@@ -145,12 +145,17 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     defer { withExtendedLifetime(dataSource) {}; groups.removeFromSuperview(); baseline.removeFromSuperview() }
     aorusConfigureTable(groups, theme: nativeTheme)
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
+    for _ in 0..<3 { groups.setNeedsLayout(); groups.layoutIfNeeded() }
     for index in 0..<3 {
         let path = IndexPath(row: index, section: 0)
         guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { fail("grouped fixture row missing") }
-        expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card: row \(index), color \(String(describing: cell.backgroundColor))")
         if #available(iOS 14.0, *) {
-            expect(cell.backgroundConfiguration?.strokeWidth == 0 && cell.backgroundConfiguration?.visualEffect == nil, "section glass is the sole material/stroke owner")
+            let background = cell.backgroundConfiguration
+            expect(background?.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "the native row marker survives repeated configuration layouts")
+            expect((cell.backgroundColor?.cgColor.alpha ?? 0) <= InterfaceGlassPane.marker.cgColor.alpha, "the legacy cell background cannot cover the section pane")
+            expect(background?.strokeWidth == 0 && background?.visualEffect == nil, "section glass is the sole material/stroke owner: \(String(describing: background))")
+        } else {
+            expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
         }
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }

@@ -70,24 +70,22 @@ final class AorusGroupedTableView: UITableView {
                 // layout. Do it only when replacing a real material/stroke,
                 // never once per pass through layoutSubviews.
                 let current = cell.backgroundConfiguration
-                let hasFill = current?.backgroundColor.map {
-                    $0.cgColor.alpha > 0 && !$0.isEqual(appearance.cardColor)
-                } ?? false
+                let hasMarker = current?.backgroundColor?.isEqual(appearance.cardColor) == true
                 let hasImage: Bool
                 if #available(iOS 15.0, *) { hasImage = current?.image != nil }
                 else { hasImage = false }
-                if current == nil || hasFill || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
+                if !hasMarker || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
                     cell.backgroundView = nil
-                    cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+                    cell.backgroundColor = nil
+                    var configuration = UIBackgroundConfiguration.clear()
+                    configuration.backgroundColor = appearance.cardColor
+                    cell.backgroundConfiguration = configuration
                 }
-            } else if cell.backgroundView != nil {
-                cell.backgroundView = nil
-            }
-            // Installing a background configuration can reset backgroundColor.
-            // Apply the ItemList marker afterwards, so subsequent layout passes
-            // still recognize this row and retain its section's material.
-            if cell.backgroundColor?.isEqual(appearance.cardColor) != true {
-                cell.backgroundColor = appearance.cardColor
+            } else {
+                if cell.backgroundView != nil { cell.backgroundView = nil }
+                if cell.backgroundColor?.isEqual(appearance.cardColor) != true {
+                    cell.backgroundColor = appearance.cardColor
+                }
             }
             sections[index.section] = convert(cell.bounds, from: cell)
         }
