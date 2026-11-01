@@ -1,4 +1,5 @@
 import UIKit
+import Darwin
 
 struct InterfaceSurfaceTheme {
     struct List {
@@ -47,10 +48,18 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
 }
 
 @MainActor func runInterfaceControlsRegression(window: UIWindow) -> Int {
+    func stage(_ message: String) { print("Interface controls: " + message); fflush(stdout) }
+    stage("identity and badge bitmap")
     var checks = 0
+    func fail(_ message: String) -> Never {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+        try? message.write(to: documents.appendingPathComponent("uikit-controls-failure.txt"), atomically: true, encoding: .utf8)
+        preconditionFailure(message)
+    }
     func expect(_ value: Bool, _ message: String) {
         checks += 1
-        precondition(value, message)
+        if !value { fail(message) }
     }
     let names: [(String?, String?, String?, String)] = [
         ("alice_123", "Other", nil, "@alice_123"),
@@ -120,6 +129,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(AorusPersonalBadge.image().size == dark.size, "long names cannot overflow the housing")
 
     let nativeTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .darkGray), overallDarkAppearance: true)
+    stage("grouped table layout")
     let whiteTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
     let groups = AorusGroupedTableView(frame: CGRect(x: 0, y: 80, width: 320, height: 200), style: .insetGrouped)
     let baseline = UITableView(frame: CGRect(x: 0, y: 300, width: 320, height: 200), style: .insetGrouped)
@@ -137,7 +147,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
     for index in 0..<3 {
         let path = IndexPath(row: index, section: 0)
-        guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { preconditionFailure("grouped fixture row missing") }
+        guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { fail("grouped fixture row missing") }
         expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
         if #available(iOS 14.0, *) {
             expect(cell.backgroundConfiguration?.strokeWidth == 0 && cell.backgroundConfiguration?.visualEffect == nil, "section glass is the sole material/stroke owner")
@@ -145,7 +155,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }
     func glassPane() -> InterfaceNativePane {
-        guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { preconditionFailure("native section pane missing") }
+        guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { fail("native section pane missing") }
         return pane
     }
     expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 1, "one native glass pane per UIKit section")
@@ -153,15 +163,18 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius, "native ItemList tint and authoritative corner radius")
     expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
     dataSource.count = 1
+    stage("single-row layout after deletion")
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
     expect(glassPane().lastSize.height == groups.rectForRow(at: IndexPath(row: 0, section: 0)).height, "single-row pane follows native row geometry after deletion")
     dataSource.count = 50
+    stage("scrolling a long group")
     groups.reloadData()
     groups.contentOffset.y = 400
     groups.setNeedsLayout(); groups.layoutIfNeeded()
     expect(glassPane().frame.minY <= -InterfaceGlassPane.blockCornerRadius, "scrolling through a section never creates a visible rounded top")
     expect(glassPane().bounds.height <= groups.bounds.height + 4 * InterfaceGlassPane.blockCornerRadius, "long sections retain a bounded native material surface")
     aorusConfigureTable(groups, theme: whiteTheme)
+    stage("theme switch and standalone panes")
     groups.layoutIfNeeded()
     expect(!glassPane().lastIsDark && !glassPane().lastIsVisible, "same white-page policy as native Interface 2.0 ItemList")
     let surface = AorusUIKitSurfaceView(frame: CGRect(x: 0, y: 0, width: 280, height: 90))
@@ -176,6 +189,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(groups.nativePanes == nil && groups.backgroundView === emptyBackdrop, "ordinary interface restores the original background and UIKit drawing")
     InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
+    stage("buttons and native swipe")
     for size in [CGSize(width: 90, height: 30), CGSize(width: 180, height: 52), CGSize(width: 70, height: 44)] {
         pill.frame = CGRect(origin: .zero, size: size)
         pill.apply(.init(title: "Install", foreground: .white, background: .blue), animated: false)

@@ -348,7 +348,22 @@ def main():
                     while not completion_path.exists() and time.monotonic() < deadline:
                         time.sleep(0.2)
                     if not completion_path.exists():
-                        raise RuntimeError("The UIKit application exited without completing its assertions\n" + (result.stdout + result.stderr)[-16000:])
+                        failure_path = Path(data_container) / "Documents/uikit-controls-failure.txt"
+                        failure_detail = failure_path.read_text() if failure_path.exists() else ""
+                        # A running process here distinguishes a layout hang from
+                        # an assertion exit, even if simctl drops its console.
+                        processes = subprocess.run(["pgrep", "-f", executable.name], capture_output=True, text=True)
+                        for pid in processes.stdout.split():
+                            try:
+                                stack = subprocess.run(["sample", pid, "1", "1"], capture_output=True, text=True, timeout=15, check=False)
+                                detail = (stack.stdout + stack.stderr)[:14000]
+                                print("UIKit unfinished process sample:\n" + detail, flush=True)
+                                if os.environ.get("GITHUB_ACTIONS"):
+                                    message = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                                    print("::error title=UIKit live process::" + message, flush=True)
+                            except (OSError, subprocess.TimeoutExpired) as sample_failure:
+                                print("Cannot sample UIKit process: " + str(sample_failure), flush=True)
+                        raise RuntimeError("The UIKit application exited without completing its assertions\n" + failure_detail + "\n" + (result.stdout + result.stderr)[-16000:])
                     completion = json.loads(completion_path.read_text())
                     if completion.get("completed") is not True or completion.get("checks", 0) <= 0 or completion.get("themeChecks", 0) <= 0:
                         raise RuntimeError("The UIKit application wrote an incomplete assertion result")

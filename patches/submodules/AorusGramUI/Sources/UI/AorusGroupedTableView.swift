@@ -60,12 +60,23 @@ final class AorusGroupedTableView: UITableView {
                   let color = cell.backgroundColor, appearance.isCardColor(color) else { continue }
             // The same invisible marker native ItemList rows use: the pane
             // supplies the material; a row must not paint an opaque plate over it.
-            cell.backgroundColor = appearance.cardColor
+            if !color.isEqual(appearance.cardColor) {
+                cell.backgroundColor = appearance.cardColor
+            }
             // A grouped UIKit cell can supply its own material/stroke on recent
             // iOS. The section pane below is the sole owner of the glass.
-            cell.backgroundView = nil
             if #available(iOS 14.0, *) {
-                cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+                // Assigning a new configuration invalidates UITableView's own
+                // layout. Do it only when replacing a real material/stroke,
+                // never once per pass through layoutSubviews.
+                let current = cell.backgroundConfiguration
+                let hasFill = (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
+                if current == nil || hasFill || current?.visualEffect != nil || current?.image != nil || current?.strokeWidth != 0 {
+                    cell.backgroundView = nil
+                    cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
+                }
+            } else if cell.backgroundView != nil {
+                cell.backgroundView = nil
             }
             sections[index.section] = convert(cell.bounds, from: cell)
         }
