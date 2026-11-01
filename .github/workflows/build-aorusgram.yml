@@ -1342,7 +1342,12 @@ jobs:
           PY
 
       - name: Plugin icons and UIKit preflight
-        run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
+        run: |
+          PYTHONPATH=aorusgram/scripts python3 - <<'PY'
+          import sys
+          from client_work_check import checked
+          checked([sys.executable, "aorusgram/scripts/plugin_icons_check.py", "aorusgram", "--telegram-source", "telegram-ios"])
+          PY
 
       - name: Native message details preflight
         run: python3 aorusgram/scripts/message_details_check.py aorusgram --telegram-source telegram-ios
