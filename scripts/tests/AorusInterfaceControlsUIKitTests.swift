@@ -5,12 +5,16 @@ struct InterfaceSurfaceTheme {
     struct List {
         let itemBlocksBackgroundColor: UIColor
         let blocksBackgroundColor: UIColor
+        var itemPrimaryTextColor: UIColor = .black
+        var itemSecondaryTextColor: UIColor = .darkGray
+        var itemAccentColor: UIColor = .blue
+        var itemPlaceholderTextColor: UIColor = .gray
     }
     let list: List
     let overallDarkAppearance: Bool
     var aorusGlassListTheme: InterfaceSurfaceTheme {
         guard InterfaceGlassPane.isEnabled else { return self }
-        return InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: InterfaceGlassPane.marker, blocksBackgroundColor: overallDarkAppearance ? .black : .white), overallDarkAppearance: overallDarkAppearance)
+        return InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: InterfaceGlassPane.marker, blocksBackgroundColor: overallDarkAppearance ? .black : .white, itemPrimaryTextColor: overallDarkAppearance ? .white : .black, itemSecondaryTextColor: overallDarkAppearance ? .lightGray : .darkGray, itemAccentColor: .blue, itemPlaceholderTextColor: .gray), overallDarkAppearance: overallDarkAppearance)
     }
 }
 
@@ -28,7 +32,7 @@ final class InterfaceNativePane: UIView, AorusListGlassPane {
     }
 }
 
-private final class InterfaceWrappingCell: UITableViewCell {
+private final class InterfaceWrappingCell: AorusGroupedTableCell {
     let label = UILabel()
     let toggle = UISwitch()
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -59,6 +63,14 @@ private final class InterfaceWrappingCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError() }
 }
 
+private final class InterfaceTrackingCell: AorusGroupedTableCell {
+    private(set) var layoutPasses = 0
+    override func layoutSubviews() {
+        layoutPasses += 1
+        super.layoutSubviews()
+    }
+}
+
 private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     var count = 3
     var wraps = false
@@ -71,7 +83,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
             cell.backgroundColor = .purple
             return cell
         }
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let cell = InterfaceTrackingCell(style: .subtitle, reuseIdentifier: nil)
         cell.textLabel?.text = String(repeating: "Long plugin name ", count: 12)
         cell.detailTextLabel?.text = String(repeating: "Описание плагина ", count: 12)
         cell.accessoryView = UISwitch()
@@ -196,11 +208,11 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         guard let cell = groups.cellForRow(at: path), let nativeCell = baseline.cellForRow(at: path) else { fail("grouped fixture row missing") }
         if #available(iOS 14.0, *) {
             let background = cell.backgroundConfiguration
-            expect(background?.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "the native row marker survives repeated configuration layouts")
+            expect((background?.backgroundColor?.cgColor.alpha ?? 0) == 0, "rows stay transparent over their section material")
             expect((cell.backgroundColor?.cgColor.alpha ?? 0) <= InterfaceGlassPane.marker.cgColor.alpha, "the legacy cell background cannot cover the section pane")
             expect(background?.strokeWidth == 0 && background?.visualEffect == nil, "section glass is the sole material/stroke owner: \(String(describing: background))")
         } else {
-            expect(cell.backgroundColor?.isEqual(InterfaceGlassPane.marker) == true, "a native pane is not covered by the ordinary opaque UIKit card")
+            expect((cell.backgroundColor?.cgColor.alpha ?? 0) == 0, "a native pane is not covered by the ordinary opaque UIKit card")
         }
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }
@@ -308,12 +320,88 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     let surfacePane = surface.subviews.compactMap { $0 as? InterfaceNativePane }.first!
     expect(surfacePane.isClear && surfacePane.lastRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0, "standalone plugin cards use the native material, never a second hand-rounded plate")
     expect(surface.isUserInteractionEnabled, "a field container never disables its text view or send button")
+    stage("live install completion and UIKit state changes")
+    guard let liveCell = groups.visibleCells.first as? AorusGroupedTableCell else { fail("live card missing") }
+    liveCell.backgroundColor = .gray // The same assignment as a Market refresh.
+    liveCell.selectionStyle = .default
+    liveCell.setSelected(true, animated: false)
+    liveCell.setHighlighted(true, animated: false)
+    liveCell.layoutIfNeeded()
+    expect((liveCell.backgroundColor?.cgColor.alpha ?? 0) == 0 && (liveCell.contentView.backgroundColor?.cgColor.alpha ?? 0) == 0, "install refresh cannot paint an opaque square over the section")
+    expect(liveCell.selectionStyle == .none && liveCell.selectedBackgroundView == nil, "pressing a card never installs a rectangular gray mask")
+    if #available(iOS 14.0, *) {
+        var state = liveCell.configurationState
+        state.isHighlighted = true
+        var replacement = UIBackgroundConfiguration.listGroupedCell()
+        replacement.backgroundColor = .gray
+        replacement.strokeWidth = 2
+        liveCell.backgroundConfiguration = replacement
+        liveCell.updateConfiguration(using: state)
+        expect((liveCell.backgroundConfiguration?.backgroundColor?.cgColor.alpha ?? 0) == 0, "UIKit state updates preserve sole section ownership")
+        expect(!liveCell.automaticallyUpdatesBackgroundConfiguration, "UIKit cannot restore its independent row material")
+    }
+    liveCell.setHighlighted(false, animated: false)
+    liveCell.setSelected(false, animated: false)
+    liveCell.layoutIfNeeded()
+    if let tracking = liveCell as? InterfaceTrackingCell {
+        let passes = tracking.layoutPasses
+        for _ in 0..<30 { tracking.layoutIfNeeded() }
+        expect(tracking.layoutPasses == passes, "stable transparent configuration does not schedule an endless layout cycle")
+    }
+
+    let reused = InterfaceTrackingCell(style: .default, reuseIdentifier: "reused")
+    reused.applyListAppearance(groups.nativePanes!)
+    reused.prepareForReuse()
+    reused.backgroundColor = .orange
+    expect(reused.listAppearance == nil && reused.backgroundColor?.isEqual(UIColor.orange) == true, "reuse releases old section ownership before a new row is configured")
+
+    stage("conventional native groups and theme replacement")
     InterfaceGlassPane.isEnabled = false
-    expect(aorusPluginTableStyle() == .insetGrouped, "ordinary interface keeps UIKit inset groups")
+    expect(aorusPluginTableStyle() == .grouped, "both modes measure rows in their native column")
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
-    expect(groups.nativePanes == nil && groups.backgroundView === emptyBackdrop, "ordinary interface restores the original background and UIKit drawing")
-    expect(groups.separatorStyle == baseline.separatorStyle, "ordinary interface restores UIKit separators")
+    guard let opaquePane = groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first else { fail("conventional section missing") }
+    expect(opaquePane.layer.cornerRadius == 11 && opaquePane.backgroundColor?.isEqual(UIColor.purple) == true, "ordinary groups have the native solid fill and rounded corners")
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty == true, "ordinary groups do not retain a glass renderer")
+    liveCell.backgroundColor = .gray
+    liveCell.setHighlighted(true, animated: false)
+    liveCell.layoutIfNeeded()
+    expect((liveCell.backgroundColor?.cgColor.alpha ?? 0) == 0 && liveCell.selectionStyle == .none, "conventional card refresh and press cannot bypass its rounded section")
+    let changedTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .orange, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
+    aorusConfigureTable(groups, theme: changedTheme)
+    groups.layoutIfNeeded()
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.backgroundColor?.isEqual(UIColor.orange) == true, "live theme changes replace the conventional pane colour")
+    for width in [CGFloat(320), 390, 768, 1024] {
+        aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: width, height: 600)))
+        groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: width, height: 200))
+        groups.layoutIfNeeded()
+        let reference = nativeItemListSideMargins(layout: InterfaceNativeLayout(size: CGSize(width: width, height: 600)))
+        expect(groups.frame.minX == reference.left && groups.frame.maxX == width - reference.right, "ordinary groups retain native outer gutters")
+    }
+    InterfaceGlassPane.isEnabled = true
+    aorusConfigureTable(groups, theme: nativeTheme)
+    groups.layoutIfNeeded()
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).isEmpty == true, "returning to Interface 2.0 discards the opaque renderer")
+
+    stage("search and filter palette")
+    let search = AorusPluginMarketSearchField(theme: nativeTheme, placeholder: "Search")
+    search.frame = CGRect(x: 0, y: 0, width: 260, height: 40)
+    search.layoutIfNeeded()
+    expect(search.textField.textColor?.isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor) == true, "search ink follows the native list palette")
+    expect(aorusPluginFilterInk(nativeTheme, active: false).isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor), "inactive filter has the same visible ink as native list controls")
+    expect(aorusPluginFilterInk(nativeTheme, active: true).isEqual(UIColor.white), "active filter uses contrasting ink on its accent fill")
+    guard let searchSurface = search.subviews.compactMap({ $0 as? AorusUIKitSurfaceView }).first else { fail("search surface missing") }
+    searchSurface.layoutIfNeeded()
+    expect(searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.isClear == true, "search uses the same clear material as list sections")
+    search.textField.text = "kept query"
+    search.update(theme: whiteTheme)
+    searchSurface.layoutIfNeeded()
+    expect(search.textField.text == "kept query" && searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.lastIsVisible == false, "white-page search matches native glass visibility and preserves the query")
+    InterfaceGlassPane.isEnabled = false
+    search.update(theme: nativeTheme)
+    searchSurface.layoutIfNeeded()
+    expect(searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty, "conventional search contains no glass material")
+    expect(searchSurface.layer.cornerRadius == 20, "conventional search retains its native capsule")
     InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
     stage("buttons and native swipe")

@@ -74,17 +74,17 @@ func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor {
 }
 
 // Grouped rows fill the column; the table frame supplies ItemList's gutters.
-// The ordinary interface retains UIKit's inset-grouped layout.
+// Both modes use the same column; the section renderer supplies the material.
 func aorusPluginTableStyle() -> UITableView.Style {
-    return AorusGlassPane.isEnabled ? .grouped : .insetGrouped
+    return .grouped
+}
+
+func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
+    return active ? .white : theme.aorusGlassListTheme.list.itemPrimaryTextColor
 }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {
     table.backgroundColor = aorusPluginPageColor(theme)
-    guard AorusGlassPane.isEnabled else {
-        table.nativePanes = nil
-        return
-    }
     table.nativePanes = aorusNativeListPanes(theme: theme, isClear: true)
 }
 
@@ -97,23 +97,27 @@ func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: Container
 
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {
     surface.configure(fill: theme.list.itemBlocksBackgroundColor, legacyCornerRadius: legacyCornerRadius, legacyBorderWidth: legacyBorderWidth,
-                      nativePanes: AorusGlassPane.isEnabled ? aorusNativeListPanes(theme: theme, isClear: !isCapsule) : nil,
+                      nativePanes: AorusGlassPane.isEnabled ? aorusNativeListPanes(theme: theme, isClear: true) : nil,
                       isCapsule: isCapsule)
 }
 
 private func aorusNativeListPanes(theme: PresentationTheme, isClear: Bool) -> AorusGroupedTableView.NativePanes {
+    let glass = AorusGlassPane.isEnabled
     let nativeTheme = theme.aorusGlassListTheme
     let originalCardColor = theme.list.itemBlocksBackgroundColor
     return AorusGroupedTableView.NativePanes(
-        cornerRadius: AorusGlassPane.blockCornerRadius,
+        cornerRadius: glass ? AorusGlassPane.blockCornerRadius : 11,
         isDark: nativeTheme.overallDarkAppearance,
-        isWhitePage: !nativeTheme.overallDarkAppearance && AorusGlassPane.isWhitePage(nativeTheme.list.blocksBackgroundColor),
+        isWhitePage: glass && !nativeTheme.overallDarkAppearance && AorusGlassPane.isWhitePage(nativeTheme.list.blocksBackgroundColor),
         cardColor: nativeTheme.list.itemBlocksBackgroundColor,
         isCardColor: { color in
             return AorusGlassPane.isBlockMarker(color)
                 || (originalCardColor.cgColor.alpha > 0 && color.isEqual(originalCardColor))
         },
-        makePane: { AorusUIKitListGlassPane(isClear: isClear) }
+        makePane: {
+            if glass { return AorusUIKitListGlassPane(isClear: isClear) }
+            return AorusUIKitOpaqueListPane(color: originalCardColor)
+        }
     )
 }
 

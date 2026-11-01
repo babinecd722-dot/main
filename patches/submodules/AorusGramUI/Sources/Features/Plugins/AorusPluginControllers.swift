@@ -143,11 +143,11 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         let theme = presentationData.theme
         modeSwitch?.update(theme: theme)
         marketView?.update(theme: theme)
-        createButton?.update(tint: theme.list.itemAccentColor, isDark: theme.overallDarkAppearance)
+        createButton?.update(tint: theme.aorusGlassListTheme.list.itemAccentColor, isDark: theme.aorusGlassListTheme.overallDarkAppearance)
         guard isNodeLoaded else { return }
         displayNode.backgroundColor = aorusPluginPageColor(theme)
         aorusConfigureTable(tableView, theme: theme)
-        tableView.separatorColor = theme.list.itemBlocksSeparatorColor
+        tableView.separatorColor = theme.aorusGlassListTheme.list.itemBlocksSeparatorColor
         emptyView.configure(theme: theme)
         tableView.reloadData()
     }
@@ -163,7 +163,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         let theme = presentationData.theme
         displayNode.backgroundColor = aorusPluginPageColor(theme)
         aorusConfigureTable(tableView, theme: theme)
-        tableView.separatorColor = theme.list.itemBlocksSeparatorColor
+        tableView.separatorColor = theme.aorusGlassListTheme.list.itemBlocksSeparatorColor
         tableView.dataSource = self
         tableView.delegate = self
         tableView.register(AorusPluginCell.self, forCellReuseIdentifier: "plugin")
@@ -177,8 +177,8 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
                 symbol: "plus",
                 pointSize: 22,
                 weight: .semibold,
-                tint: theme.list.itemAccentColor,
-                isDark: theme.overallDarkAppearance,
+                tint: theme.aorusGlassListTheme.list.itemAccentColor,
+                isDark: theme.aorusGlassListTheme.overallDarkAppearance,
                 shadow: true
             )
             button.accessibilityLabel = AorusPluginUIString.create.text
@@ -555,10 +555,10 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .value1, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
-        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
+        cell.backgroundColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
+        cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
         if indexPath.section == 0 {
             // One switch: on is running, now and at every launch after it.
             let toggle = UISwitch()
@@ -572,7 +572,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
         } else {
             let actionTitles = [AorusPluginUIString.duplicate.text, AorusPluginUIString.export.text, AorusPluginUIString.delete.text]
             cell.textLabel?.text = actionTitles[indexPath.row]
-            if indexPath.row == 2 { cell.textLabel?.textColor = presentationData.theme.list.itemDestructiveColor }
+            if indexPath.row == 2 { cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemDestructiveColor }
         }
         return cell
     }
@@ -830,9 +830,9 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         if let live = owned.live { rows.append(.status(AorusPluginMarketText.published(live.version), .systemGreen)) }
         if let pending = owned.pending { rows.append(.status(AorusPluginMarketText.underReview + " · " + pending.version, .systemOrange)) }
         if let rejected = owned.rejected, rejected.version != owned.live?.version {
-            rows.append(.status(AorusPluginMarketText.rejected + " · " + rejected.version + (rejected.reason.isEmpty ? "" : " — " + rejected.reason), presentationData.theme.list.itemDestructiveColor))
+            rows.append(.status(AorusPluginMarketText.rejected + " · " + rejected.version + (rejected.reason.isEmpty ? "" : " — " + rejected.reason), presentationData.theme.aorusGlassListTheme.list.itemDestructiveColor))
         }
-        if owned.live == nil, owned.takenDown != nil { rows.append(.status(AorusPluginMarketText.takenDown, presentationData.theme.list.itemSecondaryTextColor)) }
+        if owned.live == nil, owned.takenDown != nil { rows.append(.status(AorusPluginMarketText.takenDown, presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor)) }
         return rows
     }
 
@@ -886,11 +886,11 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let theme = presentationData.theme
         let row = sections[indexPath.section].rows[indexPath.row]
-        let cell = UITableViewCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = theme.list.itemBlocksBackgroundColor
-        cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
-        cell.detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
+        cell.backgroundColor = theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
+        cell.textLabel?.textColor = theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
         cell.accessoryType = .disclosureIndicator
         switch row {
         case .banner:
@@ -911,7 +911,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.textLabel?.text = AorusPluginUIString.icon.text
             cell.detailTextLabel?.text = record.manifest.icon
             cell.imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(record.manifest.icon)) ?? UIImage(systemName: AorusPluginIcon.fallback)
-            cell.imageView?.tintColor = theme.list.itemAccentColor
+            cell.imageView?.tintColor = theme.aorusGlassListTheme.list.itemAccentColor
         case .accent:
             cell.textLabel?.text = AorusPluginUIString.accent.text
             cell.detailTextLabel?.text = "#\(record.manifest.accent)"
@@ -923,7 +923,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.accessoryView = swatch
         case .source:
             cell.textLabel?.text = AorusPluginPublishText.fromMarket(record.manifest.market?.version ?? record.manifest.version)
-            cell.textLabel?.textColor = theme.list.itemSecondaryTextColor
+            cell.textLabel?.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
             cell.accessoryType = .none
             cell.selectionStyle = .none
         case let .status(text, color):
@@ -947,24 +947,24 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             // Drawn like the status line it stands in for, so the answer takes its place without
             // the row changing size.
             cell.textLabel?.text = AorusPluginMarketText.updating
-            cell.textLabel?.textColor = theme.list.itemSecondaryTextColor
+            cell.textLabel?.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
             cell.textLabel?.numberOfLines = 0
             cell.textLabel?.font = aorusUIFont(15, .medium)
             cell.accessoryType = .none
             cell.selectionStyle = .none
             let spinner = UIActivityIndicatorView(style: .medium)
-            spinner.color = theme.list.itemSecondaryTextColor
+            spinner.color = theme.aorusGlassListTheme.list.itemSecondaryTextColor
             spinner.startAnimating()
             cell.accessoryView = spinner
         case .publish:
             cell.textLabel?.text = AorusPluginPublishText.publish
-            cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemAccentColor
+            cell.textLabel?.textColor = isBanned ? theme.aorusGlassListTheme.list.itemSecondaryTextColor : theme.aorusGlassListTheme.list.itemAccentColor
             cell.textLabel?.font = aorusUIFont(17, .semibold)
             cell.textLabel?.textAlignment = .center
             cell.accessoryType = .none
         case .delete:
             cell.textLabel?.text = AorusPluginMarketText.deletePlugin
-            cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemDestructiveColor
+            cell.textLabel?.textColor = isBanned ? theme.aorusGlassListTheme.list.itemSecondaryTextColor : theme.aorusGlassListTheme.list.itemDestructiveColor
             cell.textLabel?.font = aorusUIFont(17, .regular)
             cell.textLabel?.textAlignment = .center
             cell.accessoryType = .none
@@ -978,7 +978,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         let format = UIGraphicsImageRendererFormat()
         format.opaque = false
         let banner = AorusPluginStore.shared.banner(for: record.manifest.id).flatMap { UIImage(data: $0) }
-        let accent = presentationData.theme.list.itemAccentColor
+        let accent = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         return UIGraphicsImageRenderer(size: side, format: format).image { context in
             let rect = CGRect(origin: .zero, size: side)
             UIBezierPath(roundedRect: rect, cornerRadius: 10).addClip()
@@ -1193,8 +1193,8 @@ private final class AorusPluginLongTextController: ViewController {
         aorusConfigureSurface(textSurface, theme: presentationData.theme, legacyCornerRadius: 12)
         textView.backgroundColor = .clear
         textView.layer.cornerRadius = textSurface.nativeCornerRadius ?? 12
-        textView.textColor = presentationData.theme.list.itemPrimaryTextColor
-        textView.tintColor = presentationData.theme.list.itemAccentColor
+        textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        textView.tintColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1205,8 +1205,8 @@ private final class AorusPluginLongTextController: ViewController {
         aorusConfigureSurface(textSurface, theme: presentationData.theme, legacyCornerRadius: 12)
         textView.backgroundColor = .clear
         textView.layer.cornerRadius = textSurface.nativeCornerRadius ?? 12
-        textView.textColor = presentationData.theme.list.itemPrimaryTextColor
-        textView.tintColor = presentationData.theme.list.itemAccentColor
+        textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        textView.tintColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         textView.font = aorusUIFont(17)
         textView.layer.cornerCurve = .continuous
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
@@ -1467,7 +1467,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private var awaitingReviewOfChange = false
     private var licenseObserver: NSObjectProtocol?
     private var highlightWork: DispatchWorkItem?
-    private lazy var codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.overallDarkAppearance)
+    private lazy var codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.aorusGlassListTheme.overallDarkAppearance)
     private var currentLayout: ContainerViewLayout?
 
     // MARK: History
@@ -1518,7 +1518,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private func updatePresentationData(_ presentationData: PresentationData) {
         self.presentationData = presentationData
         aorusUpdateChrome(presentationData)
-        codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.overallDarkAppearance)
+        codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.aorusGlassListTheme.overallDarkAppearance)
         guard isNodeLoaded else { return }
         applyEditorColors()
         historyControl?.update(theme: presentationData.theme)
@@ -1528,7 +1528,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     }
 
     private func applyEditorColors() {
-        let dark = presentationData.theme.overallDarkAppearance
+        let dark = presentationData.theme.aorusGlassListTheme.overallDarkAppearance
         let background = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
         displayNode.backgroundColor = background
         gutter.configure(dark: dark)
@@ -1550,7 +1550,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
 
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
-        let dark = presentationData.theme.overallDarkAppearance
+        let dark = presentationData.theme.aorusGlassListTheme.overallDarkAppearance
         let background = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
         displayNode.backgroundColor = background
         gutter.textView = editor
@@ -2269,13 +2269,13 @@ private final class AorusPluginHistoryControl: UIView {
 
     init(glass: UIView & AorusPluginGlassBackground, theme: PresentationTheme) {
         self.glass = glass
-        self.isDark = theme.overallDarkAppearance
-        self.lit = theme.list.itemAccentColor
-        self.unlit = theme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
+        self.isDark = theme.aorusGlassListTheme.overallDarkAppearance
+        self.lit = theme.aorusGlassListTheme.list.itemAccentColor
+        self.unlit = theme.aorusGlassListTheme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
         super.init(frame: CGRect(origin: .zero, size: Self.size))
         glass.isUserInteractionEnabled = false
         addSubview(glass)
-        divider.backgroundColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
+        divider.backgroundColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
         divider.isUserInteractionEnabled = false
         addSubview(divider)
         let configuration = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
@@ -2311,10 +2311,10 @@ private final class AorusPluginHistoryControl: UIView {
 
     /// The arrows in another theme. Which of them is lit is the editor's to say again.
     func update(theme: PresentationTheme) {
-        isDark = theme.overallDarkAppearance
-        lit = theme.list.itemAccentColor
-        unlit = theme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
-        divider.backgroundColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
+        isDark = theme.aorusGlassListTheme.overallDarkAppearance
+        lit = theme.aorusGlassListTheme.list.itemAccentColor
+        unlit = theme.aorusGlassListTheme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
+        divider.backgroundColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
         layer.shadowOpacity = isDark ? 0.35 : 0.12
         setNeedsLayout()
     }
@@ -2363,7 +2363,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         guard isNodeLoaded else { return }
         displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme)
         aorusConfigureTable(tableView, theme: presentationData.theme)
-        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        emptyLabel.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         tableView.reloadData()
     }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -2377,7 +2377,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme)
         aorusConfigureTable(tableView, theme: presentationData.theme); tableView.dataSource = self; tableView.delegate = self
         emptyLabel.text = aorusL("У этого плагина нет настраиваемых параметров.", "This plugin has no configurable settings.")
-        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        emptyLabel.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         emptyLabel.font = aorusUIFont(15)
         emptyLabel.textAlignment = .center
         emptyLabel.numberOfLines = 0
@@ -2405,11 +2405,11 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { fields.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let field = fields[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
-        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
-        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
+        cell.backgroundColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
+        cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         cell.textLabel?.text = field.title
         cell.detailTextLabel?.text = displayValue(for: field) ?? field.summary
         if field.kind == .section {
@@ -2448,7 +2448,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
             swatch.backgroundColor = pluginColor((values[field.key] ?? field.defaultValue)?.stringValue ?? AorusPluginAccent.fallback)
             cell.accessoryView = swatch
         } else if field.kind == .button || field.kind == .reset {
-            cell.textLabel?.textColor = presentationData.theme.list.itemAccentColor
+            cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         } else {
             cell.accessoryType = .disclosureIndicator
         }
@@ -2678,11 +2678,11 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let permission = AorusPluginPermission.allCases[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
-        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
-        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
+        cell.backgroundColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
+        cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         cell.textLabel?.text = permissionTitle(permission)
         cell.detailTextLabel?.text = permissionDescription(permission, requested: requested.contains(permission))
         cell.detailTextLabel?.numberOfLines = 0
@@ -2734,13 +2734,13 @@ private final class AorusPluginDocsController: ViewController {
         aorusUpdateChrome(presentationData)
         guard isNodeLoaded else { return }
         displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme)
-        textView.textColor = presentationData.theme.list.itemPrimaryTextColor
+        textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
     }
     @objc private func exportDocumentation() {
         aorusPluginExportText(AorusPluginTextExport.documentation(AorusPluginDocumentation.text), name: "Plugins_Documentation.md", from: self, anchor: navigationItem.rightBarButtonItem)
     }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme); textView.backgroundColor = .clear; textView.textColor = presentationData.theme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
+    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme); textView.backgroundColor = .clear; textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; transition.updateFrame(view: textView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
 }
 
@@ -3721,7 +3721,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         guard isNodeLoaded else { return }
         displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme)
         aorusConfigureTable(tableView, theme: presentationData.theme)
-        tableView.separatorColor = presentationData.theme.list.itemBlocksSeparatorColor
+        tableView.separatorColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksSeparatorColor
         tableView.reloadData()
     }
 
@@ -3748,7 +3748,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         displayNode = ViewControllerTracingNode()
         displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme)
         aorusConfigureTable(tableView, theme: presentationData.theme)
-        tableView.separatorColor = presentationData.theme.list.itemBlocksSeparatorColor
+        tableView.separatorColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksSeparatorColor
         tableView.dataSource = self
         tableView.delegate = self
         tableView.estimatedRowHeight = 52
@@ -3786,17 +3786,17 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         if let drawn = drawnCell(row: row, indexPath: indexPath) {
             return drawn
         }
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
         cell.textLabel?.text = row.title
-        cell.textLabel?.textColor = row.destructive ? presentationData.theme.list.itemDestructiveColor : presentationData.theme.list.itemPrimaryTextColor
+        cell.textLabel?.textColor = row.destructive ? presentationData.theme.aorusGlassListTheme.list.itemDestructiveColor : presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
         cell.detailTextLabel?.text = detail(for: row)
-        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
+        cell.detailTextLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         cell.detailTextLabel?.numberOfLines = 0
         if let icon = row.icon {
             cell.imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(icon))
-            cell.imageView?.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
+            cell.imageView?.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         }
         switch row.kind {
         case .toggle:
@@ -3835,7 +3835,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             swatch.backgroundColor = aorusPageColor(row.value?.stringValue ?? "007AFF")
             swatch.layer.cornerRadius = 14.0
             swatch.layer.borderWidth = 1.0
-            swatch.layer.borderColor = presentationData.theme.list.itemBlocksSeparatorColor.cgColor
+            swatch.layer.borderColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksSeparatorColor.cgColor
             cell.accessoryView = swatch
         case .date:
             if #available(iOS 14.0, *) {
@@ -3855,7 +3855,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             break
         }
         if let badge = row.badge, !badge.isEmpty, cell.accessoryView == nil {
-            cell.accessoryView = AorusPluginBadgeView(text: badge, color: (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor)
+            cell.accessoryView = AorusPluginBadgeView(text: badge, color: (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.aorusGlassListTheme.list.itemAccentColor)
         }
         return cell
     }
@@ -3923,9 +3923,9 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         case .text, .button, .toggle, .input, .multiline, .number, .select, .link, .slider, .stepper, .color, .date:
             return nil
         }
-        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .default, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = bleeds ? .clear : presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = bleeds ? .clear : presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
         cell.selectionStyle = tappable && !bleeds ? .default : .none
         content.translatesAutoresizingMaskIntoConstraints = false
         cell.contentView.addSubview(content)
@@ -4031,7 +4031,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         }
         picker.minimumDate = row.minimum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
         picker.maximumDate = row.maximum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
-        picker.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
+        picker.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         return picker
     }
 
@@ -4041,7 +4041,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         let picker = datePicker(for: row)
         picker.translatesAutoresizingMaskIntoConstraints = false
         let sheet = UIViewController()
-        sheet.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        sheet.view.backgroundColor = presentationData.theme.aorusGlassListTheme.list.plainBackgroundColor
         sheet.view.addSubview(picker)
         NSLayoutConstraint.activate([
             picker.leadingAnchor.constraint(equalTo: sheet.view.leadingAnchor),
@@ -4052,7 +4052,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         sheet.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(dateSheetCancelled))
         sheet.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dateSheetDone))
         let navigation = UINavigationController(rootViewController: sheet)
-        navigation.navigationBar.tintColor = presentationData.theme.list.itemAccentColor
+        navigation.navigationBar.tintColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         // Only Done and Cancel close it, so the date is never half kept.
         navigation.isModalInPresentation = true
         dateSheet = (row.id, picker, navigation)
@@ -4458,17 +4458,17 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let row = rows[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        let cell = AorusGroupedTableCell(style: .subtitle, reuseIdentifier: nil)
         aorusApplyAppFont(to: cell)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
+        cell.backgroundColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
         cell.selectionStyle = .none
         cell.textLabel?.text = row.0
-        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
+        cell.textLabel?.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
         cell.detailTextLabel?.text = row.1
         cell.detailTextLabel?.numberOfLines = 0
         cell.detailTextLabel?.textColor = row.2
-            ? presentationData.theme.list.itemDestructiveColor
-            : presentationData.theme.list.itemSecondaryTextColor
+            ? presentationData.theme.aorusGlassListTheme.list.itemDestructiveColor
+            : presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         return cell
     }
 }
@@ -4514,16 +4514,16 @@ private final class AorusPluginConsoleController: ViewController {
         self.presentationData = presentationData
         aorusUpdateChrome(presentationData)
         guard isNodeLoaded else { return }
-        let dark = presentationData.theme.overallDarkAppearance
+        let dark = presentationData.theme.aorusGlassListTheme.overallDarkAppearance
         displayNode.backgroundColor = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1.0) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1.0)
-        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        emptyLabel.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         shownEntries = nil
         refresh()
     }
 
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
-        let dark = presentationData.theme.overallDarkAppearance
+        let dark = presentationData.theme.aorusGlassListTheme.overallDarkAppearance
         displayNode.backgroundColor = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1.0) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1.0)
         textView.backgroundColor = .clear
         textView.isEditable = false
@@ -4535,7 +4535,7 @@ private final class AorusPluginConsoleController: ViewController {
         emptyLabel.textAlignment = .center
         emptyLabel.numberOfLines = 0
         emptyLabel.font = aorusUIFont(15.0)
-        emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        emptyLabel.textColor = presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
         displayNode.view.addSubview(textView)
         displayNode.view.addSubview(emptyLabel)
         refresh()
@@ -4569,7 +4569,7 @@ private final class AorusPluginConsoleController: ViewController {
                 string: formatter.string(from: entry.date) + "  ",
                 attributes: [
                     .font: UIFont.monospacedSystemFont(ofSize: 11.0, weight: .regular),
-                    .foregroundColor: presentationData.theme.list.itemSecondaryTextColor
+                    .foregroundColor: presentationData.theme.aorusGlassListTheme.list.itemSecondaryTextColor
                 ]
             )
             let body = NSAttributedString(
@@ -4592,8 +4592,8 @@ private final class AorusPluginConsoleController: ViewController {
         switch level {
         case .error: return .systemRed
         case .warn: return .systemOrange
-        case .debug: return theme.list.itemSecondaryTextColor
-        case .info: return theme.overallDarkAppearance ? UIColor(red: 0.55, green: 0.95, blue: 0.68, alpha: 1.0) : theme.list.itemPrimaryTextColor
+        case .debug: return theme.aorusGlassListTheme.list.itemSecondaryTextColor
+        case .info: return theme.aorusGlassListTheme.overallDarkAppearance ? UIColor(red: 0.55, green: 0.95, blue: 0.68, alpha: 1.0) : theme.aorusGlassListTheme.list.itemPrimaryTextColor
         }
     }
 
@@ -4617,7 +4617,7 @@ extension AorusPluginConsoleController: UITextViewDelegate {
     }
 }
 
-private final class AorusPluginCell: UITableViewCell {
+private final class AorusPluginCell: AorusGroupedTableCell {
     var onToggle: ((Bool) -> Void)?
     private let toggle = UISwitch()
 
@@ -4634,16 +4634,16 @@ private final class AorusPluginCell: UITableViewCell {
 
     func configure(manifest: AorusPluginManifest, record: AorusPluginRecord?, theme: PresentationTheme) {
         representedId = manifest.id
-        backgroundColor = theme.list.itemBlocksBackgroundColor
+        backgroundColor = theme.aorusGlassListTheme.list.itemBlocksBackgroundColor
         textLabel?.text = manifest.name
-        textLabel?.textColor = theme.list.itemPrimaryTextColor
-        detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
+        textLabel?.textColor = theme.aorusGlassListTheme.list.itemPrimaryTextColor
+        detailTextLabel?.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor
         // A Market plugin with a newer version in the catalog says so where its description is.
         if let link = manifest.market, !link.isOwn,
            let card = AorusPluginMarketCatalog.shared.card(id: link.id),
            AorusPluginSemVer.isNewer(card.version, than: link.version) {
             detailTextLabel?.text = AorusPluginMarketText.updateAvailable(card.version)
-            detailTextLabel?.textColor = theme.list.itemAccentColor
+            detailTextLabel?.textColor = theme.aorusGlassListTheme.list.itemAccentColor
         } else {
             detailTextLabel?.text = manifest.summary.isEmpty ? manifest.version : manifest.summary
         }
@@ -4685,7 +4685,7 @@ private final class AorusPluginsEmptyView: UIView {
     var onCreate: (() -> Void)?; private let icon = UIImageView(image: UIImage(systemName: "puzzlepiece.extension")); private let title = UILabel(); private let body = UILabel(); private let button = UIButton(type: .system)
     override init(frame: CGRect) { super.init(frame: frame); icon.contentMode = .scaleAspectFit; title.font = aorusUIFont(22, .semibold); title.textAlignment = .center; body.font = aorusUIFont(15); body.numberOfLines = 0; body.textAlignment = .center; button.setTitle(AorusPluginUIString.create.text, for: .normal); button.titleLabel?.font = aorusUIFont(16, .semibold); button.addTarget(self, action: #selector(create), for: .touchUpInside); [icon,title,body,button].forEach(addSubview) }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func configure(theme: PresentationTheme) { backgroundColor = aorusPluginPageColor(theme); icon.tintColor = theme.list.itemAccentColor; title.textColor = theme.list.itemPrimaryTextColor; body.textColor = theme.list.itemSecondaryTextColor; title.text = AorusPluginUIString.emptyTitle.text; body.text = AorusPluginUIString.emptyBody.text }
+    func configure(theme: PresentationTheme) { backgroundColor = aorusPluginPageColor(theme); icon.tintColor = theme.aorusGlassListTheme.list.itemAccentColor; title.textColor = theme.aorusGlassListTheme.list.itemPrimaryTextColor; body.textColor = theme.aorusGlassListTheme.list.itemSecondaryTextColor; title.text = AorusPluginUIString.emptyTitle.text; body.text = AorusPluginUIString.emptyBody.text }
     override func layoutSubviews() { super.layoutSubviews(); let width = min(bounds.width - 64, 360); icon.frame = CGRect(x: (bounds.width - 52)/2, y: max(60, bounds.midY - 130), width: 52, height: 52); title.frame = CGRect(x: (bounds.width-width)/2, y: icon.frame.maxY+18, width: width, height: 30); body.frame = CGRect(x: (bounds.width-width)/2, y: title.frame.maxY+8, width: width, height: 44); button.frame = CGRect(x: (bounds.width-220)/2, y: body.frame.maxY+16, width: 220, height: 44) }
     @objc private func create() { onCreate?() }
 }

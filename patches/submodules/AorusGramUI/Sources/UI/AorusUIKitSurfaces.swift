@@ -54,6 +54,6 @@ final class AorusUIKitSurfaceView: UIView {
             insertSubview(pane, at: 0)
         }
         pane.frame = bounds
-        pane.updateListPane(size: bounds.size, cornerRadius: capsule ? bounds.height / 2 : configuration.cornerRadius, isDark: configuration.isDark, isVisible: capsule || !configuration.isWhitePage)
+        pane.updateListPane(size: bounds.size, cornerRadius: capsule ? bounds.height / 2 : configuration.cornerRadius, isDark: configuration.isDark, isVisible: !configuration.isWhitePage)
     }
 }

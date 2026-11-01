@@ -6,6 +6,114 @@ protocol AorusListGlassPane: AnyObject {
     func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool)
 }
 
+/// UIKit can reconfigure a row independently of the table (highlight, reuse,
+/// install completion). Keep its material ownership valid at each of those points.
+class AorusGroupedTableCell: UITableViewCell {
+    private(set) var listAppearance: AorusGroupedTableView.NativePanes?
+    private var applyingAppearance = false
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        initializeTransparentBackground()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        initializeTransparentBackground()
+    }
+
+    private func initializeTransparentBackground() {
+        // Banner/hero rows intentionally have no section material either.
+        // They must not inherit UIKit's default grouped-row plate.
+        backgroundColor = .clear
+        contentView.backgroundColor = .clear
+        if #available(iOS 14.0, *) {
+            automaticallyUpdatesBackgroundConfiguration = false
+            backgroundConfiguration = UIBackgroundConfiguration.clear()
+        }
+    }
+
+    override var backgroundColor: UIColor? {
+        didSet { normalizeListBackground() }
+    }
+    override var selectionStyle: UITableViewCell.SelectionStyle {
+        didSet {
+            if listAppearance != nil && selectionStyle != .none { selectionStyle = .none }
+        }
+    }
+
+    func applyListAppearance(_ appearance: AorusGroupedTableView.NativePanes) {
+        listAppearance = appearance
+        normalizeListBackground()
+    }
+
+    override func prepareForReuse() {
+        listAppearance = nil
+        super.prepareForReuse()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        normalizeListBackground()
+    }
+
+    override func setHighlighted(_ highlighted: Bool, animated: Bool) {
+        super.setHighlighted(highlighted, animated: animated)
+        normalizeListBackground()
+    }
+
+    override func setSelected(_ selected: Bool, animated: Bool) {
+        super.setSelected(selected, animated: animated)
+        normalizeListBackground()
+    }
+
+    @available(iOS 14.0, *)
+    override func updateConfiguration(using state: UICellConfigurationState) {
+        super.updateConfiguration(using: state)
+        normalizeListBackground()
+    }
+
+    private func normalizeListBackground() {
+        guard listAppearance != nil, !applyingAppearance else { return }
+        applyingAppearance = true
+        defer { applyingAppearance = false }
+        // The shared section is the sole renderer in both appearance modes.
+        // Selection still invokes the delegate; it never adds a rectangular wash.
+        if selectionStyle != .none { selectionStyle = .none }
+        if backgroundView != nil { backgroundView = nil }
+        if selectedBackgroundView != nil { selectedBackgroundView = nil }
+        if multipleSelectionBackgroundView != nil { multipleSelectionBackgroundView = nil }
+        if (backgroundColor?.cgColor.alpha ?? 0) > 0 { backgroundColor = .clear }
+        if (contentView.backgroundColor?.cgColor.alpha ?? 0) > 0 { contentView.backgroundColor = .clear }
+        if #available(iOS 14.0, *) {
+            if automaticallyUpdatesBackgroundConfiguration { automaticallyUpdatesBackgroundConfiguration = false }
+            let current = backgroundConfiguration
+            let hasImage: Bool
+            if #available(iOS 15.0, *) { hasImage = current?.image != nil }
+            else { hasImage = false }
+            if current == nil || (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
+                || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
+                backgroundConfiguration = UIBackgroundConfiguration.clear()
+            }
+        }
+    }
+}
+
+/// Conventional ItemList sections use a solid card with the standard 11pt corners.
+/// This explicit renderer avoids depending on iOS-specific insetGrouped materials.
+final class AorusUIKitOpaqueListPane: UIView, AorusListGlassPane {
+    init(color: UIColor) {
+        super.init(frame: .zero)
+        backgroundColor = color
+        layer.cornerCurve = .continuous
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool) {
+        layer.cornerRadius = cornerRadius
+        isHidden = !isVisible
+    }
+}
+
 final class AorusGroupedTableView: UITableView {
     struct NativePanes {
         let cornerRadius: CGFloat
@@ -29,7 +137,13 @@ final class AorusGroupedTableView: UITableView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     var nativePanes: NativePanes? {
-        didSet { setNeedsLayout() }
+        didSet {
+            // A theme/mode change can replace a solid pane with a glass pane.
+            // Do not keep a renderer created for the previous appearance.
+            panes.forEach { $0.removeFromSuperview() }
+            panes.removeAll()
+            setNeedsLayout()
+        }
     }
     /// Supplied by the same ContainerViewLayout margin policy as ItemList.
     var nativeSideInsets: UIEdgeInsets? {
@@ -100,36 +214,14 @@ final class AorusGroupedTableView: UITableView {
         var visibleRows: [(IndexPath, CGRect)] = []
         for cell in visibleCells {
             guard let index = super.indexPath(for: cell) else { continue }
-            var isCard = cell.backgroundColor.map(appearance.isCardColor) ?? false
+            var isCard = (cell as? AorusGroupedTableCell)?.listAppearance != nil
+                || (cell.backgroundColor.map(appearance.isCardColor) ?? false)
             if #available(iOS 14.0, *),
                let configuredColor = cell.backgroundConfiguration?.backgroundColor {
                 isCard = isCard || appearance.isCardColor(configuredColor)
             }
             guard isCard else { continue }
-            // A grouped UIKit cell can supply its own material/stroke on recent
-            // iOS. The section pane below is the sole owner of the glass.
-            if #available(iOS 14.0, *) {
-                // Assigning a new configuration invalidates UITableView's own
-                // layout. Do it only when replacing a real material/stroke,
-                // never once per pass through layoutSubviews.
-                let current = cell.backgroundConfiguration
-                let hasMarker = current?.backgroundColor?.isEqual(appearance.cardColor) == true
-                let hasImage: Bool
-                if #available(iOS 15.0, *) { hasImage = current?.image != nil }
-                else { hasImage = false }
-                if !hasMarker || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
-                    cell.backgroundView = nil
-                    cell.backgroundColor = nil
-                    var configuration = UIBackgroundConfiguration.clear()
-                    configuration.backgroundColor = appearance.cardColor
-                    cell.backgroundConfiguration = configuration
-                }
-            } else {
-                if cell.backgroundView != nil { cell.backgroundView = nil }
-                if cell.backgroundColor?.isEqual(appearance.cardColor) != true {
-                    cell.backgroundColor = appearance.cardColor
-                }
-            }
+            (cell as? AorusGroupedTableCell)?.applyListAppearance(appearance)
             sections.insert(index.section)
             visibleRows.append((index, convert(cell.bounds, from: cell)))
         }

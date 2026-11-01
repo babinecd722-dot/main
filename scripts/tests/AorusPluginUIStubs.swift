@@ -405,3 +405,10 @@ func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: Container
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {}
 
 func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor { theme.list.blocksBackgroundColor }
+
+extension PresentationTheme {
+    var aorusGlassListTheme: PresentationTheme { self }
+}
+func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
+    active ? .white : theme.list.itemPrimaryTextColor
+}

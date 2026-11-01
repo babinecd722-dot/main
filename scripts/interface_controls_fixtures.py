@@ -11,7 +11,7 @@ def interface_controls_source(repo: Path, tg: Path) -> str:
     native = (repo / 'scripts/interface_v2_patch.py').read_text()
     radius = re.search(r'public static let blockCornerRadius: CGFloat = ([0-9.]+)', native).group(1)
     policy = '\n'.join(declaration(bridge, marker) for marker in (
-        'func aorusPluginPageColor(', 'func aorusPluginTableStyle(', 'func aorusConfigureTable(', 'func aorusConfigureTableLayout(', 'func aorusConfigureSurface(', 'private func aorusNativeListPanes('))
+        'func aorusPluginPageColor(', 'func aorusPluginFilterInk(', 'func aorusPluginTableStyle(', 'func aorusConfigureTable(', 'func aorusConfigureTableLayout(', 'func aorusConfigureSurface(', 'private func aorusNativeListPanes('))
     policy = policy.replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('AorusGlassPane', 'InterfaceGlassPane').replace('AorusUIKitListGlassPane', 'InterfaceNativePane')
     policy = policy.replace('ContainerViewLayout', 'InterfaceNativeLayout')
     # The reference calculation comes from the installed Telegram tree, not
@@ -42,4 +42,5 @@ enum InterfaceGlassPane {
     static func isWhitePage(_ color: UIColor?) -> Bool { color?.isEqual(UIColor.white) ?? false }
 }
 '''.replace('RADIUS', radius)
-    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), surface, defaults, layout, policy))
+    search = declaration(source, 'final class AorusPluginMarketSearchField: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('aorusUIFont(', 'UIFont.systemFont(ofSize:')
+    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, surface, defaults, layout, policy))
