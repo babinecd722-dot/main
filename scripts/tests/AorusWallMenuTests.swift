@@ -43,6 +43,11 @@ for enabled in [false, true] {
     expect(!localEditAllowed(wall: true), "Wall never exposes Edit Locally")
     expect(localEditAllowed(wall: false) == enabled, "ordinary chats retain their local editing setting")
 }
+wallTestLicensed = false
+testDefaults.set(true, forKey: "aorusgram_feature_edit_locally")
+expect(!localEditAllowed(wall: false), "a forged setting cannot authorize editing in ordinary chats")
+expect(!localEditAllowed(wall: true), "revocation keeps Wall posts excluded")
+wallTestLicensed = true
 for route in 0 ..< 3 {
     for classic in [false, true] {
         let result = installedRoute(route, classic: classic)

@@ -1,10 +1,10 @@
 """Execute installed Wall persistence and context-menu actions."""
 import argparse
 import re
-import subprocess
 import tempfile
 from pathlib import Path
 from classic_sheets_check import block
+from client_work_check import checked
 
 
 def check(repo: Path, tg: Path, swiftc: str):
@@ -14,7 +14,7 @@ def check(repo: Path, tg: Path, swiftc: str):
     methods = '\n'.join(block(store, marker) for marker in ('public static func removedMessageIds(', 'public static func removePosts(', 'private static func key(', 'private static func messageKey(', 'private static func parseMessageKey('))
     methods = methods.replace('UserDefaults.standard', 'testDefaults')
     action = block(menu, 'if let aorusWallContents {')
-    gate = re.search(r'if (!aorusIsWallPost && UserDefaults\.standard\.bool\(forKey: "aorusgram_feature_edit_locally"\))(?=,| \{)', menu)
+    gate = re.search(r'if (!aorusIsWallPost && AorusProtectedAccess\.boolPreference\("aorusgram_feature_edit_locally"\))(?=,| \{)', menu)
     if gate is None:
         raise RuntimeError('Wall posts expose local editing')
     for marker in ('// AorusGram: AorusAI message action v7', '// AorusGram: hide-name forward v1'):
@@ -37,7 +37,11 @@ def check(repo: Path, tg: Path, swiftc: str):
     qr = (tg / 'submodules/SettingsUI/Sources/Data and Storage/ProxyServerSettingsController.swift').read_text()
     start = qr.index('        // AorusGram: classic proxy QR presentation')
     routes.append(qr[start:qr.index('\n    }', start)])
-    source = '''import Foundation
+    access = (tg / 'submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift').read_text()
+    source = access + '''
+import Foundation
+var wallTestLicensed = true
+AorusProtectedAccess.installAuthority { wallTestLicensed }
 let suite = "aorus-wall-tests-" + UUID().uuidString
 let testDefaults = UserDefaults(suiteName: suite)!
 public struct PeerId: Hashable { let value: Int64; public init(_ value: Int64) { self.value = value }; func toInt64() -> Int64 { value } }
@@ -96,14 +100,14 @@ ROUTES
     }
     return (presents + (controller?.presented ?? 0), pushes)
 }
-'''.replace('METHODS', methods).replace('ACTION', action).replace('GATE', gate[1].replace('UserDefaults.standard', 'testDefaults')).replace('ROUTES', '\n'.join('case ' + str(i) + ':\n' + route.replace('presentControllerImpl?(controller,', 'presentControllerImpl?(controller!,').replace('pushControllerImpl?(controller)', 'pushControllerImpl?(controller!)') for i, route in enumerate(routes)))
+'''.replace('METHODS', methods).replace('ACTION', action).replace('GATE', gate[1].replace('boolPreference("aorusgram_feature_edit_locally")', 'boolPreference("aorusgram_feature_edit_locally", in: testDefaults)')).replace('ROUTES', '\n'.join('case ' + str(i) + ':\n' + route.replace('presentControllerImpl?(controller,', 'presentControllerImpl?(controller!,').replace('pushControllerImpl?(controller)', 'pushControllerImpl?(controller!)') for i, route in enumerate(routes)))
     source += (repo / 'scripts/tests/AorusWallMenuTests.swift').read_text()
     with tempfile.TemporaryDirectory(prefix='aorus-wall-menu-') as directory:
         unit = Path(directory) / 'Wall.swift'
         unit.write_text(source)
         binary = Path(directory) / 'wall'
-        subprocess.run([swiftc, '-module-cache-path', directory + '/cache', str(unit), '-o', str(binary)], check=True)
-        subprocess.run([str(binary)], check=True)
+        checked([swiftc, '-module-cache-path', directory + '/cache', str(unit), '-o', str(binary)])
+        checked([str(binary)])
 
 
 if __name__ == '__main__':

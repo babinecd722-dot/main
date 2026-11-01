@@ -6,6 +6,9 @@ import Darwin
 @main
 private enum AorusPluginIconsUIKitTests {
     @MainActor static func main() {
+        // This application measures licensed UI rendering. Denial/revocation
+        // are exercised separately by the feature entitlement regression.
+        AorusProtectedAccess.installAuthority { true }
         UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AorusPluginIconsTestApplication.self))
     }
 
