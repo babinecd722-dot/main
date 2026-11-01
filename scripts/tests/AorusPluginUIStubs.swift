@@ -101,6 +101,7 @@ public struct ContainerViewLayout: Equatable {
     public var safeInsets: UIEdgeInsets
     /// The keyboard's height when it is up, as Telegram's layout reports it.
     public var inputHeight: CGFloat?
+    public func listSideMargins(base: CGFloat) -> (left: CGFloat, right: CGFloat) { (base, base) }
 }
 
 public enum ContainedViewLayoutTransitionCurve: Equatable {
@@ -397,6 +398,7 @@ private final class AorusPluginStubAvatar: UIView, AorusPluginMarketAvatar {
 }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {}
+func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: ContainerViewLayout) {}
 
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {}
 

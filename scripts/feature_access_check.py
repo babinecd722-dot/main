@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
-from aorus_feature_access import BOOL_READ, LOCK_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL, patch, rewrite_preferences
+from aorus_feature_access import BOOL_READ, LOCK_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL, QUICK_REPLIES, patch, rewrite_preferences
 from client_work_check import checked
 
 
@@ -26,6 +26,7 @@ let ghost = UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode")
 let deleted = (UserDefaults.standard.object(forKey: "aorusgram_feature_deleted_messages") as? Bool) ?? true
 let edited = UserDefaults.standard.object(forKey: "aorusgram_feature_edited_messages") as? Bool ?? true
 let unlocked = !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+let replies = defaults.stringArray(forKey: "aorusgram_quick_replies")
 ''')
         ui = tg / "submodules/TelegramUI"
         (ui / "Sources/Chat").mkdir(parents=True)
@@ -57,6 +58,7 @@ func dispatchLocalEdit(aorusLocalEditToken: String) {
         assert 'AorusProtectedAccess.boolPreference("aorusgram_feature_deleted_messages", default: true)' in first
         assert 'AorusProtectedAccess.boolPreference("aorusgram_feature_edited_messages", default: true)' in first
         assert "let unlocked = AorusProtectedAccess.isAllowed" in first
+        assert 'AorusProtectedAccess.stringArrayPreference("aorusgram_quick_replies", in: defaults)' in first
         assert "//submodules/AorusFeatureAccess:AorusFeatureAccess" in (owner / "BUILD").read_text()
         patch(tg)
         assert source.read_text() == first, "entitlement patch must be idempotent"
@@ -74,6 +76,7 @@ def check_tree(tg: Path) -> None:
         text = source.read_text()
         assert not LOCK_READ.search(text), f"mutable lock mirror still grants access: {path}"
         if not path.startswith("submodules/AorusGramUI/"):
+            assert not QUICK_REPLIES.search(text), f"unguarded saved quick replies: {path}"
             for pattern in (BOOL_READ, OPTIONAL_BOOL, BARE_OPTIONAL_BOOL):
                 for match in pattern.finditer(text):
                     assert match[2].startswith("aorusgram_lic"), f"unguarded preference: {path}: {match[0]}"

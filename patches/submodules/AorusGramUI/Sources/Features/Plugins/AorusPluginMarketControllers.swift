@@ -1034,7 +1034,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private let filterButton = UIButton(type: .system)
     private let filterSurface = AorusUIKitSurfaceView()
     private let filterHeader = UIView()
-    private var filterHeaderMargin: CGFloat = -1
+    private var filterHeaderInsets: UIEdgeInsets?
     private let noResults = UILabel()
     private var statsObserver: NSObjectProtocol?
     private var reloadGeneration = 0
@@ -1181,7 +1181,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         applyFilters()
     }
 
-    func setInsets(top: CGFloat, bottom: CGFloat) {
+    func setInsets(top: CGFloat, bottom: CGFloat, sideInsets: UIEdgeInsets?) {
+        tableView.nativeSideInsets = sideInsets
         tableView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0)
         tableView.scrollIndicatorInsets = tableView.contentInset
         setNeedsLayout()
@@ -1193,14 +1194,15 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // The search line lines up with the cards under it, and starts clear of the band the
         // navigation bar's edge fades over: that band covers the top of this list, so a field
         // placed at the very top showed only its lower part.
-        let margin = max(tableView.layoutMargins.left, 16)
-        if filterHeader.frame.width != bounds.width || filterHeaderMargin != margin || tableView.tableHeaderView == nil {
-            filterHeaderMargin = margin
+        let base = AorusGroupedTableView.blockSideInset(for: bounds.width)
+        let insets = tableView.nativePanes != nil ? (tableView.nativeSideInsets ?? UIEdgeInsets(top: 0, left: base, bottom: 0, right: base)) : tableView.layoutMargins
+        if filterHeader.frame.width != bounds.width || filterHeaderInsets != insets || tableView.tableHeaderView == nil {
+            filterHeaderInsets = insets
             let side = AorusPluginMarketSearchField.height
             let top = Self.searchTopInset
             filterHeader.frame = CGRect(x: 0, y: 0, width: bounds.width, height: top + side + Self.searchBottomInset)
-            filterButton.frame = CGRect(x: bounds.width - margin - side, y: top, width: side, height: side)
-            searchField.frame = CGRect(x: margin, y: top, width: max(0, filterButton.frame.minX - 8 - margin), height: side)
+            filterButton.frame = CGRect(x: bounds.width - insets.right - side, y: top, width: side, height: side)
+            searchField.frame = CGRect(x: insets.left, y: top, width: max(0, filterButton.frame.minX - 8 - insets.left), height: side)
             tableView.tableHeaderView = filterHeader
         }
         noResults.frame = CGRect(x: 24, y: filterHeader.frame.maxY + 36, width: max(0, bounds.width - 48), height: 24)
@@ -2433,6 +2435,7 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }

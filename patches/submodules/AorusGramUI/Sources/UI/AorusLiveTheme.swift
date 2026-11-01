@@ -82,6 +82,13 @@ func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationThem
     table.nativePanes = aorusNativeListPanes(theme: theme, isClear: true)
 }
 
+func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: ContainerViewLayout) {
+    let base = AorusGroupedTableView.blockSideInset(for: layout.size.width)
+    let margins = layout.listSideMargins(base: base)
+    table.nativeSideInsets = UIEdgeInsets(top: 0, left: layout.intrinsicInsets.left + margins.left,
+                                          bottom: 0, right: layout.intrinsicInsets.right + margins.right)
+}
+
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {
     surface.configure(fill: theme.list.itemBlocksBackgroundColor, legacyCornerRadius: legacyCornerRadius, legacyBorderWidth: legacyBorderWidth,
                       nativePanes: AorusGlassPane.isEnabled ? aorusNativeListPanes(theme: theme, isClear: !isCapsule) : nil,

@@ -31,6 +31,7 @@ enum AorusEnvGuard {
     private static let featureLock = NSLock()
     private static var nextFeatureProbe: TimeInterval = 0
     private static var featurePermit = true
+    private static var featureEvidenceRecorded = false
         private static let runtimeData: [[UInt8]] = [
         [0xa4, 0x30, 0xd4, 0x15, 0xe2, 0x59, 0x0e, 0xb4, 0x7c, 0xa1, 0x78],
         [0xa4, 0x30, 0xd4, 0x15, 0xea, 0x40, 0x10, 0xb9, 0x74, 0xb6, 0x6f, 0x0c, 0xc5, 0x4f, 0xdd, 0x28, 0xa1, 0x13, 0xff, 0x39, 0xdd, 0x57, 0x0c, 0xb9, 0x7e, 0xb6],
@@ -90,6 +91,9 @@ enum AorusEnvGuard {
         [0x8e, 0x13, 0xfe, 0x26, 0xc6, 0x56, 0x13, 0xb0, 0x69, 0xb2, 0x6f, 0x0c],
     ]
 
+    private static let imageMarkers = imageData.map { s($0) }
+    private static let runtimeNames = runtimeData.map { s($0) }
+
     private static let linkData: [[UInt8]] = [
         [0xcd, 0x3d, 0xe1, 0x3d, 0xc3, 0x51, 0x03, 0xb4, 0x6f, 0xad, 0x65, 0x10, 0xe0],
         [0xcd, 0x30, 0xf8, 0x2f, 0xdd, 0x59, 0x12, 0xac, 0x34, 0x96, 0x63, 0x10, 0xf4, 0x52, 0xd7, 0x31, 0x87, 0x0f],
@@ -148,11 +152,22 @@ enum AorusEnvGuard {
     }
 
     private static func probeRuntime() -> Bool {
-        return runtimeData.contains { NSClassFromString(s($0)) != nil }
+        return runtimeNames.contains { NSClassFromString($0) != nil }
     }
 
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {
-        guard compromised else { return true }
+        // Share the in-process latch across launch, gate, request and feature
+        // probes. Mutable defaults cannot clear it or repeatedly trip the counter.
+        featureLock.lock()
+        if compromised { featurePermit = false }
+        let denied = !featurePermit
+        let shouldRecord = denied && !featureEvidenceRecorded
+        if shouldRecord { featureEvidenceRecorded = true }
+        featureLock.unlock()
+        guard denied else { return true }
+        guard shouldRecord else { return false }
+        // Notifications may synchronously re-enter entitlement checks. Keep all
+        // defaults writes, counter updates and notifications outside the lock.
         let defaults = UserDefaults.standard
         let wasRecorded = defaults.bool(forKey: "e7b3f014-2a8d-4c61-9f05-3b6a1e8d4c02")
         defaults.set(true, forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")
@@ -234,13 +249,12 @@ enum AorusEnvGuard {
     }
 
     private static func probeImages() -> Bool {
-        let markers = imageData.map { s($0) }
         let count = _dyld_image_count()
         var i: UInt32 = 0
         while i < count {
             if let cName = _dyld_get_image_name(i) {
                 let name = String(cString: cName).lowercased()
-                if markers.contains(where: { name.contains($0) }) { return true }
+                if imageMarkers.contains(where: { name.contains($0) }) { return true }
             }
             i += 1
         }

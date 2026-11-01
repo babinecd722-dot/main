@@ -220,7 +220,7 @@ def main():
             tab_identity = args.repo / "patches/submodules/Display/Source/AorusTabBarIdentity.swift"
             from interface_controls_fixtures import interface_controls_source
             interface_controls = work / "InterfaceControls.swift"
-            interface_controls.write_text(interface_controls_source(args.repo))
+            interface_controls.write_text(interface_controls_source(args.repo, args.telegram_source))
             personal_badge = work / "AorusPersonalBadge.swift"
             personal_badge.write_text((args.repo / "patches/submodules/Display/Source/AorusPersonalBadge.swift").read_text().replace("import AppBundle\n", ""))
             personal_name = args.repo / "patches/submodules/Display/Source/AorusPersonalBadgeName.swift"

@@ -196,6 +196,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         currentLayout = layout
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         let frame = CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: frame)
         let side = Self.createButtonSide
         // The last plugin scrolls clear of the button instead of ending up under it.
@@ -210,7 +211,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         }
         if let marketView {
             transition.updateFrame(view: marketView, frame: frame)
-            marketView.setInsets(top: 0, bottom: layout.intrinsicInsets.bottom)
+            marketView.setInsets(top: 0, bottom: layout.intrinsicInsets.bottom, sideInsets: tableView.nativeSideInsets)
         }
     }
 
@@ -503,6 +504,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
     }
 
@@ -764,6 +766,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
@@ -2398,7 +2401,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         if fields.isEmpty, AorusLicenseAccess.isAllowed { discoverSchema() }
         displayNodeDidLoad()
     }
-    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
+    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; aorusConfigureTableLayout(tableView, layout: layout); transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { fields.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let field = fields[indexPath.row]
@@ -2667,6 +2670,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
     }
 
@@ -3767,6 +3771,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
@@ -4393,6 +4398,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
+        aorusConfigureTableLayout(tableView, layout: layout)
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }

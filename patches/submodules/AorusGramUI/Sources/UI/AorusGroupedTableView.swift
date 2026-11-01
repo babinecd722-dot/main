@@ -19,17 +19,36 @@ final class AorusGroupedTableView: UITableView {
     var nativePanes: NativePanes? {
         didSet { setNeedsLayout() }
     }
+    /// Supplied by the same ContainerViewLayout margin policy as ItemList.
+    var nativeSideInsets: UIEdgeInsets? {
+        didSet { if oldValue != nativeSideInsets { setNeedsLayout() } }
+    }
+    static func blockSideInset(for width: CGFloat) -> CGFloat {
+        // ItemListControllerNode.listSideMargins: 16pt on phones, a 674pt
+        // centered list on wide layouts. Cell bounds include the outer gutters.
+        return width >= 320 ? max(16, floor((width - 674) / 2)) : 0
+    }
     private var paneContainer: UIView?
     private var contentBackground: UIView?
     private var panes: [UIView & AorusListGlassPane] = []
+    private var rowSeparators: [CALayer] = []
+    private var ordinarySeparatorStyle: UITableViewCell.SeparatorStyle?
 
     override func layoutSubviews() {
+        if nativePanes != nil {
+            if ordinarySeparatorStyle == nil { ordinarySeparatorStyle = separatorStyle }
+            if separatorStyle != .none { separatorStyle = .none }
+        } else if let original = ordinarySeparatorStyle {
+            separatorStyle = original
+            ordinarySeparatorStyle = nil
+        }
         super.layoutSubviews()
         guard let appearance = nativePanes else {
             if let container = paneContainer, backgroundView === container { backgroundView = contentBackground }
             contentBackground = nil
             paneContainer = nil
             panes.removeAll()
+            rowSeparators.removeAll()
             return
         }
         let container: UIView
@@ -54,7 +73,8 @@ final class AorusGroupedTableView: UITableView {
         // UIKit owns section bounds and cell insets, including automatic row
         // heights and safe areas. Keep full section ends, so scrolling through
         // the middle never invents a rounded top at the first visible row.
-        var sections: [Int: CGRect] = [:]
+        var sections: Set<Int> = []
+        var visibleRows: [(IndexPath, CGRect)] = []
         for cell in visibleCells {
             guard let index = super.indexPath(for: cell) else { continue }
             var isCard = cell.backgroundColor.map(appearance.isCardColor) ?? false
@@ -87,16 +107,21 @@ final class AorusGroupedTableView: UITableView {
                     cell.backgroundColor = appearance.cardColor
                 }
             }
-            sections[index.section] = convert(cell.bounds, from: cell)
+            sections.insert(index.section)
+            visibleRows.append((index, convert(cell.bounds, from: cell)))
         }
         var runs: [CGRect] = []
+        let baseInset = Self.blockSideInset(for: bounds.width)
+        let insets = nativeSideInsets ?? UIEdgeInsets(top: 0, left: baseInset, bottom: 0, right: baseInset)
+        let cardX = bounds.minX + insets.left
+        let cardWidth = max(0, bounds.width - insets.left - insets.right)
         let bufferedViewport = bounds.insetBy(dx: 0, dy: -2 * appearance.cornerRadius)
-        for section in sections.keys.sorted() {
+        for section in sections.sorted() {
             let count = numberOfRows(inSection: section)
-            guard count > 0, let cell = sections[section] else { continue }
+            guard count > 0 else { continue }
             let first = rectForRow(at: IndexPath(row: 0, section: section))
             let last = rectForRow(at: IndexPath(row: count - 1, section: section))
-            let body = CGRect(x: cell.minX, y: first.minY, width: cell.width, height: last.maxY - first.minY)
+            let body = CGRect(x: cardX, y: first.minY, width: cardWidth, height: last.maxY - first.minY)
                 .intersection(bufferedViewport)
             if !body.isNull, body.width > 0, body.height > 1 { runs.append(body) }
         }
@@ -114,5 +139,36 @@ final class AorusGroupedTableView: UITableView {
             pane.frame = convert(run, to: container)
             pane.updateListPane(size: pane.bounds.size, cornerRadius: appearance.cornerRadius, isDark: appearance.isDark, isVisible: !appearance.isWhitePage)
         }
+        // Grouped UITableView also draws section-edge hairlines. Those sit
+        // outside the rounded material and look like a second outline. Own only
+        // the interior row joins; never draw at a section's top or bottom.
+        let scale = window?.screen.scale ?? UIScreen.main.scale
+        let pixel = 1 / max(1, scale)
+        let rtl = effectiveUserInterfaceLayoutDirection == .rightToLeft
+        let separatorRects = visibleRows.compactMap { entry -> CGRect? in
+            let (index, rect) = entry
+            guard index.row + 1 < numberOfRows(inSection: index.section),
+                  rect.maxY >= bounds.minY, rect.maxY <= bounds.maxY, cardWidth > 16 else { return nil }
+            let line = CGRect(x: cardX + (rtl ? 0 : 16), y: floor(rect.maxY * scale) / scale - pixel,
+                              width: cardWidth - 16, height: pixel)
+            return convert(line, to: container)
+        }
+        while rowSeparators.count > separatorRects.count { rowSeparators.removeLast().removeFromSuperlayer() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let lineColor = separatorColor?.resolvedColor(with: traitCollection).cgColor
+        for (index, frame) in separatorRects.enumerated() {
+            let line: CALayer
+            if index < rowSeparators.count { line = rowSeparators[index] }
+            else {
+                line = CALayer()
+                line.name = "AorusInteriorRowSeparator"
+                rowSeparators.append(line)
+                container.layer.addSublayer(line)
+            }
+            line.frame = frame
+            line.backgroundColor = lineColor
+        }
+        CATransaction.commit()
     }
 }

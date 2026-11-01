@@ -60,7 +60,8 @@ def rewrite_preferences(text: str, *, ui: bool = False) -> str:
         text = OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
         text = BARE_OPTIONAL_BOOL.sub(lambda m: preference(m, True), text)
         text = BOOL_READ.sub(preference, text)
-        text = QUICK_REPLIES.sub(BRIDGE + '.stringArrayPreference("aorusgram_quick_replies")', text)
+        text = QUICK_REPLIES.sub(lambda m: BRIDGE + '.stringArrayPreference("aorusgram_quick_replies"'
+                                + (', in: ' + m[1] if m[1] != 'UserDefaults.standard' else '') + ')', text)
     return text
 
 

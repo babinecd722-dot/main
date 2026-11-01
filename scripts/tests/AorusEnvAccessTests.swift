@@ -17,6 +17,12 @@ defer {
     }
 }
 for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+var notifications = 0
+let observer = NotificationCenter.default.addObserver(forName: NSNotification.Name("aorusgram.environmentCompromised"), object: nil, queue: nil) { _ in
+    notifications += 1
+    precondition(!AorusEnvGuard.enforceFeatureAccess(), "a notification can re-enter the guard without deadlocking")
+}
+defer { NotificationCenter.default.removeObserver(observer) }
 precondition(AorusEnvGuard.enforceFeatureAccess(), "clean test process allows license evaluation")
 precondition(NSClassFromString("FLEXManager") == nil, "test requires an initially absent inspector")
 let injected = objc_allocateClassPair(NSObject.self, "FLEXManager", 0)!
@@ -26,4 +32,10 @@ precondition(!AorusEnvGuard.enforceFeatureAccess(), "an inspector introduced aft
 precondition(AorusSessionCounter.shared.value == 1, "tamper evidence is recorded once")
 for key in keys { UserDefaults.standard.removeObject(forKey: key) }
 precondition(!AorusEnvGuard.enforceFeatureAccess(), "clearing defaults cannot reset the in-process denial")
-print("Runtime inspector injection and defaults reset: 5 assertions passed")
+Thread.sleep(forTimeInterval: 1.1)
+DispatchQueue.concurrentPerform(iterations: 64) { _ in
+    precondition(!AorusEnvGuard.enforceFeatureAccess(), "parallel reads remain denied after defaults are cleared")
+}
+precondition(AorusSessionCounter.shared.value == 1 && notifications == 1, "repeated probes cannot inflate the tamper counter or notifications")
+precondition(!AorusEnvGuard.enforceBeforeRequest(), "request and feature probes share their denial latch")
+print("Runtime inspector injection, reentrant notification and concurrent defaults reset: 72 assertions passed")

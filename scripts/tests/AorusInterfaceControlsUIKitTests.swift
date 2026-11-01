@@ -30,6 +30,8 @@ final class InterfaceNativePane: UIView, AorusListGlassPane {
 
 private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     var count = 3
+    var sections = 1
+    func numberOfSections(in tableView: UITableView) -> Int { sections }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
@@ -163,14 +165,52 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { fail("native section pane missing") }
         return pane
     }
+    func separators() -> [CALayer] {
+        groups.backgroundView?.layer.sublayers?.filter { $0.name == "AorusInteriorRowSeparator" } ?? []
+    }
     expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 1, "one native glass pane per UIKit section")
     expect(emptyBackdrop.superview === groups.backgroundView, "glass never removes the plugin empty-state view")
     expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius, "native ItemList tint and authoritative corner radius")
     expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
+    expect(groups.separatorStyle == .none && separators().count == 2, "only interior joins are drawn, without UIKit section-edge rules")
+    for line in separators() {
+        expect(line.frame.minX == 32 && line.frame.maxX == 304, "row join stays inside native card gutters")
+        expect(abs(line.bounds.height * window.screen.scale - 1) < 0.001, "row join is one physical pixel")
+    }
+    stage("native list margins, rotation and side strips")
+    for width in [CGFloat(320), 375, 390, 430, 768, 1024] {
+        let layout = InterfaceNativeLayout(size: CGSize(width: width, height: 600))
+        let reference = nativeItemListSideMargins(layout: layout)
+        groups.frame.size.width = width
+        aorusConfigureTableLayout(groups, layout: layout)
+        groups.setNeedsLayout(); groups.layoutIfNeeded()
+        expect(glassPane().frame.minX == reference.left && glassPane().frame.maxX == width - reference.right, "plugin pane matches real Telegram ItemList margins at width \(width)")
+    }
+    var stripLayout = InterfaceNativeLayout(size: CGSize(width: 390, height: 600))
+    stripLayout.safeInsets.left = 40
+    stripLayout.stripLeft = true
+    stripLayout.intrinsicInsets.right = 8
+    groups.frame.size.width = 390
+    aorusConfigureTableLayout(groups, layout: stripLayout)
+    groups.layoutIfNeeded()
+    expect(glassPane().frame.minX == 56 && glassPane().frame.maxX == 366, "reserved strip and intrinsic insets use the native layout policy")
+    groups.frame.size.width = 320
+    aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: 320, height: 600)))
+    groups.semanticContentAttribute = .forceRightToLeft
+    groups.setNeedsLayout(); groups.layoutIfNeeded()
+    expect(separators().allSatisfy { $0.frame.minX == 16 && $0.frame.maxX == 288 }, "RTL mirrors only the interior separator indent")
+    groups.semanticContentAttribute = .unspecified
+    dataSource.sections = 2
+    groups.frame.size.height = 500
+    groups.reloadData(); groups.layoutIfNeeded()
+    expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 2 && separators().count == 4, "each section has one inset pane and no section-edge hairlines")
+    dataSource.sections = 1
+    groups.frame.size.height = 200
     dataSource.count = 1
     stage("single-row layout after deletion")
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
     expect(glassPane().lastSize.height == groups.rectForRow(at: IndexPath(row: 0, section: 0)).height, "single-row pane follows native row geometry after deletion")
+    expect(separators().isEmpty, "single-row sections have no extra horizontal outline")
     dataSource.count = 50
     stage("scrolling a long group")
     groups.reloadData()
@@ -178,6 +218,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     groups.setNeedsLayout(); groups.layoutIfNeeded()
     expect(glassPane().frame.minY <= -InterfaceGlassPane.blockCornerRadius, "scrolling through a section never creates a visible rounded top")
     expect(glassPane().bounds.height <= groups.bounds.height + 4 * InterfaceGlassPane.blockCornerRadius, "long sections retain a bounded native material surface")
+    expect(separators().count <= groups.visibleCells.count, "separator layer count is bounded by visible rows")
     aorusConfigureTable(groups, theme: whiteTheme)
     stage("theme switch and standalone panes")
     groups.layoutIfNeeded()
@@ -192,6 +233,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
     expect(groups.nativePanes == nil && groups.backgroundView === emptyBackdrop, "ordinary interface restores the original background and UIKit drawing")
+    expect(groups.separatorStyle == baseline.separatorStyle, "ordinary interface restores UIKit separators")
     InterfaceGlassPane.isEnabled = true
     let pill = AorusPluginPillButton(frame: .zero)
     stage("buttons and native swipe")

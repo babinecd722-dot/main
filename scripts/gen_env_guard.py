@@ -98,6 +98,7 @@ enum AorusEnvGuard {{
     private static let featureLock = NSLock()
     private static var nextFeatureProbe: TimeInterval = 0
     private static var featurePermit = true
+    private static var featureEvidenceRecorded = false
     {arr("runtimeData", RUNTIME_CLASSES)}
 
     private static func s(_ b: [UInt8]) -> String {{
@@ -110,6 +111,9 @@ enum AorusEnvGuard {{
 {arr("markerData", PATHS)}
 
 {arr("imageData", MARKERS)}
+
+    private static let imageMarkers = imageData.map {{ s($0) }}
+    private static let runtimeNames = runtimeData.map {{ s($0) }}
 
 {arr("linkData", SYMLINKS)}
 
@@ -160,11 +164,22 @@ enum AorusEnvGuard {{
     }}
 
     private static func probeRuntime() -> Bool {{
-        return runtimeData.contains {{ NSClassFromString(s($0)) != nil }}
+        return runtimeNames.contains {{ NSClassFromString($0) != nil }}
     }}
 
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {{
-        guard compromised else {{ return true }}
+        // Share the in-process latch across launch, gate, request and feature
+        // probes. Mutable defaults cannot clear it or repeatedly trip the counter.
+        featureLock.lock()
+        if compromised {{ featurePermit = false }}
+        let denied = !featurePermit
+        let shouldRecord = denied && !featureEvidenceRecorded
+        if shouldRecord {{ featureEvidenceRecorded = true }}
+        featureLock.unlock()
+        guard denied else {{ return true }}
+        guard shouldRecord else {{ return false }}
+        // Notifications may synchronously re-enter entitlement checks. Keep all
+        // defaults writes, counter updates and notifications outside the lock.
         let defaults = UserDefaults.standard
         let wasRecorded = defaults.bool(forKey: "e7b3f014-2a8d-4c61-9f05-3b6a1e8d4c02")
         defaults.set(true, forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")
@@ -246,13 +261,12 @@ enum AorusEnvGuard {{
     }}
 
     private static func probeImages() -> Bool {{
-        let markers = imageData.map {{ s($0) }}
         let count = _dyld_image_count()
         var i: UInt32 = 0
         while i < count {{
             if let cName = _dyld_get_image_name(i) {{
                 let name = String(cString: cName).lowercased()
-                if markers.contains(where: {{ name.contains($0) }}) {{ return true }}
+                if imageMarkers.contains(where: {{ name.contains($0) }}) {{ return true }}
             }}
             i += 1
         }}
