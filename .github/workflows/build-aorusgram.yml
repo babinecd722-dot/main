@@ -151,8 +151,9 @@ jobs:
           from pathlib import Path
           import sys
           detail = Path(sys.argv[1]).read_text(errors="replace")[-24000:]
-          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print("::error title=AorusAI preflight output::" + detail, flush=True)
+          for offset in range(0, len(detail), 3000):
+              chunk = detail[offset:offset + 3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=AorusAI preflight output {offset // 3000 + 1}::" + chunk, flush=True)
           PY
             return "$preflight_exit"
           }
