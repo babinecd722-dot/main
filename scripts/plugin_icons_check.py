@@ -12,6 +12,13 @@ import tempfile
 import time
 
 
+def annotate_failure(title, detail):
+    if os.environ.get("GITHUB_ACTIONS"):
+        for offset in range(0, len(detail), 3000):
+            message = detail[offset:offset + 3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title={title} {offset // 3000 + 1}::" + message, flush=True)
+
+
 def checked_compile(command, **kwargs):
     """Retain SDK errors so a failed simulator preflight can annotate its cause."""
     result = subprocess.run(command, capture_output=True, text=True, **kwargs)
@@ -46,9 +53,7 @@ def simulator_failure_diagnostics(device_id: str, since: float) -> None:
                 print("UIKit simulator crash report: " + path.name, flush=True)
                 report = path.read_text(errors="replace")[:24000]
                 print(report, flush=True)
-                if os.environ.get("GITHUB_ACTIONS"):
-                    message = (path.name + "\n" + report[:14000]).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                    print("::error title=UIKit simulator crash::" + message, flush=True)
+                annotate_failure("UIKit simulator crash", path.name + "\n" + report[:14000])
             except OSError as failure:
                 print("Cannot read UIKit crash report: " + str(failure), flush=True)
     try:
@@ -358,9 +363,7 @@ def main():
                                 stack = subprocess.run(["sample", pid, "1", "1"], capture_output=True, text=True, timeout=15, check=False)
                                 detail = (stack.stdout + stack.stderr)[:14000]
                                 print("UIKit unfinished process sample:\n" + detail, flush=True)
-                                if os.environ.get("GITHUB_ACTIONS"):
-                                    message = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                                    print("::error title=UIKit live process::" + message, flush=True)
+                                annotate_failure("UIKit live process", detail)
                             except (OSError, subprocess.TimeoutExpired) as sample_failure:
                                 print("Cannot sample UIKit process: " + str(sample_failure), flush=True)
                         raise RuntimeError("The UIKit application exited without completing its assertions\n" + failure_detail + "\n" + (result.stdout + result.stderr)[-16000:])
@@ -369,9 +372,7 @@ def main():
                         raise RuntimeError("The UIKit application wrote an incomplete assertion result")
                     print("UIKit icon resolver verified: " + str(completion["checks"]) + " assertions; native theme: " + str(completion["themeChecks"]), flush=True)
                 except Exception as failure:
-                    if os.environ.get("GITHUB_ACTIONS"):
-                        message = str(failure)[-16000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-                        print("::error title=UIKit application failure::" + message, flush=True)
+                    annotate_failure("UIKit application failure", str(failure)[-16000:])
                     simulator_failure_diagnostics(device["udid"], launched_at)
                     raise
                 finally:
@@ -397,6 +398,5 @@ if __name__ == "__main__":
             details = getattr(error, "stderr", None) or str(error)
             if isinstance(details, bytes):
                 details = details.decode(errors="replace")
-            message = details[-16000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-            print("::error title=UIKit regression::" + message, flush=True)
+            annotate_failure("UIKit regression", details[-16000:])
         raise

@@ -15,8 +15,10 @@ from telegram13_list_check import block
 
 def annotate_failure(message):
     if os.environ.get("GITHUB_ACTIONS"):
-        escaped = message[-24000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        print("::error title=Local client contract::" + escaped, flush=True)
+        detail = message[-24000:]
+        for offset in range(0, len(detail), 3000):
+            escaped = detail[offset:offset + 3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Local client contract {offset // 3000 + 1}::" + escaped, flush=True)
 
 
 def checked(command):

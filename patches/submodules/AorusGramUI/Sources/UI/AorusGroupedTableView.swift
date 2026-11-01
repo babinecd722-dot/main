@@ -71,7 +71,10 @@ final class AorusGroupedTableView: UITableView {
                 // never once per pass through layoutSubviews.
                 let current = cell.backgroundConfiguration
                 let hasFill = (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
-                if current == nil || hasFill || current?.visualEffect != nil || current?.image != nil || current?.strokeWidth != 0 {
+                let hasImage: Bool
+                if #available(iOS 15.0, *) { hasImage = current?.image != nil }
+                else { hasImage = false }
+                if current == nil || hasFill || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
                     cell.backgroundView = nil
                     cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
                 }
