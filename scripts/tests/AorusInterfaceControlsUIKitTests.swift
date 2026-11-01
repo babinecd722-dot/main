@@ -263,6 +263,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         groups.reloadData(); groups.layoutIfNeeded()
         guard let cell = groups.cellForRow(at: IndexPath(row: 0, section: 0)) as? InterfaceWrappingCell else { fail("self-sizing row missing") }
         cell.layoutIfNeeded()
+        expect((cell.backgroundColor?.cgColor.alpha ?? 0) == 0 && groups.backgroundView?.subviews.contains(where: { $0 is InterfaceNativePane }) == true,
+               "a fresh transparent-configured row acquires its native section on first display")
         heights.append(groups.rectForRow(at: IndexPath(row: 0, section: 0)).height)
         for view in [cell.label, cell.toggle] {
             let rect = view.convert(view.bounds, to: cell.contentView)
