@@ -99,7 +99,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     private let context: AccountContext
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private let emptyView = AorusPluginsEmptyView()
     private var manifests: [AorusPluginManifest] = []
     private var observer: NSObjectProtocol?
@@ -197,7 +197,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         let frame = CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: frame)
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(frame))
         let side = Self.createButtonSide
         // The last plugin scrolls clear of the button instead of ending up under it.
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom + side + 28
@@ -461,7 +461,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var observer: NSObjectProtocol?
 
     init(context: AccountContext, record: AorusPluginRecord) {
@@ -505,7 +505,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
     }
 
     private func reload() {
@@ -702,7 +702,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     private var themeSubscription: AorusLiveThemeSubscription?
     private let mode: Mode
     private var record: AorusPluginRecord
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var observer: NSObjectProtocol?
     /// Where this plugin stands in the Market, for the author's own copy. What My Plugins knew
     /// comes along and is shown only if the Market cannot be asked; otherwise the status place
@@ -767,7 +767,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 
@@ -2345,7 +2345,7 @@ private final class AorusPluginHistoryControl: UIView {
 private final class AorusPluginSettingsController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private let context: AccountContext; private var presentationData: PresentationData; private let record: AorusPluginRecord
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped); private var fields: [AorusPluginSettingField] = []; private var values: [String: AorusPluginJSONValue]
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle()); private var fields: [AorusPluginSettingField] = []; private var values: [String: AorusPluginJSONValue]
     private let emptyLabel = UILabel()
     private var schemaSandbox: AorusPluginSandbox?
     private var schemaObserver: NSObjectProtocol?
@@ -2401,7 +2401,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         if fields.isEmpty, AorusLicenseAccess.isAllowed { discoverSchema() }
         displayNodeDidLoad()
     }
-    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; aorusConfigureTableLayout(tableView, layout: layout); transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
+    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; aorusConfigureTableLayout(tableView, layout: layout); transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))) }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { fields.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let field = fields[indexPath.row]
@@ -2628,7 +2628,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
     private var record: AorusPluginRecord
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private let requested: Set<AorusPluginPermission>
     private var granted: Set<AorusPluginPermission>
 
@@ -2671,7 +2671,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { AorusPluginPermission.allCases.count }
@@ -3669,7 +3669,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private var page: AorusPluginUIPage
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var integrationObserver: NSObjectProtocol?
     /// The page is the root of a tab in the bottom bar. A tab whose page the plugin withdraws
     /// leaves the bar with it; there is nothing for the page to close.
@@ -3772,7 +3772,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 
@@ -4358,7 +4358,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     private let record: AorusPluginRecord
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var rows: [(String, String, Bool)] = []
 
     init(context: AccountContext, record: AorusPluginRecord) {
@@ -4399,7 +4399,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 

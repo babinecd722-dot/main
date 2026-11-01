@@ -1019,7 +1019,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 
     private var theme: PresentationTheme
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private let refresh = UIRefreshControl()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let messageView = UIStackView()
@@ -1190,22 +1190,22 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        tableView.frame = bounds
+        tableView.frame = tableView.frameForLayout(bounds)
         // The search line lines up with the cards under it, and starts clear of the band the
         // navigation bar's edge fades over: that band covers the top of this list, so a field
         // placed at the very top showed only its lower part.
-        let base = AorusGroupedTableView.blockSideInset(for: bounds.width)
-        let insets = tableView.nativePanes != nil ? (tableView.nativeSideInsets ?? UIEdgeInsets(top: 0, left: base, bottom: 0, right: base)) : tableView.layoutMargins
-        if filterHeader.frame.width != bounds.width || filterHeaderInsets != insets || tableView.tableHeaderView == nil {
+        let columnWidth = tableView.bounds.width
+        let insets = tableView.nativePanes != nil ? UIEdgeInsets.zero : tableView.layoutMargins
+        if filterHeader.frame.width != columnWidth || filterHeaderInsets != insets || tableView.tableHeaderView == nil {
             filterHeaderInsets = insets
             let side = AorusPluginMarketSearchField.height
             let top = Self.searchTopInset
-            filterHeader.frame = CGRect(x: 0, y: 0, width: bounds.width, height: top + side + Self.searchBottomInset)
-            filterButton.frame = CGRect(x: bounds.width - insets.right - side, y: top, width: side, height: side)
+            filterHeader.frame = CGRect(x: 0, y: 0, width: columnWidth, height: top + side + Self.searchBottomInset)
+            filterButton.frame = CGRect(x: columnWidth - insets.right - side, y: top, width: side, height: side)
             searchField.frame = CGRect(x: insets.left, y: top, width: max(0, filterButton.frame.minX - 8 - insets.left), height: side)
             tableView.tableHeaderView = filterHeader
         }
-        noResults.frame = CGRect(x: 24, y: filterHeader.frame.maxY + 36, width: max(0, bounds.width - 48), height: 24)
+        noResults.frame = CGRect(x: 24, y: filterHeader.frame.maxY + 36, width: max(0, columnWidth - 48), height: 24)
         spinner.center = CGPoint(x: bounds.midX, y: bounds.midY - 40)
         let width = min(bounds.width - 64, 360)
         let height = messageView.systemLayoutSizeFitting(CGSize(width: width, height: UIView.layoutFittingCompressedSize.height)).height
@@ -2369,7 +2369,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 final class AorusPluginMarketMineController: ViewController, UITableViewDataSource, UITableViewDelegate {
     private var presentationData: PresentationData
     private var themeSubscription: AorusLiveThemeSubscription?
-    private let tableView = AorusGroupedTableView(frame: .zero, style: .insetGrouped)
+    private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var owned: [AorusPluginMarketOwnedPlugin]
     private let banner = UILabel()
     private var storeObserver: NSObjectProtocol?
@@ -2436,7 +2436,7 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         aorusConfigureTableLayout(tableView, layout: layout)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        transition.updateFrame(view: tableView, frame: tableView.frameForLayout(CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)))
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 

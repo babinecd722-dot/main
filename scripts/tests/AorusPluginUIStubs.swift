@@ -397,6 +397,8 @@ private final class AorusPluginStubAvatar: UIView, AorusPluginMarketAvatar {
     func show(author: AorusPluginMarketAuthor?, fallbackName: String) {}
 }
 
+func aorusPluginTableStyle() -> UITableView.Style { .grouped }
+
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {}
 func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: ContainerViewLayout) {}
 

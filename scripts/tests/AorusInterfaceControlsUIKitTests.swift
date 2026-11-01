@@ -28,13 +28,46 @@ final class InterfaceNativePane: UIView, AorusListGlassPane {
     }
 }
 
+private final class InterfaceWrappingCell: UITableViewCell {
+    let label = UILabel()
+    let toggle = UISwitch()
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        label.text = String(repeating: "Long plugin description with wrapping. ", count: 8)
+        label.numberOfLines = 0
+        label.font = .systemFont(ofSize: 20)
+        for view in [label, toggle] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            label.trailingAnchor.constraint(equalTo: toggle.leadingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            toggle.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            toggle.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+}
+
 private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     var count = 3
+    var wraps = false
     var sections = 1
     func numberOfSections(in tableView: UITableView) -> Int { sections }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        if wraps {
+            let cell = InterfaceWrappingCell(style: .default, reuseIdentifier: nil)
+            cell.backgroundColor = .purple
+            return cell
+        }
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = String(repeating: "Long plugin name ", count: 12)
+        cell.detailTextLabel?.text = String(repeating: "Описание плагина ", count: 12)
+        cell.accessoryView = UISwitch()
         cell.backgroundColor = .purple
         // Reproduce UIKit's independent per-cell material/stroke under a
         // section pane. The adapter must remove this second renderer.
@@ -132,9 +165,10 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
 
     let nativeTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .darkGray), overallDarkAppearance: true)
     stage("grouped table layout")
+    expect(aorusPluginTableStyle() == .grouped, "native tables have full-width UIKit rows inside their block column")
     let whiteTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .purple, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
-    let groups = AorusGroupedTableView(frame: CGRect(x: 0, y: 80, width: 320, height: 200), style: .insetGrouped)
-    let baseline = UITableView(frame: CGRect(x: 0, y: 300, width: 320, height: 200), style: .insetGrouped)
+    let groups = AorusGroupedTableView(frame: CGRect(x: 0, y: 80, width: 320, height: 200), style: .grouped)
+    let baseline = UITableView(frame: CGRect(x: 0, y: 300, width: 320, height: 200), style: .grouped)
     let emptyBackdrop = UIView()
     groups.backgroundView = emptyBackdrop
     let dataSource = InterfaceGroupDataSource()
@@ -146,6 +180,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     }
     defer { withExtendedLifetime(dataSource) {}; groups.removeFromSuperview(); baseline.removeFromSuperview() }
     aorusConfigureTable(groups, theme: nativeTheme)
+    groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: 320, height: 200))
+    baseline.frame = CGRect(x: groups.frame.minX, y: 300, width: groups.frame.width, height: 200)
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
     for _ in 0..<3 { groups.setNeedsLayout(); groups.layoutIfNeeded() }
     for index in 0..<3 {
@@ -174,31 +210,66 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
     expect(groups.separatorStyle == .none && separators().count == 2, "only interior joins are drawn, without UIKit section-edge rules")
     for line in separators() {
-        expect(line.frame.minX == 32 && line.frame.maxX == 304, "row join stays inside native card gutters")
+        expect(line.frame.minX == 16 && line.frame.maxX == groups.bounds.width, "row join stays inside native card gutters")
         expect(abs(line.bounds.height * window.screen.scale - 1) < 0.001, "row join is one physical pixel")
     }
     stage("native list margins, rotation and side strips")
     for width in [CGFloat(320), 375, 390, 430, 768, 1024] {
         let layout = InterfaceNativeLayout(size: CGSize(width: width, height: 600))
         let reference = nativeItemListSideMargins(layout: layout)
-        groups.frame.size.width = width
         aorusConfigureTableLayout(groups, layout: layout)
+        groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: width, height: 200))
         groups.setNeedsLayout(); groups.layoutIfNeeded()
-        expect(glassPane().frame.minX == reference.left && glassPane().frame.maxX == width - reference.right, "plugin pane matches real Telegram ItemList margins at width \(width)")
+        let paneFrame = glassPane().convert(glassPane().bounds, to: window)
+        expect(paneFrame.minX == reference.left && paneFrame.maxX == width - reference.right, "plugin pane matches real Telegram ItemList margins at width \(width)")
+        for cell in groups.visibleCells {
+            cell.layoutIfNeeded()
+            let rowFrame = cell.convert(cell.bounds, to: window)
+            expect(rowFrame.minX >= paneFrame.minX && rowFrame.maxX <= paneFrame.maxX, "the entire row fits its pane at width \(width)")
+            for view in [cell.textLabel, cell.detailTextLabel, cell.accessoryView].compactMap({ $0 }) {
+                let contentFrame = view.convert(view.bounds, to: window)
+                expect(contentFrame.minX >= paneFrame.minX && contentFrame.maxX <= paneFrame.maxX, "text and accessory fit the same native column at width \(width)")
+            }
+        }
     }
+    stage("self-sizing content uses the block width")
+    dataSource.wraps = true
+    dataSource.count = 1
+    groups.rowHeight = UITableView.automaticDimension
+    groups.estimatedRowHeight = 100
+    var heights: [CGFloat] = []
+    for width in [CGFloat(320), 768] {
+        aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: width, height: 600)))
+        groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: width, height: 500))
+        groups.reloadData(); groups.layoutIfNeeded()
+        guard let cell = groups.cellForRow(at: IndexPath(row: 0, section: 0)) as? InterfaceWrappingCell else { fail("self-sizing row missing") }
+        cell.layoutIfNeeded()
+        heights.append(groups.rectForRow(at: IndexPath(row: 0, section: 0)).height)
+        for view in [cell.label, cell.toggle] {
+            let rect = view.convert(view.bounds, to: cell.contentView)
+            expect(cell.contentView.bounds.contains(rect), "self-sizing text and switch remain inside the block")
+        }
+        expect(!cell.contentView.hasAmbiguousLayout && !cell.label.hasAmbiguousLayout, "wrapping layout is fully constrained")
+    }
+    expect(heights[0] > heights[1], "narrow native column remeasures wrapping text instead of clipping it")
+    dataSource.wraps = false
+    dataSource.count = 3
+    groups.rowHeight = 44
+    groups.reloadData()
     var stripLayout = InterfaceNativeLayout(size: CGSize(width: 390, height: 600))
     stripLayout.safeInsets.left = 40
     stripLayout.stripLeft = true
     stripLayout.intrinsicInsets.right = 8
-    groups.frame.size.width = 390
     aorusConfigureTableLayout(groups, layout: stripLayout)
+    groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: 390, height: 200))
     groups.layoutIfNeeded()
-    expect(glassPane().frame.minX == 56 && glassPane().frame.maxX == 366, "reserved strip and intrinsic insets use the native layout policy")
-    groups.frame.size.width = 320
+    let stripPaneFrame = glassPane().convert(glassPane().bounds, to: window)
+    expect(stripPaneFrame.minX == 56 && stripPaneFrame.maxX == 366, "reserved strip and intrinsic insets use the native layout policy")
     aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: 320, height: 600)))
+    groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: 320, height: 200))
     groups.semanticContentAttribute = .forceRightToLeft
     groups.setNeedsLayout(); groups.layoutIfNeeded()
-    expect(separators().allSatisfy { $0.frame.minX == 16 && $0.frame.maxX == 288 }, "RTL mirrors only the interior separator indent")
+    expect(separators().allSatisfy { $0.frame.minX == 0 && $0.frame.maxX == groups.bounds.width - 16 }, "RTL mirrors only the interior separator indent")
     groups.semanticContentAttribute = .unspecified
     dataSource.sections = 2
     groups.frame.size.height = 500
@@ -230,6 +301,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(surfacePane.isClear && surfacePane.lastRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0, "standalone plugin cards use the native material, never a second hand-rounded plate")
     expect(surface.isUserInteractionEnabled, "a field container never disables its text view or send button")
     InterfaceGlassPane.isEnabled = false
+    expect(aorusPluginTableStyle() == .insetGrouped, "ordinary interface keeps UIKit inset groups")
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
     expect(groups.nativePanes == nil && groups.backgroundView === emptyBackdrop, "ordinary interface restores the original background and UIKit drawing")

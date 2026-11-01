@@ -73,6 +73,12 @@ func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor {
     return theme.aorusGlassListTheme.list.blocksBackgroundColor
 }
 
+// Grouped rows fill the column; the table frame supplies ItemList's gutters.
+// The ordinary interface retains UIKit's inset-grouped layout.
+func aorusPluginTableStyle() -> UITableView.Style {
+    return AorusGlassPane.isEnabled ? .grouped : .insetGrouped
+}
+
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {
     table.backgroundColor = aorusPluginPageColor(theme)
     guard AorusGlassPane.isEnabled else {

@@ -16,6 +16,18 @@ final class AorusGroupedTableView: UITableView {
         let makePane: () -> UIView & AorusListGlassPane
     }
 
+    override init(frame: CGRect, style: UITableView.Style) {
+        super.init(frame: frame, style: style)
+        if style == .grouped {
+            // ContainerViewLayout has already accounted for safe areas and the
+            // wide-screen column. Do not apply UIKit's second readable column.
+            insetsContentViewsToSafeArea = false
+            cellLayoutMarginsFollowReadableWidth = false
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
     var nativePanes: NativePanes? {
         didSet { setNeedsLayout() }
     }
@@ -25,9 +37,20 @@ final class AorusGroupedTableView: UITableView {
     }
     static func blockSideInset(for width: CGFloat) -> CGFloat {
         // ItemListControllerNode.listSideMargins: 16pt on phones, a 674pt
-        // centered list on wide layouts. Cell bounds include the outer gutters.
+        // centered list on wide layouts. Applied to the table, not just its glass.
         return width >= 320 ? max(16, floor((width - 674) / 2)) : 0
     }
+    /// In Interface 2.0 the table itself occupies the native block column.
+    /// UIKit measures self-sizing rows, accessories and swipe actions at this
+    /// width; narrowing only a background leaves all three outside the pane.
+    func frameForLayout(_ viewport: CGRect) -> CGRect {
+        guard nativePanes != nil else { return viewport }
+        let base = Self.blockSideInset(for: viewport.width)
+        let insets = nativeSideInsets ?? UIEdgeInsets(top: 0, left: base, bottom: 0, right: base)
+        return CGRect(x: viewport.minX + insets.left, y: viewport.minY,
+                      width: max(0, viewport.width - insets.left - insets.right), height: viewport.height)
+    }
+
     private var paneContainer: UIView?
     private var contentBackground: UIView?
     private var panes: [UIView & AorusListGlassPane] = []
@@ -111,10 +134,10 @@ final class AorusGroupedTableView: UITableView {
             visibleRows.append((index, convert(cell.bounds, from: cell)))
         }
         var runs: [CGRect] = []
-        let baseInset = Self.blockSideInset(for: bounds.width)
-        let insets = nativeSideInsets ?? UIEdgeInsets(top: 0, left: baseInset, bottom: 0, right: baseInset)
-        let cardX = bounds.minX + insets.left
-        let cardWidth = max(0, bounds.width - insets.left - insets.right)
+        // The outer margins have already been applied to the table frame.
+        // Grouped rows and their pane share the entire remaining column.
+        let cardX = bounds.minX
+        let cardWidth = bounds.width
         let bufferedViewport = bounds.insetBy(dx: 0, dy: -2 * appearance.cornerRadius)
         for section in sections.sorted() {
             let count = numberOfRows(inSection: section)
