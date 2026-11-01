@@ -42,4 +42,4 @@ enum InterfaceGlassPane {
     static func isWhitePage(_ color: UIColor?) -> Bool { color?.isEqual(UIColor.white) ?? false }
 }
 '''.replace('RADIUS', radius)
-    return 'import UIKit\n' + declaration(source, 'final class AorusPluginPillButton: UIButton') + '\n' + surface + defaults + layout + policy
+    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), surface, defaults, layout, policy))
