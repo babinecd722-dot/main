@@ -720,13 +720,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         transition.updateFrame(node: self.badgeNode, frame: CGRect(origin: self.backButtonArrow.frame.origin.offsetBy(dx: 16.0, dy: 2.0), size: badgeSize))
 
         if self.rightButtonNode.view.superview != nil {
-            let rightButtonSize = self.rightButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape)
-            self.rightButtonNode.alpha = 1.0
-
             var transition = transition
             if self.rightButtonNode.frame.width.isZero || self.rightButtonNodeUpdated {
                 transition = .immediate
             }
+            let rightButtonSize = self.rightButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
+            self.rightButtonNode.alpha = 1.0
             rightTitleInset = rightButtonSize.width + leftButtonInset + 4.0
             transition.updateFrame(node: self.rightButtonNode, frame: CGRect(origin: CGPoint(x: size.width - rightInset - 16.0 - rightButtonSize.width, y: contentVerticalOrigin + floor((nominalHeight - rightButtonSize.height) / 2.0)), size: rightButtonSize))
         }
@@ -1176,6 +1175,8 @@ private final class AorusClassicNavigationButtonItemNode: ImmediateTextNode {
         }
     }
 
+    var aorusLayoutTransition: ContainedViewLayoutTransition = .immediate
+
     var node: ASDisplayNode? {
         didSet {
             if self.node !== oldValue {
@@ -1291,6 +1292,9 @@ private final class AorusClassicNavigationButtonItemNode: ImmediateTextNode {
             let nodeSize = node.measure(constrainedSize)
             let size = CGSize(width: max(nodeSize.width, superSize.width), height: max(nodeSize.height, superSize.height))
             node.frame = CGRect(origin: CGPoint(), size: nodeSize)
+            (node as? AorusNavigationBarLayoutNode)?.aorusNavigationBarLayout(updateFrame: { view, frame in
+                self.aorusLayoutTransition.updateFrame(view: view, frame: frame)
+            })
             return size
         } else if let imageView = self.imageView {
             let nodeSize = imageView.image?.size ?? CGSize()
@@ -1534,7 +1538,7 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
         }
     }
 
-    func updateLayout(constrainedSize: CGSize, isLandscape: Bool) -> CGSize {
+    func updateLayout(constrainedSize: CGSize, isLandscape: Bool, transition: ContainedViewLayoutTransition = .immediate) -> CGSize {
         var nodeOrigin = CGPoint(x: 0.0, y: 0.0)
         var totalHeight: CGFloat = 0.0
         for i in 0 ..< self.nodes.count {
@@ -1543,6 +1547,7 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
             }
             let node = self.nodes[i]
 
+            node.aorusLayoutTransition = transition
             var nodeSize = node.updateLayout(constrainedSize)
             nodeSize.width = ceil(nodeSize.width)
             nodeSize.height = ceil(nodeSize.height)

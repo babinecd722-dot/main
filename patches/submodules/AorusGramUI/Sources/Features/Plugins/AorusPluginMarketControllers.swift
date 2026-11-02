@@ -1034,7 +1034,10 @@ final class AorusPluginFilterControl: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         surface.frame = bounds
-        button.frame = bounds
+        // UIKit scales/translates a menu source while presenting and dismissing
+        // its preview. A frame write under that transform changes its geometry.
+        button.bounds = CGRect(origin: .zero, size: bounds.size)
+        button.center = CGPoint(x: bounds.midX, y: bounds.midY)
         button.layer.cornerRadius = bounds.height / 2
     }
 

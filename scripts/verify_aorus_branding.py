@@ -3903,7 +3903,9 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/ChatController.swift", (
             "return self.ghostPeerId != nil && aorusGhostChatButtonIsShown()",
             "self.requestNavigationLayout?(transition)",
-            "transition.updateFrame(node: self.avatarNode, frame: self.avatarFrame)",
+            "self.avatarLayoutPending = true",
+            "func aorusNavigationBarLayout(updateFrame: (UIView, CGRect) -> Void)",
+            "updateFrame(self.avatarNode.view, self.avatarFrame)",
             "UserDefaults.standard.set(-1, forKey: overrideKey)",
         )),
         ("submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift", (
@@ -3912,13 +3914,15 @@ def main() -> None:
         )),
         # 13.1.1's bar measures a node only when its button changes: the ghost's capsule says when
         # its width does, or the avatar is left 40 points to the right, half off the screen.
+        ("submodules/Display/Source/NavigationBar.swift", ("public protocol AorusNavigationBarLayoutNode: AnyObject",)),
         ("submodules/TelegramUI/Sources/ChatController.swift", (
             "final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode {",
             "self.aorusNavigationBarLayoutRevision += 1",
         )),
         ("submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarItemContent.swift", ("button.aorusNodeLayoutRevision = (item.customDisplayNode as? AorusNavigationBarResizingNode)?.aorusNavigationBarLayoutRevision",)),
         ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponentContent.swift", ("if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {", "button.aorusNodeLayoutRevision = self.aorusNodeLayoutRevision")),
-        ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationButtonComponent.swift", ("if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {",)),
+        ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationButtonComponent.swift", ("if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {", "(node as? AorusNavigationBarLayoutNode)?.aorusNavigationBarLayout(updateFrame:")),
+        ("submodules/Display/Source/AorusClassicNavigationBar.swift", ("node.aorusLayoutTransition = transition", "(node as? AorusNavigationBarLayoutNode)?.aorusNavigationBarLayout(updateFrame:")),
         ("submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarContentView.swift", ("aorusNodeLayoutRevision: button.aorusNodeLayoutRevision",)),
         # The ghost fades with the chat's avatar through the profile's expansion, both ways.
         ("submodules/TelegramUI/Sources/Chat/ChatExpansionSource.swift", ("loan.aorusCompanionFollowers = (self.avatarItem?.customDisplayNode as? AorusGhostAvatarNavigationNode)?.expansionFollowers ?? []",)),

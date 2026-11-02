@@ -1,6 +1,7 @@
 """Run the installed avatar/follower loan and cross-fade with real UIKit views."""
 from pathlib import Path
 from telegram13_list_check import block
+from chat_avatar_layout_fixtures import chat_avatar_layout_source
 
 
 def profile_transition_test_source(tg: Path) -> str:
@@ -20,7 +21,8 @@ def profile_transition_test_source(tg: Path) -> str:
     # Execute the installed placement with distinct parent/local origins, not a zero-origin fixture
     # that would hide the ghost capsule's extra 40 points.
     placement = snapshot[:snapshot.index("            snapshotView.layer.animateAlpha(")] + "\n        }\n"
-    return r'''import UIKit
+    return chat_avatar_layout_source(tg) + r'''
+import UIKit
 private struct ExpansionClock { let time: CGFloat; let isOpening: Bool }
 private struct GhostFrame { let photo: CGRect?; let companionContent: CGFloat }
 private struct GhostChoreography {
@@ -123,6 +125,7 @@ private struct GhostChoreography {
             probe.photoHost.removeFromSuperview()
         }
     } }
+    checks += runChatAvatarNavigationLayoutRegression()
     print("Profile avatar/ghost loan and crossfade: \(checks) assertions passed")
     return checks
 }

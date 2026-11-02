@@ -75,9 +75,23 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     var count = 3
     var wraps = false
     var sections = 1
+    var mine = false
+    var nativeCells = false
     func numberOfSections(in tableView: UITableView) -> Int { sections }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if mine {
+            let cell = nativeCells ? UITableViewCell(style: .value1, reuseIdentifier: nil) : AorusGroupedTableCell(style: .value1, reuseIdentifier: nil)
+            cell.textLabel?.text = "My plugins"
+            cell.detailTextLabel?.text = "117"
+            cell.imageView?.image = UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { context in
+                UIColor.blue.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 30, height: 30))
+            }
+            cell.accessoryType = .disclosureIndicator
+            cell.backgroundColor = .purple
+            return cell
+        }
         if wraps {
             let cell = InterfaceWrappingCell(style: .default, reuseIdentifier: nil)
             cell.backgroundColor = .purple
@@ -199,6 +213,8 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     }
     defer { withExtendedLifetime(dataSource) {}; groups.removeFromSuperview(); baseline.removeFromSuperview() }
     aorusConfigureTable(groups, theme: nativeTheme)
+    expect(!groups.showsVerticalScrollIndicator && !groups.showsHorizontalScrollIndicator,
+           "a narrowed native card column has no system scroll bar over its material")
     groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: 320, height: 200))
     baseline.frame = CGRect(x: groups.frame.minX, y: 300, width: groups.frame.width, height: 200)
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
@@ -251,6 +267,56 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
             }
         }
     }
+    stage("my plugins uses native inner margins")
+    let nativeMineSource = InterfaceGroupDataSource()
+    nativeMineSource.mine = true
+    nativeMineSource.nativeCells = true
+    nativeMineSource.count = 1
+    let nativeMine = UITableView(frame: CGRect(x: 0, y: 80, width: 390, height: 200), style: .insetGrouped)
+    nativeMine.dataSource = nativeMineSource
+    nativeMine.contentInsetAdjustmentBehavior = .never
+    nativeMine.cellLayoutMarginsFollowReadableWidth = false
+    nativeMine.insetsContentViewsToSafeArea = false
+    nativeMine.rowHeight = 44
+    window.addSubview(nativeMine)
+    defer { withExtendedLifetime(nativeMineSource) {}; nativeMine.removeFromSuperview() }
+    dataSource.mine = true
+    dataSource.count = 1
+    func trailingGlyph(_ cell: UITableViewCell) -> CGRect? {
+        func images(_ view: UIView) -> [UIImageView] {
+            (view as? UIImageView).map { [$0] } ?? view.subviews.flatMap(images)
+        }
+        return images(cell).filter { $0 !== cell.imageView && $0.image != nil && !$0.isHidden }
+            .map { $0.convert($0.bounds, to: cell) }
+            .filter { $0.midX > cell.bounds.midX && $0.width > 0 && $0.height > 0 }
+            .max(by: { $0.maxX < $1.maxX })
+    }
+    for glassEnabled in [true, false] {
+        InterfaceGlassPane.isEnabled = glassEnabled
+        aorusConfigureTable(groups, theme: nativeTheme)
+        for width: CGFloat in [320, 390, 768] {
+            nativeMine.frame.size.width = width
+            nativeMine.reloadData(); nativeMine.layoutIfNeeded()
+            aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: width, height: 600)))
+            groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: width, height: 200))
+            groups.reloadData(); groups.layoutIfNeeded()
+            let path = IndexPath(row: 0, section: 0)
+            guard let cell = groups.cellForRow(at: path), let reference = nativeMine.cellForRow(at: path),
+                  let arrow = trailingGlyph(cell), let nativeArrow = trailingGlyph(reference) else { fail("native disclosure glyph missing") }
+            let trailing = cell.bounds.maxX - arrow.maxX
+            let nativeTrailing = reference.bounds.maxX - nativeArrow.maxX
+            expect(trailing >= nativeTrailing - 1,
+                   "My plugins disclosure retains the native inner gap: actual=\(trailing), native=\(nativeTrailing), width=\(width)")
+            for view in [cell.imageView as UIView?, cell.textLabel, cell.detailTextLabel].compactMap({ $0 }) {
+                expect(cell.bounds.insetBy(dx: 7, dy: 0).contains(view.convert(view.bounds, to: cell)),
+                       "My plugins tile, title and count stay inside the native section")
+            }
+        }
+    }
+    InterfaceGlassPane.isEnabled = true
+    aorusConfigureTable(groups, theme: nativeTheme)
+    dataSource.mine = false
+    dataSource.count = 3
     stage("self-sizing content uses the block width")
     dataSource.wraps = true
     dataSource.count = 1
@@ -448,6 +514,18 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
                 let target = filter.hitTest(CGPoint(x: 20, y: 20), with: nil)
                 expect(target === filter.button || target?.isDescendant(of: filter.button) == true,
                        "the native menu button, not its backdrop, receives taps")
+                for transform in [CGAffineTransform(scaleX: 0.82, y: 0.82),
+                                  CGAffineTransform(translationX: 8, y: -12).scaledBy(x: 1.1, y: 1.1)] {
+                    filter.button.transform = transform
+                    filter.update(theme: theme, active: active, image: filterImage)
+                    filter.setNeedsLayout(); filter.layoutIfNeeded()
+                    expect(filter.button.center == CGPoint(x: filter.bounds.midX, y: filter.bounds.midY)
+                           && filter.button.bounds == CGRect(origin: .zero, size: filter.bounds.size),
+                           "menu preview transforms cannot rewrite the filter's resting geometry")
+                    expect(filter.button.transform == transform, "layout preserves UIKit's menu presentation transform")
+                    filter.button.transform = .identity
+                    expect(filter.button.frame == filter.bounds, "dismissal returns the glyph to its exact original place")
+                }
             }
         }
     }

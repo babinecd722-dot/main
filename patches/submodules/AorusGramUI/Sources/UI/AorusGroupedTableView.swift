@@ -27,6 +27,12 @@ class AorusGroupedTableCell: UITableViewCell {
         // They must not inherit UIKit's default grouped-row plate.
         backgroundColor = .clear
         contentView.backgroundColor = .clear
+        // The table already owns the outer gutter. Keep a stable native inner
+        // margin instead of inheriting the full-width grouped table's margins.
+        preservesSuperviewLayoutMargins = false
+        insetsLayoutMarginsFromSafeArea = false
+        directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+        contentView.preservesSuperviewLayoutMargins = true
         if #available(iOS 14.0, *) {
             automaticallyUpdatesBackgroundConfiguration = false
             backgroundConfiguration = UIBackgroundConfiguration.clear()
@@ -126,6 +132,10 @@ final class AorusGroupedTableView: UITableView {
 
     override init(frame: CGRect, style: UITableView.Style) {
         super.init(frame: frame, style: style)
+        // The scroll view occupies the card column, so an indicator would run
+        // over the section material instead of the page's outer gutter.
+        showsVerticalScrollIndicator = false
+        showsHorizontalScrollIndicator = false
         if style == .grouped {
             // ContainerViewLayout has already accounted for safe areas and the
             // wide-screen column. Do not apply UIKit's second readable column.
