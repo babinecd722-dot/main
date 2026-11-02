@@ -1,5 +1,6 @@
 """Exercise installed chat-avatar layout against both native navigation hosts."""
 from pathlib import Path
+import re
 
 from round_video_uikit_fixtures import declaration
 
@@ -26,7 +27,7 @@ def chat_avatar_layout_source(tg: Path) -> str:
     protocols = '\n'.join(declaration(source, marker).replace('public protocol', '@MainActor private protocol')
                           for source, marker in [(display, 'public protocol AorusNavigationBarLayoutNode'),
                                                  (content, 'public protocol AorusNavigationBarResizingNode')])
-    return r'''import UIKit
+    fixture = r'''import UIKit
 private typealias PeerId = Int
 private struct PresentationTheme { var overallDarkAppearance = true }
 private enum AorusOldInterface { static var isEnabled = false }
@@ -155,3 +156,32 @@ private extension AorusGhostAvatarNavigationNode {
     return checks
 }
 '''
+    # These sources share one Swift module with the other UIKit harnesses.
+    # File-private stand-ins still participate in type lookup beside existing
+    # module-level types; give every stand-in an unambiguous fixture prefix.
+    names = {
+        'PeerId': 'AvatarLayoutPeerId',
+        'PresentationTheme': 'AvatarLayoutTheme',
+        'AorusOldInterface': 'AvatarLayoutClassicMode',
+        'AorusInterfaceV2Run': 'AvatarLayoutInterfaceMode',
+        'ASDisplayNode': 'AvatarLayoutDisplayNode',
+        'ASButtonNode': 'AvatarLayoutButtonNode',
+        'ContainedViewLayoutTransition': 'AvatarLayoutTransition',
+        'ComponentTransition': 'AvatarLayoutComponentTransition',
+        'GlassBackgroundView': 'AvatarLayoutGlassBackgroundView',
+        'AorusNavigationBarLayoutNode': 'AvatarLayoutHostNode',
+        'AorusNavigationBarResizingNode': 'AvatarLayoutResizingNode',
+        'AorusGhostAvatarNavigationNode': 'AvatarLayoutCapsule',
+        'AvatarNativeHost': 'AvatarLayoutNativeHost',
+        'AvatarClassicHost': 'AvatarLayoutClassicHost',
+        'aorusGhostChatButtonIsShown': 'avatarLayoutGhostIsShown',
+        'aorusGhostIsActive': 'avatarLayoutGhostIsActive',
+        'aorusGhostIconColor': 'avatarLayoutGhostIconColor',
+        'aorusGhostIconImage': 'avatarLayoutGhostIconImage',
+    }
+    for original, name in names.items():
+        fixture = re.sub(r'\b' + original + r'\b', name, fixture)
+    declarations = re.findall(r'^(?:@\w+\s+)?private (?:final )?(?:class|struct|enum|protocol|typealias) (\w+)', fixture, re.M)
+    if any(not name.startswith('AvatarLayout') for name in declarations):
+        raise RuntimeError('Chat avatar fixture introduces an unscoped stand-in type')
+    return fixture

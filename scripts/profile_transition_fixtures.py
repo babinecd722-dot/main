@@ -78,7 +78,7 @@ private struct GhostChoreography {
     let frame = CGRect(x: 40, y: 0, width: 44, height: 44)
     let avatarNode = UIView(frame: CGRect(x: 3, y: 3, width: 38, height: 38))
     let containerNode = SnapshotContainer()
-    final class SnapshotContainer { let view = UIView() }
+    @MainActor final class SnapshotContainer { let view = UIView() }
     struct SnapshotState { let snapshotView: UIView? }
     func install(_ snapshotState: SnapshotState) {
 ''' + placement + r'''
