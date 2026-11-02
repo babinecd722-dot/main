@@ -17,10 +17,10 @@ import UserNotifications
 // app fully closes (forcing a clean re-init); a moment later the banner appears and a
 // single tap relaunches the app. iOS has no public API to relaunch a process in place,
 // so this is the closest thing to an automatic restart.
-public func aorusPresentRestartNotice(context: AccountContext, controller: ViewController?) {
+public func aorusPresentRestartNotice(context: AccountContext, controller: ViewController?, text: String? = nil) {
     guard let controller = controller else { return }
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-    let text = aorusL("Необходим перезапуск", "Restart required")
+    let text = text ?? aorusL("Необходим перезапуск", "Restart required")
     let actionText = aorusL("Перезапустить сейчас", "Restart now")
     controller.present(
         UndoOverlayController(

@@ -12,6 +12,14 @@ public enum AorusLocalStarRating {
     private static var cachedData: Data?
     private static var cachedLedgers: [String: Ledger]?
 
+    /// Reads the rating again from what a settings load stored.
+    public static func reloadFromStorage() {
+        lock.lock()
+        cachedData = nil
+        cachedLedgers = nil
+        lock.unlock()
+    }
+
     public enum Operation {
         case gift, resale, upgrade, conversion, refund
     }

@@ -8,6 +8,18 @@ public final class AorusGramManager {
     public static let shared = AorusGramManager()
     private init() {
         load()
+        // After a settings load, every switch it carried: the flat keys and what this manager
+        // drives live (Anti-Screenshot) follow at once, and the screens hear of it.
+        NotificationCenter.default.addObserver(
+            forName: AorusSettingsLifecycle.didImport, object: nil, queue: nil
+        ) { [weak self] _ in
+            // A save without the table is one from before any switch was touched: the defaults.
+            if UserDefaults.standard.dictionary(forKey: "aorusgram_settings_v1") == nil {
+                UserDefaults.standard.set([String: Any](), forKey: "aorusgram_settings_v1")
+            }
+            self?.load()
+            self?.save()
+        }
         // License kill-switch (in-memory side effects). LicenseGate already forces every
         // flat aorusgram_* flag OFF / restores them on the lock flag; here we only handle
         // state that a raw key write can't revert: Anti-Screenshot is applied by a live

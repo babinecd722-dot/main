@@ -160,6 +160,12 @@ public final class AorusPluginStore {
         return generationValue
     }
 
+    /// A settings load has put another set of plugins in place: whatever was read before it is
+    /// out of date, and the runtime is told as for any other change.
+    func settingsDidLoad() {
+        notifyChanged()
+    }
+
     private func notifyChanged() {
         generationLock.lock()
         generationValue &+= 1

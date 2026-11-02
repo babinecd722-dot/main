@@ -6,7 +6,14 @@ import Combine
 //   key: "aorusgram_streaks"  value: [String(peerId): StreakRecord]
 final class StreakManager: ObservableObject {
     static let shared = StreakManager()
-    private init() { load() }
+    private init() {
+        load()
+        // After a settings load, the streaks it carried, and none where it carried none.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.streaks = [:]
+            self?.load()
+        }
+    }
 
     @Published private(set) var streaks: [Int64: StreakRecord] = [:]
 

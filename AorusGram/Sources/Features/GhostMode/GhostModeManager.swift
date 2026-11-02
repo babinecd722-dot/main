@@ -13,7 +13,12 @@ private func aorusLicenseLocked() -> Bool {
 //      inside AccountStateManager / AccountPresenceManager source patches.
 final class GhostModeManager {
     static let shared = GhostModeManager()
-    private init() {}
+    private init() {
+        // After a settings load, the Ghost Mode it carried.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.load()
+        }
+    }
 
     private(set) var isEnabled: Bool = false {
         didSet {

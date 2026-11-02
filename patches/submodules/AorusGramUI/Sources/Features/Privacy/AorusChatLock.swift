@@ -26,7 +26,19 @@ public final class AorusChatLock {
 
     private init() {}
 
+    /// After a settings load the locked chats are read again, from what it stored.
+    private static let settingsLoadObserver: Void = {
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) {
+            AorusChatLock.withStateLock {
+                AorusChatLock.cachedEnabled = [:]
+                AorusChatLock.cachedIds = [:]
+            }
+            NotificationCenter.default.post(name: AorusChatLock.changedNotification, object: nil)
+        }
+    }()
+
     private static func withStateLock<T>(_ body: () -> T) -> T {
+        _ = settingsLoadObserver
         stateLock.lock()
         defer { stateLock.unlock() }
         return body()

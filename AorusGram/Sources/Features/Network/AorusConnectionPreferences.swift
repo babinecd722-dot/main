@@ -83,6 +83,21 @@ public final class AorusConnectionPreferences {
         self.update { stored in stored.autoSwitch = value }
     }
 
+    /// Reads the switches again from the keychain, which a settings load has just replaced, and
+    /// puts them in force: the mirror is rewritten and the change announced as any other.
+    func reloadFromStorage() {
+        let loaded = Self.readKeychain() ?? Stored(bypass: true, stableCalls: true, autoSwitch: true)
+        self.lock.lock()
+        let changed = loaded != self.cached
+        self.cached = loaded
+        self.lock.unlock()
+        Self.writeMirror(loaded)
+        guard changed else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.didChangeNotification, object: nil)
+        }
+    }
+
     private func update(_ transform: (inout Stored) -> Void) {
         self.lock.lock()
         var updated = self.cached

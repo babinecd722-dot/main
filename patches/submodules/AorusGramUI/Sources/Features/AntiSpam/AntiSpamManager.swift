@@ -5,7 +5,14 @@ import AorusGram
 final class AntiSpamManager {
     static let shared = AntiSpamManager()
     static let stateChangedNotification = Notification.Name("aorusgram_antispam_state_changed")
-    private init() { load() }
+    private init() {
+        load()
+        // After a settings load, the lists and switches it carried.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.load()
+            NotificationCenter.default.post(name: AntiSpamManager.stateChangedNotification, object: nil)
+        }
+    }
 
     private let defaultsKey = "aorusgram_antispam"
     private let keychainService = "aorusgram.antispam.state"

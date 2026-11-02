@@ -495,7 +495,17 @@ private enum AorusPeerNoteStore {
         return "\(accountId):\(peerKey)"
     }
 
+    /// After a settings load the notes are read again, from the file it put in place.
+    private static let settingsLoadObserver: Void = {
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) {
+            AorusPeerNoteStore.lock.lock()
+            AorusPeerNoteStore.cachedNotes = nil
+            AorusPeerNoteStore.lock.unlock()
+        }
+    }()
+
     private static func loadLocked() -> [String: String] {
+        _ = settingsLoadObserver
         if let cachedNotes {
             return cachedNotes
         }

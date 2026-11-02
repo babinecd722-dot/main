@@ -2607,6 +2607,87 @@ def main() -> None:
         if marker not in aorus_controller_text:
             err.append(f"AorusSettings: tab-name/device-microphone UI is missing {marker}")
 
+    # Every page of the AorusGram settings holds a copy of all the switches. A switch writes only
+    # itself, and a page shows what is stored when another page, a plugin or Siri changes it:
+    # writing the whole copy put the Wall back on after it had been turned off elsewhere.
+    for marker in (
+        "aorusPersisters[keyPath]?(value)",
+        "\\.wallEnabled: { mgr.wallEnabled = $0 }",
+        "updateState { _ in aorusStoredState() }",
+        "forName: .aorusSettingsChanged,",
+    ):
+        if marker not in aorus_controller_text:
+            err.append(f"AorusSettings: a page writes switches it did not touch — missing {marker}")
+    for stale in ("mgr.wallEnabled = s.wallEnabled", "mgr.ghostMode = s.ghostMode"):
+        if stale in aorus_controller_text:
+            err.append(f"AorusSettings: a page writes its whole copy of the switches again — {stale}")
+
+    # Save and Load sit in a block of their own above the subscription's, and a load is put in
+    # force at once: the stores read their data again and the screens are told.
+    for marker in (
+        '.saveSettings(theme, aorusL("Сохранить настройки", "Save Settings"))',
+        '.loadSettings(theme, aorusL("Загрузить настройки", "Load Settings"))',
+        "case .saveSettings:         return 132",
+        "case .loadSettings:         return 133",
+        "AorusSettingsTransfer.present(.save, context: context, from: weakController)",
+        "AorusSettingsTransfer.present(.load, context: context, from: weakController)",
+    ):
+        if marker not in aorus_controller_text:
+            err.append(f"SettingsTransfer: the AorusGram screen is missing {marker}")
+    transfer = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusSettingsTransferController.swift"
+    transfer_text = transfer.read_text(encoding="utf-8") if transfer.is_file() else ""
+    for marker in (
+        "modalPresentationStyle = .overFullScreen",
+        "AorusLiveTheme.follow(",
+        "UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder])",
+        "AorusSettingsArchive.prepareCapture()",
+        "AorusSettingsArchive.write(name: name, into: $0)",
+        "AorusSettingsArchive.prepare(from: summary.url)",
+        "AorusSettingsArchive.apply(prepared)",
+        "AorusFakeGramStore.reloadFromStorage()",
+        "AorusFakeUsernamesStore.reloadFromStorage()",
+        "AorusLocalStarRating.reloadFromStorage()",
+        "AorusPluginRuntimeManager.shared.reloadAutostart()",
+        "LaunchState.interfaceDiffersFromRun",
+        "private static func isInsideApp(",
+    ):
+        if marker not in transfer_text:
+            err.append(f"SettingsTransfer: the save and load card is missing {marker}")
+    settings_archive = here.parent / "AorusGram" / "Sources" / "Features" / "Settings" / "AorusSettingsArchive.swift"
+    settings_archive_text = settings_archive.read_text(encoding="utf-8") if settings_archive.is_file() else ""
+    for marker in (
+        "try AorusBackupArchive.write(to: temporary, key: key(), limits: limits)",
+        "try AorusBackupArchive.read(url: readable, key: key(), limits: limits)",
+        'guard entry.path == Path.meta, let decoded',
+        "guard decoded.format <= Meta.currentFormat else { throw Failure.newerFormat }",
+        '"aorusgram_lic", "aorusgram_license"',
+        '"aorusgram_settings_folder"',
+        "guard !relative.contains(where: { $0.isEmpty || $0 == \".\" || $0 == \"..\" }) else { return nil }",
+        "NotificationCenter.default.post(name: AorusSettingsLifecycle.didImport, object: nil)",
+    ):
+        if marker not in settings_archive_text:
+            err.append(f"SettingsTransfer: the settings archive is missing {marker}")
+    # A store that keeps its data in memory reads it again after a load.
+    for relative_path, marker in (
+        ("Features/DeletedMessages/DeletedMessagesCache.swift", "AorusSettingsLifecycle.willImport"),
+        ("Features/UI/PinboardManager.swift", "AorusSettingsLifecycle.willImport"),
+        ("Features/GhostMode/GhostModeManager.swift", "AorusSettingsLifecycle.didImport"),
+        ("Features/AntiSpam/AntiSpamManager.swift", "AorusSettingsLifecycle.didImport"),
+        ("Features/Messaging/AutoReplyManager.swift", "AorusSettingsLifecycle.didImport"),
+        ("Features/UI/StreakManager.swift", "AorusSettingsLifecycle.didImport"),
+        ("AntiSpoofManager.swift", "AorusSettingsLifecycle.didImport"),
+    ):
+        for root in (here.parent / "AorusGram" / "Sources", tg / "submodules" / "AorusGramUI" / "Sources"):
+            store = root / relative_path
+            store_text = store.read_text(encoding="utf-8") if store.is_file() else ""
+            if marker not in store_text:
+                err.append(f"SettingsTransfer: {store} does not read its data again after a load ({marker})")
+    for relative_path in ("AorusGramManager.swift", "Features/Privacy/AorusChatLock.swift", "AccountDetailsController.swift"):
+        store = tg / "submodules" / "AorusGramUI" / "Sources" / relative_path
+        store_text = store.read_text(encoding="utf-8") if store.is_file() else ""
+        if "AorusSettingsLifecycle.didImport" not in store_text:
+            err.append(f"SettingsTransfer: {relative_path} does not read its data again after a load")
+
     for relative_path in (
         "submodules/AorusGramUI/Sources/UI/Messaging/AorusVoiceToText.swift",
         "submodules/AorusGramUI/Sources/UI/Settings/VoiceTranscriberView.swift",

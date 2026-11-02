@@ -4,7 +4,12 @@ import Foundation
 
 public final class AntiSpoofManager {
     public static let shared = AntiSpoofManager()
-    private init() { load() }
+    private init() {
+        load()
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.reloadAfterSettingsLoad()
+        }
+    }
 
     // MARK: - Settings
 
@@ -23,6 +28,13 @@ public final class AntiSpoofManager {
             ud.set(antiSpoofDeleted, forKey: "aorusgram_antispoof_deleted")
         }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
+        antiSpoofOnline  = d["antiSpoofOnline"]  as? Bool ?? false
+        antiSpoofDeleted = d["antiSpoofDeleted"] as? Bool ?? true
+    }
+
+    /// After a settings load: what it stored, and the defaults where it stored nothing.
+    private func reloadAfterSettingsLoad() {
+        let d = UserDefaults.standard.dictionary(forKey: key) ?? [:]
         antiSpoofOnline  = d["antiSpoofOnline"]  as? Bool ?? false
         antiSpoofDeleted = d["antiSpoofDeleted"] as? Bool ?? true
     }

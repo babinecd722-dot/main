@@ -686,6 +686,32 @@ public final class AorusUserVPNStore {
         self.postChange()
     }
 
+    // MARK: - Saved settings
+
+    /// The servers in the clear, for a settings save: what is stored is sealed to this device,
+    /// and a save has to open on another.
+    func exportedState() -> Data? {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return try? JSONEncoder().encode(self.cached)
+    }
+
+    /// A save's servers, sealed again for this device and in force at once. A save without any
+    /// leaves none; bytes that are not this store's own JSON are taken for none as well.
+    func importState(_ data: Data?) {
+        let stored = data.flatMap { try? JSONDecoder().decode(Stored.self, from: $0) } ?? Stored(enabled: false, configs: [], selectedServerId: nil)
+        self.lock.lock()
+        let changed = stored != self.cached
+        self.cached = stored
+        self.lock.unlock()
+        let store = UserDefaults(suiteName: Self.suiteName)
+        Self.persistState(stored, store: store)
+        Self.writeMirrors(stored, store: store)
+        if changed {
+            self.postChange()
+        }
+    }
+
     private static func writeMirrors(_ stored: Stored, store: UserDefaults?) {
         let active = stored.enabled && Self.server(id: stored.selectedServerId, in: stored.configs) != nil
         store?.set(active, forKey: Self.enabledMirrorKey)

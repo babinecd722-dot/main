@@ -285,6 +285,7 @@ private enum AorusSection: Int32 {
     case wall
     case plugins
     case misc
+    case settingsTransfer
 }
 
 // MARK: - State
@@ -376,6 +377,8 @@ private final class AorusArguments {
     let openBubbleSettings: () -> Void
     let openTabSettings: () -> Void
     let openMessageSettings: () -> Void
+    let saveSettings: () -> Void
+    let loadSettings: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -398,7 +401,9 @@ private final class AorusArguments {
          openFont: @escaping () -> Void,
          openBubbleSettings: @escaping () -> Void,
          openTabSettings: @escaping () -> Void,
-         openMessageSettings: @escaping () -> Void) {
+         openMessageSettings: @escaping () -> Void,
+         saveSettings: @escaping () -> Void,
+         loadSettings: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -421,6 +426,8 @@ private final class AorusArguments {
         self.openBubbleSettings = openBubbleSettings
         self.openTabSettings = openTabSettings
         self.openMessageSettings = openMessageSettings
+        self.saveSettings = saveSettings
+        self.loadSettings = loadSettings
     }
 }
 
@@ -524,6 +531,9 @@ private enum AorusEntry: ItemListNodeEntry {
     case bypassSaveViewOnce(PresentationTheme, String, Bool)
     case bypassStoryDownload(PresentationTheme, String, Bool)
 
+    case saveSettings(PresentationTheme, String)
+    case loadSettings(PresentationTheme, String)
+
     case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
     case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
@@ -570,6 +580,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return section
         case .misc:
             return AorusSection.misc.rawValue
+        case .saveSettings, .loadSettings:
+            return AorusSection.settingsTransfer.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
         case .subscription, .officialChannel, .proxyDiagnostics, .connectionSettings: // AORUS-DIAG
@@ -670,6 +682,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case .plugins:              return 99
         case let .pluginShortcut(_, _, _, _, _, stableId, _, _): return stableId
         case .misc:                 return 130
+        // Their own block, above the subscription's.
+        case .saveSettings:         return 132
+        case .loadSettings:         return 133
         case .subscription:         return 136
         case .officialChannel:      return 137
         case .connectionSettings:   return 146 // AORUS-CONN — above the diagnostics row
@@ -865,6 +880,10 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .bypassSaveViewOnce(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .bypassStoryDownload(lt, ls, lv):
             if case let .bypassStoryDownload(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .saveSettings(lt, ls):
+            if case let .saveSettings(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .loadSettings(lt, ls):
+            if case let .loadSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .subscription(lt, ls):
             if case let .subscription(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .officialChannel(lt, ls):
@@ -1056,6 +1075,10 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassSaveViewOnce, $0) })
         case let .bypassStoryDownload(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassStoryDownload, $0) })
+        case let .saveSettings(_, title):
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.saveSettings)
+        case let .loadSettings(_, title):
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.loadSettings)
         case let .subscription(_, title):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openSubscription)
         case let .officialChannel(_, title):
@@ -1182,6 +1205,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .plugins(theme, aorusPluginsTitle()),
         .misc(theme, l10n.misc),
 
+        .saveSettings(theme, aorusL("Сохранить настройки", "Save Settings")),
+        .loadSettings(theme, aorusL("Загрузить настройки", "Load Settings")),
+
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
         .connectionSettings(theme, l10n.connectionSettings), // AORUS-CONN
@@ -1297,20 +1323,12 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
 // MARK: - Public factory
 
-public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes, section: String? = nil) -> ViewController {
-    // License gate: opening the AorusGram settings while the subscription is locked
-    // routes to the purchase/subscription screen instead (LicenseGate handles the
-    // notification). Fail-open — an active user (flag absent/false) is never affected.
-    // The global lock already blocks entry when expired; this covers a bypassed lock.
-    if !AorusLicenseAccess.isAllowed {
-        NotificationCenter.default.post(
-            name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
-    }
-    let mgr   = AorusGramManager.shared
+/// The settings as they are stored now: the managers', and the keys some of them keep alone.
+private func aorusStoredState() -> AorusState {
+    let mgr = AorusGramManager.shared
     let spoof = AntiSpoofManager.shared
     let stealth = AorusStealthCodec.shared
-
-    let initialState = AorusState(
+    return AorusState(
         ghostMode:          mgr.ghostMode,
         ghostChatButton:    mgr.ghostChatButton,
         blockReadReceipts:  mgr.blockReadReceipts,
@@ -1371,6 +1389,22 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         bypassSaveViewOnce: UserDefaults.standard.object(forKey: "aorusgram_bypass_view_once") as? Bool ?? true,
         bypassStoryDownload: UserDefaults.standard.object(forKey: "aorusgram_bypass_story_dl") as? Bool ?? true
     )
+}
+
+public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes, section: String? = nil) -> ViewController {
+    // License gate: opening the AorusGram settings while the subscription is locked
+    // routes to the purchase/subscription screen instead (LicenseGate handles the
+    // notification). Fail-open — an active user (flag absent/false) is never affected.
+    // The global lock already blocks entry when expired; this covers a bypassed lock.
+    if !AorusLicenseAccess.isAllowed {
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
+    }
+    let mgr   = AorusGramManager.shared
+    let spoof = AntiSpoofManager.shared
+    let stealth = AorusStealthCodec.shared
+
+    let initialState = aorusStoredState()
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue   = Atomic(value: initialState)
 
@@ -1381,6 +1415,63 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
     // Weak reference so openChannel can navigate using the controller's nav stack
     weak var weakController: ItemListController?
 
+    // Each switch writes its own setting, and only its own.
+    let aorusPersisters: [WritableKeyPath<AorusState, Bool>: (Bool) -> Void] = [
+        \.ghostMode: { mgr.ghostMode = $0 },
+        \.ghostChatButton: { mgr.ghostChatButton = $0 },
+        \.blockReadReceipts: { mgr.blockReadReceipts = $0 },
+        \.hideTyping: { mgr.hideTyping = $0 },
+        \.saveDeletedMessages: { mgr.saveDeletedMessages = $0 },
+        \.saveEditedMessages: { mgr.saveEditedMessages = $0 },
+        \.antiScreenshot: { mgr.antiScreenshot = $0 },
+        \.callRecording: { mgr.callRecording = $0 },
+        \.voiceTranscription: { mgr.voiceTranscription = $0 },
+        \.translator: { mgr.translator = $0 },
+        \.shareButton: { mgr.shareButton = $0 },
+        \.videoMessagesRearCamera: { mgr.videoMessagesRearCamera = $0 },
+        \.deviceMicrophone: { mgr.deviceMicrophone = $0 },
+        \.autoReply: { mgr.autoReply = $0 },
+        \.downloadAccel: { mgr.downloadAccel = $0 },
+        \.maxMediaQuality: { mgr.maxMediaQuality = $0 },
+        \.antiSpamEnabled: { mgr.antiSpamEnabled = $0 },
+        \.performanceStatsEnabled: { mgr.performanceStatsEnabled = $0 },
+        \.performanceShowUptime: { mgr.performanceShowUptime = $0 },
+        \.performanceShowRAM: { mgr.performanceShowRAM = $0 },
+        \.performanceShowCPU: { mgr.performanceShowCPU = $0 },
+        \.performanceShowFPS: { mgr.performanceShowFPS = $0 },
+        \.performanceShowBattery: { mgr.performanceShowBattery = $0 },
+        \.performanceShowNetwork: { mgr.performanceShowNetwork = $0 },
+        \.performanceShowDisk: { mgr.performanceShowDisk = $0 },
+        \.performanceShowThermal: { mgr.performanceShowThermal = $0 },
+        \.performanceShowGraph: { mgr.performanceShowGraph = $0 },
+        \.ramAutoClean: { mgr.ramAutoClean = $0 },
+        \.cacheAutoClean: { mgr.cacheAutoClean = $0 },
+        \.editLocally: { mgr.editLocally = $0 },
+        \.userMessages: { mgr.userMessagesInGroup = $0 },
+        \.messageSeconds: { mgr.messageSeconds = $0 },
+        \.doubleTapCopy: { mgr.doubleTapCopy = $0 },
+        \.tripleTapDelete: { mgr.tripleTapDelete = $0 },
+        \.glassUI: { mgr.glassUI = $0 },
+        \.amoledMode: { mgr.amoledMode = $0 },
+        \.profileReportButton: { mgr.profileReportButton = $0 },
+        \.hideCallsTab: { mgr.hideCallsTab = $0 },
+        \.hideContactsTab: { mgr.hideContactsTab = $0 },
+        \.hideSearchButton: { mgr.hideSearchButton = $0 },
+        \.hideTabTitles: { mgr.hideTabTitles = $0 },
+        \.compactTabBar: { mgr.compactTabBar = $0 },
+        \.wallEnabled: { mgr.wallEnabled = $0 },
+        \.siriShortcuts: { mgr.siriShortcuts = $0 },
+        \.squareAvatars: { mgr.squareAvatars = $0 },
+        \.antiSpoofDeleted: { spoof.antiSpoofDeleted = $0 },
+        \.antiSpoofOnline: { spoof.antiSpoofOnline = $0 },
+        \.aorusCodeEnabled: { stealth.isEnabled = $0 },
+        \.bypassSavePaid: { UserDefaults.standard.set($0, forKey: "aorusgram_bypass_save_paid") },
+        \.bypassSaveViewOnce: { UserDefaults.standard.set($0, forKey: "aorusgram_bypass_view_once") },
+        \.bypassStoryDownload: { UserDefaults.standard.set($0, forKey: "aorusgram_bypass_story_dl") },
+        \.subscriptionBanner: { UserDefaults.standard.set($0, forKey: "aorusgram_subscription_banner") },
+        \.showStories: { UserDefaults.standard.set($0, forKey: "aorusgram_show_stories") },
+    ]
+
     let arguments = AorusArguments(
         set: { keyPath, value in
             updateState { current in
@@ -1388,63 +1479,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 next[keyPath: keyPath] = value
                 return next
             }
-            // Persist to managers based on which key changed
+            // Only the switch that changed is written. Every page of these settings holds a copy
+            // of all of them, and writing each field from it put back whatever another page, a
+            // plugin, Siri or the ghost button had changed since this page opened: the Wall, turned
+            // off on its own page, came back at the next switch touched on another.
+            aorusPersisters[keyPath]?(value)
             let s = stateValue.with { $0 }
-            mgr.ghostMode           = s.ghostMode
-            mgr.ghostChatButton     = s.ghostChatButton
-            mgr.blockReadReceipts   = s.blockReadReceipts
-            mgr.hideTyping          = s.hideTyping
-            mgr.saveDeletedMessages = s.saveDeletedMessages
-            mgr.saveEditedMessages  = s.saveEditedMessages
-            mgr.antiScreenshot      = s.antiScreenshot
-            mgr.callRecording       = s.callRecording
-            mgr.voiceTranscription  = s.voiceTranscription
-            mgr.translator          = s.translator
-            mgr.shareButton         = s.shareButton
-            mgr.videoMessagesRearCamera = s.videoMessagesRearCamera
-            mgr.deviceMicrophone    = s.deviceMicrophone
-            mgr.autoReply           = s.autoReply
-            mgr.downloadAccel       = s.downloadAccel
-            mgr.maxMediaQuality     = s.maxMediaQuality
-            mgr.antiSpamEnabled     = s.antiSpamEnabled
-            mgr.performanceStatsEnabled = s.performanceStatsEnabled
-            mgr.performanceShowUptime   = s.performanceShowUptime
-            mgr.performanceShowRAM      = s.performanceShowRAM
-            mgr.performanceShowCPU      = s.performanceShowCPU
-            mgr.performanceShowFPS      = s.performanceShowFPS
-            mgr.performanceShowBattery  = s.performanceShowBattery
-            mgr.performanceShowNetwork  = s.performanceShowNetwork
-            mgr.performanceShowDisk     = s.performanceShowDisk
-            mgr.performanceShowThermal  = s.performanceShowThermal
-            mgr.performanceShowGraph    = s.performanceShowGraph
-            mgr.ramAutoClean       = s.ramAutoClean
-            mgr.ramCleanInterval   = s.ramCleanInterval
-            mgr.cacheAutoClean      = s.cacheAutoClean
-            mgr.cacheCleanInterval  = s.cacheCleanInterval
-            mgr.editLocally         = s.editLocally
-            mgr.userMessagesInGroup = s.userMessages
-            mgr.messageSeconds      = s.messageSeconds
-            mgr.doubleTapCopy       = s.doubleTapCopy
-            mgr.tripleTapDelete     = s.tripleTapDelete
-            mgr.glassUI             = s.glassUI
-            mgr.amoledMode          = s.amoledMode
-            mgr.profileReportButton = s.profileReportButton
-            mgr.hideCallsTab        = s.hideCallsTab
-            mgr.hideContactsTab     = s.hideContactsTab
-            mgr.hideSearchButton    = s.hideSearchButton
-            mgr.hideTabTitles       = s.hideTabTitles
-            mgr.compactTabBar       = s.compactTabBar
-            mgr.wallEnabled         = s.wallEnabled
-            mgr.siriShortcuts       = s.siriShortcuts
-            mgr.squareAvatars       = s.squareAvatars
-            spoof.antiSpoofDeleted  = s.antiSpoofDeleted
-            spoof.antiSpoofOnline   = s.antiSpoofOnline
-            stealth.isEnabled       = s.aorusCodeEnabled
-            UserDefaults.standard.set(s.bypassSavePaid,      forKey: "aorusgram_bypass_save_paid")
-            UserDefaults.standard.set(s.bypassSaveViewOnce,  forKey: "aorusgram_bypass_view_once")
-            UserDefaults.standard.set(s.bypassStoryDownload, forKey: "aorusgram_bypass_story_dl")
-            UserDefaults.standard.set(s.subscriptionBanner, forKey: "aorusgram_subscription_banner")
-            UserDefaults.standard.set(s.showStories, forKey: "aorusgram_show_stories")
             // Glass effects are read once when the nav bar / input panel / HUD build
             // their layers, so toggling only fully applies (everywhere) after a restart.
             if keyPath == \AorusState.glassUI {
@@ -1739,6 +1779,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 return
             }
             navigationController.pushViewController(screen)
+        },
+        saveSettings: {
+            AorusSettingsTransfer.present(.save, context: context, from: weakController)
+        },
+        loadSettings: {
+            AorusSettingsTransfer.present(.load, context: context, from: weakController)
         }
     )
 
@@ -1759,9 +1805,22 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         }
         return ActionDisposable { NotificationCenter.default.removeObserver(token) }
     }
-    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData, pluginIntegrationSignal)
+    // The managers say when a setting changes, wherever it was changed: this page, another page
+    // of these settings, a plugin, Siri, the ghost in a chat. The page then shows what is stored.
+    let storedStateSignal: Signal<Void, NoError> = Signal { subscriber in
+        let token = NotificationCenter.default.addObserver(
+            forName: .aorusSettingsChanged,
+            object: nil,
+            queue: .main
+        ) { _ in
+            updateState { _ in aorusStoredState() }
+        }
+        subscriber.putNext(Void())
+        return ActionDisposable { NotificationCenter.default.removeObserver(token) }
+    }
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData, pluginIntegrationSignal, storedStateSignal)
         |> deliverOnMainQueue
-        |> map { state, presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        |> map { state, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
             // The derived theme, not the raw one. Every row Telegram itself draws reaches it
             // through ItemListPresentationData's convenience init; the rows in this file are our

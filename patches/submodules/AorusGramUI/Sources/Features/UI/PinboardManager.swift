@@ -7,6 +7,34 @@ final class PinboardManager {
     static let shared = PinboardManager()
     private init() {
         queue.sync { self.openDB(); self.createTable() }
+
+        // A settings save reads this file and a load replaces it (AorusSettingsArchive): the
+        // journal is folded into the file before the one, the file is let go of before the
+        // other and opened again once it is done.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.willCapture) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                if let db = self.db {
+                    sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+                }
+            }
+        }
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.willImport) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                if let db = self.db {
+                    sqlite3_close_v2(db)
+                    self.db = nil
+                }
+            }
+        }
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                self.openDB()
+                self.createTable()
+            }
+        }
     }
 
     private var db: OpaquePointer?
@@ -194,7 +222,13 @@ private func aorusBindText(_ statement: OpaquePointer?, _ index: Int32, _ value:
 
 final class PinboardStore: ObservableObject {
     static let shared = PinboardStore()
-    private init() { reload() }
+    private init() {
+        reload()
+        // After a settings load, the pinboard that came with it.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.reload()
+        }
+    }
 
     @Published private(set) var items: [PinnedMessage] = []
 

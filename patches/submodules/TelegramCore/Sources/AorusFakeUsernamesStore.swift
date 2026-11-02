@@ -68,6 +68,23 @@ public enum AorusFakeUsernamesStore {
         }
     }
 
+    /// Reads every account's names again from what a settings load stored, and tells each
+    /// account that had any, before or after.
+    public static func reloadFromStorage() {
+        lock.lock()
+        var accounts = Set(cache.keys)
+        for storedKey in UserDefaults.standard.dictionaryRepresentation().keys where storedKey.hasPrefix(key) {
+            if let account = Int64(storedKey.dropFirst(key.count)) {
+                accounts.insert(account)
+            }
+        }
+        cache = [:]
+        lock.unlock()
+        for account in accounts {
+            notify(account)
+        }
+    }
+
     public static func state(account: Int64) -> State {
         lock.lock()
         defer { lock.unlock() }

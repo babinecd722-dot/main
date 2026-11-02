@@ -6,7 +6,12 @@ import Combine
 // scheduled). Deduplicates replies within a cooldown window per peer.
 final class AutoReplyManager: ObservableObject {
     static let shared = AutoReplyManager()
-    private init() {}
+    private init() {
+        // After a settings load, the auto-reply it carried.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            self?.load()
+        }
+    }
 
     @Published var isEnabled: Bool = false {
         didSet { persist() }

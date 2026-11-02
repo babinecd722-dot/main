@@ -107,6 +107,14 @@ public enum AorusFakeGramStore {
         return true
     }
 
+    /// Reads the ledger again from what a settings load stored, and says so.
+    public static func reloadFromStorage() {
+        lock.lock()
+        cached = nil
+        lock.unlock()
+        notify()
+    }
+
     private static func notify() {
         if Thread.isMainThread {
             NotificationCenter.default.post(name: changedNotification, object: nil)

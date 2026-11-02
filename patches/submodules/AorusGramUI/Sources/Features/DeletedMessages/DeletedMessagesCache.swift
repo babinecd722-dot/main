@@ -60,6 +60,34 @@ final class DeletedMessagesCache {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         dbPath = dir.appendingPathComponent("deleted_messages.sqlite").path
         queue.sync { self.openDB(); self.createTable() }
+
+        // A settings save reads this file and a load replaces it (AorusSettingsArchive): the
+        // journal is folded into the file before the one, the file is let go of before the
+        // other and opened again once it is done.
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.willCapture) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                if let db = self.db {
+                    sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+                }
+            }
+        }
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.willImport) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                if let db = self.db {
+                    sqlite3_close_v2(db)
+                    self.db = nil
+                }
+            }
+        }
+        AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
+            guard let self else { return }
+            self.queue.sync {
+                self.openDB()
+                self.createTable()
+            }
+        }
         // Well after launch and on the cache's own background queue: the first pass over a
         // file that has grown for months is a long one.
         queue.asyncAfter(deadline: .now() + 30) { [weak self] in self?.pruneIfDue() }
