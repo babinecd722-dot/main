@@ -56,7 +56,7 @@ private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage { UIIm
 }
 @MainActor private final class AvatarLayoutNode: ASDisplayNode {}
 @MainActor private final class ASButtonNode: ASDisplayNode {
-    var accessibilityLabel: String? { get { view.accessibilityLabel } set { view.accessibilityLabel = newValue } }
+    override var accessibilityLabel: String? { get { view.accessibilityLabel } set { view.accessibilityLabel = newValue } }
     func setImage(_ image: UIImage, for state: UIControl.State) {}
     func addTarget(_ target: Any?, action: Selector, forControlEvents: UIControl.Event) {}
 }
