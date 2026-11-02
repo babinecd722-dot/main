@@ -1374,6 +1374,18 @@ def check_plugin_ui_stubs(root: Path, errors: list[str]) -> None:
     if declared == 0:
         fail(errors, "plugin UI stubs declare no runtime methods to check")
 
+    # The Market's order menu is stood in for by its entry point alone; the stand-in has to
+    # be the real signature, or the screens are checked against a call that does not exist.
+    sort_menu = root / "patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginSortMenu.swift"
+    sort_stub = re.search(r"^func aorusPresentPluginSortMenu\(.*?\) \{\}$", stub_text, re.M)
+    if sort_stub is None or not sort_menu.is_file():
+        fail(errors, "plugin UI stubs no longer stand in for the Market's order menu")
+    else:
+        signature = normalized(sort_stub.group(0)[: -len(" {}")])
+        real_menu = {normalized(line) for line in sort_menu.read_text(encoding="utf-8").split("\n")}
+        if signature + " {" not in real_menu:
+            fail(errors, f"plugin UI stub has drifted from AorusPluginSortMenu: {signature}")
+
     # The Market transport and its Telegram side are stood in for the same way, and held to
     # the real files the same way: a stub that has drifted type-checks the screens against an
     # API that no longer exists.

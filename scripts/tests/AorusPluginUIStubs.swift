@@ -397,6 +397,11 @@ private final class AorusPluginStubAvatar: UIView, AorusPluginMarketAvatar {
     func show(author: AorusPluginMarketAuthor?, fallbackName: String) {}
 }
 
+/// The Market's order menu (`AorusPluginSortMenu.swift`) is Telegram's own ContextUI menu, which
+/// these stubs do not carry; the screens need only its entry point, whose signature is held
+/// to the real one.
+func aorusPresentPluginSortMenu(context: AccountContext, presentationData: PresentationData, from controller: ViewController, sourceView: UIView, options: [AorusPluginMarketSortOption]) {}
+
 func aorusPluginTableStyle() -> UITableView.Style { .grouped }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {}
