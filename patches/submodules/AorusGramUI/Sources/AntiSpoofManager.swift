@@ -9,6 +9,9 @@ public final class AntiSpoofManager {
         AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
             self?.reloadAfterSettingsLoad()
         }
+        activityQueue.async {
+            AntiSpoofManager.dropLegacyLastSeenKeys()
+        }
     }
 
     // MARK: - Settings
@@ -89,11 +92,20 @@ public final class AntiSpoofManager {
     private var peerActivity: [Int64: PeerActivityRecord] = [:]
     private let activityLock = NSLock()
     private let activityQueue = DispatchQueue(label: "aorusgram.peer_activity", qos: .utility)
-    /// How often one person's "last seen" is written to disk. Every message of every chat
-    /// wrote it — hundreds at once when the app came back after a long time away.
-    private let persistInterval: TimeInterval = 30
-    /// When each person's time was last written. On `activityQueue`.
-    private var persistedAt: [Int64: Date] = [:]
+    /// Everyone's last activity, kept as one table in the defaults: the chat header reads it
+    /// from there. It used to be a key of its own for every person who ever wrote, which grew
+    /// the defaults by thousands of keys, and every write to the defaults writes all of them.
+    public static let lastSeenKey = "aorusgram_peer_activity_v2"
+    private static let legacyLastSeenPrefix = "aorusgram_peer_last_seen_"
+    private static let legacyDroppedKey = "aorusgram_peer_activity_v2_ready"
+    /// The header shows an hour at most; a day is kept, and the most recent few hundred.
+    private static let lastSeenLifetime: TimeInterval = 24 * 60 * 60
+    private static let lastSeenLimit = 400
+    /// A burst — hundreds of messages when the app comes back after a long time away — is
+    /// written once, this long after it starts.
+    private let persistDelay: TimeInterval = 2
+    /// Whether a write is waiting. On `activityQueue`.
+    private var persistScheduled = false
 
     public func recordActivity(peerId: Int64, kind: ActivityKind) {
         guard antiSpoofOnline else { return }
@@ -103,13 +115,7 @@ public final class AntiSpoofManager {
             self.activityLock.lock()
             self.peerActivity[peerId] = record
             self.activityLock.unlock()
-            if self.persistedAt[peerId].map({ record.date.timeIntervalSince($0) >= self.persistInterval }) ?? true {
-                self.persistedAt[peerId] = record.date
-                UserDefaults.standard.set(
-                    record.date.timeIntervalSince1970,
-                    forKey: "aorusgram_peer_last_seen_\(peerId)"
-                )
-            }
+            self.schedulePersist()
             NotificationCenter.default.post(
                 name: .aorusPeerActivityUpdated,
                 object: nil,
@@ -133,12 +139,65 @@ public final class AntiSpoofManager {
         }
 
         // Из UserDefaults (сохраняется между сессиями)
-        let ts = UserDefaults.standard.double(forKey: "aorusgram_peer_last_seen_\(peerId)")
+        let ts = (UserDefaults.standard.dictionary(forKey: Self.lastSeenKey)?[String(peerId)] as? Double) ?? 0
         if ts > 0 {
             return .lastSeen(Date(timeIntervalSince1970: ts))
         }
 
         return .unknown
+    }
+
+    /// Writes the table once a burst has settled. On `activityQueue`.
+    private func schedulePersist() {
+        guard !persistScheduled else { return }
+        persistScheduled = true
+        activityQueue.asyncAfter(deadline: .now() + persistDelay) { [weak self] in
+            self?.persistLastSeen()
+        }
+    }
+
+    /// The table with what is in memory merged in, the stale and the oldest past the limit
+    /// taken out, in memory and on disk alike. On `activityQueue`.
+    private func persistLastSeen() {
+        persistScheduled = false
+        let cutoff = Date().addingTimeInterval(-Self.lastSeenLifetime)
+        activityLock.lock()
+        peerActivity = peerActivity.filter { $0.value.date >= cutoff }
+        let records = peerActivity
+        activityLock.unlock()
+        let defaults = UserDefaults.standard
+        var table = (defaults.dictionary(forKey: Self.lastSeenKey) as? [String: Double]) ?? [:]
+        for (peerId, record) in records {
+            table[String(peerId)] = record.date.timeIntervalSince1970
+        }
+        table = table.filter { $0.value >= cutoff.timeIntervalSince1970 }
+        if table.count > Self.lastSeenLimit {
+            let kept = table.sorted { $0.value > $1.value }.prefix(Self.lastSeenLimit)
+            table = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        }
+        defaults.set(table, forKey: Self.lastSeenKey)
+    }
+
+    /// The keys of one person each, from before the table, brought into it once if they are
+    /// recent and removed. On `activityQueue`.
+    private static func dropLegacyLastSeenKeys() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: legacyDroppedKey) else { return }
+        let cutoff = Date().timeIntervalSince1970 - lastSeenLifetime
+        var table = (defaults.dictionary(forKey: lastSeenKey) as? [String: Double]) ?? [:]
+        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(legacyLastSeenPrefix) {
+            let peerId = String(key.dropFirst(legacyLastSeenPrefix.count))
+            if let date = (value as? NSNumber)?.doubleValue, date >= cutoff, Int64(peerId) != nil {
+                table[peerId] = max(table[peerId] ?? 0, date)
+            }
+            defaults.removeObject(forKey: key)
+        }
+        if table.count > lastSeenLimit {
+            let kept = table.sorted { $0.value > $1.value }.prefix(lastSeenLimit)
+            table = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        }
+        defaults.set(table, forKey: lastSeenKey)
+        defaults.set(true, forKey: legacyDroppedKey)
     }
 
     public enum RealLastSeen {

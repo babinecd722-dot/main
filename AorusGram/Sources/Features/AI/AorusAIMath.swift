@@ -260,6 +260,12 @@ public enum AorusAIMath {
         return parseAtoms(&scanner, depth: 0, stop: [])
     }
 
+    /// The pair of dollars, then the single dollar, compiled once: every formula in every
+    /// answer passes through here each time the answer is drawn.
+    private static let mathDelimiterExpressions: [NSRegularExpression] = [#"\$\$([\s\S]+?)\$\$"#, #"(?<!\\)\$([^$\n]+)\$"#].compactMap {
+        try? NSRegularExpression(pattern: $0)
+    }
+
     /// `$$…$$` and `$…$` say "this is maths" and are not content. A lone `$` says five
     /// dollars, so only a PAIR is removed — and the pair of dollars first, because the
     /// single-dollar rule would take the opening two and strand the closing two mid-line.
@@ -270,8 +276,7 @@ public enum AorusAIMath {
         for delimiter in ["\\(", "\\)", "\\[", "\\]"] {
             value = value.replacingOccurrences(of: delimiter, with: "")
         }
-        for pattern in [#"\$\$([\s\S]+?)\$\$"#, #"(?<!\\)\$([^$\n]+)\$"#] {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+        for regex in mathDelimiterExpressions {
             let text = NSMutableString(string: value)
             let matches = regex.matches(in: value, range: NSRange(location: 0, length: (value as NSString).length))
             for match in matches.reversed() {

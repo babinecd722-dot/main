@@ -267,6 +267,8 @@ public enum AorusSettingsArchive {
         "aorusgram.market.stats", "aorusgram_settings_folder", "aorusgram_reality_",
         // The keychain holds the account backup and what it says of itself; this is a copy.
         "aorusgram_backup_",
+        // When people were last seen: what this device observed, not a setting.
+        "aorusgram_peer_activity", "aorusgram_peer_last_seen_",
     ]
     private static let deviceKeys: Set<String> = [
         "aorusgram_root_path", "aorusgram_login_backup_restore_requested", "aorusgram_local_edit_active_message",

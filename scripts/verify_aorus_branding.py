@@ -2622,6 +2622,51 @@ def main() -> None:
         if stale in aorus_controller_text:
             err.append(f"AorusSettings: a page writes its whole copy of the switches again — {stale}")
 
+    # Hot paths stay cheap: each of these used to repeat work on every draw or every parse.
+    for relative_path, markers in (
+        ("submodules/AorusGramUI/Sources/Features/AI/AorusAIControllers.swift", (
+            "private static func cachedRegex(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {",
+            "private static let mediumDateFormatter: DateFormatter = {",
+        )),
+        ("submodules/TelegramCore/Sources/AorusFakeGiftsStore.swift", (
+            "let (gifts, migratedData) = decoded(data)",
+            "return AorusStoredGift.decodedGift(self.giftData)",
+            "let knownMissing = keychainMisses.contains(account)",
+        )),
+        ("submodules/TelegramCore/Sources/Utils/AorusGramPremium.swift", (
+            "guard keychainMayHave(account) else {",
+            "public static func reloadFromStorage() {",
+        )),
+        ("submodules/AorusGramUI/Sources/AntiSpoofManager.swift", (
+            'public static let lastSeenKey = "aorusgram_peer_activity_v2"',
+            "private static func dropLegacyLastSeenKeys() {",
+        )),
+        ("submodules/AorusGramUI/Sources/AorusWallSettingsController.swift", (
+            "public static func reloadFromStorage() {",
+        )),
+    ):
+        hot = tg / relative_path
+        hot_text = hot.read_text(encoding="utf-8") if hot.is_file() else ""
+        for marker in markers:
+            if marker not in hot_text:
+                err.append(f"Performance: {relative_path} is missing {marker}")
+    title_view = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
+    title_text = title_view.read_text(encoding="utf-8") if title_view.is_file() else ""
+    if "aorusgram_peer_last_seen_" in title_text:
+        err.append("Performance: the chat header still reads a defaults key per person")
+    for relative_path in (
+        "submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketControllers.swift",
+        "submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginControllers.swift",
+    ):
+        plugin_text = (tg / relative_path).read_text(encoding="utf-8") if (tg / relative_path).is_file() else ""
+        if "showsMenuAsPrimaryAction" in plugin_text:
+            err.append(f"Plugins: {relative_path} opens a UIKit menu that lifts its button away")
+    market_text = (tg / "submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketControllers.swift").read_text(encoding="utf-8") \
+        if (tg / "submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketControllers.swift").is_file() else ""
+    for marker in ("onSortMenu?(filterControl, options)", "scrollView.showsVerticalScrollIndicator = false"):
+        if marker not in market_text:
+            err.append(f"Plugins: the Market is missing {marker}")
+
     # Save and Load sit in a block of their own above the subscription's, and a load is put in
     # force at once: the stores read their data again and the screens are told.
     for marker in (
@@ -2639,9 +2684,10 @@ def main() -> None:
     for marker in (
         "modalPresentationStyle = .overFullScreen",
         "AorusLiveTheme.follow(",
-        "UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder])",
         "AorusSettingsArchive.prepareCapture()",
-        "AorusSettingsArchive.write(name: name, into: $0)",
+        "try AorusSettingsVault.save(name: name)",
+        "try? AorusSettingsVault.saves()",
+        "AorusSettingsVault.delete(summary)",
         "AorusSettingsArchive.prepare(from: summary.url)",
         "AorusSettingsArchive.apply(prepared)",
         "AorusFakeGramStore.reloadFromStorage()",
@@ -2649,10 +2695,26 @@ def main() -> None:
         "AorusLocalStarRating.reloadFromStorage()",
         "AorusPluginRuntimeManager.shared.reloadAutostart()",
         "LaunchState.interfaceDiffersFromRun",
-        "private static func isInsideApp(",
     ):
         if marker not in transfer_text:
             err.append(f"SettingsTransfer: the save and load card is missing {marker}")
+    # The client keeps the saves itself: nobody is asked for a folder.
+    for stale in ("UIDocumentPickerViewController", "startAccessingSecurityScopedResource", "bookmarkData("):
+        if stale in transfer_text:
+            err.append(f"SettingsTransfer: the card still asks for a folder — {stale}")
+    settings_vault = here.parent / "AorusGram" / "Sources" / "Features" / "Settings" / "AorusSettingsVault.swift"
+    settings_vault_text = settings_vault.read_text(encoding="utf-8") if settings_vault.is_file() else ""
+    for marker in (
+        'public static let folderName = "AorusGram Settings"',
+        "fm.urls(for: .documentDirectory, in: .userDomainMask)",
+        'private static let service = "aorusgram.settings.saves"',
+        "adoptLegacyFolder(into: directory)",
+        "restoreMissing(into: directory)",
+        "guard data.count == header.size, digest(data) == header.digest else { return nil }",
+        "for (fileName, header) in headers() where isSaveFileName(fileName) {",
+    ):
+        if marker not in settings_vault_text:
+            err.append(f"SettingsTransfer: the saves' store is missing {marker}")
     settings_archive = here.parent / "AorusGram" / "Sources" / "Features" / "Settings" / "AorusSettingsArchive.swift"
     settings_archive_text = settings_archive.read_text(encoding="utf-8") if settings_archive.is_file() else ""
     for marker in (

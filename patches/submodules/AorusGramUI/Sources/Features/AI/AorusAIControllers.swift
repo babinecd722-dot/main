@@ -8368,6 +8368,24 @@ enum AorusAIMarkdownBlock {
 }
 
 enum AorusAIMarkdown {
+    /// The expressions the renderer uses, compiled once each. An answer is rendered again for
+    /// every piece of it that streams in, and the list pass alone used to compile two
+    /// expressions for every line of it, every time.
+    private static let regexLock = NSLock()
+    private static var regexCache: [String: NSRegularExpression] = [:]
+
+    private static func cachedRegex(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression? {
+        let key = String(options.rawValue) + "|" + pattern
+        regexLock.lock()
+        defer { regexLock.unlock() }
+        if let cached = regexCache[key] {
+            return cached
+        }
+        guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
+        regexCache[key] = compiled
+        return compiled
+    }
+
     static func blocks(_ source: String) -> [AorusAIMarkdownBlock] {
         var result: [AorusAIMarkdownBlock] = []
         guard source.contains("```") else {
@@ -8692,13 +8710,13 @@ enum AorusAIMarkdown {
 
     private static func normalizeLists(_ source: String) -> String {
         return source.components(separatedBy: .newlines).map { line in
-            if let regex = try? NSRegularExpression(pattern: #"^(\s*)[-*+]\s+\[([ xX])\]\s+(.+)$"#),
+            if let regex = cachedRegex(#"^(\s*)[-*+]\s+\[([ xX])\]\s+(.+)$"#),
                let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) {
                 let nsLine = line as NSString
                 let mark = nsLine.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces).isEmpty ? "☐" : "☑︎"
                 return nsLine.substring(with: match.range(at: 1)) + mark + " " + nsLine.substring(with: match.range(at: 3))
             }
-            guard let regex = try? NSRegularExpression(pattern: #"^(\s*)[-*+]\s+(.+)$"#),
+            guard let regex = cachedRegex(#"^(\s*)[-*+]\s+(.+)$"#),
                   let match = regex.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else {
                 return line
             }
@@ -8708,7 +8726,7 @@ enum AorusAIMarkdown {
     }
 
     private static func replacing(pattern: String, in source: String, transform: ([String]) -> String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return source }
+        guard let regex = cachedRegex(pattern) else { return source }
         let result = NSMutableString(string: source)
         let matches = regex.matches(in: source, range: NSRange(location: 0, length: (source as NSString).length))
         for match in matches.reversed() {
@@ -8722,7 +8740,7 @@ enum AorusAIMarkdown {
     }
 
     private static func applyMarkdownLinks(in value: NSMutableAttributedString, accent: UIColor) {
-        guard let regex = try? NSRegularExpression(pattern: #"\[([^\]\n]+)\]\((https?://[^\s)]+)\)"#, options: [.caseInsensitive]) else { return }
+        guard let regex = cachedRegex(#"\[([^\]\n]+)\]\((https?://[^\s)]+)\)"#, options: [.caseInsensitive]) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)).reversed() {
             if startsInCode(match.range, in: value) { continue }
             let title = value.attributedSubstring(from: match.range(at: 1))
@@ -8790,7 +8808,7 @@ enum AorusAIMarkdown {
     }
 
     private static func apply(pattern: String, in value: NSMutableAttributedString, font: UIFont) {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex = cachedRegex(pattern) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)).reversed() {
             if startsInCode(match.range, in: value) { continue }
             // The inner text is taken WITH its attributes. Handing `replaceCharacters` a
@@ -8804,7 +8822,7 @@ enum AorusAIMarkdown {
     }
 
     private static func applyStrikethrough(in value: NSMutableAttributedString) {
-        guard let regex = try? NSRegularExpression(pattern: #"~~([^~\n]+)~~"#) else { return }
+        guard let regex = cachedRegex(#"~~([^~\n]+)~~"#) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)).reversed() {
             if startsInCode(match.range, in: value) { continue }
             let text = value.attributedSubstring(from: match.range(at: 1))
@@ -8818,7 +8836,7 @@ enum AorusAIMarkdown {
     /// this is only the compact convention models commonly emit without Markdown.
     private static func applyCalloutLabels(in value: NSMutableAttributedString, size: CGFloat) {
         let pattern = #"(?im)^(пример(?:\s+\d+)?|решение|ответ|итог|важно|example(?:\s+\d+)?|solution|answer|result|important):"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex = cachedRegex(pattern) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)) {
             if isCode(match.range, in: value) { continue }
             value.addAttribute(.font, value: aorusUIFont(size, .semibold), range: match.range)
@@ -8827,7 +8845,7 @@ enum AorusAIMarkdown {
 
     private static func applyListParagraphs(in value: NSMutableAttributedString, scale: CGFloat) {
         let pattern = #"(?m)^\s*(?:-|☐|☑︎|\d+[.)])\s+.*$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
+        guard let regex = cachedRegex(pattern) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)) {
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineSpacing = 6.0 * scale
@@ -8838,7 +8856,7 @@ enum AorusAIMarkdown {
     }
 
     private static func applyInlineCode(in value: NSMutableAttributedString, backgroundColor: UIColor, size: CGFloat) {
-        guard let regex = try? NSRegularExpression(pattern: #"`([^`\n]+)`"#) else { return }
+        guard let regex = cachedRegex(#"`([^`\n]+)`"#) else { return }
         // Code sits a touch below the running text at every size — the same 15/16.5 the
         // answer was designed at, kept as a ratio.
         let codeSize = size * (15.0 / 16.5)
@@ -8854,7 +8872,7 @@ enum AorusAIMarkdown {
     }
 
     private static func applyHeadings(in value: NSMutableAttributedString, scale: CGFloat) {
-        guard let regex = try? NSRegularExpression(pattern: #"(?m)^(#{1,3})\s+(.+)$"#) else { return }
+        guard let regex = cachedRegex(#"(?m)^(#{1,3})\s+(.+)$"#) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)).reversed() {
             if startsInCode(match.range, in: value) { continue }
             let text = value.attributedSubstring(from: match.range(at: 2))
@@ -8877,7 +8895,7 @@ enum AorusAIMarkdown {
             (#"https?://t\.me/([A-Za-z0-9_]{5,32})(?:/\d+)?"#, { URL(string: "aorus-username://\($0)") })
         ]
         for item in patterns {
-            guard let regex = try? NSRegularExpression(pattern: item.0, options: [.caseInsensitive]) else { continue }
+            guard let regex = cachedRegex(item.0, options: [.caseInsensitive]) else { continue }
             for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)) {
                 if isCode(match.range, in: value) { continue }
                 let capture = match.numberOfRanges > 1 ? (value.string as NSString).substring(with: match.range(at: 1)) : (value.string as NSString).substring(with: match.range)
@@ -8921,11 +8939,16 @@ private enum AorusAIFormat {
         if days >= 1 && days < 7 {
             return aorusAILocalized("\(days) дн. назад", days == 1 ? "1 day ago" : "\(days) days ago")
         }
+        return mediumDateFormatter.string(from: date)
+    }
+
+    /// One formatter for every row of the conversation list, rather than one made per row.
+    private static let mediumDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
+        return formatter
+    }()
     /// §14: quota wording built only from backend metadata. Never invents a reset time.
     static func quotaText(_ quota: AorusAIQuota) -> String {
         let title = aorusAILocalized("Лимит AorusAI исчерпан", "AorusAI limit reached")

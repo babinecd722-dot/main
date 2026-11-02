@@ -31,6 +31,18 @@ public enum AorusWallSettingsStore {
     private static var excludedCache: [Int64: Set<Int64>] = [:]
     private static var removedCache: [Int64: Set<MessageId>] = [:]
 
+    /// After a settings load: everything is read again from what the load stored. A seen post
+    /// marked from the old memory would otherwise have written the old list over the new one.
+    public static func reloadFromStorage() {
+        lock.lock()
+        seenCache = [:]
+        excludedCache = [:]
+        removedCache = [:]
+        displayedCache = [:]
+        seenDirectory = nil
+        lock.unlock()
+    }
+
     public static func removedMessageIds(accountId: Int64) -> Set<MessageId> {
         lock.lock()
         defer { lock.unlock() }
@@ -204,7 +216,14 @@ public enum AorusWallSettingsStore {
         return MessageId(peerId: PeerId(peerId), namespace: namespace, id: id)
     }
 
+    /// Made and marked once: it was looked up, created and marked again for every post seen.
+    /// The caller holds `lock`, as every caller of the paths below does.
+    private static var seenDirectory: URL?
+
     private static func seenDirectoryURL() -> URL? {
+        if let seenDirectory, FileManager.default.fileExists(atPath: seenDirectory.path) {
+            return seenDirectory
+        }
         guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -215,6 +234,7 @@ public enum AorusWallSettingsStore {
             values.isExcludedFromBackup = true
             var mutableDirectory = directory
             try? mutableDirectory.setResourceValues(values)
+            seenDirectory = directory
             return directory
         } catch {
             return nil

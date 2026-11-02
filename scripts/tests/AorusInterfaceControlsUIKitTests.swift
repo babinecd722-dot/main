@@ -477,10 +477,6 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     let filter = AorusPluginFilterControl(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
     guard let filterImage = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)),
           let filterActiveImage = UIImage(systemName: "line.3.horizontal.decrease", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)) else { fail("native filter glyph missing") }
-    if #available(iOS 14.0, *) {
-        filter.button.showsMenuAsPrimaryAction = true
-        filter.button.menu = UIMenu(children: [UIAction(title: "Sort", handler: { _ in })])
-    }
     let filterDark = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .darkGray, blocksBackgroundColor: .black, itemPrimaryTextColor: .white), overallDarkAppearance: true)
     let filterLight = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .white, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
     for glassEnabled in [true, false] {
@@ -491,41 +487,38 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         }
         for theme in [filterDark, filterLight] {
             for active in [false, true, false] {
-                filter.update(theme: theme, active: active, image: active ? filterActiveImage : filterImage)
+                filter.update(theme: theme, active: active, image: active ? filterActiveImage : filterImage, animated: false)
                 filter.layoutIfNeeded()
-                filter.button.layoutIfNeeded()
                 guard let backdrop = filter.subviews.compactMap({ $0 as? AorusUIKitSurfaceView }).first,
+                      let glyph = filter.subviews.compactMap({ $0 as? UIImageView }).first,
                       let backIndex = filter.subviews.firstIndex(where: { $0 === backdrop }),
-                      let frontIndex = filter.subviews.firstIndex(where: { $0 === filter.button }),
-                      let glyph = filter.button.imageView else { fail("filter foreground hierarchy missing") }
-                expect(backIndex < frontIndex && backdrop.superview === filter && filter.button.superview === filter,
-                       "filter material and button are ordered siblings after every image/theme update")
-                expect(glyph.isDescendant(of: filter.button) && !glyph.isDescendant(of: backdrop),
-                       "glass never contains the filter glyph that it would refract")
-                expect(backdrop.frame == filter.bounds && filter.button.frame == filter.bounds,
-                       "foreground and background keep the same native control bounds")
+                      let glyphIndex = filter.subviews.firstIndex(where: { $0 === glyph }),
+                      let frontIndex = filter.subviews.firstIndex(where: { $0 === filter.button }) else { fail("filter foreground hierarchy missing") }
+                expect(backIndex < glyphIndex && glyphIndex < frontIndex && backdrop.superview === filter && filter.button.superview === filter,
+                       "material, glyph and the touch target are ordered siblings after every image/theme update")
+                expect(!glyph.isDescendant(of: backdrop) && !glyph.isDescendant(of: filter.button),
+                       "glass never contains the filter glyph, and no UIKit-managed button content can reorder it")
+                expect(filter.button.image(for: .normal) == nil,
+                       "the touch target draws nothing UIKit could reorder over the glyph")
+                if #available(iOS 14.0, *) {
+                    expect(filter.button.menu == nil && !filter.button.showsMenuAsPrimaryAction,
+                           "the touch target opens no UIKit menu that could lift the glyph away")
+                }
+                expect(backdrop.frame == filter.bounds && glyph.frame == filter.bounds && filter.button.frame == filter.bounds,
+                       "material, glyph and touch target share the control's bounds")
                 expect(backdrop.isHidden == active, "active filter uses its accent fill instead of a lens")
                 let expectedInk = aorusPluginFilterInk(theme, active: active)
-                expect(filter.button.tintColor.isEqual(expectedInk) && glyph.tintColor.isEqual(expectedInk),
+                expect(glyph.tintColor.isEqual(expectedInk),
                        "filter glyph keeps the native light/dark foreground colour")
-                expect(filter.button.image(for: .normal)?.renderingMode == .alwaysTemplate,
+                expect(glyph.image?.renderingMode == .alwaysTemplate,
                        "black source pixels remain a tintable mask, never an opaque foreground")
-                expect(filter.button.bounds.contains(filter.button.convert(glyph.bounds, from: glyph)), "filter glyph fits inside its native button")
                 let target = filter.hitTest(CGPoint(x: 20, y: 20), with: nil)
-                expect(target === filter.button || target?.isDescendant(of: filter.button) == true,
-                       "the native menu button, not its backdrop, receives taps")
-                for transform in [CGAffineTransform(scaleX: 0.82, y: 0.82),
-                                  CGAffineTransform(translationX: 8, y: -12).scaledBy(x: 1.1, y: 1.1)] {
-                    filter.button.transform = transform
-                    filter.update(theme: theme, active: active, image: filterImage)
-                    filter.setNeedsLayout(); filter.layoutIfNeeded()
-                    expect(filter.button.center == CGPoint(x: filter.bounds.midX, y: filter.bounds.midY)
-                           && filter.button.bounds == CGRect(origin: .zero, size: filter.bounds.size),
-                           "menu preview transforms cannot rewrite the filter's resting geometry")
-                    expect(filter.button.transform == transform, "layout preserves UIKit's menu presentation transform")
-                    filter.button.transform = .identity
-                    expect(filter.button.frame == filter.bounds, "dismissal returns the glyph to its exact original place")
-                }
+                expect(target === filter.button, "the touch target, not its backdrop or glyph, receives taps")
+                filter.button.sendActions(for: .touchDown)
+                filter.button.sendActions(for: .touchUpInside)
+                filter.setNeedsLayout(); filter.layoutIfNeeded()
+                expect(glyph.frame == filter.bounds && backdrop.frame == filter.bounds && filter.transform == .identity,
+                       "pressing the filter never moves its glyph or its lens")
             }
         }
     }

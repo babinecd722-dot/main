@@ -230,6 +230,10 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
             view.onOpen = { [weak self] card in self?.openMarketCard(card, host: host) }
             view.onOpenMine = { [weak self] owned in self?.openMine(owned) }
             view.onError = { [weak self] message in self?.showError(AorusPluginRequestError(message)) }
+            view.onSortMenu = { [weak self] sourceView, options in
+                guard let self else { return }
+                aorusPresentPluginSortMenu(context: self.context, presentationData: self.presentationData, from: self, sourceView: sourceView, options: options)
+            }
             view.isHidden = true
             // Level with the plugins list rather than on top of everything: under the navigation
             // bar, so the bar's edge fades over the Market as it does over the plugins, and
@@ -1208,6 +1212,7 @@ private final class AorusPluginLongTextController: ViewController {
         textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor
         textView.tintColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
         textView.font = aorusUIFont(17)
+        textView.showsVerticalScrollIndicator = false
         textView.layer.cornerCurve = .continuous
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
         textView.keyboardDismissMode = .interactive
@@ -1559,6 +1564,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         currentLineBand.backgroundColor = AorusPluginLineGutter.bandColor(dark: dark)
         editor.backgroundColor = .clear; editor.textColor = codeStyle.text; editor.font = codeStyle.font
         editor.autocorrectionType = .no; editor.autocapitalizationType = .none; editor.smartQuotesType = .no; editor.smartDashesType = .no
+        editor.showsVerticalScrollIndicator = false; console.showsVerticalScrollIndicator = false
         editor.textContainerInset = UIEdgeInsets(top: 14, left: 8, bottom: 80, right: 12); editor.delegate = self; editor.text = record.source
         console.backgroundColor = background; console.textColor = dark ? UIColor(white: 0.86, alpha: 1) : .darkText; console.font = .monospacedSystemFont(ofSize: 12, weight: .regular); console.isEditable = false; console.isHidden = true
         console.layer.borderColor = UIColor.separator.cgColor; console.layer.borderWidth = 1 / UIScreen.main.scale
@@ -2740,7 +2746,7 @@ private final class AorusPluginDocsController: ViewController {
         aorusPluginExportText(AorusPluginTextExport.documentation(AorusPluginDocumentation.text), name: "Plugins_Documentation.md", from: self, anchor: navigationItem.rightBarButtonItem)
     }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme); textView.backgroundColor = .clear; textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
+    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = aorusPluginPageColor(presentationData.theme); textView.backgroundColor = .clear; textView.textColor = presentationData.theme.aorusGlassListTheme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.showsVerticalScrollIndicator = false; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; transition.updateFrame(view: textView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
 }
 
@@ -4527,6 +4533,7 @@ private final class AorusPluginConsoleController: ViewController {
         displayNode.backgroundColor = dark ? UIColor(red: 0.055, green: 0.059, blue: 0.071, alpha: 1.0) : UIColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1.0)
         textView.backgroundColor = .clear
         textView.isEditable = false
+        textView.showsVerticalScrollIndicator = false
         textView.alwaysBounceVertical = true
         textView.font = .monospacedSystemFont(ofSize: 12.0, weight: .regular)
         textView.textContainerInset = UIEdgeInsets(top: 14.0, left: 14.0, bottom: 24.0, right: 14.0)

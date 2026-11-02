@@ -146,6 +146,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
         textView.backgroundColor = .clear
         textView.font = aorusUIFont(17)
+        textView.showsVerticalScrollIndicator = false
         textView.textColor = theme.list.itemPrimaryTextColor
         textView.tintColor = accent
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 52)

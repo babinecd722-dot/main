@@ -906,17 +906,6 @@ private extension AorusPluginMarketSort {
         case .downloads: return aorusL("По скачиваниям", "Downloads")
         }
     }
-
-    var symbol: String {
-        switch self {
-        case .newest: return "clock"
-        case .name: return "textformat"
-        case .popularity: return "flame"
-        case .likes: return "hand.thumbsup"
-        case .dislikes: return "hand.thumbsdown"
-        case .downloads: return "arrow.down.circle"
-        }
-    }
 }
 
 // MARK: - The catalog
@@ -1011,21 +1000,38 @@ final class AorusPluginMarketSearchField: UIView, UITextFieldDelegate {
     }
 }
 
-/// Keep the material outside UIButton's UIKit-managed image hierarchy. UIKit
-/// may reorder its own content; it must never move the glyph under its lens.
+/// One order of the catalog in the order button's menu.
+struct AorusPluginMarketSortOption {
+    let title: String
+    let isSelected: Bool
+    let select: () -> Void
+}
+
+/// The order button beside the search field: its lens, the accent it fills with while the order
+/// is not the usual one, and the funnel, in one view that stays where it is. The menu it opens is
+/// Telegram's own, anchored to it, as the filter in a chat's search is: UIKit's menu lifted the
+/// glyph out of its lens and flew it to the menu, leaving the lens behind.
 final class AorusPluginFilterControl: UIView {
-    let button = UIButton(type: .system)
+    let button = UIButton(type: .custom)
     private let surface = AorusUIKitSurfaceView()
+    private let fill = UIView()
+    private let glyphView = UIImageView()
+    private var isActive = false
+    private var hasState = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isOpaque = false
         backgroundColor = .clear
-        surface.isOpaque = false
-        surface.isUserInteractionEnabled = false
-        addSubview(surface)
-        button.isOpaque = false
-        button.layer.cornerRadius = AorusPluginMarketSearchField.height / 2
+        for view in [surface, fill, glyphView] as [UIView] {
+            view.isUserInteractionEnabled = false
+            addSubview(view)
+        }
+        fill.alpha = 0.0
+        fill.layer.cornerCurve = .continuous
+        glyphView.contentMode = .center
+        button.addTarget(self, action: #selector(pressedDown), for: [.touchDown, .touchDragEnter])
+        button.addTarget(self, action: #selector(released), for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit])
         addSubview(button)
     }
 
@@ -1034,26 +1040,62 @@ final class AorusPluginFilterControl: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         surface.frame = bounds
-        // UIKit scales/translates a menu source while presenting and dismissing
-        // its preview. A frame write under that transform changes its geometry.
-        button.bounds = CGRect(origin: .zero, size: bounds.size)
-        button.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        button.layer.cornerRadius = bounds.height / 2
+        fill.frame = bounds
+        fill.layer.cornerRadius = bounds.height / 2
+        glyphView.frame = bounds
+        button.frame = bounds
     }
 
-    func update(theme: PresentationTheme, active: Bool, image: UIImage) {
+    /// The control in `theme`, filled while `active`. A change of state crossfades: the accent
+    /// over the lens and the funnel into its other shape, together.
+    func update(theme: PresentationTheme, active: Bool, image: UIImage, animated: Bool) {
         let palette = theme.aorusGlassListTheme
         overrideUserInterfaceStyle = palette.overallDarkAppearance ? .dark : .light
         aorusConfigureSurface(surface, theme: theme, isCapsule: true,
                               legacyCornerRadius: AorusPluginMarketSearchField.height / 2)
-        surface.isHidden = active
+        fill.backgroundColor = palette.list.itemAccentColor
         let ink = aorusPluginFilterInk(theme, active: active)
-        button.backgroundColor = active ? palette.list.itemAccentColor : .clear
-        button.tintColor = ink
-        button.setImage(image.withRenderingMode(.alwaysTemplate), for: .normal)
-        button.imageView?.tintColor = ink
-        button.imageView?.contentMode = .center
-        setNeedsLayout()
+        let glyph = image.withRenderingMode(.alwaysTemplate)
+        let changed = hasState && active != isActive
+        isActive = active
+        hasState = true
+        guard animated, changed, window != nil else {
+            surface.isHidden = active
+            fill.alpha = active ? 1.0 : 0.0
+            glyphView.image = glyph
+            glyphView.tintColor = ink
+            return
+        }
+        // The lens is glass, and glass is shown or hidden rather than faded: the accent fades over
+        // it, and it goes once the accent covers it, or comes back before the accent fades.
+        if !active {
+            surface.isHidden = false
+        }
+        UIView.transition(with: glyphView, duration: 0.22, options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction], animations: {
+            self.glyphView.image = glyph
+            self.glyphView.tintColor = ink
+        })
+        UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction], animations: {
+            self.fill.alpha = active ? 1.0 : 0.0
+        }, completion: { _ in
+            if self.isActive == active {
+                self.surface.isHidden = active
+            }
+        })
+    }
+
+    @objc private func pressedDown() {
+        setPressed(true)
+    }
+
+    @objc private func released() {
+        setPressed(false)
+    }
+
+    private func setPressed(_ pressed: Bool) {
+        UIView.animate(withDuration: pressed ? 0.08 : 0.25, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+            self.glyphView.alpha = pressed ? 0.5 : 1.0
+        })
     }
 }
 
@@ -1080,7 +1122,6 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private var sort = AorusPluginMarketSort(rawValue: UserDefaults.standard.string(forKey: AorusPluginMarketView.sortKey) ?? "") ?? .newest
     private let searchField: AorusPluginMarketSearchField
     private let filterControl = AorusPluginFilterControl(frame: .zero)
-    private var filterButton: UIButton { filterControl.button }
     private let filterHeader = UIView()
     private var filterHeaderInsets: UIEdgeInsets?
     private let noResults = UILabel()
@@ -1096,6 +1137,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     var onOpen: ((AorusPluginMarketCard) -> Void)?
     var onOpenMine: (([AorusPluginMarketOwnedPlugin]) -> Void)?
     var onError: ((String) -> Void)?
+    /// Opens the order menu from the button: the host presents Telegram's menu anchored to it.
+    var onSortMenu: ((UIView, [AorusPluginMarketSortOption]) -> Void)?
 
     init(theme: PresentationTheme) {
         self.theme = theme
@@ -1120,8 +1163,8 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // One line over the list: the search field, and beside it the order the plugins are
         // listed in, a round glyph that fills while the order is not the usual one.
         searchField.onChange = { [weak self] _ in self?.applyFilters() }
-        filterButton.accessibilityLabel = aorusL("Фильтры", "Filters")
-        if #available(iOS 14.0, *) { filterButton.showsMenuAsPrimaryAction = true }
+        filterControl.button.accessibilityLabel = aorusL("Фильтры", "Filters")
+        filterControl.button.addTarget(self, action: #selector(openSortMenu), for: .touchUpInside)
         filterHeader.addSubview(searchField)
         filterHeader.addSubview(filterControl)
         noResults.text = aorusL("Ничего не найдено", "Nothing found")
@@ -1400,22 +1443,30 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 
     /// The order button: a round block beside the field, filled with the accent while the order
     /// is not the usual one, so a list in another order never passes for the usual one.
-    private func updateFilters() {
+    private func updateFilters(animated: Bool = false) {
         let changed = sort != .newest
         filterControl.update(theme: theme, active: changed,
-                             image: AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed))
-        filterButton.accessibilityValue = sort.title
-        guard #available(iOS 14.0, *) else { return }
-        filterButton.menu = UIMenu(title: aorusL("Порядок плагинов", "Sort plugins"), children: AorusPluginMarketSort.allCases.map { choice in
-            UIAction(title: choice.title, image: UIImage(systemName: choice.symbol), state: choice == sort ? .on : .off) { [weak self] _ in
-                guard let self, self.sort != choice else { return }
-                self.sort = choice
-                UserDefaults.standard.set(choice.rawValue, forKey: AorusPluginMarketView.sortKey)
-                UISelectionFeedbackGenerator().selectionChanged()
-                self.updateFilters()
-                self.applyFilters()
-            }
-        })
+                             image: AorusGlyphs.filter(size: 20.0, lineWidth: 2.0, filled: changed),
+                             animated: animated)
+        filterControl.button.accessibilityValue = sort.title
+    }
+
+    @objc private func openSortMenu() {
+        let options = AorusPluginMarketSort.allCases.map { choice in
+            AorusPluginMarketSortOption(title: choice.title, isSelected: choice == sort, select: { [weak self] in
+                self?.select(choice)
+            })
+        }
+        onSortMenu?(filterControl, options)
+    }
+
+    private func select(_ choice: AorusPluginMarketSort) {
+        guard sort != choice else { return }
+        sort = choice
+        UserDefaults.standard.set(choice.rawValue, forKey: AorusPluginMarketView.sortKey)
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateFilters(animated: true)
+        applyFilters()
     }
 
     /// The pill on a row: installs or updates without opening the sheet, and opens the sheet
@@ -1825,6 +1876,9 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         view.layer.addSublayer(headerWash)
 
         scrollView.alwaysBounceVertical = true
+        // No scroll bar, as no plugin screen has one: the page is a sheet, not a document.
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
         scrollView.delegate = self
         scrollView.contentInsetAdjustmentBehavior = .never
         view.addSubview(scrollView)

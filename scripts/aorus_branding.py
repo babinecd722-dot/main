@@ -3777,7 +3777,7 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
     the server-provided TelegramUserPresence. When the recipient uses ghost mode the
     server value is stale or "recently/lastWeek/lastMonth" — but we have direct
     evidence they were online from incoming-message timestamps recorded by
-    AntiSpoofManager (UserDefaults key aorusgram_peer_last_seen_<peerId>).
+    AntiSpoofManager (one table in UserDefaults, aorusgram_peer_activity_v2).
 
     Patch shadows the existing `string` binding with our override, keeping `activity`
     intact. The peer timestamp is read straight from UserDefaults; the two status strings
@@ -3864,7 +3864,9 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         # stamped over a status that was already correct.
         + indent + "    let aorusOnlineWords = [\"в сети\", \"online\", \"у мережі\", \"en línea\", \"em linha\", \"en ligne\", \"çevrimiçi\"]\n"
         + indent + "    if aorusOnlineWords.contains(where: { string.range(of: $0, options: .caseInsensitive) != nil }) { return string }\n"
-        + indent + "    let aorusTs = UserDefaults.standard.double(forKey: \"aorusgram_peer_last_seen_\\(peer.id.toInt64())\")\n"
+        # One bounded table of everyone's last activity (AntiSpoofManager.lastSeenKey), not a
+        # defaults key per person.
+        + indent + "    let aorusTs = (UserDefaults.standard.dictionary(forKey: \"aorusgram_peer_activity_v2\")?[\"\\(peer.id.toInt64())\"] as? Double) ?? 0\n"
         + indent + "    guard aorusTs > 0 else { return string }\n"
         + indent + "    let ago = Date().timeIntervalSince1970 - aorusTs\n"
         + indent + "    if ago < 60 { return aorusL(\"в сети - AORUS\", \"online - AORUS\") }\n"
@@ -9142,10 +9144,60 @@ def patch_local_premium(tg: Path) -> None:
         "        var add = base\n"
         "        add[kSecValueData as String] = data\n"
         "        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly\n"
-        "        SecItemAdd(add as CFDictionary, nil)\n"
+        "        let added = SecItemAdd(add as CFDictionary, nil) == errSecSuccess\n"
+        "        keychainLock.lock()\n"
+        "        if added {\n"
+        "            keychainAccounts?.insert(account)\n"
+        "        } else {\n"
+        "            keychainAccounts?.remove(account)\n"
+        "        }\n"
+        "        keychainLock.unlock()\n"
+        "    }\n"
+        "\n"
+        "    // What the service holds, read once. Every user Telegram parses asks for its emoji status\n"
+        "    // and its colours, and almost none of them has one here: each of those asks went to the\n"
+        "    // keychain, a call into another process, for every user of every update.\n"
+        "    private static let keychainLock = NSLock()\n"
+        "    private static var keychainAccounts: Set<String>?\n"
+        "\n"
+        "    private static func keychainMayHave(_ account: String) -> Bool {\n"
+        "        keychainLock.lock()\n"
+        "        defer { keychainLock.unlock() }\n"
+        "        if keychainAccounts == nil {\n"
+        "            let query: [String: Any] = [\n"
+        "                kSecClass as String: kSecClassGenericPassword,\n"
+        "                kSecAttrService as String: keychainService,\n"
+        "                kSecMatchLimit as String: kSecMatchLimitAll,\n"
+        "                kSecReturnAttributes as String: true\n"
+        "            ]\n"
+        "            var result: AnyObject?\n"
+        "            let status = SecItemCopyMatching(query as CFDictionary, &result)\n"
+        "            if status == errSecSuccess, let rows = result as? [[String: Any]] {\n"
+        "                keychainAccounts = Set(rows.compactMap { $0[kSecAttrAccount as String] as? String })\n"
+        "            } else if status == errSecItemNotFound {\n"
+        "                keychainAccounts = []\n"
+        "            } else {\n"
+        "                // Not readable yet (before the first unlock): ask the keychain itself.\n"
+        "                return true\n"
+        "            }\n"
+        "        }\n"
+        "        return keychainAccounts?.contains(account) ?? true\n"
+        "    }\n"
+        "\n"
+        "    /// After a settings load replaced this service and the defaults: read both again.\n"
+        "    public static func reloadFromStorage() {\n"
+        "        keychainLock.lock()\n"
+        "        keychainAccounts = nil\n"
+        "        keychainLock.unlock()\n"
+        "        lock.lock()\n"
+        "        giftedPremiumCache = nil\n"
+        "        lock.unlock()\n"
         "    }\n"
         "\n"
         "    private static func keychainGet(account: String) -> Data? {\n"
+        "        guard keychainMayHave(account) else {\n"
+        "            return nil\n"
+        "        }\n"
         "        let query: [String: Any] = [\n"
         "            kSecClass as String: kSecClassGenericPassword,\n"
         "            kSecAttrService as String: keychainService,\n"
@@ -9168,6 +9220,9 @@ def patch_local_premium(tg: Path) -> None:
         "            kSecAttrAccount as String: account\n"
         "        ]\n"
         "        SecItemDelete(base as CFDictionary)\n"
+        "        keychainLock.lock()\n"
+        "        keychainAccounts?.remove(account)\n"
+        "        keychainLock.unlock()\n"
         "    }\n"
         "\n"
         "    public static func persistEmojiStatus(_ status: PeerEmojiStatus?, rawId: Int64) {\n"
@@ -10163,7 +10218,29 @@ public struct AorusStoredGift: Codable, Equatable {
     }
 
     public var gift: StarGift? {
-        return try? JSONDecoder().decode(StarGift.self, from: self.giftData)
+        return AorusStoredGift.decodedGift(self.giftData)
+    }
+
+    // A gift's encoding decoded once. `gift` and `key` are read for every gift a screen draws
+    // and for every comparison a lookup makes, and each read used to decode the gift again.
+    private static let decodedGiftLock = NSLock()
+    private static var decodedGifts: [Data: StarGift] = [:]
+
+    private static func decodedGift(_ data: Data) -> StarGift? {
+        decodedGiftLock.lock()
+        if let cached = decodedGifts[data] {
+            decodedGiftLock.unlock()
+            return cached
+        }
+        decodedGiftLock.unlock()
+        guard let gift = try? JSONDecoder().decode(StarGift.self, from: data) else { return nil }
+        decodedGiftLock.lock()
+        if decodedGifts.count >= 512 {
+            decodedGifts.removeAll(keepingCapacity: true)
+        }
+        decodedGifts[data] = gift
+        decodedGiftLock.unlock()
+        return gift
     }
 
     public var key: String {
@@ -10263,9 +10340,31 @@ public enum AorusFakeGiftsStore {
         return (gifts, changed ? (try? JSONEncoder().encode(gifts)) : nil)
     }
 
+    // The list decoded once for each value stored. It is read for every gift a screen draws
+    // and every message that carries one, and each read used to decode all of it again.
+    private static let decodedLock = NSLock()
+    private static var decodedData: Data?
+    private static var decodedGifts: [AorusStoredGift] = []
+
+    private static func decoded(_ data: Data) -> ([AorusStoredGift], Data?) {
+        decodedLock.lock()
+        if let cachedData = decodedData, cachedData == data {
+            let gifts = decodedGifts
+            decodedLock.unlock()
+            return (gifts, nil)
+        }
+        decodedLock.unlock()
+        let result = decodeAndMigrate(data)
+        decodedLock.lock()
+        decodedData = result.1 ?? data
+        decodedGifts = result.0
+        decodedLock.unlock()
+        return result
+    }
+
     public static func all() -> [AorusStoredGift] {
         if let data = UserDefaults.standard.data(forKey: listKey) {
-            let (gifts, migratedData) = decodeAndMigrate(data)
+            let (gifts, migratedData) = decoded(data)
             if let migratedData {
                 UserDefaults.standard.set(migratedData, forKey: listKey)
                 aorusKeychainSet(migratedData, account: keychainListAccount)
@@ -10311,9 +10410,31 @@ public enum AorusFakeGiftsStore {
         // not synced to iCloud, and kept across an uninstall/reinstall.
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
+        keychainMissLock.lock()
+        keychainMisses.remove(account)
+        keychainMissLock.unlock()
+    }
+
+    // What the keychain answered "not found" for, in this run. Someone who never touched the
+    // switch or the list has nothing there, and each read of either went to the keychain, a call
+    // into another process, every time a gift or a balance was drawn.
+    private static let keychainMissLock = NSLock()
+    private static var keychainMisses = Set<String>()
+
+    /// After a settings load replaced the keychain: ask it again.
+    public static func reloadFromStorage() {
+        keychainMissLock.lock()
+        keychainMisses.removeAll()
+        keychainMissLock.unlock()
     }
 
     private static func aorusKeychainGet(account: String) -> Data? {
+        keychainMissLock.lock()
+        let knownMissing = keychainMisses.contains(account)
+        keychainMissLock.unlock()
+        if knownMissing {
+            return nil
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -10323,6 +10444,11 @@ public enum AorusFakeGiftsStore {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            keychainMissLock.lock()
+            keychainMisses.insert(account)
+            keychainMissLock.unlock()
+        }
         guard status == errSecSuccess, let data = result as? Data else {
             return nil
         }
@@ -11513,9 +11639,31 @@ public enum AorusFakeStarsStore {
         add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
+        keychainMissLock.lock()
+        keychainMisses.remove(account)
+        keychainMissLock.unlock()
+    }
+
+    // What the keychain answered "not found" for, in this run. Someone who never touched the
+    // switch or the list has nothing there, and each read of either went to the keychain, a call
+    // into another process, every time a gift or a balance was drawn.
+    private static let keychainMissLock = NSLock()
+    private static var keychainMisses = Set<String>()
+
+    /// After a settings load replaced the keychain: ask it again.
+    public static func reloadFromStorage() {
+        keychainMissLock.lock()
+        keychainMisses.removeAll()
+        keychainMissLock.unlock()
     }
 
     private static func aorusKeychainGet(account: String) -> Data? {
+        keychainMissLock.lock()
+        let knownMissing = keychainMisses.contains(account)
+        keychainMissLock.unlock()
+        if knownMissing {
+            return nil
+        }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -11525,6 +11673,11 @@ public enum AorusFakeStarsStore {
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            keychainMissLock.lock()
+            keychainMisses.insert(account)
+            keychainMissLock.unlock()
+        }
         guard status == errSecSuccess, let data = result as? Data else { return nil }
         return data
     }
