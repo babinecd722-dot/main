@@ -368,10 +368,42 @@ public enum AorusBadge {
         guard let kind = kind(forPeerRawId: id) else { return nil }
         switch kind {
         case .meme:
-            return catImage(height: height)
+            return cachedImage(String(format: "meme|%.2f", height)) {
+                catImage(height: height)
+            }
         case .dev:
-            return devImage(height: height, accent: accent)
+            var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+            accent.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+            return cachedImage(String(format: "dev|%.2f|%.3f|%.3f|%.3f|%.3f", height, red, green, blue, alpha)) {
+                devImage(height: height, accent: accent)
+            }
         }
+    }
+
+    // The rows ask on every layout: each chat in the list, each message in a chat, and a
+    // group with a badge holder in it asks once per message of theirs. Drawn every time,
+    // the cat was the large picture scaled down again and the tag was text set again, on
+    // the queue that lays the rows out. The same height in the same colour is the same
+    // picture, so it is drawn once; a colour change of the theme adds one, and the cap
+    // keeps a long session of them from piling up.
+    private static let imageCacheLock = NSLock()
+    private static var imageCache: [String: UIImage] = [:]
+
+    private static func cachedImage(_ key: String, _ make: () -> UIImage?) -> UIImage? {
+        imageCacheLock.lock()
+        if let cached = imageCache[key] {
+            imageCacheLock.unlock()
+            return cached
+        }
+        imageCacheLock.unlock()
+        guard let image = make() else { return nil }
+        imageCacheLock.lock()
+        if imageCache.count >= 32 {
+            imageCache.removeAll()
+        }
+        imageCache[key] = image
+        imageCacheLock.unlock()
+        return image
     }
 
     // Meme cat scaled to `height` points (preserving aspect). The source asset is a

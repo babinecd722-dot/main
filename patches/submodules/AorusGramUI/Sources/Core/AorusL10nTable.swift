@@ -53,7 +53,9 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Tutto ciò che hai configurato in AorusGram — interruttori, regali, Stelle e nomi utente fittizi, cronologia degli acquisti, backup e il resto — viene salvato in un file crittografato. I salvataggi restano anche dopo aver reinstallato l'app.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruttori, regali, Stelle, nomi utente e tutto ciò che hai configurato in AorusGram. Puoi recuperarli in qualsiasi momento.",
+        "Choose a save to bring its settings back.": "Scegli un salvataggio per ripristinarne le impostazioni.",
+        "Settings loaded. Restarting the app is recommended": "Impostazioni caricate. È consigliato riavviare l'app",
         "No saves yet. Save your settings and they'll appear here.": "Nessun salvataggio. Salva le impostazioni e appariranno qui.",
         "Couldn't save the settings. Try again.": "Impossibile salvare le impostazioni. Riprova.",
         "Couldn't read the saves.": "Impossibile leggere i salvataggi.",
@@ -63,7 +65,6 @@ enum AorusL10nTable {
         "Load Settings": "Carica impostazioni",
         "Settings saved": "Impostazioni salvate",
         "Settings loaded": "Impostazioni caricate",
-        "Settings loaded. Some changes need a restart": "Impostazioni caricate. Alcune modifiche richiedono un riavvio",
         "Save name": "Nome del salvataggio",
         "Replace": "Sostituisci",
         "Load": "Carica",
@@ -71,7 +72,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Un salvataggio con questo nome verrà sostituito.",
         "The file is damaged or isn't an AorusGram save.": "Il file è danneggiato o non è un salvataggio di AorusGram.",
         "This save was made by a newer version of AorusGram.": "Questo salvataggio è stato creato da una versione più recente di AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Il salvataggio selezionato sostituisce le impostazioni attuali di AorusGram. Le modifiche si applicano subito.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "I nomi utente collezionabili e i prezzi sono visibili solo a te. I nomi reali e la proprietà restano invariati.",
         "Collectible usernames must have at least 4 characters.": "I nomi utente collezionabili devono contenere almeno 4 caratteri.",
         "Delete username": "Elimina nome utente",
@@ -1107,7 +1107,9 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Wszystko, co skonfigurowano w AorusGram — przełączniki, fałszywe prezenty, gwiazdki i nazwy użytkownika, historia zakupów, kopie zapasowe i reszta — zostanie zapisane w zaszyfrowanym pliku. Zapisy pozostają nawet po ponownej instalacji aplikacji.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Przełączniki, prezenty, gwiazdki, nazwy użytkownika i wszystko inne, co skonfigurowano w AorusGram. Możesz je przywrócić w każdej chwili.",
+        "Choose a save to bring its settings back.": "Wybierz zapis, aby przywrócić jego ustawienia.",
+        "Settings loaded. Restarting the app is recommended": "Ustawienia wczytane. Zalecane jest ponowne uruchomienie aplikacji",
         "No saves yet. Save your settings and they'll appear here.": "Nie ma jeszcze zapisów. Zapisz ustawienia, a pojawią się tutaj.",
         "Couldn't save the settings. Try again.": "Nie udało się zapisać ustawień. Spróbuj ponownie.",
         "Couldn't read the saves.": "Nie udało się odczytać zapisów.",
@@ -1117,7 +1119,6 @@ enum AorusL10nTable {
         "Load Settings": "Wczytaj ustawienia",
         "Settings saved": "Ustawienia zapisane",
         "Settings loaded": "Ustawienia wczytane",
-        "Settings loaded. Some changes need a restart": "Ustawienia wczytane. Część zmian wymaga ponownego uruchomienia",
         "Save name": "Nazwa zapisu",
         "Replace": "Zastąp",
         "Load": "Wczytaj",
@@ -1125,7 +1126,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Zapis o tej nazwie zostanie zastąpiony.",
         "The file is damaged or isn't an AorusGram save.": "Plik jest uszkodzony lub nie jest zapisem AorusGram.",
         "This save was made by a newer version of AorusGram.": "Ten zapis utworzyła nowsza wersja AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Wybrany zapis zastąpi bieżące ustawienia AorusGram. Zmiany zostaną zastosowane od razu.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcjonerskie nazwy użytkownika i ceny są widoczne tylko dla Ciebie. Prawdziwe nazwy i własność pozostają bez zmian.",
         "Collectible usernames must have at least 4 characters.": "Kolekcjonerskie nazwy użytkownika muszą mieć co najmniej 4 znaki.",
         "Delete username": "Usuń nazwę użytkownika",
@@ -2161,7 +2161,9 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Alles wat je in AorusGram hebt ingesteld — schakelaars, nepcadeaus, -sterren en -gebruikersnamen, aankoopgeschiedenis, back-ups en de rest — wordt bewaard in een versleuteld bestand. Opslagen blijven bewaard, ook als je de app opnieuw installeert.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Schakelaars, cadeaus, sterren, gebruikersnamen en al het andere dat je in AorusGram hebt ingesteld. Je kunt ze altijd terughalen.",
+        "Choose a save to bring its settings back.": "Kies een opslag om de instellingen ervan terug te zetten.",
+        "Settings loaded. Restarting the app is recommended": "Instellingen geladen. Het wordt aanbevolen de app opnieuw te starten",
         "No saves yet. Save your settings and they'll appear here.": "Nog geen opslagen. Bewaar je instellingen en ze verschijnen hier.",
         "Couldn't save the settings. Try again.": "Kan de instellingen niet bewaren. Probeer het opnieuw.",
         "Couldn't read the saves.": "Kan de opslagen niet lezen.",
@@ -2171,7 +2173,6 @@ enum AorusL10nTable {
         "Load Settings": "Instellingen laden",
         "Settings saved": "Instellingen bewaard",
         "Settings loaded": "Instellingen geladen",
-        "Settings loaded. Some changes need a restart": "Instellingen geladen. Sommige wijzigingen vereisen een herstart",
         "Save name": "Naam van opslag",
         "Replace": "Vervang",
         "Load": "Laad",
@@ -2179,7 +2180,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Een opslag met deze naam wordt vervangen.",
         "The file is damaged or isn't an AorusGram save.": "Het bestand is beschadigd of is geen AorusGram-opslag.",
         "This save was made by a newer version of AorusGram.": "Deze opslag is gemaakt door een nieuwere versie van AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "De gekozen opslag vervangt de huidige instellingen van AorusGram. Wijzigingen gelden meteen.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Verzamelbare gebruikersnamen en prijzen zijn alleen voor jou zichtbaar. Echte namen en eigendom blijven ongewijzigd.",
         "Collectible usernames must have at least 4 characters.": "Verzamelbare gebruikersnamen moeten minstens 4 tekens bevatten.",
         "Delete username": "Gebruikersnaam verwijderen",
@@ -3215,7 +3215,9 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Tot el que has configurat a AorusGram — interruptors, regals, estrelles i noms d'usuari falsos, historial de compres, còpies de seguretat i la resta — es desa en un fitxer xifrat. Els desaments es mantenen encara que reinstal·lis l'app.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruptors, regals, estrelles, noms d'usuari i tota la resta que has configurat a AorusGram. Els pots recuperar quan vulguis.",
+        "Choose a save to bring its settings back.": "Tria un desament per recuperar-ne la configuració.",
+        "Settings loaded. Restarting the app is recommended": "Configuració carregada. Es recomana reiniciar l'app",
         "No saves yet. Save your settings and they'll appear here.": "Encara no hi ha desaments. Desa la configuració i apareixerà aquí.",
         "Couldn't save the settings. Try again.": "No s'ha pogut desar la configuració. Torna-ho a provar.",
         "Couldn't read the saves.": "No s'han pogut llegir els desaments.",
@@ -3225,7 +3227,6 @@ enum AorusL10nTable {
         "Load Settings": "Carrega la configuració",
         "Settings saved": "Configuració desada",
         "Settings loaded": "Configuració carregada",
-        "Settings loaded. Some changes need a restart": "Configuració carregada. Alguns canvis requereixen reiniciar",
         "Save name": "Nom del desament",
         "Replace": "Substitueix",
         "Load": "Carrega",
@@ -3233,7 +3234,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Se substituirà el desament amb aquest nom.",
         "The file is damaged or isn't an AorusGram save.": "El fitxer està malmès o no és un desament d'AorusGram.",
         "This save was made by a newer version of AorusGram.": "Aquest desament s'ha fet amb una versió més nova d'AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "El desament triat substitueix la configuració actual d'AorusGram. Els canvis s'apliquen de seguida.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Els noms d’usuari col·leccionables i els preus només són visibles per a tu. Els noms reals i la propietat no canvien.",
         "Collectible usernames must have at least 4 characters.": "Els noms d’usuari col·leccionables han de tenir almenys 4 caràcters.",
         "Delete username": "Suprimeix el nom d’usuari",
@@ -4269,7 +4269,9 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Semua yang Anda atur di AorusGram — sakelar, hadiah, Bintang dan nama pengguna palsu, riwayat pembelian, cadangan, dan lainnya — disimpan ke file terenkripsi. Simpanan tetap ada meski aplikasi dipasang ulang.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Sakelar, hadiah, Bintang, nama pengguna, dan semua yang Anda atur di AorusGram. Anda bisa memulihkannya kapan saja.",
+        "Choose a save to bring its settings back.": "Pilih simpanan untuk memulihkan pengaturannya.",
+        "Settings loaded. Restarting the app is recommended": "Pengaturan dimuat. Disarankan untuk memulai ulang aplikasi",
         "No saves yet. Save your settings and they'll appear here.": "Belum ada simpanan. Simpan pengaturan Anda dan simpanan akan muncul di sini.",
         "Couldn't save the settings. Try again.": "Tidak dapat menyimpan pengaturan. Coba lagi.",
         "Couldn't read the saves.": "Tidak dapat membaca simpanan.",
@@ -4279,7 +4281,6 @@ enum AorusL10nTable {
         "Load Settings": "Muat Pengaturan",
         "Settings saved": "Pengaturan disimpan",
         "Settings loaded": "Pengaturan dimuat",
-        "Settings loaded. Some changes need a restart": "Pengaturan dimuat. Beberapa perubahan perlu mulai ulang",
         "Save name": "Nama simpanan",
         "Replace": "Ganti",
         "Load": "Muat",
@@ -4287,7 +4288,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Simpanan dengan nama ini akan diganti.",
         "The file is damaged or isn't an AorusGram save.": "File rusak atau bukan simpanan AorusGram.",
         "This save was made by a newer version of AorusGram.": "Simpanan ini dibuat oleh versi AorusGram yang lebih baru.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Simpanan yang dipilih menggantikan pengaturan AorusGram saat ini. Perubahan langsung berlaku.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya terlihat oleh Anda. Nama asli dan kepemilikan tidak berubah.",
         "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi harus memiliki setidaknya 4 karakter.",
         "Delete username": "Hapus nama pengguna",
@@ -5323,7 +5323,9 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Semua yang anda tetapkan dalam AorusGram — suis, hadiah, Bintang dan nama pengguna palsu, sejarah pembelian, sandaran dan lain-lain — disimpan ke fail yang disulitkan. Simpanan kekal walaupun apl dipasang semula.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Suis, hadiah, Bintang, nama pengguna dan semua yang anda tetapkan dalam AorusGram. Anda boleh memulihkannya bila-bila masa.",
+        "Choose a save to bring its settings back.": "Pilih simpanan untuk memulihkan tetapannya.",
+        "Settings loaded. Restarting the app is recommended": "Tetapan dimuatkan. Disyorkan untuk memulakan semula apl",
         "No saves yet. Save your settings and they'll appear here.": "Belum ada simpanan. Simpan tetapan anda dan ia akan muncul di sini.",
         "Couldn't save the settings. Try again.": "Tidak dapat menyimpan tetapan. Cuba lagi.",
         "Couldn't read the saves.": "Tidak dapat membaca simpanan.",
@@ -5333,7 +5335,6 @@ enum AorusL10nTable {
         "Load Settings": "Muatkan Tetapan",
         "Settings saved": "Tetapan disimpan",
         "Settings loaded": "Tetapan dimuatkan",
-        "Settings loaded. Some changes need a restart": "Tetapan dimuatkan. Sesetengah perubahan perlu dimulakan semula",
         "Save name": "Nama simpanan",
         "Replace": "Ganti",
         "Load": "Muatkan",
@@ -5341,7 +5342,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Simpanan dengan nama ini akan diganti.",
         "The file is damaged or isn't an AorusGram save.": "Fail rosak atau bukan simpanan AorusGram.",
         "This save was made by a newer version of AorusGram.": "Simpanan ini dibuat oleh versi AorusGram yang lebih baharu.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Simpanan yang dipilih menggantikan tetapan AorusGram semasa. Perubahan berkuat kuasa serta-merta.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Nama pengguna koleksi dan harga hanya kelihatan kepada anda. Nama sebenar dan pemilikan tidak berubah.",
         "Collectible usernames must have at least 4 characters.": "Nama pengguna koleksi mesti mempunyai sekurang-kurangnya 4 aksara.",
         "Delete username": "Padam nama pengguna",
@@ -6377,7 +6377,9 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Усё, што наладжана ў AorusGram, — пераключальнікі, фэйкавыя падарункі, зоркі і юзернэймы, гісторыя пакупак, бэкапы і астатняе — захаваецца ў зашыфраваны файл. Захаванні застаюцца і пасля пераўсталёўкі праграмы.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Пераключальнікі, падарункі, зоркі, юзернэймы і ўсё астатняе, што вы наладзілі ў AorusGram. Вярнуць іх можна ў любы момант.",
+        "Choose a save to bring its settings back.": "Выберыце захаванне, каб вярнуць яго налады.",
+        "Settings loaded. Restarting the app is recommended": "Налады загружаны. Рэкамендуецца перазапусціць праграму",
         "No saves yet. Save your settings and they'll appear here.": "Захаванняў пакуль няма. Захавайце налады — яны з’явяцца тут.",
         "Couldn't save the settings. Try again.": "Не ўдалося захаваць налады. Паспрабуйце яшчэ раз.",
         "Couldn't read the saves.": "Не ўдалося прачытаць захаванні.",
@@ -6387,7 +6389,6 @@ enum AorusL10nTable {
         "Load Settings": "Загрузіць налады",
         "Settings saved": "Налады захаваны",
         "Settings loaded": "Налады загружаны",
-        "Settings loaded. Some changes need a restart": "Налады загружаны. Частка змен — пасля перазапуску",
         "Save name": "Назва захавання",
         "Replace": "Замяніць",
         "Load": "Загрузіць",
@@ -6395,7 +6396,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Захаванне з такой назвай будзе заменена.",
         "The file is damaged or isn't an AorusGram save.": "Файл пашкоджаны або гэта не захаванне AorusGram.",
         "This save was made by a newer version of AorusGram.": "Гэта захаванне зроблена больш новай версіяй AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Выбранае захаванне заменіць бягучыя налады AorusGram. Змены прымяняцца адразу.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Калекцыйныя імёны карыстальніка і цэны бачны толькі вам. Сапраўдныя імёны і права ўласнасці не змяняюцца.",
         "Collectible usernames must have at least 4 characters.": "Калекцыйнае імя карыстальніка павінна мець не менш за 4 сімвалы.",
         "Delete username": "Выдаліць імя карыстальніка",
@@ -7431,7 +7431,9 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "AorusGram’da sozlagan hamma narsa — kalitlar, soxta sovg‘alar, yulduzlar va foydalanuvchi nomlari, xaridlar tarixi, zaxira nusxalar va boshqalar — shifrlangan faylga saqlanadi. Ilova qayta o‘rnatilsa ham saqlamalar qoladi.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kalitlar, sovg‘alar, yulduzlar, foydalanuvchi nomlari va AorusGram’da sozlagan boshqa hamma narsa. Ularni istalgan vaqtda qaytarish mumkin.",
+        "Choose a save to bring its settings back.": "Sozlamalarini qaytarish uchun saqlamani tanlang.",
+        "Settings loaded. Restarting the app is recommended": "Sozlamalar yuklandi. Ilovani qayta ishga tushirish tavsiya etiladi",
         "No saves yet. Save your settings and they'll appear here.": "Hozircha saqlamalar yo‘q. Sozlamalarni saqlang — ular shu yerda paydo bo‘ladi.",
         "Couldn't save the settings. Try again.": "Sozlamalarni saqlab bo‘lmadi. Qayta urinib ko‘ring.",
         "Couldn't read the saves.": "Saqlamalarni o‘qib bo‘lmadi.",
@@ -7441,7 +7443,6 @@ enum AorusL10nTable {
         "Load Settings": "Sozlamalarni yuklash",
         "Settings saved": "Sozlamalar saqlandi",
         "Settings loaded": "Sozlamalar yuklandi",
-        "Settings loaded. Some changes need a restart": "Sozlamalar yuklandi. Ayrim o‘zgarishlar qayta ishga tushirishni talab qiladi",
         "Save name": "Saqlama nomi",
         "Replace": "Almashtirish",
         "Load": "Yuklash",
@@ -7449,7 +7450,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Shu nomdagi saqlama almashtiriladi.",
         "The file is damaged or isn't an AorusGram save.": "Fayl buzilgan yoki bu AorusGram saqlamasi emas.",
         "This save was made by a newer version of AorusGram.": "Bu saqlama AorusGram’ning yangiroq versiyasida yaratilgan.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Tanlangan saqlama joriy AorusGram sozlamalari o‘rnini egallaydi. O‘zgarishlar darhol qo‘llanadi.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolleksion foydalanuvchi nomlari va narxlar faqat sizga ko‘rinadi. Haqiqiy nomlar va egalik huquqi o‘zgarmaydi.",
         "Collectible usernames must have at least 4 characters.": "Kolleksion foydalanuvchi nomi kamida 4 belgidan iborat bo‘lishi kerak.",
         "Delete username": "Foydalanuvchi nomini o‘chirish",
@@ -8485,7 +8485,9 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "AorusGram에서 설정한 모든 것(스위치, 가짜 선물, 별과 사용자 이름, 구매 내역, 백업 등)이 암호화된 파일에 저장됩니다. 앱을 다시 설치해도 저장 항목은 유지됩니다.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "스위치, 선물, 별, 사용자 이름 등 AorusGram에서 설정한 모든 것. 언제든 다시 불러올 수 있습니다.",
+        "Choose a save to bring its settings back.": "설정을 되돌릴 저장 항목을 선택하세요.",
+        "Settings loaded. Restarting the app is recommended": "설정을 불러왔습니다. 앱을 다시 시작하는 것이 좋습니다",
         "No saves yet. Save your settings and they'll appear here.": "아직 저장 항목이 없습니다. 설정을 저장하면 여기에 표시됩니다.",
         "Couldn't save the settings. Try again.": "설정을 저장하지 못했습니다. 다시 시도하세요.",
         "Couldn't read the saves.": "저장 항목을 읽지 못했습니다.",
@@ -8495,7 +8497,6 @@ enum AorusL10nTable {
         "Load Settings": "설정 불러오기",
         "Settings saved": "설정이 저장되었습니다",
         "Settings loaded": "설정을 불러왔습니다",
-        "Settings loaded. Some changes need a restart": "설정을 불러왔습니다. 일부 변경 사항은 재시작 후 적용됩니다",
         "Save name": "저장 이름",
         "Replace": "바꾸기",
         "Load": "불러오기",
@@ -8503,7 +8504,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "같은 이름의 저장 항목을 덮어씁니다.",
         "The file is damaged or isn't an AorusGram save.": "파일이 손상되었거나 AorusGram 저장 파일이 아닙니다.",
         "This save was made by a newer version of AorusGram.": "이 저장 항목은 더 최신 버전의 AorusGram에서 만들어졌습니다.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "선택한 저장 항목이 현재 AorusGram 설정을 대체합니다. 변경 사항은 바로 적용됩니다.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "수집용 사용자명과 가격은 나에게만 표시됩니다. 실제 사용자명과 소유권은 변경되지 않습니다.",
         "Collectible usernames must have at least 4 characters.": "수집용 사용자명은 4자 이상이어야 합니다.",
         "Delete username": "사용자명 삭제",
@@ -9539,7 +9539,9 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "كل ما ضبطته في AorusGram — المفاتيح والهدايا والنجوم وأسماء المستخدمين الوهمية وسجل المشتريات والنسخ الاحتياطية وغيرها — يُحفظ في ملف مشفّر. تبقى عمليات الحفظ حتى بعد إعادة تثبيت التطبيق.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "المفاتيح والهدايا والنجوم وأسماء المستخدمين وكل ما ضبطته في AorusGram. يمكنك استعادتها في أي وقت.",
+        "Choose a save to bring its settings back.": "اختر حفظًا لاستعادة إعداداته.",
+        "Settings loaded. Restarting the app is recommended": "تم تحميل الإعدادات. يُنصح بإعادة تشغيل التطبيق",
         "No saves yet. Save your settings and they'll appear here.": "لا توجد عمليات حفظ بعد. احفظ إعداداتك وستظهر هنا.",
         "Couldn't save the settings. Try again.": "تعذّر حفظ الإعدادات. حاول مرة أخرى.",
         "Couldn't read the saves.": "تعذّرت قراءة عمليات الحفظ.",
@@ -9549,7 +9551,6 @@ enum AorusL10nTable {
         "Load Settings": "تحميل الإعدادات",
         "Settings saved": "تم حفظ الإعدادات",
         "Settings loaded": "تم تحميل الإعدادات",
-        "Settings loaded. Some changes need a restart": "تم تحميل الإعدادات. بعض التغييرات تتطلب إعادة التشغيل",
         "Save name": "اسم الحفظ",
         "Replace": "استبدال",
         "Load": "تحميل",
@@ -9557,7 +9558,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "سيُستبدل الحفظ الذي يحمل هذا الاسم.",
         "The file is damaged or isn't an AorusGram save.": "الملف تالف أو ليس حفظًا من AorusGram.",
         "This save was made by a newer version of AorusGram.": "تم إنشاء هذا الحفظ بإصدار أحدث من AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "سيستبدل الحفظ المحدد إعدادات AorusGram الحالية. تُطبَّق التغييرات فورًا.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "أسماء المستخدمين القابلة للاقتناء والأسعار مرئية لك فقط. لا تتغير الأسماء الحقيقية أو الملكية.",
         "Collectible usernames must have at least 4 characters.": "يجب أن تتكون أسماء المستخدمين القابلة للاقتناء من 4 أحرف على الأقل.",
         "Delete username": "حذف اسم المستخدم",
@@ -10593,7 +10593,9 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "هر چه در AorusGram تنظیم کرده‌اید — کلیدها، هدیه‌ها، ستاره‌ها و نام‌های کاربری جعلی، تاریخچهٔ خرید، پشتیبان‌ها و بقیه — در یک فایل رمزگذاری‌شده ذخیره می‌شود. ذخیره‌ها حتی پس از نصب دوبارهٔ برنامه باقی می‌مانند.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "کلیدها، هدیه‌ها، ستاره‌ها، نام‌های کاربری و هر چیز دیگری که در AorusGram تنظیم کرده‌اید. هر زمان بخواهید می‌توانید آن‌ها را برگردانید.",
+        "Choose a save to bring its settings back.": "برای بازگرداندن تنظیمات، یک ذخیره را انتخاب کنید.",
+        "Settings loaded. Restarting the app is recommended": "تنظیمات بارگذاری شد. راه‌اندازی مجدد برنامه توصیه می‌شود",
         "No saves yet. Save your settings and they'll appear here.": "هنوز ذخیره‌ای نیست. تنظیمات را ذخیره کنید تا اینجا نمایش داده شوند.",
         "Couldn't save the settings. Try again.": "ذخیرهٔ تنظیمات ممکن نشد. دوباره تلاش کنید.",
         "Couldn't read the saves.": "خواندن ذخیره‌ها ممکن نشد.",
@@ -10603,7 +10605,6 @@ enum AorusL10nTable {
         "Load Settings": "بارگذاری تنظیمات",
         "Settings saved": "تنظیمات ذخیره شد",
         "Settings loaded": "تنظیمات بارگذاری شد",
-        "Settings loaded. Some changes need a restart": "تنظیمات بارگذاری شد. برخی تغییرات پس از راه‌اندازی مجدد اعمال می‌شوند",
         "Save name": "نام ذخیره",
         "Replace": "جایگزینی",
         "Load": "بارگذاری",
@@ -10611,7 +10612,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "ذخیره‌ای با این نام جایگزین می‌شود.",
         "The file is damaged or isn't an AorusGram save.": "فایل آسیب دیده است یا ذخیرهٔ AorusGram نیست.",
         "This save was made by a newer version of AorusGram.": "این ذخیره با نسخهٔ جدیدتری از AorusGram ساخته شده است.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "ذخیرهٔ انتخاب‌شده جایگزین تنظیمات فعلی AorusGram می‌شود. تغییرات بلافاصله اعمال می‌شوند.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "نام‌های کاربری کلکسیونی و قیمت‌ها فقط برای شما نمایش داده می‌شوند. نام‌های واقعی و مالکیت تغییری نمی‌کنند.",
         "Collectible usernames must have at least 4 characters.": "نام کاربری کلکسیونی باید حداقل ۴ نویسه داشته باشد.",
         "Delete username": "حذف نام کاربری",
@@ -11647,7 +11647,9 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "AorusGram-да бапталғанның бәрі — қосқыштар, жалған сыйлықтар, жұлдыздар мен пайдаланушы аттары, сатып алу тарихы, сақтық көшірмелер және т.б. — шифрланған файлға сақталады. Қолданбаны қайта орнатсаңыз да, сақтаулар қалады.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Қосқыштар, сыйлықтар, жұлдыздар, пайдаланушы аттары және AorusGram-да баптағанның бәрі. Оларды кез келген уақытта қайтаруға болады.",
+        "Choose a save to bring its settings back.": "Баптауларын қайтару үшін сақтауды таңдаңыз.",
+        "Settings loaded. Restarting the app is recommended": "Баптаулар жүктелді. Қолданбаны қайта іске қосу ұсынылады",
         "No saves yet. Save your settings and they'll appear here.": "Әзірге сақтаулар жоқ. Баптауларды сақтаңыз — олар осында пайда болады.",
         "Couldn't save the settings. Try again.": "Баптауларды сақтау мүмкін болмады. Қайталап көріңіз.",
         "Couldn't read the saves.": "Сақтауларды оқу мүмкін болмады.",
@@ -11657,7 +11659,6 @@ enum AorusL10nTable {
         "Load Settings": "Баптауларды жүктеу",
         "Settings saved": "Баптаулар сақталды",
         "Settings loaded": "Баптаулар жүктелді",
-        "Settings loaded. Some changes need a restart": "Баптаулар жүктелді. Кейбір өзгерістер қайта іске қосудан кейін күшіне енеді",
         "Save name": "Сақтау атауы",
         "Replace": "Ауыстыру",
         "Load": "Жүктеу",
@@ -11665,7 +11666,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Осы атаудағы сақтау ауыстырылады.",
         "The file is damaged or isn't an AorusGram save.": "Файл бүлінген немесе бұл AorusGram сақтауы емес.",
         "This save was made by a newer version of AorusGram.": "Бұл сақтау AorusGram-ның жаңарақ нұсқасында жасалған.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Таңдалған сақтау AorusGram-ның ағымдағы баптауларын ауыстырады. Өзгерістер бірден қолданылады.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Коллекциялық пайдаланушы аттары мен бағалар тек сізге көрінеді. Нақты аттар мен иелік құқығы өзгермейді.",
         "Collectible usernames must have at least 4 characters.": "Коллекциялық пайдаланушы аты кемінде 4 таңбадан тұруы керек.",
         "Delete username": "Пайдаланушы атын жою",
@@ -12701,7 +12701,9 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "你在 AorusGram 中设置的一切——开关、虚拟礼物、星星和用户名、购买记录、备份等——都会保存到一个加密文件中。 即使重新安装应用，存档也会保留。",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "开关、礼物、星星、用户名，以及你在 AorusGram 中设置的一切。随时都能恢复。",
+        "Choose a save to bring its settings back.": "选择一个存档以恢复其设置。",
+        "Settings loaded. Restarting the app is recommended": "设置已载入。建议重启应用",
         "No saves yet. Save your settings and they'll appear here.": "还没有存档。保存设置后会显示在这里。",
         "Couldn't save the settings. Try again.": "无法保存设置。请重试。",
         "Couldn't read the saves.": "无法读取存档。",
@@ -12711,7 +12713,6 @@ enum AorusL10nTable {
         "Load Settings": "载入设置",
         "Settings saved": "设置已保存",
         "Settings loaded": "设置已载入",
-        "Settings loaded. Some changes need a restart": "设置已载入。部分更改需要重启后生效",
         "Save name": "存档名称",
         "Replace": "替换",
         "Load": "载入",
@@ -12719,7 +12720,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "同名存档将被替换。",
         "The file is damaged or isn't an AorusGram save.": "文件已损坏，或不是 AorusGram 存档。",
         "This save was made by a newer version of AorusGram.": "此存档由更新版本的 AorusGram 创建。",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "所选存档将替换 AorusGram 当前的设置。更改立即生效。",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏用户名和价格仅对你可见。真实用户名及所有权不会改变。",
         "Collectible usernames must have at least 4 characters.": "收藏用户名至少需要 4 个字符。",
         "Delete username": "删除用户名",
@@ -13756,7 +13756,9 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "你在 AorusGram 中設定的一切——開關、虛擬禮物、星星與使用者名稱、購買紀錄、備份等——都會儲存到加密檔案中。 即使重新安裝 App，存檔也會保留。",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "開關、禮物、星星、使用者名稱，以及你在 AorusGram 中設定的一切。隨時都能恢復。",
+        "Choose a save to bring its settings back.": "選擇一個存檔以恢復其設定。",
+        "Settings loaded. Restarting the app is recommended": "設定已載入。建議重新啟動 App",
         "No saves yet. Save your settings and they'll appear here.": "還沒有存檔。儲存設定後會顯示在這裡。",
         "Couldn't save the settings. Try again.": "無法儲存設定。請再試一次。",
         "Couldn't read the saves.": "無法讀取存檔。",
@@ -13766,7 +13768,6 @@ enum AorusL10nTable {
         "Load Settings": "載入設定",
         "Settings saved": "設定已儲存",
         "Settings loaded": "設定已載入",
-        "Settings loaded. Some changes need a restart": "設定已載入。部分變更需重新啟動後生效",
         "Save name": "存檔名稱",
         "Replace": "取代",
         "Load": "載入",
@@ -13774,7 +13775,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "同名的存檔將被取代。",
         "The file is damaged or isn't an AorusGram save.": "檔案已損毀，或不是 AorusGram 存檔。",
         "This save was made by a newer version of AorusGram.": "此存檔由較新版本的 AorusGram 建立。",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "所選存檔將取代 AorusGram 目前的設定。變更立即生效。",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "收藏使用者名稱和價格僅供你查看。真實名稱和所有權不會變更。",
         "Collectible usernames must have at least 4 characters.": "收藏使用者名稱至少需要 4 個字元。",
         "Delete username": "刪除使用者名稱",
@@ -14810,7 +14810,9 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "AorusGram で設定したすべて（スイッチ、フェイクのギフト・スター・ユーザー名、購入履歴、バックアップなど）が暗号化されたファイルに保存されます。 アプリを再インストールしても保存データは残ります。",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "スイッチ、ギフト、スター、ユーザー名など、AorusGram で設定したすべて。いつでも元に戻せます。",
+        "Choose a save to bring its settings back.": "設定を戻す保存データを選択してください。",
+        "Settings loaded. Restarting the app is recommended": "設定を読み込みました。アプリの再起動をおすすめします",
         "No saves yet. Save your settings and they'll appear here.": "保存データはまだありません。設定を保存すると、ここに表示されます。",
         "Couldn't save the settings. Try again.": "設定を保存できませんでした。もう一度お試しください。",
         "Couldn't read the saves.": "保存データを読み込めませんでした。",
@@ -14820,7 +14822,6 @@ enum AorusL10nTable {
         "Load Settings": "設定を読み込む",
         "Settings saved": "設定を保存しました",
         "Settings loaded": "設定を読み込みました",
-        "Settings loaded. Some changes need a restart": "設定を読み込みました。一部の変更は再起動後に反映されます",
         "Save name": "保存名",
         "Replace": "置き換える",
         "Load": "読み込む",
@@ -14828,7 +14829,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "同じ名前の保存データは置き換えられます。",
         "The file is damaged or isn't an AorusGram save.": "ファイルが破損しているか、AorusGram の保存データではありません。",
         "This save was made by a newer version of AorusGram.": "この保存データは新しいバージョンの AorusGram で作成されています。",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "選択した保存データで現在の AorusGram の設定が置き換えられます。変更はすぐに反映されます。",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "コレクション用ユーザー名と価格は自分にだけ表示されます。実際の名前や所有権は変わりません。",
         "Collectible usernames must have at least 4 characters.": "コレクション用ユーザー名は4文字以上である必要があります。",
         "Delete username": "ユーザー名を削除",
@@ -15864,7 +15864,9 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Kaikki, mitä olet määrittänyt AorusGramissa — kytkimet, valelahjat, -tähdet ja -käyttäjänimet, ostohistoria, varmuuskopiot ja muu — tallennetaan salattuun tiedostoon. Tallennukset säilyvät, vaikka apin asentaisi uudelleen.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kytkimet, lahjat, tähdet, käyttäjänimet ja kaikki muu, mitä olet määrittänyt AorusGramissa. Voit palauttaa ne milloin tahansa.",
+        "Choose a save to bring its settings back.": "Valitse tallennus, jonka asetukset palautetaan.",
+        "Settings loaded. Restarting the app is recommended": "Asetukset ladattu. Apin uudelleenkäynnistystä suositellaan",
         "No saves yet. Save your settings and they'll appear here.": "Tallennuksia ei vielä ole. Tallenna asetuksesi, niin ne näkyvät tässä.",
         "Couldn't save the settings. Try again.": "Asetuksia ei voitu tallentaa. Yritä uudelleen.",
         "Couldn't read the saves.": "Tallennuksia ei voitu lukea.",
@@ -15874,7 +15876,6 @@ enum AorusL10nTable {
         "Load Settings": "Lataa asetukset",
         "Settings saved": "Asetukset tallennettu",
         "Settings loaded": "Asetukset ladattu",
-        "Settings loaded. Some changes need a restart": "Asetukset ladattu. Osa muutoksista vaatii uudelleenkäynnistyksen",
         "Save name": "Tallennuksen nimi",
         "Replace": "Korvaa",
         "Load": "Lataa",
@@ -15882,7 +15883,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Samanniminen tallennus korvataan.",
         "The file is damaged or isn't an AorusGram save.": "Tiedosto on vioittunut tai se ei ole AorusGram-tallennus.",
         "This save was made by a newer version of AorusGram.": "Tämä tallennus on tehty AorusGramin uudemmalla versiolla.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Valittu tallennus korvaa AorusGramin nykyiset asetukset. Muutokset tulevat voimaan heti.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Keräiltävät käyttäjänimet ja hinnat näkyvät vain sinulle. Oikeat nimet ja omistajuus eivät muutu.",
         "Collectible usernames must have at least 4 characters.": "Keräiltävissä käyttäjänimissä on oltava vähintään 4 merkkiä.",
         "Delete username": "Poista käyttäjänimi",
@@ -16918,7 +16918,9 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "כל מה שהגדרתם ב-AorusGram — מתגים, מתנות, כוכבים ושמות משתמש מזויפים, היסטוריית רכישות, גיבויים ועוד — נשמר בקובץ מוצפן. השמירות נשארות גם אחרי התקנה מחדש של האפליקציה.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "מתגים, מתנות, כוכבים, שמות משתמש וכל מה שהגדרתם ב-AorusGram. אפשר להחזיר אותם בכל רגע.",
+        "Choose a save to bring its settings back.": "בחרו שמירה כדי להחזיר את ההגדרות שלה.",
+        "Settings loaded. Restarting the app is recommended": "ההגדרות נטענו. מומלץ להפעיל מחדש את האפליקציה",
         "No saves yet. Save your settings and they'll appear here.": "אין עדיין שמירות. שמרו את ההגדרות והן יופיעו כאן.",
         "Couldn't save the settings. Try again.": "לא ניתן לשמור את ההגדרות. נסו שוב.",
         "Couldn't read the saves.": "לא ניתן לקרוא את השמירות.",
@@ -16928,7 +16930,6 @@ enum AorusL10nTable {
         "Load Settings": "טעינת הגדרות",
         "Settings saved": "ההגדרות נשמרו",
         "Settings loaded": "ההגדרות נטענו",
-        "Settings loaded. Some changes need a restart": "ההגדרות נטענו. חלק מהשינויים ייכנסו לתוקף אחרי הפעלה מחדש",
         "Save name": "שם השמירה",
         "Replace": "החלפה",
         "Load": "טעינה",
@@ -16936,7 +16937,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "שמירה בשם הזה תוחלף.",
         "The file is damaged or isn't an AorusGram save.": "הקובץ פגום או שאינו שמירה של AorusGram.",
         "This save was made by a newer version of AorusGram.": "השמירה הזו נוצרה בגרסה חדשה יותר של AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "השמירה שנבחרה תחליף את ההגדרות הנוכחיות של AorusGram. השינויים חלים מיד.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "שמות משתמש לאספנות והמחירים מוצגים רק לך. שמות אמיתיים והבעלות אינם משתנים.",
         "Collectible usernames must have at least 4 characters.": "שם משתמש לאספנות חייב להכיל לפחות 4 תווים.",
         "Delete username": "מחיקת שם משתמש",
@@ -17972,7 +17972,9 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Sve što si postavio u AorusGramu — prekidači, lažni darovi, zvjezdice i korisnička imena, povijest kupnji, sigurnosne kopije i ostalo — sprema se u šifriranu datoteku. Kopije ostaju i nakon ponovne instalacije aplikacije.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Prekidači, darovi, zvjezdice, korisnička imena i sve ostalo što si postavio u AorusGramu. Možeš ih vratiti u bilo kojem trenutku.",
+        "Choose a save to bring its settings back.": "Odaberi kopiju da vratiš njezine postavke.",
+        "Settings loaded. Restarting the app is recommended": "Postavke su učitane. Preporučuje se ponovno pokrenuti aplikaciju",
         "No saves yet. Save your settings and they'll appear here.": "Još nema kopija. Spremi postavke i pojavit će se ovdje.",
         "Couldn't save the settings. Try again.": "Spremanje postavki nije uspjelo. Pokušaj ponovno.",
         "Couldn't read the saves.": "Kopije nije moguće pročitati.",
@@ -17982,7 +17984,6 @@ enum AorusL10nTable {
         "Load Settings": "Učitaj postavke",
         "Settings saved": "Postavke su spremljene",
         "Settings loaded": "Postavke su učitane",
-        "Settings loaded. Some changes need a restart": "Postavke su učitane. Neke promjene zahtijevaju ponovno pokretanje",
         "Save name": "Naziv kopije",
         "Replace": "Zamijeni",
         "Load": "Učitaj",
@@ -17990,7 +17991,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Kopija s ovim nazivom bit će zamijenjena.",
         "The file is damaged or isn't an AorusGram save.": "Datoteka je oštećena ili nije kopija AorusGrama.",
         "This save was made by a newer version of AorusGram.": "Ovu kopiju izradila je novija verzija AorusGrama.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Odabrana kopija zamjenjuje trenutačne postavke AorusGrama. Promjene se primjenjuju odmah.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Kolekcionarska korisnička imena i cijene vidljivi su samo vama. Stvarna imena i vlasništvo ostaju nepromijenjeni.",
         "Collectible usernames must have at least 4 characters.": "Kolekcionarska korisnička imena moraju imati najmanje 4 znaka.",
         "Delete username": "Izbriši korisničko ime",
@@ -19026,7 +19026,9 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Све што си подесио у AorusGram-у — прекидачи, лажни поклони, звездице и корисничка имена, историја куповина, резервне копије и остало — чува се у шифровану датотеку. Копије остају и након поновне инсталације апликације.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Прекидачи, поклони, звездице, корисничка имена и све остало што си подесио у AorusGram-у. Можеш их вратити у било ком тренутку.",
+        "Choose a save to bring its settings back.": "Изабери копију да вратиш њена подешавања.",
+        "Settings loaded. Restarting the app is recommended": "Подешавања су учитана. Препоручује се поновно покретање апликације",
         "No saves yet. Save your settings and they'll appear here.": "Још нема копија. Сачувај подешавања и појавиће се овде.",
         "Couldn't save the settings. Try again.": "Чување подешавања није успело. Покушај поново.",
         "Couldn't read the saves.": "Копије није могуће прочитати.",
@@ -19036,7 +19038,6 @@ enum AorusL10nTable {
         "Load Settings": "Учитај подешавања",
         "Settings saved": "Подешавања су сачувана",
         "Settings loaded": "Подешавања су учитана",
-        "Settings loaded. Some changes need a restart": "Подешавања су учитана. Неке промене захтевају поновно покретање",
         "Save name": "Назив копије",
         "Replace": "Замени",
         "Load": "Учитај",
@@ -19044,7 +19045,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Копија са овим називом биће замењена.",
         "The file is damaged or isn't an AorusGram save.": "Датотека је оштећена или није копија AorusGram-а.",
         "This save was made by a newer version of AorusGram.": "Ову копију је направила новија верзија AorusGram-а.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Изабрана копија замењује тренутна подешавања AorusGram-а. Промене се примењују одмах.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекционарска корисничка имена и цене видљиви су само вама. Стварна имена и власништво остају непромењени.",
         "Collectible usernames must have at least 4 characters.": "Колекционарска корисничка имена морају имати најмање 4 знака.",
         "Delete username": "Обриши корисничко име",
@@ -20080,7 +20080,9 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Vše, co jste v AorusGramu nastavili — přepínače, falešné dárky, hvězdy a uživatelská jména, historie nákupů, zálohy a další — se uloží do šifrovaného souboru. Zálohy zůstanou i po přeinstalování aplikace.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Přepínače, dárky, hvězdy, uživatelská jména a vše ostatní, co jste v AorusGramu nastavili. Vrátit je můžete kdykoli.",
+        "Choose a save to bring its settings back.": "Vyberte zálohu, jejíž nastavení chcete vrátit.",
+        "Settings loaded. Restarting the app is recommended": "Nastavení načteno. Doporučujeme aplikaci restartovat",
         "No saves yet. Save your settings and they'll appear here.": "Zatím tu nejsou žádné zálohy. Uložte nastavení a objeví se tady.",
         "Couldn't save the settings. Try again.": "Nastavení se nepodařilo uložit. Zkuste to znovu.",
         "Couldn't read the saves.": "Zálohy se nepodařilo načíst.",
@@ -20090,7 +20092,6 @@ enum AorusL10nTable {
         "Load Settings": "Načíst nastavení",
         "Settings saved": "Nastavení uloženo",
         "Settings loaded": "Nastavení načteno",
-        "Settings loaded. Some changes need a restart": "Nastavení načteno. Některé změny vyžadují restart",
         "Save name": "Název zálohy",
         "Replace": "Nahradit",
         "Load": "Načíst",
@@ -20098,7 +20099,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Záloha s tímto názvem bude nahrazena.",
         "The file is damaged or isn't an AorusGram save.": "Soubor je poškozený nebo to není záloha AorusGramu.",
         "This save was made by a newer version of AorusGram.": "Tuto zálohu vytvořila novější verze AorusGramu.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Vybraná záloha nahradí aktuální nastavení AorusGramu. Změny se projeví hned.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sběratelská uživatelská jména a ceny vidíte jen vy. Skutečná jména ani vlastnictví se nemění.",
         "Collectible usernames must have at least 4 characters.": "Sběratelská uživatelská jména musí mít alespoň 4 znaky.",
         "Delete username": "Smazat uživatelské jméno",
@@ -21134,7 +21134,9 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Všetko, čo ste v AorusGrame nastavili — prepínače, falošné darčeky, hviezdy a používateľské mená, história nákupov, zálohy a ostatné — sa uloží do šifrovaného súboru. Zálohy zostanú aj po preinštalovaní aplikácie.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Prepínače, darčeky, hviezdy, používateľské mená a všetko ostatné, čo ste v AorusGrame nastavili. Vrátiť ich môžete kedykoľvek.",
+        "Choose a save to bring its settings back.": "Vyberte zálohu, ktorej nastavenia chcete vrátiť.",
+        "Settings loaded. Restarting the app is recommended": "Nastavenia načítané. Odporúčame aplikáciu reštartovať",
         "No saves yet. Save your settings and they'll appear here.": "Zatiaľ tu nie sú žiadne zálohy. Uložte nastavenia a objavia sa tu.",
         "Couldn't save the settings. Try again.": "Nastavenia sa nepodarilo uložiť. Skúste to znova.",
         "Couldn't read the saves.": "Zálohy sa nepodarilo načítať.",
@@ -21144,7 +21146,6 @@ enum AorusL10nTable {
         "Load Settings": "Načítať nastavenia",
         "Settings saved": "Nastavenia uložené",
         "Settings loaded": "Nastavenia načítané",
-        "Settings loaded. Some changes need a restart": "Nastavenia načítané. Niektoré zmeny vyžadujú reštart",
         "Save name": "Názov zálohy",
         "Replace": "Nahradiť",
         "Load": "Načítať",
@@ -21152,7 +21153,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Záloha s týmto názvom bude nahradená.",
         "The file is damaged or isn't an AorusGram save.": "Súbor je poškodený alebo to nie je záloha AorusGramu.",
         "This save was made by a newer version of AorusGram.": "Túto zálohu vytvorila novšia verzia AorusGramu.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Vybraná záloha nahradí aktuálne nastavenia AorusGramu. Zmeny sa prejavia hneď.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Zberateľské používateľské mená a ceny vidíte iba vy. Skutočné mená ani vlastníctvo sa nemenia.",
         "Collectible usernames must have at least 4 characters.": "Zberateľské používateľské mená musia mať aspoň 4 znaky.",
         "Delete username": "Odstrániť používateľské meno",
@@ -22188,7 +22188,9 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Tot ce ai configurat în AorusGram — comutatoare, cadouri, stele și nume de utilizator false, istoricul achizițiilor, copii de rezervă și restul — se salvează într-un fișier criptat. Salvările rămân și după reinstalarea aplicației.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Comutatoare, cadouri, stele, nume de utilizator și tot ce ai configurat în AorusGram. Le poți readuce oricând.",
+        "Choose a save to bring its settings back.": "Alege o salvare pentru a-i readuce setările.",
+        "Settings loaded. Restarting the app is recommended": "Setări încărcate. Se recomandă repornirea aplicației",
         "No saves yet. Save your settings and they'll appear here.": "Încă nu există salvări. Salvează setările și vor apărea aici.",
         "Couldn't save the settings. Try again.": "Setările nu au putut fi salvate. Încearcă din nou.",
         "Couldn't read the saves.": "Salvările nu au putut fi citite.",
@@ -22198,7 +22200,6 @@ enum AorusL10nTable {
         "Load Settings": "Încarcă setările",
         "Settings saved": "Setări salvate",
         "Settings loaded": "Setări încărcate",
-        "Settings loaded. Some changes need a restart": "Setări încărcate. Unele modificări necesită o repornire",
         "Save name": "Numele salvării",
         "Replace": "Înlocuiește",
         "Load": "Încarcă",
@@ -22206,7 +22207,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Salvarea cu acest nume va fi înlocuită.",
         "The file is damaged or isn't an AorusGram save.": "Fișierul este deteriorat sau nu este o salvare AorusGram.",
         "This save was made by a newer version of AorusGram.": "Această salvare a fost creată de o versiune mai nouă de AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Salvarea selectată înlocuiește setările actuale AorusGram. Modificările se aplică imediat.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Numele de utilizator de colecție și prețurile sunt vizibile doar pentru tine. Numele reale și proprietatea rămân neschimbate.",
         "Collectible usernames must have at least 4 characters.": "Numele de utilizator de colecție trebuie să aibă cel puțin 4 caractere.",
         "Delete username": "Șterge numele de utilizator",
@@ -23242,7 +23242,9 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Minden, amit az AorusGramban beállítottál — kapcsolók, ál-ajándékok, -csillagok és -felhasználónevek, vásárlási előzmények, biztonsági mentések és a többi — titkosított fájlba kerül. A mentések az app újratelepítése után is megmaradnak.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kapcsolók, ajándékok, csillagok, felhasználónevek és minden más, amit az AorusGramban beállítottál. Bármikor visszaállíthatod őket.",
+        "Choose a save to bring its settings back.": "Válassz egy mentést, hogy visszaállítsd a beállításait.",
+        "Settings loaded. Restarting the app is recommended": "Beállítások betöltve. Ajánlott újraindítani az appot",
         "No saves yet. Save your settings and they'll appear here.": "Még nincs mentés. Mentsd el a beállításokat, és itt jelennek meg.",
         "Couldn't save the settings. Try again.": "Nem sikerült menteni a beállításokat. Próbáld újra.",
         "Couldn't read the saves.": "Nem sikerült beolvasni a mentéseket.",
@@ -23252,7 +23254,6 @@ enum AorusL10nTable {
         "Load Settings": "Beállítások betöltése",
         "Settings saved": "Beállítások elmentve",
         "Settings loaded": "Beállítások betöltve",
-        "Settings loaded. Some changes need a restart": "Beállítások betöltve. Néhány változáshoz újraindítás kell",
         "Save name": "Mentés neve",
         "Replace": "Csere",
         "Load": "Betöltés",
@@ -23260,7 +23261,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Az ilyen nevű mentés felül lesz írva.",
         "The file is damaged or isn't an AorusGram save.": "A fájl sérült, vagy nem AorusGram-mentés.",
         "This save was made by a newer version of AorusGram.": "Ezt a mentést az AorusGram egy újabb verziója készítette.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "A kiválasztott mentés lecseréli az AorusGram jelenlegi beállításait. A változások azonnal érvénybe lépnek.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "A gyűjthető felhasználóneveket és az árakat csak te látod. A valódi nevek és a tulajdonjog nem változnak.",
         "Collectible usernames must have at least 4 characters.": "A gyűjthető felhasználóneveknek legalább 4 karakterből kell állniuk.",
         "Delete username": "Felhasználónév törlése",
@@ -24296,7 +24296,9 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Alt du har satt opp i AorusGram — brytere, falske gaver, stjerner og brukernavn, kjøpshistorikk, sikkerhetskopier og resten — lagres i en kryptert fil. Lagringene blir værende selv om appen installeres på nytt.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Brytere, gaver, stjerner, brukernavn og alt annet du har satt opp i AorusGram. Du kan hente dem tilbake når som helst.",
+        "Choose a save to bring its settings back.": "Velg en lagring for å hente tilbake innstillingene.",
+        "Settings loaded. Restarting the app is recommended": "Innstillingene er lastet inn. Det anbefales å starte appen på nytt",
         "No saves yet. Save your settings and they'll appear here.": "Ingen lagringer ennå. Lagre innstillingene, så vises de her.",
         "Couldn't save the settings. Try again.": "Kunne ikke lagre innstillingene. Prøv igjen.",
         "Couldn't read the saves.": "Kunne ikke lese lagringene.",
@@ -24306,7 +24308,6 @@ enum AorusL10nTable {
         "Load Settings": "Last inn innstillinger",
         "Settings saved": "Innstillingene er lagret",
         "Settings loaded": "Innstillingene er lastet inn",
-        "Settings loaded. Some changes need a restart": "Innstillingene er lastet inn. Noen endringer krever omstart",
         "Save name": "Navn på lagringen",
         "Replace": "Erstatt",
         "Load": "Last inn",
@@ -24314,7 +24315,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "En lagring med dette navnet blir erstattet.",
         "The file is damaged or isn't an AorusGram save.": "Filen er skadet eller er ikke en AorusGram-lagring.",
         "This save was made by a newer version of AorusGram.": "Denne lagringen ble laget av en nyere versjon av AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Den valgte lagringen erstatter de gjeldende AorusGram-innstillingene. Endringene gjelder med en gang.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlebrukernavn og priser er bare synlige for deg. Ekte navn og eierskap forblir uendret.",
         "Collectible usernames must have at least 4 characters.": "Samlebrukernavn må ha minst 4 tegn.",
         "Delete username": "Slett brukernavn",
@@ -25350,7 +25350,9 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Allt du har ställt in i AorusGram — reglage, falska gåvor, stjärnor och användarnamn, köphistorik, säkerhetskopior och resten — sparas i en krypterad fil. Sparningarna finns kvar även om appen installeras om.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Reglage, gåvor, stjärnor, användarnamn och allt annat du har ställt in i AorusGram. Du kan ta tillbaka dem när som helst.",
+        "Choose a save to bring its settings back.": "Välj en sparning för att ta tillbaka dess inställningar.",
+        "Settings loaded. Restarting the app is recommended": "Inställningarna har lästs in. Vi rekommenderar att du startar om appen",
         "No saves yet. Save your settings and they'll appear here.": "Inga sparningar ännu. Spara dina inställningar så visas de här.",
         "Couldn't save the settings. Try again.": "Det gick inte att spara inställningarna. Försök igen.",
         "Couldn't read the saves.": "Det gick inte att läsa sparningarna.",
@@ -25360,7 +25362,6 @@ enum AorusL10nTable {
         "Load Settings": "Läs in inställningar",
         "Settings saved": "Inställningarna har sparats",
         "Settings loaded": "Inställningarna har lästs in",
-        "Settings loaded. Some changes need a restart": "Inställningarna har lästs in. Vissa ändringar kräver omstart",
         "Save name": "Namn på sparningen",
         "Replace": "Ersätt",
         "Load": "Läs in",
@@ -25368,7 +25369,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "En sparning med det här namnet ersätts.",
         "The file is damaged or isn't an AorusGram save.": "Filen är skadad eller är inte en AorusGram-sparning.",
         "This save was made by a newer version of AorusGram.": "Den här sparningen gjordes av en nyare version av AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Den valda sparningen ersätter de aktuella AorusGram-inställningarna. Ändringarna gäller direkt.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Samlingsbara användarnamn och priser visas bara för dig. Riktiga namn och ägande ändras inte.",
         "Collectible usernames must have at least 4 characters.": "Samlingsbara användarnamn måste ha minst 4 tecken.",
         "Delete username": "Ta bort användarnamn",
@@ -26404,7 +26404,9 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Mọi thứ bạn thiết lập trong AorusGram — công tắc, quà, Sao và tên người dùng giả, lịch sử mua, bản sao lưu và các mục khác — được lưu vào một tệp được mã hóa. Bản lưu vẫn còn ngay cả khi cài đặt lại ứng dụng.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Công tắc, quà, Sao, tên người dùng và mọi thứ bạn đã thiết lập trong AorusGram. Bạn có thể khôi phục chúng bất cứ lúc nào.",
+        "Choose a save to bring its settings back.": "Chọn một bản lưu để khôi phục cài đặt của nó.",
+        "Settings loaded. Restarting the app is recommended": "Đã tải cài đặt. Nên khởi động lại ứng dụng",
         "No saves yet. Save your settings and they'll appear here.": "Chưa có bản lưu nào. Hãy lưu cài đặt và chúng sẽ xuất hiện ở đây.",
         "Couldn't save the settings. Try again.": "Không thể lưu cài đặt. Hãy thử lại.",
         "Couldn't read the saves.": "Không thể đọc các bản lưu.",
@@ -26414,7 +26416,6 @@ enum AorusL10nTable {
         "Load Settings": "Tải cài đặt",
         "Settings saved": "Đã lưu cài đặt",
         "Settings loaded": "Đã tải cài đặt",
-        "Settings loaded. Some changes need a restart": "Đã tải cài đặt. Một số thay đổi cần khởi động lại",
         "Save name": "Tên bản lưu",
         "Replace": "Thay thế",
         "Load": "Tải",
@@ -26422,7 +26423,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Bản lưu có tên này sẽ bị thay thế.",
         "The file is damaged or isn't an AorusGram save.": "Tệp bị hỏng hoặc không phải bản lưu AorusGram.",
         "This save was made by a newer version of AorusGram.": "Bản lưu này được tạo bởi phiên bản AorusGram mới hơn.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Bản lưu đã chọn sẽ thay thế cài đặt AorusGram hiện tại. Thay đổi được áp dụng ngay.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Tên người dùng sưu tầm và giá chỉ hiển thị với bạn. Tên thật và quyền sở hữu không thay đổi.",
         "Collectible usernames must have at least 4 characters.": "Tên người dùng sưu tầm phải có ít nhất 4 ký tự.",
         "Delete username": "Xóa tên người dùng",
@@ -27458,7 +27458,9 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Усе, що налаштовано в AorusGram, — перемикачі, фейкові подарунки, зірки та юзернейми, історія покупок, бекапи й решта — збережеться в зашифрований файл. Збереження залишаються і після перевстановлення застосунку.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Перемикачі, подарунки, зірки, юзернейми й усе інше, що ви налаштували в AorusGram. Повернути їх можна будь-коли.",
+        "Choose a save to bring its settings back.": "Виберіть збереження, щоб повернути його налаштування.",
+        "Settings loaded. Restarting the app is recommended": "Налаштування завантажено. Рекомендується перезапустити застосунок",
         "No saves yet. Save your settings and they'll appear here.": "Збережень поки немає. Збережіть налаштування — вони з’являться тут.",
         "Couldn't save the settings. Try again.": "Не вдалося зберегти налаштування. Спробуйте ще раз.",
         "Couldn't read the saves.": "Не вдалося прочитати збереження.",
@@ -27468,7 +27470,6 @@ enum AorusL10nTable {
         "Load Settings": "Завантажити налаштування",
         "Settings saved": "Налаштування збережено",
         "Settings loaded": "Налаштування завантажено",
-        "Settings loaded. Some changes need a restart": "Налаштування завантажено. Частина змін — після перезапуску",
         "Save name": "Назва збереження",
         "Replace": "Замінити",
         "Load": "Завантажити",
@@ -27476,7 +27477,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Збереження з такою назвою буде замінено.",
         "The file is damaged or isn't an AorusGram save.": "Файл пошкоджено або це не збереження AorusGram.",
         "This save was made by a newer version of AorusGram.": "Це збереження зроблено новішою версією AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Вибране збереження замінить поточні налаштування AorusGram. Зміни застосуються одразу.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Колекційні імена користувача та ціни бачите лише ви. Справжні імена та право власності не змінюються.",
         "Collectible usernames must have at least 4 characters.": "Колекційне ім’я користувача має містити щонайменше 4 символи.",
         "Delete username": "Видалити ім’я користувача",
@@ -28521,7 +28521,9 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Todo lo que configuraste en AorusGram — interruptores, regalos, Estrellas y nombres de usuario falsos, historial de compras, copias de seguridad y lo demás — se guarda en un archivo cifrado. Los guardados se conservan aunque reinstales la app.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruptores, regalos, Estrellas, nombres de usuario y todo lo demás que configuraste en AorusGram. Puedes recuperarlos cuando quieras.",
+        "Choose a save to bring its settings back.": "Elige un guardado para recuperar sus ajustes.",
+        "Settings loaded. Restarting the app is recommended": "Ajustes cargados. Se recomienda reiniciar la app",
         "No saves yet. Save your settings and they'll appear here.": "Todavía no hay guardados. Guarda tus ajustes y aparecerán aquí.",
         "Couldn't save the settings. Try again.": "No se pudieron guardar los ajustes. Inténtalo de nuevo.",
         "Couldn't read the saves.": "No se pudieron leer los guardados.",
@@ -28531,7 +28533,6 @@ enum AorusL10nTable {
         "Load Settings": "Cargar ajustes",
         "Settings saved": "Ajustes guardados",
         "Settings loaded": "Ajustes cargados",
-        "Settings loaded. Some changes need a restart": "Ajustes cargados. Algunos cambios requieren reiniciar",
         "Save name": "Nombre del guardado",
         "Replace": "Reemplazar",
         "Load": "Cargar",
@@ -28539,7 +28540,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Se reemplazará el guardado con este nombre.",
         "The file is damaged or isn't an AorusGram save.": "El archivo está dañado o no es un guardado de AorusGram.",
         "This save was made by a newer version of AorusGram.": "Este guardado se creó con una versión más reciente de AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "El guardado elegido reemplaza los ajustes actuales de AorusGram. Los cambios se aplican al instante.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Los nombres de usuario coleccionables y los precios solo son visibles para ti. Los nombres reales y la propiedad no cambian.",
         "Collectible usernames must have at least 4 characters.": "Los nombres de usuario coleccionables deben tener al menos 4 caracteres.",
         "Delete username": "Eliminar nombre de usuario",
@@ -29584,7 +29584,9 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Tudo o que você configurou no AorusGram — chaves, presentes, Estrelas e nomes de usuário falsos, histórico de compras, backups e o resto — é salvo em um arquivo criptografado. Os salvamentos permanecem mesmo se o app for reinstalado.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Chaves, presentes, Estrelas, nomes de usuário e tudo o mais que você configurou no AorusGram. Dá para recuperar a qualquer momento.",
+        "Choose a save to bring its settings back.": "Escolha um salvamento para recuperar as configurações dele.",
+        "Settings loaded. Restarting the app is recommended": "Configurações carregadas. Recomendamos reiniciar o app",
         "No saves yet. Save your settings and they'll appear here.": "Ainda não há salvamentos. Salve suas configurações e elas aparecerão aqui.",
         "Couldn't save the settings. Try again.": "Não foi possível salvar as configurações. Tente novamente.",
         "Couldn't read the saves.": "Não foi possível ler os salvamentos.",
@@ -29594,7 +29596,6 @@ enum AorusL10nTable {
         "Load Settings": "Carregar configurações",
         "Settings saved": "Configurações salvas",
         "Settings loaded": "Configurações carregadas",
-        "Settings loaded. Some changes need a restart": "Configurações carregadas. Algumas mudanças exigem reiniciar",
         "Save name": "Nome do salvamento",
         "Replace": "Substituir",
         "Load": "Carregar",
@@ -29602,7 +29603,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "O salvamento com este nome será substituído.",
         "The file is damaged or isn't an AorusGram save.": "O arquivo está danificado ou não é um salvamento do AorusGram.",
         "This save was made by a newer version of AorusGram.": "Este salvamento foi criado por uma versão mais nova do AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "O salvamento escolhido substitui as configurações atuais do AorusGram. As mudanças valem na hora.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Os nomes de utilizador colecionáveis e os preços só são visíveis para si. Os nomes reais e a propriedade não mudam.",
         "Collectible usernames must have at least 4 characters.": "Os nomes de utilizador colecionáveis devem ter pelo menos 4 caracteres.",
         "Delete username": "Eliminar nome de utilizador",
@@ -30647,7 +30647,9 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Alles, was du in AorusGram eingerichtet hast — Schalter, falsche Geschenke, Sterne und Benutzernamen, Kaufverlauf, Backups und der Rest — wird in einer verschlüsselten Datei gesichert. Sicherungen bleiben auch nach einer Neuinstallation der App erhalten.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Schalter, Geschenke, Sterne, Benutzernamen und alles andere, was du in AorusGram eingerichtet hast. Du kannst es jederzeit zurückholen.",
+        "Choose a save to bring its settings back.": "Wähle eine Sicherung, um ihre Einstellungen zurückzuholen.",
+        "Settings loaded. Restarting the app is recommended": "Einstellungen geladen. Ein Neustart der App wird empfohlen",
         "No saves yet. Save your settings and they'll appear here.": "Noch keine Sicherungen. Sichere deine Einstellungen, dann erscheinen sie hier.",
         "Couldn't save the settings. Try again.": "Die Einstellungen konnten nicht gesichert werden. Versuche es erneut.",
         "Couldn't read the saves.": "Die Sicherungen konnten nicht gelesen werden.",
@@ -30657,7 +30659,6 @@ enum AorusL10nTable {
         "Load Settings": "Einstellungen laden",
         "Settings saved": "Einstellungen gesichert",
         "Settings loaded": "Einstellungen geladen",
-        "Settings loaded. Some changes need a restart": "Einstellungen geladen. Einige Änderungen erfordern einen Neustart",
         "Save name": "Name der Sicherung",
         "Replace": "Ersetzen",
         "Load": "Laden",
@@ -30665,7 +30666,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Eine Sicherung mit diesem Namen wird ersetzt.",
         "The file is damaged or isn't an AorusGram save.": "Die Datei ist beschädigt oder keine AorusGram-Sicherung.",
         "This save was made by a newer version of AorusGram.": "Diese Sicherung wurde mit einer neueren Version von AorusGram erstellt.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Die gewählte Sicherung ersetzt die aktuellen AorusGram-Einstellungen. Änderungen gelten sofort.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Sammelbare Nutzernamen und Preise sind nur für dich sichtbar. Echte Namen und Eigentumsrechte bleiben unverändert.",
         "Collectible usernames must have at least 4 characters.": "Sammelbare Nutzernamen müssen mindestens 4 Zeichen enthalten.",
         "Delete username": "Nutzernamen löschen",
@@ -31710,7 +31710,9 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "Tout ce que vous avez configuré dans AorusGram — interrupteurs, faux cadeaux, étoiles et noms d'utilisateur, historique d'achats, sauvegardes et le reste — est enregistré dans un fichier chiffré. Les sauvegardes restent même si vous réinstallez l'app.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interrupteurs, cadeaux, étoiles, noms d'utilisateur et tout ce que vous avez configuré dans AorusGram. Vous pouvez les retrouver à tout moment.",
+        "Choose a save to bring its settings back.": "Choisissez une sauvegarde pour retrouver ses réglages.",
+        "Settings loaded. Restarting the app is recommended": "Réglages chargés. Il est recommandé de redémarrer l'app",
         "No saves yet. Save your settings and they'll appear here.": "Aucune sauvegarde pour l'instant. Enregistrez vos réglages et ils apparaîtront ici.",
         "Couldn't save the settings. Try again.": "Impossible d'enregistrer les réglages. Réessayez.",
         "Couldn't read the saves.": "Impossible de lire les sauvegardes.",
@@ -31720,7 +31722,6 @@ enum AorusL10nTable {
         "Load Settings": "Charger les réglages",
         "Settings saved": "Réglages enregistrés",
         "Settings loaded": "Réglages chargés",
-        "Settings loaded. Some changes need a restart": "Réglages chargés. Certains changements nécessitent un redémarrage",
         "Save name": "Nom de la sauvegarde",
         "Replace": "Remplacer",
         "Load": "Charger",
@@ -31728,7 +31729,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "La sauvegarde portant ce nom sera remplacée.",
         "The file is damaged or isn't an AorusGram save.": "Le fichier est endommagé ou n'est pas une sauvegarde AorusGram.",
         "This save was made by a newer version of AorusGram.": "Cette sauvegarde a été créée par une version plus récente d'AorusGram.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "La sauvegarde choisie remplace les réglages actuels d'AorusGram. Les changements s'appliquent immédiatement.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Les noms d’utilisateur de collection et les prix ne sont visibles que par vous. Les vrais noms et la propriété restent inchangés.",
         "Collectible usernames must have at least 4 characters.": "Les noms d’utilisateur de collection doivent comporter au moins 4 caractères.",
         "Delete username": "Supprimer le nom d’utilisateur",
@@ -32773,7 +32773,9 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
-        "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled.": "AorusGram'da ayarladığınız her şey — anahtarlar, sahte hediyeler, yıldızlar ve kullanıcı adları, satın alma geçmişi, yedekler ve diğerleri — şifreli bir dosyaya kaydedilir. Kayıtlar uygulama yeniden yüklense bile kalır.",
+        "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Anahtarlar, hediyeler, yıldızlar, kullanıcı adları ve AorusGram'da ayarladığınız diğer her şey. İstediğiniz zaman geri yükleyebilirsiniz.",
+        "Choose a save to bring its settings back.": "Ayarlarını geri yüklemek için bir kayıt seçin.",
+        "Settings loaded. Restarting the app is recommended": "Ayarlar yüklendi. Uygulamayı yeniden başlatmanız önerilir",
         "No saves yet. Save your settings and they'll appear here.": "Henüz kayıt yok. Ayarlarınızı kaydedin, burada görünecekler.",
         "Couldn't save the settings. Try again.": "Ayarlar kaydedilemedi. Tekrar deneyin.",
         "Couldn't read the saves.": "Kayıtlar okunamadı.",
@@ -32783,7 +32785,6 @@ enum AorusL10nTable {
         "Load Settings": "Ayarları yükle",
         "Settings saved": "Ayarlar kaydedildi",
         "Settings loaded": "Ayarlar yüklendi",
-        "Settings loaded. Some changes need a restart": "Ayarlar yüklendi. Bazı değişiklikler yeniden başlatma gerektiriyor",
         "Save name": "Kayıt adı",
         "Replace": "Üzerine yaz",
         "Load": "Yükle",
@@ -32791,7 +32792,6 @@ enum AorusL10nTable {
         "A save with this name will be replaced.": "Bu adlı kaydın üzerine yazılacak.",
         "The file is damaged or isn't an AorusGram save.": "Dosya bozuk veya bir AorusGram kaydı değil.",
         "This save was made by a newer version of AorusGram.": "Bu kayıt AorusGram'ın daha yeni bir sürümüyle oluşturuldu.",
-        "The selected save replaces the current AorusGram settings. Changes apply right away.": "Seçilen kayıt, mevcut AorusGram ayarlarının yerini alır. Değişiklikler hemen uygulanır.",
         "Collectible usernames and prices are visible only to you. Real usernames and ownership remain unchanged.": "Koleksiyonluk kullanıcı adları ve fiyatlar yalnızca size görünür. Gerçek adlar ve sahiplik değişmez.",
         "Collectible usernames must have at least 4 characters.": "Koleksiyonluk kullanıcı adları en az 4 karakter olmalıdır.",
         "Delete username": "Kullanıcı adını sil",

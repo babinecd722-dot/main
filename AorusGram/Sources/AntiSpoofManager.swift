@@ -22,8 +22,14 @@ public final class AntiSpoofManager {
 
     private let key = "aorusgram_antispoof_v1"
 
+    /// Set while the stored switches are read back, so their `didSet` does not save and tell
+    /// every screen once per switch; a settings load saves once after reading them.
+    private var isLoading = false
+
     private func load() {
+        isLoading = true
         defer {
+            isLoading = false
             // Mirror to flat keys so TelegramCore source patches (which can't import
             // this module) can read the toggles via UserDefaults.standard.bool.
             let ud = UserDefaults.standard
@@ -38,11 +44,15 @@ public final class AntiSpoofManager {
     /// After a settings load: what it stored, and the defaults where it stored nothing.
     private func reloadAfterSettingsLoad() {
         let d = UserDefaults.standard.dictionary(forKey: key) ?? [:]
+        isLoading = true
         antiSpoofOnline  = d["antiSpoofOnline"]  as? Bool ?? false
         antiSpoofDeleted = d["antiSpoofDeleted"] as? Bool ?? true
+        isLoading = false
+        save()
     }
 
     private func save() {
+        guard !isLoading else { return }
         UserDefaults.standard.set(
             ["antiSpoofOnline": antiSpoofOnline, "antiSpoofDeleted": antiSpoofDeleted],
             forKey: key

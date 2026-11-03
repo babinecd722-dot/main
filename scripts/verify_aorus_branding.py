@@ -2644,12 +2644,40 @@ def main() -> None:
         ("submodules/AorusGramUI/Sources/AorusWallSettingsController.swift", (
             "public static func reloadFromStorage() {",
         )),
+        # Reading the stored switches back assigns every one of them, and each assignment
+        # saved the whole table and told every screen and plugin: fifty times per read.
+        ("submodules/AorusGramUI/Sources/AorusGramManager.swift", (
+            "private var isLoading = false",
+            "guard !isLoading else { return }",
+        )),
+        ("submodules/AorusGramUI/Sources/AntiSpoofManager.swift", (
+            "guard !isLoading else { return }",
+        )),
+        # Siri is asked only when its own switch turns, not on every setting anyone changes.
+        ("submodules/AorusGramUI/Sources/Core/AorusGramBootstrap.swift", (
+            "guard enabled != self.siriShortcutsDonated else { return }",
+        )),
+        ("submodules/AorusGram/Sources/Core/AorusGramBootstrap.swift", (
+            "guard enabled != self.siriShortcutsDonated else { return }",
+        )),
+        ("submodules/AorusBadge/Sources/AorusBadge.swift", (
+            "private static func cachedImage(_ key: String, _ make: () -> UIImage?) -> UIImage? {",
+        )),
+        ("submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginTabs.swift", (
+            "if imageCache.count >= 64 {",
+        )),
     ):
         hot = tg / relative_path
         hot_text = hot.read_text(encoding="utf-8") if hot.is_file() else ""
         for marker in markers:
             if marker not in hot_text:
                 err.append(f"Performance: {relative_path} is missing {marker}")
+    # The music capsule of a profile without a photo sits on the page, whose ink the rest of
+    # the header already takes: the track in the accent colour stood out of it.
+    header_node = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    header_node_text = header_node.read_text(encoding="utf-8") if header_node.is_file() else ""
+    if "(isOverlay || aorusOverlayPalette) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor" not in header_node_text:
+        err.append("InterfaceV2: the profile music capsule paints the track in the accent colour")
     title_view = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
     title_text = title_view.read_text(encoding="utf-8") if title_view.is_file() else ""
     if "aorusgram_peer_last_seen_" in title_text:

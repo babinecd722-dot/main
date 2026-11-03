@@ -61,7 +61,7 @@ enum AorusSettingsTransfer {
             aorusPresentRestartNotice(
                 context: context,
                 controller: controller,
-                text: aorusL("Настройки загружены. Часть изменений — после перезапуска", "Settings loaded. Some changes need a restart")
+                text: aorusL("Настройки загружены. Рекомендуется перезапустить приложение", "Settings loaded. Restarting the app is recommended")
             )
         } else {
             toast(aorusL("Настройки загружены", "Settings loaded"), context: context, controller: controller)
@@ -339,8 +339,8 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
         switch mode {
         case .save:
             captionLabel.text = aorusL(
-                "Всё, что настроено в AorusGram, — переключатели, фейковые подарки, звёзды и юзернеймы, история покупок, бэкапы и остальное — сохранится в зашифрованный файл. Сохранения остаются и после переустановки приложения.",
-                "Everything you set up in AorusGram — switches, fake gifts, Stars and usernames, purchase history, backups and the rest — is saved to an encrypted file. Saves stay even if the app is reinstalled."
+                "Переключатели, подарки, звёзды, юзернеймы и всё остальное, что вы настроили в AorusGram. Вернуть их можно в любой момент.",
+                "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time."
             )
             let name = currentName()
             let replaces = !name.isEmpty && saves.contains { $0.url.lastPathComponent.lowercased() == AorusSettingsArchive.fileName(for: name).lowercased() }
@@ -355,8 +355,8 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
             }
         case .load:
             captionLabel.text = aorusL(
-                "Выбранное сохранение заменит текущие настройки AorusGram. Изменения применятся сразу.",
-                "The selected save replaces the current AorusGram settings. Changes apply right away."
+                "Выберите сохранение, чтобы вернуть его настройки.",
+                "Choose a save to bring its settings back."
             )
             emptyLabel.text = aorusL("Сохранений пока нет. Сохраните настройки — они появятся здесь.", "No saves yet. Save your settings and they'll appear here.")
             emptyLabel.isHidden = isListing || !saves.isEmpty

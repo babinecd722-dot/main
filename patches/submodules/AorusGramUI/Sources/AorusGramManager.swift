@@ -177,11 +177,21 @@ public final class AorusGramManager {
         ud.set(voiceTwinPreset,                forKey: "aorusgram_voice_twin_preset")
     }
 
+    /// Set while `load()` reads the table back. Every switch it assigns has a `didSet` that
+    /// saves, and a save writes the whole table, the flat keys, Anti-Screenshot and tells every
+    /// screen and plugin that a setting changed: fifty of those for one read, at launch and at
+    /// every settings load. While it is set a save does nothing; whoever loads saves once after.
+    private var isLoading = false
+
     private func load() {
         // Always mirror current values to the flat keys read by source patches —
         // this also catches fresh installs where the dictionary doesn't exist yet
         // (defaults apply, then save() is called once).
-        defer { mirrorFlatKeys() }
+        isLoading = true
+        defer {
+            isLoading = false
+            mirrorFlatKeys()
+        }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
         ghostChatButton     = d["ghostChatButton"]     as? Bool ?? true
@@ -244,6 +254,7 @@ public final class AorusGramManager {
     }
 
     private func save() {
+        guard !isLoading else { return }
         UserDefaults.standard.set([
             "ghostMode":           ghostMode,
             "ghostChatButton":     ghostChatButton,

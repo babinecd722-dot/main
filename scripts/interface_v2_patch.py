@@ -6080,9 +6080,13 @@ def _patch_compact_music(tg: Path) -> None:
         "                musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? .white : presentationData.theme.list.itemAccentColor))\n"
         "                let artistSeparatorIndex = musicString.length\n"
         "                musicString.append(NSAttributedString(string: \" \\(artist)\", font: Font.regular(12.0), textColor: stripSecondaryColor))\n",
-        "                musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: isOverlay ? aorusOverlayInk : presentationData.theme.list.itemAccentColor))\n"
+        # In Interface 2.0 the pill sits on the header's own page, whose ink every other label
+        # there is drawn in -- the name, the status, the equalizer in this very pill. The theme's
+        # accent was left on the track alone when there was no photo behind it, and with the
+        # AorusGram accent that read as a different control.
+        "                musicString.append(NSAttributedString(string: track ?? \"\", font: Font.semibold(12.0), textColor: (isOverlay || aorusOverlayPalette) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor))\n"
         "                let artistSeparatorIndex = musicString.length\n"
-        "                musicString.append(NSAttributedString(string: \" \\(artist)\", font: Font.regular(12.0), textColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
+        "                musicString.append(NSAttributedString(string: \" \\(artist)\", font: Font.regular(12.0), textColor: (isOverlay || aorusOverlayPalette) ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
         "compact music font",
     )
     # The two glyphs in the pill, for the same reason as its text: white on a pale page is a hole
@@ -6096,7 +6100,7 @@ def _patch_compact_music(tg: Path) -> None:
     text = _replace_once(
         text,
         "                                        component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: stripSecondaryColor))\n",
-        "                                        component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: isOverlay ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
+        "                                        component: AnyComponent(BundleIconComponent(name: \"Item List/InlineTextRightArrow\", tintColor: (isOverlay || aorusOverlayPalette) ? aorusOverlayInk.withAlphaComponent(0.7) : stripSecondaryColor))\n",
         "compact music arrow",
     )
     # The pill's padding is written by the music-capsule pass, one script earlier. Pinned rather

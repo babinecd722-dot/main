@@ -12,6 +12,8 @@ public final class AorusGramBootstrap {
     private init() {}
 
     private var didSetup = false
+    /// Whether the Siri shortcuts are donated as things stand. Main thread.
+    private var siriShortcutsDonated = false
 
     public func setup(accountPath: String? = nil) {
         guard !didSetup else { return }
@@ -138,15 +140,23 @@ public final class AorusGramBootstrap {
         // We use a raw notification name because `.aorusSettingsChanged` is defined in
         // the AorusGramUI module (AorusGramManager) which AorusGram doesn't depend on.
         if #available(iOS 16.0, *) {
-            if AorusGramConfig.isEnabled(.siriShortcuts) {
+            // Only when the switch itself turns. Every setting anyone changes posts this
+            // notification, and the Siri switch is one of fifty: on each of the others this
+            // donated every shortcut again, or asked the system to delete them all, for nothing.
+            siriShortcutsDonated = AorusGramConfig.isEnabled(.siriShortcuts)
+            if siriShortcutsDonated {
                 SiriShortcutsManager.shared.donateAllDefaults()
             }
             NotificationCenter.default.addObserver(
                 forName: NSNotification.Name("aorusgram_settings_changed"),
                 object: nil,
                 queue: .main
-            ) { _ in
-                if AorusGramConfig.isEnabled(.siriShortcuts) {
+            ) { [weak self] _ in
+                guard let self else { return }
+                let enabled = AorusGramConfig.isEnabled(.siriShortcuts)
+                guard enabled != self.siriShortcutsDonated else { return }
+                self.siriShortcutsDonated = enabled
+                if enabled {
                     SiriShortcutsManager.shared.donateAllDefaults()
                 } else {
                     NSUserActivity.deleteAllSavedUserActivities(completionHandler: {})

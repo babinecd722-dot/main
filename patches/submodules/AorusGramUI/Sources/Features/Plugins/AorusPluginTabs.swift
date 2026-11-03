@@ -227,6 +227,11 @@ public final class AorusPluginTabHost {
         }
         .withRenderingMode(.alwaysOriginal)
         .withAlignmentRectInsets(UIEdgeInsets(top: insets.top * scale, left: insets.left * scale, bottom: insets.bottom * scale, right: insets.right * scale))
+        // A key is a glyph in one colour, and the colours follow the theme and its accent: a
+        // session of theme changes would add a set each time and none would ever go.
+        if imageCache.count >= 64 {
+            imageCache.removeAll()
+        }
         imageCache[key] = image
         return image
     }
