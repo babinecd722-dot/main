@@ -215,7 +215,8 @@ import UIKit
     icon.draw(phase: nil)
     let bars = icon.layer.sublayers!
     expect(bars.filter { !$0.isHidden }.count == 3, "idle music icon has three bars")
-    expect(Array(bars.prefix(3)).map { $0.frame.height } == [16, 11, 5], "idle bars match the supplied descending design")
+    // The shortened design: the tallest bar is a little over the pill's capital letters.
+    expect(Array(bars.prefix(3)).map { $0.frame.height } == [11, 7.5, 4], "idle bars match the supplied descending design")
     expect(Array(bars.prefix(3)).allSatisfy { abs($0.frame.midY - 9) < 0.001 && $0.cornerRadius == 1.5 }, "rounded bars share one centre")
     let idle = bars.map(\.frame)
     func same(_ lhs: [CGRect], _ rhs: [CGRect]) -> Bool {
@@ -227,7 +228,7 @@ import UIKit
         icon.draw(phase: phase)
         expect(bars.count == 3 && bars.allSatisfy { !$0.isHidden && $0.frame.width == 3 && $0.cornerRadius == 1.5 && abs($0.frame.midY - 9) < 0.001 }, "playing keeps the idle style: three rounded bars on one centre")
         expect(bars.enumerated().allSatisfy { abs($0.element.frame.minX - CGFloat($0.offset) * 5.5) < 0.001 }, "playing keeps the idle spacing")
-        expect(bars.allSatisfy { $0.frame.height >= 4 - 0.001 && $0.frame.height <= 16 + 0.001 }, "animated heights stay inside the idle icon")
+        expect(bars.allSatisfy { $0.frame.height >= 3 - 0.001 && $0.frame.height <= 11 + 0.001 }, "animated heights stay inside the idle icon")
     }
     icon.draw(phase: 2)
     let frozen = bars.map(\.frame)
