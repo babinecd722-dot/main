@@ -9,9 +9,41 @@ final class AntiSpamManager {
         load()
         // After a settings load, the lists and switches it carried.
         AorusSettingsLifecycle.observe(AorusSettingsLifecycle.didImport) { [weak self] in
-            self?.load()
-            NotificationCenter.default.post(name: AntiSpamManager.stateChangedNotification, object: nil)
+            guard let self else { return }
+            self.load()
+            NotificationCenter.default.post(name: AntiSpamManager.stateChangedNotification, object: self)
         }
+        // There are two of these, one in the core module and one in the settings, and both
+        // keep the state in memory. The settings change it, the core checks incoming messages
+        // with it — and the core read it once at launch: an exception or a stop word added in
+        // the settings did nothing until the app was restarted, and an auto-block in the core
+        // wrote its old copy of every list back over what the settings had saved. Each reads
+        // the storage again when the other has saved.
+        NotificationCenter.default.addObserver(
+            forName: AntiSpamManager.stateChangedNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, (note.object as AnyObject?) !== self else { return }
+            self.load()
+        }
+        DispatchQueue.global(qos: .utility).async {
+            AntiSpamManager.dropLegacyToastClocks()
+        }
+    }
+
+    /// The state is read by the incoming-message check, on the account's own queue, and changed
+    /// by the settings on the main thread.
+    private let stateLock = NSRecursiveLock()
+
+    /// Earlier builds kept the last anti-spam notice of every sender under a key of its own,
+    /// and never removed one. Dropped once.
+    private static func dropLegacyToastClocks() {
+        let defaults = UserDefaults.standard
+        let flag = "aorusgram_antispam_toast_clock_v2"
+        guard !defaults.bool(forKey: flag) else { return }
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("aorusgram_antispam_last_toast_") {
+            defaults.removeObject(forKey: key)
+        }
+        defaults.set(true, forKey: flag)
     }
 
     private let defaultsKey = "aorusgram_antispam"
@@ -195,6 +227,8 @@ final class AntiSpamManager {
     // MARK: - Persistence
 
     private func load() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         let flatAllowedPeerIds = Self.readFlatPeerIds(key: "aorusgram_antispam_allowed_peer_ids")
         let defaultsData = UserDefaults.standard.data(forKey: defaultsKey)
         let keychainData = keychainRead()
@@ -238,6 +272,7 @@ final class AntiSpamManager {
     }
 
     private func save() {
+        stateLock.lock()
         let state = SavedState(
             isEnabled:      isEnabled,
             autoBlock:      autoBlock,
@@ -256,7 +291,29 @@ final class AntiSpamManager {
             keychainWrite(data)
         }
         mirrorFlatState()
-        NotificationCenter.default.post(name: Self.stateChangedNotification, object: nil)
+        stateLock.unlock()
+        AntiSpamManager.postOnMain(Notification(name: Self.stateChangedNotification, object: self))
+    }
+
+    /// Observers of these notifications run on the main queue, and a post from another thread
+    /// waits for the main thread to have run them. The incoming-message check posts from inside
+    /// the account's database transaction, which then waited on whatever the main thread was
+    /// doing; posted from there they are handed over instead.
+    private static func postOnMain(_ notification: Notification) {
+        if Thread.isMainThread {
+            NotificationCenter.default.post(notification)
+        } else {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(notification)
+            }
+        }
+    }
+
+    private func mutate(_ change: () -> Void) {
+        stateLock.lock()
+        change()
+        stateLock.unlock()
+        save()
     }
 
     private func mirrorFlatState() {
@@ -299,54 +356,67 @@ final class AntiSpamManager {
 
     // MARK: - API
 
-    func setEnabled(_ value: Bool)   { isEnabled = value; save() }
-    func setAutoBlock(_ value: Bool) { autoBlock = value; save() }
-    func setAutoReport(_ value: Bool) { autoReport = value; save() }
-    func setThreatProtection(_ value: Bool)   { threatProtection = value; save() }
-    func setSpamProtection(_ value: Bool)      { spamProtection = value; save() }
-    func setStopWordsProtection(_ value: Bool) { stopWordsProtection = value; save() }
-    func setTextCleanup(_ value: Bool)         { textCleanup = value; save() }
+    // Called at every launch with the switch as it is. Saving it unchanged wrote the whole
+    // state to the defaults and twice to the keychain, on the main thread, before the first
+    // screen.
+    func setEnabled(_ value: Bool) {
+        stateLock.lock()
+        let unchanged = isEnabled == value
+        stateLock.unlock()
+        guard !unchanged else { return }
+        mutate { isEnabled = value }
+    }
+    func setAutoBlock(_ value: Bool) { mutate { autoBlock = value } }
+    func setAutoReport(_ value: Bool) { mutate { autoReport = value } }
+    func setThreatProtection(_ value: Bool)   { mutate { threatProtection = value } }
+    func setSpamProtection(_ value: Bool)      { mutate { spamProtection = value } }
+    func setStopWordsProtection(_ value: Bool) { mutate { stopWordsProtection = value } }
+    func setTextCleanup(_ value: Bool)         { mutate { textCleanup = value } }
 
     func addKeyword(_ kw: String) {
         let clean = kw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty, !keywords.contains(clean) else { return }
-        keywords.append(clean)
-        save()
+        guard !clean.isEmpty else { return }
+        stateLock.lock()
+        let known = keywords.contains(clean)
+        stateLock.unlock()
+        guard !known else { return }
+        mutate { keywords.append(clean) }
     }
 
     func removeKeyword(_ kw: String) {
-        keywords.removeAll { $0 == kw }
-        save()
+        mutate { keywords.removeAll { $0 == kw } }
     }
 
     func blockPeer(_ peerId: Int64) {
         guard !trustedTelegramServiceIds.contains(peerId) else { return }
-        blockedPeerIds.insert(peerId)
-        save()
+        mutate { blockedPeerIds.insert(peerId) }
     }
 
     func unblockPeer(_ peerId: Int64) {
-        blockedPeerIds.remove(peerId)
-        // Manual unblock = "I trust this one": grant auto-block immunity so spam from them
-        // can never silently re-add them to the block list.
-        autoBlockImmuneIds.insert(peerId)
-        save()
+        mutate {
+            blockedPeerIds.remove(peerId)
+            // Manual unblock = "I trust this one": grant auto-block immunity so spam from them
+            // can never silently re-add them to the block list.
+            autoBlockImmuneIds.insert(peerId)
+        }
     }
 
     // Exceptions (trusted peers) — never filtered or auto-blocked, even if their text
     // matches a pattern. Adding a peer here also lifts any existing block on them.
     func allowPeer(_ peerId: Int64) {
-        allowedPeerIds.insert(peerId)
-        blockedPeerIds.remove(peerId)
-        save()
+        mutate {
+            allowedPeerIds.insert(peerId)
+            blockedPeerIds.remove(peerId)
+        }
     }
 
     func removeAllowedPeer(_ peerId: Int64) {
-        allowedPeerIds.remove(peerId)
-        save()
+        mutate { allowedPeerIds.remove(peerId) }
     }
 
     func isAllowed(_ peerId: Int64) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         return allowedPeerIds.contains(peerId)
     }
 
@@ -405,6 +475,8 @@ final class AntiSpamManager {
 
     func check(peerId: Int64, text: String?) -> SpamVerdict {
         guard effectiveEnabled else { return SpamVerdict(isSpam: false, reason: .clean) }
+        stateLock.lock()
+        defer { stateLock.unlock() }
 
         if trustedTelegramServiceIds.contains(peerId) || allowedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: false, reason: .clean)
@@ -437,13 +509,10 @@ final class AntiSpamManager {
             return SpamVerdict(isSpam: true, reason: .blockedUser)
         }
 
-        if stopWordsProtection {
-            for keyword in keywords {
-                let cleanKeyword = normalize(keyword)
-                if !cleanKeyword.isEmpty && normalized.contains(cleanKeyword) {
-                    return SpamVerdict(isSpam: true, reason: .keyword(cleanKeyword))
-                }
-            }
+        // The same matching that hides the word in every chat (AorusStopWords): where a word
+        // begins, with an ending, spelt out or with look-alike letters.
+        if stopWordsProtection, let keyword = AorusStopWords.firstMatch(in: text ?? "", words: keywords) {
+            return SpamVerdict(isSpam: true, reason: .keyword(keyword))
         }
 
         if spamProtection {
@@ -504,7 +573,10 @@ final class AntiSpamManager {
         // Immune peers (manually un-blocked): suppress the spam/blocked notice and never
         // auto-block. Threats and flood still alert though — immunity only exempts the
         // spam + blocked path, not doxx/swat/flood.
+        stateLock.lock()
         let isImmune = autoBlockImmuneIds.contains(peerId)
+        let shouldAutoBlock = autoBlock && !isImmune
+        stateLock.unlock()
         let isFloodOrThreat: Bool
         switch verdict.reason {
         case .threat, .flood, .repeatedMessage:
@@ -520,13 +592,9 @@ final class AntiSpamManager {
         if let messageId {
             userInfo["msgId"] = NSNumber(value: messageId)
         }
-        NotificationCenter.default.post(
-            name: .aorusSpamDetected,
-            object: nil,
-            userInfo: userInfo
-        )
+        AntiSpamManager.postOnMain(Notification(name: .aorusSpamDetected, object: nil, userInfo: userInfo))
 
-        if autoBlock && !isImmune {
+        if shouldAutoBlock {
             blockPeer(peerId)
         }
     }
@@ -717,11 +785,21 @@ final class AntiSpamManager {
         }
     }
 
+    /// Each built-in pattern compacted once: they were normalized and compacted again for
+    /// every pattern of every message checked, some three hundred times a message.
+    private var compactedPatterns: [String: String] = [:]
+
     private func containsPattern(_ pattern: String, normalized: String, compacted: String) -> Bool {
         if normalized.contains(pattern) {
             return true
         }
-        let patternCompact = compact(normalize(pattern))
+        let patternCompact: String
+        if let known = compactedPatterns[pattern] {
+            patternCompact = known
+        } else {
+            patternCompact = compact(normalize(pattern))
+            compactedPatterns[pattern] = patternCompact
+        }
         return !patternCompact.isEmpty && compacted.contains(patternCompact)
     }
 
@@ -739,6 +817,13 @@ final class AntiSpamManager {
             entry.value.contains { now - $0 <= 90.0 }
         }
         peerWindows[peerId] = window
+        // A window is a minute and a half of one sender; the senders of a long session are
+        // not kept for ever.
+        if peerWindows.count > 256 {
+            peerWindows = peerWindows.filter { entry in
+                entry.value.timestamps.contains { now - $0 <= 90.0 }
+            }
+        }
 
         if repeats.count >= 3 && normalizedText.count >= 12 {
             return .repeatedMessage

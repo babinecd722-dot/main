@@ -143,15 +143,20 @@ final class AutoReplyManager: ObservableObject {
             // observes this and sends from the account named by `accountPath`. Without that
             // name the observer fell back to whichever context was on screen, so a reply to
             // one account's chat was sent — visibly, to the peer — from another account.
-            NotificationCenter.default.post(
-                name: NSNotification.Name("aorusgram.sendAutoReply"),
-                object: nil,
-                userInfo: [
-                    "peerId": NSNumber(value: peerId),
-                    "accountPath": accountPath,
-                    "text": msg,
-                ]
-            )
+            // Handed to the main queue, where the sender observes it: this runs inside the
+            // account's database transaction, and a post from here waited on the main thread.
+            let userInfo: [String: Any] = [
+                "peerId": NSNumber(value: peerId),
+                "accountPath": accountPath,
+                "text": msg,
+            ]
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("aorusgram.sendAutoReply"),
+                    object: nil,
+                    userInfo: userInfo
+                )
+            }
         }
     }
 }

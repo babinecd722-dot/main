@@ -163,6 +163,14 @@ public final class AorusGramBootstrap {
             }
         }
 
+        // A message its stop words hide in the chat is not kept for deleted-message recovery
+        // nor answered: nobody was meant to see it. It still says its sender was online.
+        if let stopWords = AorusStopWords.current(),
+           stopWords.hides(text: text, isIncoming: true, peerId: peerId, authorId: (info["senderId"] as? NSNumber)?.int64Value) {
+            AntiSpoofManager.shared.recordActivity(peerId: senderId, kind: .message)
+            return
+        }
+
         // Pre-cache for deleted-messages feature — captures content before any deletion.
         // Without this the cache only sees messages whose delete-hook fires, which is unreliable.
         DeletedMessagesCache.shared.handleIncomingNotification(note)

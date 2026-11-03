@@ -20,6 +20,15 @@ public final class AorusGramManager {
             self?.load()
             self?.save()
         }
+        // Ghost Mode switched from outside these settings: the Siri shortcut goes through the
+        // core module's GhostModeManager, which writes only the flat key. The next save of any
+        // switch here wrote the old value back over it, and this page kept showing it.
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("aorusgram_ghost_mode_changed"), object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, !self.licenseLocked, let value = note.object as? Bool, value != self.ghostMode else { return }
+            self.ghostMode = value
+        }
         // License kill-switch (in-memory side effects). LicenseGate already forces every
         // flat aorusgram_* flag OFF / restores them on the lock flag; here we only handle
         // state that a raw key write can't revert: Anti-Screenshot is applied by a live

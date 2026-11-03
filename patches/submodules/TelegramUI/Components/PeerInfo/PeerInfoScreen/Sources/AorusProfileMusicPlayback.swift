@@ -130,12 +130,15 @@ final class AorusProfileMusicPlayback {
 /// rate of its own, and the motion starts from that resting shape, so the icon never changes
 /// its style: a new track begins exactly where the idle icon stands, a pause holds the bars
 /// where they are, and closing the player settles them back.
+///
+/// The tallest bar is the height of the pill's capital letters and a little more, so the icon
+/// reads as part of the line it ends rather than standing over it.
 final class AorusProfileMusicEqualizerView: UIView {
-    static let restingHeights: [CGFloat] = [16, 11, 5]
+    static let restingHeights: [CGFloat] = [11, 7.5, 4]
     static let barWidth: CGFloat = 3
     static let barPitch: CGFloat = 5.5
-    private static let lowest: CGFloat = 4
-    private static let highest: CGFloat = 16
+    private static let lowest: CGFloat = 3
+    private static let highest: CGFloat = 11
     /// Radians per second of playback. Unequal, so the bars never fall into step.
     private static let rates: [Double] = [6.2, 8.3, 7.1]
 
@@ -196,6 +199,7 @@ final class AorusProfileMusicIconComponent: Component {
         view.playback = self.playback
         self.playback.icon = view
         view.color = self.color
+        // The box keeps the height the pill was laid out with; the bars are centred in it.
         return CGSize(width: 14, height: 18)
     }
 }

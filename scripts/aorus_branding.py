@@ -3035,13 +3035,11 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                // AorusGram: native anti-spam prefilter (runs before messages enter local history)\n"
         "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
         "                let aorusBlockedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
-        "                let aorusUserKeywords = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_keywords\") ?? []\n"
         "                let aorusAllowedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusImmunePeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_immune_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusThreatProtection = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_threat_protection\") as? Bool) ?? true\n"
         "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
         "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
-        "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
         "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
         "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n"
         "                let aorusStoredThreatTokensLatin = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_latin\") ?? []\n"
@@ -3136,19 +3134,16 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    if !deob.isEmpty { for tok in aorusThreatTokensLatin where !tok.isEmpty && deob.contains(tok) { return tok } }\n"
         "                    return nil\n"
         "                }\n"
-        "                // Spam / stop-words / blocked → hide. Returns a reason when hidden, else nil.\n"
+        "                // Spam / blocked → hide. Returns a reason when hidden, else nil. The stop words\n"
+        "                // are not here: they hide a message where it is drawn, in every chat, and keep\n"
+        "                // it stored (AorusStopWords) — dropped here, a word taken off the list brought\n"
+        "                // nothing back and the server went on counting the message as unread.\n"
         "                func aorusSpamHideReason(_ identity: Int64, _ rawText: String) -> String? {\n"
         "                    // Blocked / allowed / service peers are decided by the caller.\n"
+        "                    guard aorusSpamProtectionOn else { return nil }\n"
         "                    let text = aorusNormalizeSpamText(rawText)\n"
         "                    if text.isEmpty { return nil }\n"
         "                    let compacted = aorusCompactSpamText(text)\n"
-        "                    if aorusStopWordsOn {\n"
-        "                        for keyword in aorusUserKeywords {\n"
-        "                            let cleanKeyword = aorusNormalizeSpamText(keyword)\n"
-        "                            if !cleanKeyword.isEmpty && aorusSpamContains(cleanKeyword, normalized: text, compacted: compacted) { return \"keyword\" }\n"
-        "                        }\n"
-        "                    }\n"
-        "                    guard aorusSpamProtectionOn else { return nil }\n"
         "                    let strongPatterns = [\"гарантированный доход\", \"гарантированная прибыль\", \"гарантия выплат\", \"доход каждый день\", \"быстрый доход\", \"пассивный доход\", \"без вложений\", \"100% доход\", \"доход без риска\", \"удвою ваши вложения\", \"удвою ваш депозит\", \"верну с прибылью\", \"закрытый инвест клуб\", \"личный инвестор\", \"инвестируй и получай\", \"переведи деньги\", \"без риска\", \"guaranteed profit\", \"guaranteed income\", \"guaranteed returns\", \"double your money\", \"double your investment\", \"double your deposit\", \"risk free profit\", \"get rich quick\", \"investment opportunity\", \"high return investment\", \"no risk high profit\", \"крипто раздача\", \"раздача криптовалюты\", \"бесплатные биткоины\", \"подключите кошелек\", \"подключи кошелек\", \"синхронизируйте кошелек\", \"введите сид фразу\", \"сид фраза\", \"мнемоническая фраза\", \"секретная фраза\", \"онлайн casino\", \"free bitcoin\", \"free crypto\", \"crypto giveaway\", \"bitcoin giveaway\", \"nft drop\", \"airdrop\", \"claim your airdrop\", \"claim your reward\", \"connect your wallet\", \"wallet connect\", \"validate your wallet\", \"sync your wallet\", \"seed phrase\", \"recovery phrase\", \"private key\", \"send 1 btc\", \"elon musk giveaway\", \"double your btc\", \"быстрый заработок\", \"легкий заработок\", \"легкий зарабаток\", \"лёгкий заработок\", \"лёгкий зарабаток\", \"легкие деньги\", \"работа без опыта\", \"удаленная работа без опыта\", \"пиши в лс заработок\", \"заработок в интернете\", \"ищем сотрудников на удаленку\", \"оплата ежедневно\", \"заработок от 5000\", \"предлагаю заработок\", \"предлагаю зарабаток\", \"заработок по\", \"зарабаток по\", \"тысяч в час\", \"тысяч в день\", \"тысяч в неделю\", \"заработок без вложений\", \"доход в час\", \"easy money\", \"make money fast\", \"work from home no experience\", \"be your own boss\", \"hiring remote workers\", \"earn money online\", \"ваш аккаунт заблокирован\", \"аккаунт будет удален\", \"подтвердите аккаунт\", \"верифицируйте аккаунт\", \"введите код\", \"отправьте код\", \"пришлите код\", \"код никому не сообщайте\", \"служба поддержки telegram\", \"техподдержка telegram\", \"официальная поддержка telegram\", \"verify your account\", \"confirm your identity\", \"account has been blocked\", \"account will be suspended\", \"telegram support\", \"official telegram team\", \"unusual login attempt\", \"click here to verify\", \"your account is at risk\", \"вы выиграли приз\", \"вы стали победителем\", \"заберите свой выигрыш\", \"поздравляем вы выиграли\", \"вы получили приз\", \"you have won\", \"you are a winner\", \"claim your prize\", \"congratulations you won\", \"you have been selected\", \"я взломал вашу камеру\", \"у меня есть ваше видео\", \"оплатите иначе разошлю\", \"i hacked your webcam\", \"i have your video\", \"pay or i will send\", \"i recorded you\"]\n"
         "                    if strongPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return \"builtinPattern\" }\n"
         "                    let weightedPatterns = [\"заработ\", \"зарабат\", \"крипт\", \"биткоин\", \"инвест\", \"казино\", \"букмекер\", \"ставки\", \"розыгрыш\", \"приз\", \"доход\", \"прибыль\", \"трейдинг\", \"трейдер\", \"сигнал\", \"подработка\", \"арбитраж\", \"промокод\", \"слоты\", \"депозит\", \"вложени\", \"кошелек\", \"кошелёк\", \"верификац\", \"подтверд\", \"заблокирован\", \"поддержк\", \"выплат\", \"вывод средств\", \"реферал\", \"бонус\", \"обмен валют\", \"гарант\", \"forex\", \"binance\", \"usdt\", \"btc\", \"eth\", \"crypto\", \"bitcoin\", \"wallet\", \"giveaway\", \"bonus\", \"casino\", \"betting\", \"gambling\", \"trading\", \"profit\", \"invest\", \"referral\", \"withdraw\", \"deposit\", \"airdrop\", \"verify\", \"suspended\", \"prize\", \"winner\", \"lottery\", \"loan\", \"escort\", \"promo\", \"earn\", \"payout\"]\n"
@@ -3225,7 +3220,10 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    // Text clean-up applies to every incoming message (not just DMs).\n"
         "                    if aorusTextCleanupOn {\n"
         "                        let aorusNorm = aorusSmartNormalize(storeMsg.text)\n"
-        "                        if aorusNorm != storeMsg.text { return aorusRebuildStoreMessage(storeMsg, text: aorusNorm) }\n"
+        "                        // Only a change of case that keeps every character where it was: the\n"
+        "                        // message's entities (bold, links, spoilers, custom emoji) are ranges\n"
+        "                        // into the text, and \"İ\" or \"ß\" change length when their case does.\n"
+        "                        if aorusNorm != storeMsg.text && aorusNorm.utf16.count == storeMsg.text.utf16.count { return aorusRebuildStoreMessage(storeMsg, text: aorusNorm) }\n"
         "                    }\n"
         "                    return storeMsg\n"
         "                } : messages\n"
@@ -3547,6 +3545,145 @@ def _auto_reply_hook_span(text: str, sentinel: str):
     return None
 
 
+def patch_stop_words_everywhere(tg: Path) -> bool:
+    """The anti-spam stop words hide a message in every chat, not only a stranger's DM.
+
+    The stop words used to be checked only inside the TelegramCore prefilter, in the branch for
+    private chats with someone who is not a contact: a group, a channel, a contact or a bot that
+    wrote one of the words showed it as if there were no list. And a prefilter that drops a
+    message from storage cannot be undone — a word taken off the list never brought anything
+    back — and leaves the server counting the dropped message as unread.
+
+    So the words are applied where messages are drawn. The message is stored as Telegram stores
+    it and only not shown: in the chat (its entry is left out of the history list, the way
+    Telegram leaves out a message pending removal), in the chat list (the last message's text
+    and thumbnail), and as an in-app notification (no banner, no sound). Reading the chat reads
+    it with the rest, since the read marker comes from the full history view. The matching is
+    `AorusStopWords` in the core module, reached through `AorusStopWordScreen`.
+    """
+    ok = True
+
+    # 1. The chat's history.
+    history = tg / "submodules/TelegramUI/Sources/ChatHistoryEntriesForView.swift"
+    if history.is_file():
+        t = history.read_text(encoding="utf-8")
+        if "AorusStopWordScreen.current()" not in t:
+            count_anchor = "    var count = 0\n    loop: for entry in view.entries {\n"
+            removed_anchor = (
+                "        if pendingRemovedMessages.contains(message.id) {\n"
+                "            continue\n"
+                "        }\n"
+            )
+            if t.count(count_anchor) == 1 and t.count(removed_anchor) == 1:
+                t = t.replace(
+                    count_anchor,
+                    "    // AorusGram: the stop words, read once for the whole pass.\n"
+                    "    let aorusStopWords = AorusStopWordScreen.current()\n"
+                    + count_anchor,
+                    1,
+                )
+                t = t.replace(
+                    removed_anchor,
+                    removed_anchor
+                    + "        // AorusGram: a message with one of the stop words is not drawn, in any chat.\n"
+                    + "        if let aorusStopWords, aorusStopWords.hides(message) {\n"
+                    + "            continue\n"
+                    + "        }\n",
+                    1,
+                )
+                history.write_text(t, encoding="utf-8")
+                _ensure_aorusgramui_import(history)
+                print("StopWords: chat history leaves out the messages they hide")
+            else:
+                print("StopWords: WARNING chat history anchors not found")
+                ok = False
+    else:
+        print("StopWords: ChatHistoryEntriesForView.swift not found")
+        ok = False
+
+    # 2. The chat list: the last message's text, and its thumbnail.
+    item = tg / "submodules/ChatListUI/Sources/Node/ChatListItem.swift"
+    if item.is_file():
+        t = item.read_text(encoding="utf-8")
+        if "aorusStopWordHiddenText(" not in t:
+            text_anchor = (
+                "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
+                "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
+                "spoilers: spoilers, customEmojiRanges: customEmojiRanges, richTextPreview: richTextPreview)\n"
+            )
+            media_anchor = "                        if message._asMessage().containsSecretMedia {\n"
+            # Before the chat lock's own replacement, when there is one, so that a locked chat
+            # says it is locked and nothing about what its last message holds.
+            lock_anchor = "                    // AorusGram: Chat Protection — replace the preview of a protected\n"
+            insert_before = lock_anchor if t.count(lock_anchor) == 1 else text_anchor
+            if t.count(text_anchor) == 1 and t.count(media_anchor) == 1:
+                t = t.replace(
+                    insert_before,
+                    "                    // AorusGram: a last message its stop words hide in the chat is not read\n"
+                    "                    // out in the list either.\n"
+                    "                    if let aorusStopWords = AorusStopWordScreen.current(), messages.contains(where: { aorusStopWords.hides($0) }) {\n"
+                    "                        messageText = aorusStopWordHiddenText(item.presentationData.strings.baseLanguageCode)\n"
+                    "                        messageEntities = []\n"
+                    "                        spoilers = nil\n"
+                    "                        customEmojiRanges = nil\n"
+                    "                        richTextPreview = nil\n"
+                    "                    }\n"
+                    + insert_before,
+                    1,
+                )
+                t = t.replace(
+                    media_anchor,
+                    "                        if let aorusStopWords = AorusStopWordScreen.current(), aorusStopWords.hides(message) {\n"
+                    "                            displayMediaPreviews = false\n"
+                    "                        }\n"
+                    + media_anchor,
+                    1,
+                )
+                item.write_text(t, encoding="utf-8")
+                print("StopWords: chat list hides the text and thumbnail they hide")
+            else:
+                print("StopWords: WARNING chat list anchors not found")
+                ok = False
+    else:
+        print("StopWords: ChatListItem.swift not found")
+        ok = False
+
+    # 3. In-app notifications: no banner and no sound for a message nobody may see.
+    app_context = tg / "submodules/TelegramUI/Sources/ApplicationContext.swift"
+    if app_context.is_file():
+        t = app_context.read_text(encoding="utf-8")
+        if "AorusStopWordScreen.current()" not in t:
+            anchor = (
+                "                            guard !locked else {\n"
+                "                                return\n"
+                "                            }\n"
+                "                            let isMuted = firstMessage.attributes.contains(where: { attribute in\n"
+            )
+            if t.count(anchor) == 1:
+                t = t.replace(
+                    anchor,
+                    "                            guard !locked else {\n"
+                    "                                return\n"
+                    "                            }\n"
+                    "                            // AorusGram: a message its stop words hide makes no sound and shows no banner.\n"
+                    "                            if let aorusStopWords = AorusStopWordScreen.current(), messages.allSatisfy({ aorusStopWords.hides($0) }) {\n"
+                    "                                return\n"
+                    "                            }\n"
+                    "                            let isMuted = firstMessage.attributes.contains(where: { attribute in\n",
+                    1,
+                )
+                app_context.write_text(t, encoding="utf-8")
+                _ensure_aorusgramui_import(app_context)
+                print("StopWords: in-app notifications skip the messages they hide")
+            else:
+                print("StopWords: WARNING in-app notification anchor not found")
+                ok = False
+    else:
+        print("StopWords: ApplicationContext.swift not found")
+        ok = False
+    return ok
+
+
 def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
     """Show a native Telegram-style toast when the client hides/blocks spam.
 
@@ -3619,11 +3756,15 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                if !aorusBlockedNow.contains(aorusPeerId) { return }\n"
         "            }\n"
         "            let cooldownBucket = isThreat ? \"threat\" : (isBlocked ? \"blocked\" : (isFlood ? \"flood\" : (isKeyword ? \"keyword\" : \"spam\")))\n"
-        "            let cooldownKey = \"aorusgram_antispam_last_toast_\\(cooldownBucket)_\\(aorusPeerId)\"\n"
+        "            // One table of the last notices, sender by sender, pruned as it is written: a\n"
+        "            // key per sender was written for every spammer ever seen and never removed.\n"
+        "            let cooldownKey = \"\\(cooldownBucket)_\\(aorusPeerId)\"\n"
         "            let cooldown: TimeInterval = isThreat ? 4.0 : (isBlocked ? 15.0 : (isFlood ? 8.0 : 6.0))\n"
-        "            let lastToast = UserDefaults.standard.double(forKey: cooldownKey)\n"
-        "            guard now - lastToast > cooldown else { return }\n"
-        "            UserDefaults.standard.set(now, forKey: cooldownKey)\n"
+        "            var aorusToastClock = (UserDefaults.standard.dictionary(forKey: \"aorusgram_antispam_toast_clock\") as? [String: Double]) ?? [:]\n"
+        "            guard now - (aorusToastClock[cooldownKey] ?? 0.0) > cooldown else { return }\n"
+        "            aorusToastClock = aorusToastClock.filter { now - $0.value < 60.0 }\n"
+        "            aorusToastClock[cooldownKey] = now\n"
+        "            UserDefaults.standard.set(aorusToastClock, forKey: \"aorusgram_antispam_toast_clock\")\n"
         "            let title: String\n"
         "            let text: String\n"
         "            let iconName: String\n"
@@ -31125,6 +31266,7 @@ def main() -> None:
     patch_show_stories_toggle(tg)
     patch_show_stories_live_refresh(tg)
     patch_chat_lock(tg)
+    patch_stop_words_everywhere(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_plugin_appearance(tg)

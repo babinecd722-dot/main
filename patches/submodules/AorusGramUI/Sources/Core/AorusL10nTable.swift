@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Hidden by a stop word": "Nascosto da una parola vietata",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "I messaggi con queste parole vengono nascosti in tutte le chat: private, gruppi e canali. La parola viene trovata anche con una desinenza diversa. Scorri verso sinistra per eliminare.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruttori, regali, Stelle, nomi utente e tutto ciò che hai configurato in AorusGram. Puoi recuperarli in qualsiasi momento.",
         "Choose a save to bring its settings back.": "Scegli un salvataggio per ripristinarne le impostazioni.",
         "Settings loaded. Restarting the app is recommended": "Impostazioni caricate. È consigliato riavviare l'app",
@@ -711,7 +713,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Non c'è ancora nessuno bloccato.",
         "STOP WORDS": "PAROLE VIETATE",
         "Add a word": "Aggiungi una parola",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "I messaggi che contengono queste parole vengono nascosti automaticamente. Scorri verso sinistra per eliminare.",
         "EXCEPTIONS": "ECCEZIONI",
         "Add exception": "Aggiungi un'eccezione",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Questi contatti non vengono mai filtrati dall'anti-spam. Scorri verso sinistra per rimuovere.",
@@ -1107,6 +1108,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Hidden by a stop word": "Ukryte przez słowo zakazane",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Wiadomości z tymi słowami są ukrywane we wszystkich czatach: prywatnych, grupach i kanałach. Słowo zostanie znalezione także z inną końcówką. Przesuń w lewo, aby usunąć.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Przełączniki, prezenty, gwiazdki, nazwy użytkownika i wszystko inne, co skonfigurowano w AorusGram. Możesz je przywrócić w każdej chwili.",
         "Choose a save to bring its settings back.": "Wybierz zapis, aby przywrócić jego ustawienia.",
         "Settings loaded. Restarting the app is recommended": "Ustawienia wczytane. Zalecane jest ponowne uruchomienie aplikacji",
@@ -1765,7 +1768,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Nikt nie jest jeszcze zablokowany.",
         "STOP WORDS": "SŁOWA ZAKAZANE",
         "Add a word": "Dodaj słowo",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Wiadomości z tymi słowami są ukrywane automatycznie. Przesuń w lewo, aby usunąć.",
         "EXCEPTIONS": "WYJĄTKI",
         "Add exception": "Dodaj wyjątek",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Te kontakty nigdy nie są filtrowane przez anty-spam. Przesuń w lewo, aby usunąć.",
@@ -2161,6 +2163,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Hidden by a stop word": "Verborgen door een verboden woord",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Berichten met deze woorden worden in elke chat verborgen: privéchats, groepen en kanalen. Een woord wordt ook met een andere uitgang gevonden. Veeg naar links om te verwijderen.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Schakelaars, cadeaus, sterren, gebruikersnamen en al het andere dat je in AorusGram hebt ingesteld. Je kunt ze altijd terughalen.",
         "Choose a save to bring its settings back.": "Kies een opslag om de instellingen ervan terug te zetten.",
         "Settings loaded. Restarting the app is recommended": "Instellingen geladen. Het wordt aanbevolen de app opnieuw te starten",
@@ -2819,7 +2823,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Er is nog niemand geblokkeerd.",
         "STOP WORDS": "VERBODEN WOORDEN",
         "Add a word": "Woord toevoegen",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Berichten met deze woorden worden automatisch verborgen. Veeg naar links om te verwijderen.",
         "EXCEPTIONS": "UITZONDERINGEN",
         "Add exception": "Uitzondering toevoegen",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Deze contacten worden nooit door de anti-spam gefilterd. Veeg naar links om te verwijderen.",
@@ -3215,6 +3218,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Hidden by a stop word": "Amagat per una paraula prohibida",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Els missatges amb aquestes paraules s'amaguen a tots els xats: privats, grups i canals. La paraula es troba també amb una terminació diferent. Llisca cap a l'esquerra per eliminar-les.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruptors, regals, estrelles, noms d'usuari i tota la resta que has configurat a AorusGram. Els pots recuperar quan vulguis.",
         "Choose a save to bring its settings back.": "Tria un desament per recuperar-ne la configuració.",
         "Settings loaded. Restarting the app is recommended": "Configuració carregada. Es recomana reiniciar l'app",
@@ -3873,7 +3878,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Encara no hi ha ningú bloquejat.",
         "STOP WORDS": "PARAULES PROHIBIDES",
         "Add a word": "Afegeix una paraula",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Els missatges amb aquestes paraules s'amaguen automàticament. Llisca cap a l'esquerra per eliminar-les.",
         "EXCEPTIONS": "EXCEPCIONS",
         "Add exception": "Afegeix una excepció",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Aquests contactes mai no els filtra l'antispam. Llisca cap a l'esquerra per treure'ls.",
@@ -4269,6 +4273,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Hidden by a stop word": "Disembunyikan oleh kata terlarang",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Pesan yang memuat kata-kata ini disembunyikan di semua obrolan — obrolan pribadi, grup, dan kanal. Kata juga ditemukan dengan akhiran yang berbeda. Geser ke kiri untuk menghapus.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Sakelar, hadiah, Bintang, nama pengguna, dan semua yang Anda atur di AorusGram. Anda bisa memulihkannya kapan saja.",
         "Choose a save to bring its settings back.": "Pilih simpanan untuk memulihkan pengaturannya.",
         "Settings loaded. Restarting the app is recommended": "Pengaturan dimuat. Disarankan untuk memulai ulang aplikasi",
@@ -4927,7 +4933,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Belum ada yang diblokir.",
         "STOP WORDS": "KATA TERLARANG",
         "Add a word": "Tambahkan kata",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Pesan yang memuat kata-kata ini disembunyikan otomatis. Geser ke kiri untuk menghapus.",
         "EXCEPTIONS": "PENGECUALIAN",
         "Add exception": "Tambahkan pengecualian",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Kontak ini tidak pernah disaring anti-spam. Geser ke kiri untuk menghapus.",
@@ -5323,6 +5328,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Hidden by a stop word": "Disembunyikan oleh kata larangan",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Mesej yang mengandungi kata-kata ini disembunyikan dalam semua sembang — sembang peribadi, kumpulan dan saluran. Kata juga ditemui dengan akhiran yang berbeza. Leret ke kiri untuk memadam.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Suis, hadiah, Bintang, nama pengguna dan semua yang anda tetapkan dalam AorusGram. Anda boleh memulihkannya bila-bila masa.",
         "Choose a save to bring its settings back.": "Pilih simpanan untuk memulihkan tetapannya.",
         "Settings loaded. Restarting the app is recommended": "Tetapan dimuatkan. Disyorkan untuk memulakan semula apl",
@@ -5981,7 +5988,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Belum ada sesiapa disekat.",
         "STOP WORDS": "KATA LARANGAN",
         "Add a word": "Tambah kata",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Mesej yang mengandungi kata-kata ini disembunyikan secara automatik. Leret ke kiri untuk memadam.",
         "EXCEPTIONS": "PENGECUALIAN",
         "Add exception": "Tambah pengecualian",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Kenalan ini tidak pernah ditapis oleh anti-spam. Leret ke kiri untuk membuang.",
@@ -6377,6 +6383,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Hidden by a stop word": "Схавана стоп-словам",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Паведамленні з гэтымі словамі хаваюцца ва ўсіх чатах — асабістых, групах і каналах. Слова знаходзіцца і з іншым канчаткам. Каб выдаліць, правядзіце па радку ўлева.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Пераключальнікі, падарункі, зоркі, юзернэймы і ўсё астатняе, што вы наладзілі ў AorusGram. Вярнуць іх можна ў любы момант.",
         "Choose a save to bring its settings back.": "Выберыце захаванне, каб вярнуць яго налады.",
         "Settings loaded. Restarting the app is recommended": "Налады загружаны. Рэкамендуецца перазапусціць праграму",
@@ -7035,7 +7043,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Пакуль ніхто не заблакаваны.",
         "STOP WORDS": "СТОП-СЛОВЫ",
         "Add a word": "Дадаць слова",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Паведамленні з гэтымі словамі хаваюцца аўтаматычна. Каб выдаліць, правядзіце па радку ўлева.",
         "EXCEPTIONS": "ВЫКЛЮЧЭННІ",
         "Add exception": "Дадаць выключэнне",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Гэтыя кантакты ніколі не фільтруюцца антыспамам. Каб выдаліць, правядзіце па радку ўлева.",
@@ -7431,6 +7438,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Hidden by a stop word": "Taqiqlangan so‘z bilan yashirildi",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Bu so‘zlar bor xabarlar barcha chatlarda — shaxsiy chatlar, guruhlar va kanallarda yashiriladi. So‘z boshqa qo‘shimcha bilan ham topiladi. O‘chirish uchun chapga suring.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kalitlar, sovg‘alar, yulduzlar, foydalanuvchi nomlari va AorusGram’da sozlagan boshqa hamma narsa. Ularni istalgan vaqtda qaytarish mumkin.",
         "Choose a save to bring its settings back.": "Sozlamalarini qaytarish uchun saqlamani tanlang.",
         "Settings loaded. Restarting the app is recommended": "Sozlamalar yuklandi. Ilovani qayta ishga tushirish tavsiya etiladi",
@@ -8089,7 +8098,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Hali hech kim bloklanmagan.",
         "STOP WORDS": "TAQIQLANGAN SO‘ZLAR",
         "Add a word": "So‘z qo‘shish",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Bu so‘zlar bor xabarlar avtomatik yashiriladi. O‘chirish uchun chapga suring.",
         "EXCEPTIONS": "ISTISNOLAR",
         "Add exception": "Istisno qo‘shish",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Bu kontaktlar hech qachon anti-spam tomonidan filtrlanmaydi. Olib tashlash uchun chapga suring.",
@@ -8485,6 +8493,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Hidden by a stop word": "금지어로 숨김",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "이 단어가 든 메시지는 개인 채팅, 그룹, 채널 등 모든 채팅에서 숨겨집니다. 어미가 달라도 단어를 찾습니다. 왼쪽으로 밀어 삭제하세요.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "스위치, 선물, 별, 사용자 이름 등 AorusGram에서 설정한 모든 것. 언제든 다시 불러올 수 있습니다.",
         "Choose a save to bring its settings back.": "설정을 되돌릴 저장 항목을 선택하세요.",
         "Settings loaded. Restarting the app is recommended": "설정을 불러왔습니다. 앱을 다시 시작하는 것이 좋습니다",
@@ -9143,7 +9153,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "아직 차단된 사람이 없습니다.",
         "STOP WORDS": "금지어",
         "Add a word": "단어 추가",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "이 단어가 든 메시지는 자동으로 숨겨집니다. 왼쪽으로 밀어 삭제하세요.",
         "EXCEPTIONS": "예외",
         "Add exception": "예외 추가",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "이 연락처는 스팸 방지 필터를 거치지 않습니다. 왼쪽으로 밀어 제거하세요.",
@@ -9539,6 +9548,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Hidden by a stop word": "مخفية بسبب كلمة محظورة",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "تُخفى الرسائل التي تحتوي هذه الكلمات في كل الدردشات — الخاصة والمجموعات والقنوات. يُعثر على الكلمة حتى بنهاية مختلفة. اسحب لليسار للحذف.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "المفاتيح والهدايا والنجوم وأسماء المستخدمين وكل ما ضبطته في AorusGram. يمكنك استعادتها في أي وقت.",
         "Choose a save to bring its settings back.": "اختر حفظًا لاستعادة إعداداته.",
         "Settings loaded. Restarting the app is recommended": "تم تحميل الإعدادات. يُنصح بإعادة تشغيل التطبيق",
@@ -10197,7 +10208,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "لم يُحظر أحد بعد.",
         "STOP WORDS": "الكلمات المحظورة",
         "Add a word": "إضافة كلمة",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "تُخفى الرسائل التي تحتوي هذه الكلمات تلقائيًا. اسحب لليسار للحذف.",
         "EXCEPTIONS": "الاستثناءات",
         "Add exception": "إضافة استثناء",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "لا تُصفّى جهات الاتصال هذه بواسطة مكافحة السبام أبدًا. اسحب لليسار للإزالة.",
@@ -10593,6 +10603,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Hidden by a stop word": "پنهان‌شده با واژهٔ ممنوع",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "پیام‌های دارای این واژه‌ها در همهٔ گفتگوها پنهان می‌شوند — گفتگوهای خصوصی، گروه‌ها و کانال‌ها. واژه با پسوند دیگر هم پیدا می‌شود. برای حذف به چپ بکشید.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "کلیدها، هدیه‌ها، ستاره‌ها، نام‌های کاربری و هر چیز دیگری که در AorusGram تنظیم کرده‌اید. هر زمان بخواهید می‌توانید آن‌ها را برگردانید.",
         "Choose a save to bring its settings back.": "برای بازگرداندن تنظیمات، یک ذخیره را انتخاب کنید.",
         "Settings loaded. Restarting the app is recommended": "تنظیمات بارگذاری شد. راه‌اندازی مجدد برنامه توصیه می‌شود",
@@ -11251,7 +11263,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "هنوز کسی مسدود نشده است.",
         "STOP WORDS": "واژه‌های ممنوع",
         "Add a word": "افزودن واژه",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "پیام‌های دارای این واژه‌ها خودکار پنهان می‌شوند. برای حذف به چپ بکشید.",
         "EXCEPTIONS": "استثناها",
         "Add exception": "افزودن استثنا",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "این مخاطبان هرگز توسط ضد هرزنامه فیلتر نمی‌شوند. برای حذف به چپ بکشید.",
@@ -11647,6 +11658,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Hidden by a stop word": "Тоқтату сөзімен жасырылды",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Осы сөздер бар хабарлар барлық чаттарда — жеке чаттарда, топтарда және арналарда жасырылады. Сөз басқа жалғаумен де табылады. Жою үшін солға сырғытыңыз.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Қосқыштар, сыйлықтар, жұлдыздар, пайдаланушы аттары және AorusGram-да баптағанның бәрі. Оларды кез келген уақытта қайтаруға болады.",
         "Choose a save to bring its settings back.": "Баптауларын қайтару үшін сақтауды таңдаңыз.",
         "Settings loaded. Restarting the app is recommended": "Баптаулар жүктелді. Қолданбаны қайта іске қосу ұсынылады",
@@ -12305,7 +12318,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Әзірге ешкім бұғатталмаған.",
         "STOP WORDS": "ТОҚТАТУ СӨЗДЕРІ",
         "Add a word": "Сөз қосу",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Осы сөздер бар хабарлар автоматты жасырылады. Жою үшін солға сырғытыңыз.",
         "EXCEPTIONS": "ЕРЕКШЕЛІКТЕР",
         "Add exception": "Ерекшелік қосу",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Бұл контактілер анти-спам арқылы еш уақытта сүзгіленбейді. Жою үшін солға сырғытыңыз.",
@@ -12701,6 +12713,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Hidden by a stop word": "已被屏蔽词隐藏",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "含有这些词的消息会在所有聊天中隐藏——私聊、群组和频道。词语换了词尾也能识别。向左滑动即可删除。",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "开关、礼物、星星、用户名，以及你在 AorusGram 中设置的一切。随时都能恢复。",
         "Choose a save to bring its settings back.": "选择一个存档以恢复其设置。",
         "Settings loaded. Restarting the app is recommended": "设置已载入。建议重启应用",
@@ -13359,7 +13373,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "还没有拉黑任何人。",
         "STOP WORDS": "屏蔽词",
         "Add a word": "添加词语",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "含有这些词的消息会被自动隐藏。向左滑动即可删除。",
         "EXCEPTIONS": "例外",
         "Add exception": "添加例外",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "这些联系人永远不会被反垃圾过滤。向左滑动即可移除。",
@@ -13756,6 +13769,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Hidden by a stop word": "已被封鎖詞隱藏",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "含有這些詞的訊息會在所有聊天中隱藏——私人聊天、群組和頻道。詞語換了詞尾也能識別。向左滑動即可刪除。",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "開關、禮物、星星、使用者名稱，以及你在 AorusGram 中設定的一切。隨時都能恢復。",
         "Choose a save to bring its settings back.": "選擇一個存檔以恢復其設定。",
         "Settings loaded. Restarting the app is recommended": "設定已載入。建議重新啟動 App",
@@ -14414,7 +14429,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "還沒有拉黑任何人。",
         "STOP WORDS": "封鎖詞",
         "Add a word": "新增詞語",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "含有這些詞的訊息會被自動隱藏。向左滑動即可刪除。",
         "EXCEPTIONS": "例外",
         "Add exception": "新增例外",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "這些聯絡人永遠不會被反垃圾過濾。向左滑動即可移除。",
@@ -14810,6 +14824,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Hidden by a stop word": "禁止ワードで非表示",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "これらのワードを含むメッセージは、個人チャット、グループ、チャンネルなどすべてのチャットで非表示になります。語尾が違ってもワードは見つかります。左にスワイプすると削除できます。",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "スイッチ、ギフト、スター、ユーザー名など、AorusGram で設定したすべて。いつでも元に戻せます。",
         "Choose a save to bring its settings back.": "設定を戻す保存データを選択してください。",
         "Settings loaded. Restarting the app is recommended": "設定を読み込みました。アプリの再起動をおすすめします",
@@ -15468,7 +15484,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "まだ誰もブロックしていません。",
         "STOP WORDS": "禁止ワード",
         "Add a word": "ワードを追加",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "これらのワードを含むメッセージは自動的に非表示になります。左にスワイプすると削除できます。",
         "EXCEPTIONS": "例外",
         "Add exception": "例外を追加",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "これらの連絡先はスパム対策の対象になりません。左にスワイプすると削除できます。",
@@ -15864,6 +15879,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Hidden by a stop word": "Piilotettu kielletyn sanan vuoksi",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Näitä sanoja sisältävät viestit piilotetaan kaikissa keskusteluissa – yksityisissä, ryhmissä ja kanavilla. Sana löytyy myös eri päätteellä. Poista pyyhkäisemällä vasemmalle.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kytkimet, lahjat, tähdet, käyttäjänimet ja kaikki muu, mitä olet määrittänyt AorusGramissa. Voit palauttaa ne milloin tahansa.",
         "Choose a save to bring its settings back.": "Valitse tallennus, jonka asetukset palautetaan.",
         "Settings loaded. Restarting the app is recommended": "Asetukset ladattu. Apin uudelleenkäynnistystä suositellaan",
@@ -16522,7 +16539,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Ketään ei ole vielä estetty.",
         "STOP WORDS": "KIELLETYT SANAT",
         "Add a word": "Lisää sana",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Näitä sanoja sisältävät viestit piilotetaan automaattisesti. Poista pyyhkäisemällä vasemmalle.",
         "EXCEPTIONS": "POIKKEUKSET",
         "Add exception": "Lisää poikkeus",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Roskapostisuoja ei koskaan suodata näitä yhteystietoja. Poista pyyhkäisemällä vasemmalle.",
@@ -16918,6 +16934,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Hidden by a stop word": "הוסתר בגלל מילה חסומה",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "הודעות שמכילות את המילים האלה מוסתרות בכל הצ'אטים — פרטיים, קבוצות וערוצים. המילה נמצאת גם עם סיומת אחרת. החליקו שמאלה כדי למחוק.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "מתגים, מתנות, כוכבים, שמות משתמש וכל מה שהגדרתם ב-AorusGram. אפשר להחזיר אותם בכל רגע.",
         "Choose a save to bring its settings back.": "בחרו שמירה כדי להחזיר את ההגדרות שלה.",
         "Settings loaded. Restarting the app is recommended": "ההגדרות נטענו. מומלץ להפעיל מחדש את האפליקציה",
@@ -17576,7 +17594,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "עדיין לא נחסם אף אחד.",
         "STOP WORDS": "מילים חסומות",
         "Add a word": "הוספת מילה",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "הודעות שמכילות את המילים האלה מוסתרות אוטומטית. החליקו שמאלה כדי למחוק.",
         "EXCEPTIONS": "חריגים",
         "Add exception": "הוספת חריג",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "אנשי הקשר האלה לעולם לא מסוננים על ידי ההגנה מפני ספאם. החליקו שמאלה כדי להסיר.",
@@ -17972,6 +17989,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Hidden by a stop word": "Skriveno zbog zabranjene riječi",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Poruke koje sadrže ove riječi skrivaju se u svim razgovorima – privatnim, grupama i kanalima. Riječ se pronalazi i s drugim nastavkom. Povucite ulijevo za brisanje.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Prekidači, darovi, zvjezdice, korisnička imena i sve ostalo što si postavio u AorusGramu. Možeš ih vratiti u bilo kojem trenutku.",
         "Choose a save to bring its settings back.": "Odaberi kopiju da vratiš njezine postavke.",
         "Settings loaded. Restarting the app is recommended": "Postavke su učitane. Preporučuje se ponovno pokrenuti aplikaciju",
@@ -18630,7 +18649,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Još nitko nije blokiran.",
         "STOP WORDS": "ZABRANJENE RIJEČI",
         "Add a word": "Dodaj riječ",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Poruke koje sadrže ove riječi automatski se skrivaju. Povucite ulijevo za brisanje.",
         "EXCEPTIONS": "IZNIMKE",
         "Add exception": "Dodaj iznimku",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Ove kontakte zaštita od neželjenih poruka nikada ne filtrira. Povucite ulijevo za uklanjanje.",
@@ -19026,6 +19044,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Hidden by a stop word": "Сакривено због забрањене речи",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Поруке које садрже ове речи сакривају се у свим ћаскањима – приватним, групама и каналима. Реч се проналази и са другим наставком. Превуците улево за брисање.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Прекидачи, поклони, звездице, корисничка имена и све остало што си подесио у AorusGram-у. Можеш их вратити у било ком тренутку.",
         "Choose a save to bring its settings back.": "Изабери копију да вратиш њена подешавања.",
         "Settings loaded. Restarting the app is recommended": "Подешавања су учитана. Препоручује се поновно покретање апликације",
@@ -19684,7 +19704,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Још нико није блокиран.",
         "STOP WORDS": "ЗАБРАЊЕНЕ РЕЧИ",
         "Add a word": "Додај реч",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Поруке које садрже ове речи аутоматски се сакривају. Превуците улево за брисање.",
         "EXCEPTIONS": "ИЗУЗЕЦИ",
         "Add exception": "Додај изузетак",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Ове контакте заштита од нежељених порука никада не филтрира. Превуците улево за уклањање.",
@@ -20080,6 +20099,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Hidden by a stop word": "Skryto zakázaným slovem",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Zprávy obsahující tato slova se skrývají ve všech chatech – soukromých, skupinách i kanálech. Slovo se najde i s jinou koncovkou. Smažete je přejetím doleva.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Přepínače, dárky, hvězdy, uživatelská jména a vše ostatní, co jste v AorusGramu nastavili. Vrátit je můžete kdykoli.",
         "Choose a save to bring its settings back.": "Vyberte zálohu, jejíž nastavení chcete vrátit.",
         "Settings loaded. Restarting the app is recommended": "Nastavení načteno. Doporučujeme aplikaci restartovat",
@@ -20738,7 +20759,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Zatím nikdo není blokován.",
         "STOP WORDS": "ZAKÁZANÁ SLOVA",
         "Add a word": "Přidat slovo",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Zprávy obsahující tato slova se automaticky skryjí. Smažete je přejetím doleva.",
         "EXCEPTIONS": "VÝJIMKY",
         "Add exception": "Přidat výjimku",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Tyto kontakty ochrana proti spamu nikdy nefiltruje. Odeberete je přejetím doleva.",
@@ -21134,6 +21154,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Hidden by a stop word": "Skryté zakázaným slovom",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Správy obsahujúce tieto slová sa skrývajú vo všetkých četoch – súkromných, skupinách aj kanáloch. Slovo sa nájde aj s inou koncovkou. Zmažete ich potiahnutím doľava.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Prepínače, darčeky, hviezdy, používateľské mená a všetko ostatné, čo ste v AorusGrame nastavili. Vrátiť ich môžete kedykoľvek.",
         "Choose a save to bring its settings back.": "Vyberte zálohu, ktorej nastavenia chcete vrátiť.",
         "Settings loaded. Restarting the app is recommended": "Nastavenia načítané. Odporúčame aplikáciu reštartovať",
@@ -21792,7 +21814,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Zatiaľ nie je nikto zablokovaný.",
         "STOP WORDS": "ZAKÁZANÉ SLOVÁ",
         "Add a word": "Pridať slovo",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Správy obsahujúce tieto slová sa automaticky skryjú. Zmažete ich potiahnutím doľava.",
         "EXCEPTIONS": "VÝNIMKY",
         "Add exception": "Pridať výnimku",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Tieto kontakty ochrana pred spamom nikdy nefiltruje. Odstránite ich potiahnutím doľava.",
@@ -22188,6 +22209,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Hidden by a stop word": "Ascuns de un cuvânt interzis",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Mesajele care conțin aceste cuvinte sunt ascunse în toate conversațiile – private, grupuri și canale. Cuvântul este găsit și cu altă terminație. Glisează la stânga pentru a șterge.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Comutatoare, cadouri, stele, nume de utilizator și tot ce ai configurat în AorusGram. Le poți readuce oricând.",
         "Choose a save to bring its settings back.": "Alege o salvare pentru a-i readuce setările.",
         "Settings loaded. Restarting the app is recommended": "Setări încărcate. Se recomandă repornirea aplicației",
@@ -22846,7 +22869,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Nimeni nu este blocat încă.",
         "STOP WORDS": "CUVINTE INTERZISE",
         "Add a word": "Adaugă un cuvânt",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Mesajele care conțin aceste cuvinte sunt ascunse automat. Glisează la stânga pentru a șterge.",
         "EXCEPTIONS": "EXCEPȚII",
         "Add exception": "Adaugă excepție",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Aceste contacte nu sunt filtrate niciodată de anti-spam. Glisează la stânga pentru a le elimina.",
@@ -23242,6 +23264,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Hidden by a stop word": "Tiltott szó miatt elrejtve",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Az ezeket a szavakat tartalmazó üzenetek minden csevegésben elrejtődnek – privát csevegésekben, csoportokban és csatornákon. A szót más végződéssel is megtalálja. Törléshez húzd balra.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Kapcsolók, ajándékok, csillagok, felhasználónevek és minden más, amit az AorusGramban beállítottál. Bármikor visszaállíthatod őket.",
         "Choose a save to bring its settings back.": "Válassz egy mentést, hogy visszaállítsd a beállításait.",
         "Settings loaded. Restarting the app is recommended": "Beállítások betöltve. Ajánlott újraindítani az appot",
@@ -23900,7 +23924,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Még senki sincs blokkolva.",
         "STOP WORDS": "TILTOTT SZAVAK",
         "Add a word": "Szó hozzáadása",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Az ezeket a szavakat tartalmazó üzenetek automatikusan elrejtődnek. Törléshez húzd balra.",
         "EXCEPTIONS": "KIVÉTELEK",
         "Add exception": "Kivétel hozzáadása",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Ezeket a névjegyeket a spamvédelem soha nem szűri. Eltávolításhoz húzd balra.",
@@ -24296,6 +24319,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Hidden by a stop word": "Skjult av et stoppord",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Meldinger som inneholder disse ordene, skjules i alle chatter – private chatter, grupper og kanaler. Ordet blir funnet også med en annen endelse. Sveip mot venstre for å slette.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Brytere, gaver, stjerner, brukernavn og alt annet du har satt opp i AorusGram. Du kan hente dem tilbake når som helst.",
         "Choose a save to bring its settings back.": "Velg en lagring for å hente tilbake innstillingene.",
         "Settings loaded. Restarting the app is recommended": "Innstillingene er lastet inn. Det anbefales å starte appen på nytt",
@@ -24954,7 +24979,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Ingen er blokkert ennå.",
         "STOP WORDS": "STOPPORD",
         "Add a word": "Legg til et ord",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Meldinger som inneholder disse ordene, skjules automatisk. Sveip mot venstre for å slette.",
         "EXCEPTIONS": "UNNTAK",
         "Add exception": "Legg til unntak",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Disse kontaktene filtreres aldri av antispam. Sveip mot venstre for å fjerne.",
@@ -25350,6 +25374,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Hidden by a stop word": "Dold av ett stoppord",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Meddelanden som innehåller dessa ord döljs i alla chattar – privata chattar, grupper och kanaler. Ordet hittas även med en annan ändelse. Svep åt vänster för att radera.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Reglage, gåvor, stjärnor, användarnamn och allt annat du har ställt in i AorusGram. Du kan ta tillbaka dem när som helst.",
         "Choose a save to bring its settings back.": "Välj en sparning för att ta tillbaka dess inställningar.",
         "Settings loaded. Restarting the app is recommended": "Inställningarna har lästs in. Vi rekommenderar att du startar om appen",
@@ -26008,7 +26034,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Ingen är blockerad ännu.",
         "STOP WORDS": "STOPPORD",
         "Add a word": "Lägg till ett ord",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Meddelanden som innehåller dessa ord döljs automatiskt. Svep åt vänster för att radera.",
         "EXCEPTIONS": "UNDANTAG",
         "Add exception": "Lägg till undantag",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Dessa kontakter filtreras aldrig av antispam. Svep åt vänster för att ta bort.",
@@ -26404,6 +26429,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Hidden by a stop word": "Đã ẩn do từ bị chặn",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Tin nhắn chứa những từ này sẽ bị ẩn trong mọi cuộc trò chuyện — riêng tư, nhóm và kênh. Từ vẫn được nhận ra dù có đuôi khác. Vuốt sang trái để xóa.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Công tắc, quà, Sao, tên người dùng và mọi thứ bạn đã thiết lập trong AorusGram. Bạn có thể khôi phục chúng bất cứ lúc nào.",
         "Choose a save to bring its settings back.": "Chọn một bản lưu để khôi phục cài đặt của nó.",
         "Settings loaded. Restarting the app is recommended": "Đã tải cài đặt. Nên khởi động lại ứng dụng",
@@ -27062,7 +27089,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Chưa chặn ai cả.",
         "STOP WORDS": "TỪ BỊ CHẶN",
         "Add a word": "Thêm một từ",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Tin nhắn chứa những từ này sẽ tự động bị ẩn. Vuốt sang trái để xóa.",
         "EXCEPTIONS": "NGOẠI LỆ",
         "Add exception": "Thêm ngoại lệ",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Các liên hệ này không bao giờ bị bộ lọc chống spam xử lý. Vuốt sang trái để gỡ.",
@@ -27458,6 +27484,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Hidden by a stop word": "Приховано стоп-словом",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Повідомлення з цими словами приховуються в усіх чатах — особистих, групах і каналах. Слово знаходиться і з іншим закінченням. Щоб видалити, проведіть рядок ліворуч.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Перемикачі, подарунки, зірки, юзернейми й усе інше, що ви налаштували в AorusGram. Повернути їх можна будь-коли.",
         "Choose a save to bring its settings back.": "Виберіть збереження, щоб повернути його налаштування.",
         "Settings loaded. Restarting the app is recommended": "Налаштування завантажено. Рекомендується перезапустити застосунок",
@@ -28119,7 +28147,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Поки ніхто не заблокований.",
         "STOP WORDS": "СТОП-СЛОВА",
         "Add a word": "Додати слово",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Повідомлення з цими словами приховуються автоматично. Щоб видалити, проведіть по рядку вліво.",
         "EXCEPTIONS": "ВИНЯТКИ",
         "Add exception": "Додати виняток",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Ці контакти ніколи не фільтруються антиспамом. Щоб видалити, проведіть по рядку вліво.",
@@ -28521,6 +28548,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Hidden by a stop word": "Oculto por una palabra prohibida",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Los mensajes con estas palabras se ocultan en todos los chats: privados, grupos y canales. La palabra se encuentra también con otra terminación. Desliza a la izquierda para eliminar.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interruptores, regalos, Estrellas, nombres de usuario y todo lo demás que configuraste en AorusGram. Puedes recuperarlos cuando quieras.",
         "Choose a save to bring its settings back.": "Elige un guardado para recuperar sus ajustes.",
         "Settings loaded. Restarting the app is recommended": "Ajustes cargados. Se recomienda reiniciar la app",
@@ -29182,7 +29211,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Todavía no hay nadie bloqueado.",
         "STOP WORDS": "PALABRAS PROHIBIDAS",
         "Add a word": "Añadir una palabra",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Los mensajes con estas palabras se ocultan automáticamente. Desliza a la izquierda para eliminar.",
         "EXCEPTIONS": "EXCEPCIONES",
         "Add exception": "Añadir excepción",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Estos contactos nunca se filtran por el anti-spam. Desliza a la izquierda para quitar.",
@@ -29584,6 +29612,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Hidden by a stop word": "Oculto por uma palavra bloqueada",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Mensagens com essas palavras são ocultadas em todos os chats — privados, grupos e canais. A palavra é encontrada também com outra terminação. Deslize para a esquerda para excluir.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Chaves, presentes, Estrelas, nomes de usuário e tudo o mais que você configurou no AorusGram. Dá para recuperar a qualquer momento.",
         "Choose a save to bring its settings back.": "Escolha um salvamento para recuperar as configurações dele.",
         "Settings loaded. Restarting the app is recommended": "Configurações carregadas. Recomendamos reiniciar o app",
@@ -30245,7 +30275,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Ninguém foi bloqueado ainda.",
         "STOP WORDS": "PALAVRAS BLOQUEADAS",
         "Add a word": "Adicionar palavra",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Mensagens com essas palavras são ocultadas automaticamente. Deslize para a esquerda para excluir.",
         "EXCEPTIONS": "EXCEÇÕES",
         "Add exception": "Adicionar exceção",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Esses contatos nunca são filtrados pelo anti-spam. Deslize para a esquerda para remover.",
@@ -30647,6 +30676,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Hidden by a stop word": "Durch ein Stoppwort ausgeblendet",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Nachrichten mit diesen Wörtern werden in allen Chats ausgeblendet – in privaten Chats, Gruppen und Kanälen. Ein Wort wird auch mit anderer Endung gefunden. Zum Löschen nach links wischen.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Schalter, Geschenke, Sterne, Benutzernamen und alles andere, was du in AorusGram eingerichtet hast. Du kannst es jederzeit zurückholen.",
         "Choose a save to bring its settings back.": "Wähle eine Sicherung, um ihre Einstellungen zurückzuholen.",
         "Settings loaded. Restarting the app is recommended": "Einstellungen geladen. Ein Neustart der App wird empfohlen",
@@ -31308,7 +31339,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Es ist noch niemand blockiert.",
         "STOP WORDS": "STOPPWÖRTER",
         "Add a word": "Wort hinzufügen",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Nachrichten mit diesen Wörtern werden automatisch ausgeblendet. Zum Löschen nach links wischen.",
         "EXCEPTIONS": "AUSNAHMEN",
         "Add exception": "Ausnahme hinzufügen",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Diese Kontakte werden nie vom Anti-Spam gefiltert. Zum Entfernen nach links wischen.",
@@ -31710,6 +31740,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Hidden by a stop word": "Masqué par un mot interdit",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Les messages contenant ces mots sont masqués dans toutes les discussions : privées, groupes et canaux. Un mot est trouvé même avec une autre terminaison. Faites glisser vers la gauche pour supprimer.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Interrupteurs, cadeaux, étoiles, noms d'utilisateur et tout ce que vous avez configuré dans AorusGram. Vous pouvez les retrouver à tout moment.",
         "Choose a save to bring its settings back.": "Choisissez une sauvegarde pour retrouver ses réglages.",
         "Settings loaded. Restarting the app is recommended": "Réglages chargés. Il est recommandé de redémarrer l'app",
@@ -32371,7 +32403,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Personne n’est encore bloqué.",
         "STOP WORDS": "MOTS INTERDITS",
         "Add a word": "Ajouter un mot",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Les messages contenant ces mots sont masqués automatiquement. Faites glisser vers la gauche pour supprimer.",
         "EXCEPTIONS": "EXCEPTIONS",
         "Add exception": "Ajouter une exception",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Ces contacts ne sont jamais filtrés par l’anti-spam. Faites glisser vers la gauche pour retirer.",
@@ -32773,6 +32804,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Hidden by a stop word": "Yasaklı kelime nedeniyle gizlendi",
+        "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.": "Bu kelimeleri içeren mesajlar tüm sohbetlerde gizlenir — özel sohbetler, gruplar ve kanallar. Kelime farklı bir ekle de bulunur. Silmek için sola kaydırın.",
         "Switches, gifts, Stars, usernames and everything else you've set up in AorusGram. You can bring them back any time.": "Anahtarlar, hediyeler, yıldızlar, kullanıcı adları ve AorusGram'da ayarladığınız diğer her şey. İstediğiniz zaman geri yükleyebilirsiniz.",
         "Choose a save to bring its settings back.": "Ayarlarını geri yüklemek için bir kayıt seçin.",
         "Settings loaded. Restarting the app is recommended": "Ayarlar yüklendi. Uygulamayı yeniden başlatmanız önerilir",
@@ -33434,7 +33467,6 @@ enum AorusL10nTable {
         "No one is blocked yet.": "Henüz kimse engellenmedi.",
         "STOP WORDS": "YASAKLI KELİMELER",
         "Add a word": "Kelime ekle",
-        "Messages containing these words are hidden automatically. Swipe left to delete.": "Bu kelimeleri içeren mesajlar otomatik gizlenir. Silmek için sola kaydırın.",
         "EXCEPTIONS": "İSTİSNALAR",
         "Add exception": "İstisna ekle",
         "These contacts are never filtered by anti-spam. Swipe left to remove.": "Bu kişiler anti-spam tarafından hiçbir zaman filtrelenmez. Kaldırmak için sola kaydırın.",

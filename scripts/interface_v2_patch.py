@@ -1382,7 +1382,10 @@ def _patch_glass_action_buttons(tg: Path) -> None:
             "\n"
             "        if AorusInterfaceV2Run.isEnabled {\n"
             "            let glassBackground = GlassBackgroundView(frame: CGRect())\n"
-            "            glassBackground.isUserInteractionEnabled = false\n"
+            "            // It takes the touches: the button's content goes inside it below, as it is in\n"
+            "            // Telegram's own glass buttons, and the glass stretches under a press only when\n"
+            "            // the press lands in it.\n"
+            "            glassBackground.isUserInteractionEnabled = true\n"
             "            self.aorusGlassBackground = glassBackground\n"
             "        } else {\n"
             "            self.aorusGlassBackground = nil\n"
@@ -1401,6 +1404,13 @@ def _patch_glass_action_buttons(tg: Path) -> None:
             "            if glassBackground.superview == nil {\n"
             "                self.view.insertSubview(glassBackground, at: 0)\n"
             "            }\n"
+            "            // The icon, the label and the context-menu source inside the glass, as a\n"
+            "            // Telegram glass button's content is: the press reaches the glass, which\n"
+            "            // stretches toward the finger and springs back with the content in it, and\n"
+            "            // the button's own tap and long press still get the touches through it.\n"
+            "            if self.containerNode.view.superview !== glassBackground.contentView {\n"
+            "                glassBackground.contentView.addSubview(self.containerNode.view)\n"
+            "            }\n"
             "            transition.updateFrame(view: glassBackground, frame: backgroundFrame)\n"
             "            glassBackground.update(\n"
             "                size: backgroundFrame.size,\n"
@@ -1412,7 +1422,8 @@ def _patch_glass_action_buttons(tg: Path) -> None:
             "                // the ink over this page is chosen from, so the two cannot disagree.\n"
             "                isDark: AorusGlassPane.profilePageIsDark,\n"
             "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-            "                isInteractive: false,\n"
+            "                // Liquid glass, as Telegram's buttons are: held and dragged, it stretches.\n"
+            "                isInteractive: true,\n"
             "                isVisible: true,\n"
             "                transition: .immediate\n"
             "            )\n"
@@ -1435,6 +1446,27 @@ def _patch_glass_action_buttons(tg: Path) -> None:
             "            foregroundColor = AorusGlassPane.profilePageInk\n"
             "        }\n",
             "button white foreground",
+        )
+        text = _replace_once(
+            text,
+            "        transition.updateFrame(node: self.containerNode, frame: CGRect(origin: CGPoint(), size: size))\n",
+            "        // AorusGram: inside the glass under Interface 2.0, whose top edge moves down as the\n"
+            "        // header collapses; the content keeps the place it has in the button.\n"
+            "        let aorusContainerY: CGFloat = self.aorusGlassBackground != nil ? -(size.height * (1.0 - fraction)) : 0.0\n"
+            "        transition.updateFrame(node: self.containerNode, frame: CGRect(origin: CGPoint(x: 0.0, y: aorusContainerY), size: size))\n",
+            "button content inside the glass",
+        )
+        text = _replace_once(
+            text,
+            "        self.highligthedChanged = { [weak self] highlighted in\n"
+            "            if let strongSelf = self {\n"
+            "                if highlighted {\n",
+            "        self.highligthedChanged = { [weak self] highlighted in\n"
+            "            // AorusGram: liquid glass answers a press itself; dimming the whole button to\n"
+            "            // 0.4 under it is what made these read as something other than Telegram's.\n"
+            "            if let strongSelf = self, strongSelf.aorusGlassBackground == nil {\n"
+            "                if highlighted {\n",
+            "button glass press",
         )
         button.write_text(text, encoding="utf-8")
         print("InterfaceV2: made the action buttons glass")
@@ -5434,12 +5466,17 @@ def _patch_overlay_palette(tg: Path) -> None:
         "        let expandedAvatarNavigationContentsSecondaryColor: UIColor = aorusOverlayInk\n",
         "overlay palette collapsed secondary",
     )
+    # Anchored on the line after it: Telegram 13.1 put the same declaration in the wallet
+    # balance above the music row, and the first match is that one -- which left the balance
+    # white on a pale page and the music capsule without the page's ink.
     text = _replace_once(
         text,
-        "            let isOverlay = self.isAvatarExpanded || hasBackground\n",
+        "            let isOverlay = self.isAvatarExpanded || hasBackground\n"
+        "            let stripSecondaryColor = hasCoverColor ?",
         "            // AorusGram: the capsule is over the avatar's colour whether or not the photo is\n"
         "            // expanded, so the track and the artist take the page's ink either way.\n"
-        "            let isOverlay = self.isAvatarExpanded || hasBackground || aorusOverlayPalette\n",
+        "            let isOverlay = self.isAvatarExpanded || hasBackground || aorusOverlayPalette\n"
+        "            let stripSecondaryColor = hasCoverColor ?",
         "overlay palette music capsule",
     )
     text = _replace_once(
@@ -7987,6 +8024,293 @@ def _module_build(path: Path, tg: Path) -> Path:
     raise RuntimeError(f"InterfaceV2: no BUILD file above {path}")
 
 
+
+def _patch_wallet_balance(tg: Path) -> None:
+    """The public wallet balance of Telegram 13.1, laid out the Interface 2.0 way.
+
+    Telegram puts the balance on the right of the status line once the photo is expanded,
+    which matches a header whose name and status start at the left. Interface 2.0 keeps the
+    photo expanded and centres the name, the status and the username, so the pill stood off
+    to the right of a centred line, in white even on a pale page.
+
+    Under Interface 2.0 it is a row of its own, centred under the status, on the same glass as
+    the music capsule and in the page's ink; the name and the status move up by that row so the
+    buttons below keep their place. The old interface and the settings keep Telegram's layout.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    text = path.read_text(encoding="utf-8")
+    if "aorusGlassBalance" in text:
+        return
+    if "if let currentWalletBalance {" not in text:
+        print("InterfaceV2: no wallet balance in this Telegram — skipped")
+        return
+    text = _replace_once(
+        text,
+        "    let aorusMusicCapsule = GlassBackgroundView(frame: CGRect())\n",
+        "    let aorusMusicCapsule = GlassBackgroundView(frame: CGRect())\n"
+        "    /// The wallet balance's glass under Interface 2.0, made with the balance and let go with it.\n"
+        "    private var aorusBalanceCapsule: GlassBackgroundView?\n",
+        "wallet balance glass",
+    )
+    text = _replace_once(
+        text,
+        "            if !self.isSettings && !self.isMyProfile {\n"
+        "                minTitleFrame.origin.y -= 83.0\n"
+        "            }\n",
+        "            if !self.isSettings && !self.isMyProfile {\n"
+        "                minTitleFrame.origin.y -= 83.0\n"
+        "            }\n"
+        "            // AorusGram: the balance is a centred row of its own under the status in\n"
+        "            // Interface 2.0, so the text above makes room for it rather than meeting the\n"
+        "            // buttons.\n"
+        "            if aorusCentredHeader && !AorusOldInterface.isEnabled && currentWalletBalance != nil {\n"
+        "                minTitleFrame.origin.y -= 30.0\n"
+        "            }\n",
+        "wallet balance room",
+    )
+    text = _replace_once(
+        text,
+        "            let isOverlay = self.isAvatarExpanded || hasBackground\n"
+        "            let primaryColor = isOverlay ? UIColor.white : presentationData.theme.list.itemPrimaryTextColor\n",
+        "            let isOverlay = self.isAvatarExpanded || hasBackground\n"
+        "            // AorusGram: on glass and in the page's ink under Interface 2.0, as the music\n"
+        "            // capsule is; white was unreadable on a pale page.\n"
+        "            let aorusGlassBalance = aorusCentredHeader && !AorusOldInterface.isEnabled\n"
+        "            let primaryColor = aorusGlassBalance ? aorusOverlayInk : (isOverlay ? UIColor.white : presentationData.theme.list.itemPrimaryTextColor)\n",
+        "wallet balance ink",
+    )
+    text = _replace_once(
+        text,
+        "            let iconColor: UIColor\n"
+        "            if isColoredBackground {\n",
+        "            var iconColor: UIColor\n"
+        "            if isColoredBackground {\n",
+        "wallet balance icon colour",
+    )
+    text = _replace_once(
+        text,
+        "                iconColor = presentationData.theme.list.itemAccentColor\n"
+        "            }\n",
+        "                iconColor = presentationData.theme.list.itemAccentColor\n"
+        "            }\n"
+        "            if aorusGlassBalance {\n"
+        "                iconColor = aorusOverlayInk.withAlphaComponent(0.55)\n"
+        "            }\n",
+        "wallet balance icon ink",
+    )
+    text = _replace_once(
+        text,
+        "                    background: AnyComponent(RoundedRectangle(color: contentButtonBackgroundColor, cornerRadius: 10.0)),\n"
+        "                    minSize: CGSize(width: 0.0, height: 20.0),\n"
+        "                    contentInsets: UIEdgeInsets(top: 1.0, left: 8.0, bottom: 1.0, right: 8.0),\n",
+        "                    background: aorusGlassBalance ? nil : AnyComponent(RoundedRectangle(color: contentButtonBackgroundColor, cornerRadius: 10.0)),\n"
+        "                    minSize: CGSize(width: 0.0, height: aorusGlassBalance ? 24.0 : 20.0),\n"
+        "                    contentInsets: aorusGlassBalance ? UIEdgeInsets(top: 3.0, left: 12.0, bottom: 3.0, right: 10.0) : UIEdgeInsets(top: 1.0, left: 8.0, bottom: 1.0, right: 8.0),\n",
+        "wallet balance capsule shape",
+    )
+    text = _replace_once(
+        text,
+        "                containerSize: CGSize(width: maximumBalanceWidth, height: 20.0)\n",
+        "                containerSize: CGSize(width: maximumBalanceWidth, height: aorusGlassBalance ? 24.0 : 20.0)\n",
+        "wallet balance capsule height",
+    )
+    text = _replace_once(
+        text,
+        "            let balanceFrame: CGRect\n"
+        "            if self.isAvatarExpanded {\n",
+        "            let balanceFrame: CGRect\n"
+        "            if aorusGlassBalance {\n"
+        "                // A row of its own, centred under the status and the username like the rest\n"
+        "                // of the header.\n"
+        "                let lastRowFrame = usernameFrame.maxY > subtitleFrame.maxY ? usernameFrame : subtitleFrame\n"
+        "                balanceFrame = CGRect(origin: CGPoint(\n"
+        "                    x: hasStrip ? bandCenteredOrigin(width: balanceSize.width, margin: 16.0) : floorToScreenPixels((width - balanceSize.width) / 2.0),\n"
+        "                    y: lastRowFrame.maxY + titleOffset + 6.0\n"
+        "                ), size: balanceSize)\n"
+        "            } else if self.isAvatarExpanded {\n",
+        "wallet balance centred row",
+    )
+    stock_frames = (
+        "                if balanceView.superview == nil {\n"
+        "                    // Newly loaded balance fades in at its final position.\n"
+        "                    ContainedViewLayoutTransition.immediate.updateFrame(view: balanceView, frame: balanceFrame)\n"
+        "                    self.regularContentNode.view.addSubview(balanceView)\n"
+        "                    if transition.isAnimated {\n"
+        "                        balanceView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                    }\n"
+        "                } else if additive {\n"
+        "                    transition.updateFrameAdditiveToCenter(view: balanceView, frame: balanceFrame)\n"
+        "                } else {\n"
+        "                    transition.updateFrame(view: balanceView, frame: balanceFrame)\n"
+        "                }\n"
+        "                ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut).updateAlpha(layer: balanceView.layer, alpha: backgroundBannerAlpha * (1.0 - titleCollapseFraction))\n"
+    )
+    indented_stock = "".join("    " + line + "\n" for line in stock_frames.rstrip("\n").split("\n"))
+    text = _replace_once(
+        text,
+        stock_frames,
+        "                if aorusGlassBalance {\n"
+        "                    // The row inside its own glass, as a Telegram glass button's content is: a\n"
+        "                    // press reaches the glass, which stretches toward the finger and springs\n"
+        "                    // back with the row in it. The glass carries the row's place and alpha.\n"
+        "                    let aorusCapsule: GlassBackgroundView\n"
+        "                    if let current = self.aorusBalanceCapsule {\n"
+        "                        aorusCapsule = current\n"
+        "                    } else {\n"
+        "                        aorusCapsule = GlassBackgroundView(frame: CGRect())\n"
+        "                        self.aorusBalanceCapsule = aorusCapsule\n"
+        "                    }\n"
+        "                    if aorusCapsule.superview == nil {\n"
+        "                        ContainedViewLayoutTransition.immediate.updateFrame(view: aorusCapsule, frame: balanceFrame)\n"
+        "                        self.regularContentNode.view.addSubview(aorusCapsule)\n"
+        "                        if transition.isAnimated {\n"
+        "                            aorusCapsule.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                        }\n"
+        "                    } else if additive {\n"
+        "                        transition.updateFrameAdditiveToCenter(view: aorusCapsule, frame: balanceFrame)\n"
+        "                    } else {\n"
+        "                        transition.updateFrame(view: aorusCapsule, frame: balanceFrame)\n"
+        "                    }\n"
+        "                    aorusCapsule.update(\n"
+        "                        size: balanceFrame.size,\n"
+        "                        cornerRadius: balanceFrame.height * 0.5,\n"
+        "                        isDark: aorusHeaderPageIsDark,\n"
+        "                        tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
+        "                        isInteractive: true,\n"
+        "                        isVisible: true,\n"
+        "                        transition: .immediate\n"
+        "                    )\n"
+        "                    if balanceView.superview !== aorusCapsule.contentView {\n"
+        "                        aorusCapsule.contentView.addSubview(balanceView)\n"
+        "                    }\n"
+        "                    ContainedViewLayoutTransition.immediate.updateFrame(view: balanceView, frame: CGRect(origin: CGPoint(), size: balanceFrame.size))\n"
+        "                    balanceView.alpha = 1.0\n"
+        "                    ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut).updateAlpha(layer: aorusCapsule.layer, alpha: backgroundBannerAlpha * (1.0 - titleCollapseFraction))\n"
+        "                } else {\n"
+        + indented_stock
+        + "                }\n",
+        "wallet balance glass layout",
+    )
+    text = _replace_once(
+        text,
+        "        if currentWalletBalance == nil, let balance = self.walletBalance {\n"
+        "            self.walletBalance = nil\n",
+        "        if currentWalletBalance == nil, let balance = self.walletBalance {\n"
+        "            self.walletBalance = nil\n"
+        "            // AorusGram: its glass goes with it, and the next balance gets a glass of its own.\n"
+        "            if let aorusCapsule = self.aorusBalanceCapsule {\n"
+        "                self.aorusBalanceCapsule = nil\n"
+        "                if transition.isAnimated {\n"
+        "                    aorusCapsule.layer.animateAlpha(from: CGFloat(aorusCapsule.layer.presentation()?.opacity ?? aorusCapsule.layer.opacity), to: 0.0, duration: 0.2, removeOnCompletion: false, completion: { _ in\n"
+        "                        aorusCapsule.removeFromSuperview()\n"
+        "                    })\n"
+        "                } else {\n"
+        "                    aorusCapsule.removeFromSuperview()\n"
+        "                }\n"
+        "            }\n",
+        "wallet balance glass removal",
+    )
+    # An expansion moves the balance with the status; inside its glass, the glass is what moves.
+    text = _replace_once(
+        text,
+        "        if let view = self.walletBalance?.view {\n"
+        "            views.append(view)\n"
+        "        }\n",
+        "        if let view = self.walletBalance?.view {\n"
+        "            if let aorusCapsule = self.aorusBalanceCapsule, view.superview === aorusCapsule.contentView {\n"
+        "                views.append(aorusCapsule)\n"
+        "            } else {\n"
+        "                views.append(view)\n"
+        "            }\n"
+        "        }\n",
+        "wallet balance glass expansion",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: wallet balance centred on glass under the status")
+
+
+
+def _patch_music_capsule_content(tg: Path) -> None:
+    """The saved-music row inside its glass, and the glass liquid, as Telegram's glass buttons are.
+
+    A Telegram glass button keeps its content in the glass's `contentView` and turns the
+    material's interaction on: held and dragged, the glass stretches toward the finger and
+    springs back, carrying what is in it. The capsule this header draws for the saved track
+    lay under the row as a separate, untouchable view, so a press never reached it and the
+    pill stayed rigid. The row now lives in the capsule, which places it and carries its alpha;
+    an expansion moves the capsule, and with it the row.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    text = path.read_text(encoding="utf-8")
+    if "aorusMusicRowFrame" in text:
+        return
+    start = text.index("                        self.aorusMusicCapsule.update(")
+    end = text.index("                        )", start)
+    body = text[start:end]
+    body = _replace_once(body, "isInteractive: false,", "isInteractive: true,", "music capsule liquid glass")
+    text = text[:start] + body + text[end:]
+    text = _replace_once(
+        text,
+        "self.aorusMusicCapsule.isUserInteractionEnabled = false\n",
+        "self.aorusMusicCapsule.isUserInteractionEnabled = true\n",
+        "music capsule takes touches",
+    )
+    stock = (
+        "                    if musicView.superview == nil {\n"
+        "                        // A newly loaded strip item fades in at its final position.\n"
+        "                        ContainedViewLayoutTransition.immediate.updateFrame(view: musicView, frame: musicFrame)\n"
+        "                        self.regularContentNode.view.addSubview(musicView)\n"
+        "                        if transition.isAnimated {\n"
+        "                            musicView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                        }\n"
+        "                    } else if additive {\n"
+        "                        musicTransition.updateFrameAdditiveToCenter(view: musicView, frame: musicFrame)\n"
+        "                    } else {\n"
+        "                        musicTransition.updateFrame(view: musicView, frame: musicFrame)\n"
+        "                    }\n"
+        "\n"
+        "                    ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut).updateAlpha(layer: musicView.layer, alpha: backgroundBannerAlpha)\n"
+    )
+    indented = "".join(("    " + line if line else line) + "\n" for line in stock.rstrip("\n").split("\n"))
+    text = _replace_once(
+        text,
+        stock,
+        "                    if self.aorusMusicCapsule.superview != nil {\n"
+        "                        // AorusGram: in its glass, which is where the press has to land for the\n"
+        "                        // glass to stretch under it. The capsule is the row inset by 12 and 3.\n"
+        "                        let aorusMusicRowFrame = CGRect(origin: CGPoint(x: 12.0, y: 3.0), size: musicFrame.size)\n"
+        "                        if musicView.superview !== self.aorusMusicCapsule.contentView {\n"
+        "                            self.aorusMusicCapsule.contentView.addSubview(musicView)\n"
+        "                            ContainedViewLayoutTransition.immediate.updateFrame(view: musicView, frame: aorusMusicRowFrame)\n"
+        "                        } else {\n"
+        "                            musicTransition.updateFrame(view: musicView, frame: aorusMusicRowFrame)\n"
+        "                        }\n"
+        "                        // Above the playback's fill, which shares the glass with it.\n"
+        "                        self.aorusMusicCapsule.contentView.bringSubviewToFront(musicView)\n"
+        "                        musicView.alpha = 1.0\n"
+        "                    } else {\n"
+        + indented
+        + "                    }\n",
+        "music row inside its glass",
+    )
+    # An expansion moves the capsule; the row inside it is not moved a second time.
+    music_entry = (
+        "        if let view = self.music?.view {\n"
+        "            views.append(view)\n"
+        "        }\n"
+    )
+    if text.count(music_entry) != 2:
+        raise RuntimeError("InterfaceV2: the expansion's music entries have changed")
+    text = text.replace(
+        music_entry,
+        "        if let view = self.music?.view, view.superview !== self.aorusMusicCapsule.contentView {\n"
+        "            views.append(view)\n"
+        "        }\n",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: the saved-music row is inside its glass, which stretches under a press")
+
+
 def patch_interface_v2_run_switch(tg: Path) -> None:
     """Hold every place that draws Interface 2.0 to the choice the run started with.
 
@@ -8086,6 +8410,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_static_avatar(tg)
     _patch_avatar_gallery_gesture(tg)
     _patch_compact_music(tg)
+    _patch_wallet_balance(tg)
     _patch_music_player_glass(tg)
     header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
     header_text = header.read_text()
@@ -8121,4 +8446,6 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_disabled_row_wash(tg)
     _patch_proxy_connection_section(tg)
     _patch_profile_expansion(tg)
+    # After the expansion pass, which anchors on the strip's stock entries this one rewrites.
+    _patch_music_capsule_content(tg)
     _patch_build(tg)

@@ -2653,6 +2653,17 @@ def main() -> None:
         ("submodules/AorusGramUI/Sources/AntiSpoofManager.swift", (
             "guard !isLoading else { return }",
         )),
+        # Both copies of the anti-spam follow each other's saves, guard their state, and hand
+        # their notifications to the main queue instead of waiting on it from the database.
+        ("submodules/AorusGram/Sources/Features/AntiSpam/AntiSpamManager.swift", (
+            "private let stateLock = NSRecursiveLock()",
+            "guard let self, (note.object as AnyObject?) !== self else { return }",
+            "AntiSpamManager.postOnMain(Notification(name: .aorusSpamDetected, object: nil, userInfo: userInfo))",
+            "AorusStopWords.firstMatch(in: text ?? \"\", words: keywords)",
+        )),
+        ("submodules/AorusGramUI/Sources/Features/AntiSpam/AntiSpamManager.swift", (
+            "private let stateLock = NSRecursiveLock()",
+        )),
         # Siri is asked only when its own switch turns, not on every setting anyone changes.
         ("submodules/AorusGramUI/Sources/Core/AorusGramBootstrap.swift", (
             "guard enabled != self.siriShortcutsDonated else { return }",
@@ -2678,6 +2689,42 @@ def main() -> None:
     header_node_text = header_node.read_text(encoding="utf-8") if header_node.is_file() else ""
     if "(isOverlay || aorusOverlayPalette) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor" not in header_node_text:
         err.append("InterfaceV2: the profile music capsule paints the track in the accent colour")
+    # Liquid glass: the content of every Interface 2.0 glass control is inside its glass, which is
+    # interactive, so a press stretches it as Telegram's own glass buttons stretch.
+    for marker in (
+        "let aorusMusicRowFrame = CGRect(origin: CGPoint(x: 12.0, y: 3.0), size: musicFrame.size)",
+        "self.aorusMusicCapsule.isUserInteractionEnabled = true",
+        "aorusCapsule.contentView.addSubview(balanceView)",
+        # The wallet balance is a centred row on glass in the page's ink, not a white pill at the right.
+        "let aorusGlassBalance = aorusCentredHeader && !AorusOldInterface.isEnabled",
+    ):
+        if marker not in header_node_text:
+            err.append(f"InterfaceV2: the profile header is missing {marker}")
+    button_node = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift"
+    button_node_text = button_node.read_text(encoding="utf-8") if button_node.is_file() else ""
+    for marker in (
+        "glassBackground.contentView.addSubview(self.containerNode.view)",
+        "glassBackground.isUserInteractionEnabled = true",
+    ):
+        if marker not in button_node_text:
+            err.append(f"InterfaceV2: the profile action buttons are missing {marker}")
+    # The stop words hide a message where it is drawn, in every chat: the history, the chat
+    # list and in-app notifications. They used to work only in a stranger's DM, inside the
+    # prefilter, which dropped the message from storage for good.
+    for relative_path, marker in (
+        ("submodules/TelegramUI/Sources/ChatHistoryEntriesForView.swift", "if let aorusStopWords, aorusStopWords.hides(message) {"),
+        ("submodules/ChatListUI/Sources/Node/ChatListItem.swift", "messageText = aorusStopWordHiddenText(item.presentationData.strings.baseLanguageCode)"),
+        ("submodules/ChatListUI/Sources/Node/ChatListItem.swift", "if let aorusStopWords = AorusStopWordScreen.current(), aorusStopWords.hides(message) {"),
+        ("submodules/TelegramUI/Sources/ApplicationContext.swift", "if let aorusStopWords = AorusStopWordScreen.current(), messages.allSatisfy({ aorusStopWords.hides($0) }) {"),
+    ):
+        stop_path = tg / relative_path
+        stop_text = stop_path.read_text(encoding="utf-8") if stop_path.is_file() else ""
+        if marker not in stop_text:
+            err.append(f"StopWords: {relative_path} is missing {marker}")
+    state_utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    state_utils_text = state_utils.read_text(encoding="utf-8") if state_utils.is_file() else ""
+    if "aorusUserKeywords" in state_utils_text:
+        err.append("StopWords: the TelegramCore prefilter still drops stop-word messages from storage")
     title_view = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
     title_text = title_view.read_text(encoding="utf-8") if title_view.is_file() else ""
     if "aorusgram_peer_last_seen_" in title_text:

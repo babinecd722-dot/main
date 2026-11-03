@@ -269,6 +269,8 @@ public enum AorusSettingsArchive {
         "aorusgram_backup_",
         // When people were last seen: what this device observed, not a setting.
         "aorusgram_peer_activity", "aorusgram_peer_last_seen_",
+        // When the anti-spam last showed a notice for a sender.
+        "aorusgram_antispam_last_toast_", "aorusgram_antispam_toast_clock",
     ]
     private static let deviceKeys: Set<String> = [
         "aorusgram_root_path", "aorusgram_login_backup_restore_requested", "aorusgram_local_edit_active_message",

@@ -430,7 +430,7 @@ private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
         entries.append(.keyword(theme, Int32(i), word))
     }
     entries.append(.keywordInput(theme, aorusL("Добавить слово", "Add a word"), state.newKeyword))
-    entries.append(.keywordsInfo(theme, aorusL("Сообщения с этими словами скрываются автоматически. Для удаления свайпните строку влево.", "Messages containing these words are hidden automatically. Swipe left to delete.")))
+    entries.append(.keywordsInfo(theme, aorusL("Сообщения с этими словами скрываются во всех чатах — в личных, группах и каналах. Слово находится и с другим окончанием. Для удаления свайпните строку влево.", "Messages with these words are hidden in every chat — private chats, groups and channels. A word is found with a different ending too. Swipe left to delete.")))
 
     entries.append(.exceptionsHeader(theme, aorusL("ИСКЛЮЧЕНИЯ", "EXCEPTIONS")))
     for (i, peer) in state.allowed.enumerated() {
