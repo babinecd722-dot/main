@@ -80,7 +80,10 @@ def main():
         require('TabBarUI/Sources/TabBarNode.swift', 'CGFloat(self.aorusPreviewPlace(of: container.item, at: i)) * distanceBetweenNodes', 'self.tabBarNodeContainers[self.aorusPreviewContainerIndex(at: index)]', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusDraggedFrame = itemFrame', 'self.aorusIsPreview ? .immediate : itemTransition', 'self.liquidLensView.contentView.convert(center, from: self)', '(self.selectionGestureState != nil || self.aorusPreviewDrag != nil) && component.isLiftedStateEnabled', 'aorusCarriedOver && self.aorusPreviewDrag?.id != item.id ? 0.0 : 1.0')
         require('TelegramPresentationData/Sources/MakePresentationTheme.swift', 'let aorusNativeLight =', 'reference: aorusNativeLight ? .day : reference')
-        require('TelegramPresentationData/Sources/PresentationTheme.swift', 'func deriveList(from theme:', 'deriveList(from: self)')
+        # Ordinary lists are drawn in Telegram's own theme under Interface 2.0; only a profile's
+        # page palette carries the block marker.
+        ordinary = require('TelegramPresentationData/Sources/PresentationTheme.swift', 'var aorusGlassListTheme: PresentationTheme {\n        return self\n    }')
+        assert 'func deriveList(' not in ordinary
         glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = isDark ? 0.0 : 0.8', 'nativeParamsView.lumaMax = isDark ? 0.15 : 0.801')
         assert 'aorusGlassLuminance' not in glass and 'regularLight' not in glass
         pages = require('ItemListUI/Sources/ItemListControllerNode.swift')

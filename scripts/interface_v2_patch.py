@@ -64,18 +64,21 @@ _GLASS_THEME_SWIFT = '''
 
 // MARK: - AorusGram Interface 2.0
 
-// Ordinary lists keep Telegram's palette and add only the marker used to find glass blocks.
-// Profile pages derive their contrast separately because their backdrop follows the avatar.
+// Ordinary lists keep Telegram's palette and its own opaque cards. Profile pages derive their
+// contrast separately, because their backdrop follows the avatar, and only they carry the marker
+// that has their blocks drawn as blur instead of as cards.
 //
 // The derived theme has to be cached. Both ItemListPresentationData and the item nodes compare
 // themes by identity (===), so handing out a fresh instance per read would make every
 // comparison report a change and every list relayout itself on every pass.
 
-/// How a block finds out it is a block.
+/// How a block on a profile page finds out it is a block.
 ///
-/// Under Interface 2.0 a row paints no fill of its own: the material comes from one real
-/// `GlassBackgroundView` laid behind the whole run of rows that share a section, because a card that
-/// paints anything over that material flattens it back into the opaque panel it used to be.
+/// Under Interface 2.0 a row on a profile paints no fill of its own: the material comes from one
+/// `AorusBlurBlockView` laid behind the whole run of rows that share a section, because a card that
+/// paints anything over that material flattens it back into the opaque panel it used to be. Rows
+/// anywhere else -- Settings, every screen of Telegram's and of ours -- keep Telegram's own card
+/// and never see the marker: only a theme derived for a profile page carries it.
 ///
 /// Which leaves the problem of knowing where the runs are, and there is no answer to that in any one
 /// place -- a block is however many consecutive rows happen to share a section id, and each of those
@@ -256,38 +259,16 @@ private final class AorusGlassThemeCache {
         let source: PresentationTheme
         let dark: Bool
         let derived: PresentationTheme
-        let isList: Bool
 
-        init(source: PresentationTheme, dark: Bool, derived: PresentationTheme, isList: Bool = false) {
+        init(source: PresentationTheme, dark: Bool, derived: PresentationTheme) {
             self.source = source
             self.dark = dark
             self.derived = derived
-            self.isList = isList
         }
     }
 
     private let lock = NSLock()
     private var entries: [Entry] = []
-
-    func deriveList(from theme: PresentationTheme) -> PresentationTheme {
-        // A profile may hand an ItemList its scoped page palette. Keep that palette intact.
-        if AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor) { return theme }
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        for entry in self.entries where entry.isList && entry.source === theme { return entry.derived }
-        let marker = theme.overallDarkAppearance ? AorusGlassPane.blockMarker : AorusGlassPane.blockMarkerLight
-        let list = theme.list.withUpdated(
-            itemBlocksBackgroundColor: marker,
-            itemModalBlocksBackgroundColor: marker,
-            itemHighlightedBackgroundColor: .clear
-        )
-        let derived = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: theme.rootController, list: list, chatList: theme.chatList, chat: theme.chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)
-        derived.forceSync = theme.forceSync
-        derived.starGift = theme.starGift
-        self.entries.append(Entry(source: theme, dark: theme.overallDarkAppearance, derived: derived, isList: true))
-        if self.entries.count > 8 { self.entries.removeFirst(self.entries.count - 8) }
-        return derived
-    }
 
     func derive(from theme: PresentationTheme, dark: Bool) -> PresentationTheme {
         // Deriving from an already derived theme would compound the alpha of every colour. Which of
@@ -304,7 +285,7 @@ private final class AorusGlassThemeCache {
         defer { self.lock.unlock() }
 
         for entry in self.entries {
-            if !entry.isList && entry.dark == dark && entry.source === theme {
+            if entry.dark == dark && entry.source === theme {
                 return entry.derived
             }
         }
@@ -412,12 +393,15 @@ private final class AorusGlassThemeCache {
 }
 
 public extension PresentationTheme {
-    /// Native palette roles over glass blocks, including the chosen accent and secondary ink.
+    /// The theme an ordinary list is drawn in under Interface 2.0: the theme itself.
+    ///
+    /// Settings, Telegram's screens and ours are no longer on glass. Their blocks are Telegram's
+    /// own opaque cards on Telegram's own page -- the grey one in the light theme, with white
+    /// cards on it -- so the rows paint their fills, round their corners and highlight a press as
+    /// upstream draws them, and no block is looked for behind them. Kept as the one name every
+    /// such screen asks, so that a list's palette has a single place to change again.
     var aorusGlassListTheme: PresentationTheme {
-        guard AorusInterfaceV2Run.isEnabled else {
-            return self
-        }
-        return AorusGlassThemeCache.shared.deriveList(from: self)
+        return self
     }
 
     /// The same, for the peer-info list. The pair is chosen by the page the list sits on rather
@@ -568,16 +552,21 @@ def _patch_item_list_theme(tg: Path) -> None:
 
 
 def _patch_profile_section_glass(tg: Path) -> None:
-    """Put a real pane of glass behind each peer-info section.
+    """Put a blur block behind each section of a profile, and leave Settings' sections Telegram's.
 
-    The stock section is an opaque rectangle in `itemBlocksBackgroundColor`. Interface 2.0
-    keeps the rectangle's geometry -- it is what the rows are laid out against -- and swaps
-    what fills it for `GlassBackgroundView`, sized and cornered from the same frame.
+    The stock section is an opaque rectangle in `itemBlocksBackgroundColor`. On a profile Interface
+    2.0 keeps the rectangle's geometry -- it is what the rows are laid out against -- and swaps what
+    fills it for an `AorusBlurBlockView`, sized and cornered from the same frame, with the rows in a
+    theme derived for the page so that their labels are its ink.
+
+    Settings is the same screen in another mode, and its sections are the reader's own list of
+    options rather than a profile's blocks: they keep Telegram's card, its palette and its corners.
+    The screen tells each section which it is as it makes it.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift"
     text = _read(path, "PeerInfoScreenItemSectionContainerNode.swift")
     if "aorusGlassBackgroundView" in text:
-        print("InterfaceV2: profile sections already glass")
+        print("InterfaceV2: profile sections already blurred")
         return
     if _GLASS_IMPORT not in text:
         # ComponentFlow alongside it: the `transition:` argument is a ComponentTransition, and
@@ -593,18 +582,21 @@ def _patch_profile_section_glass(tg: Path) -> None:
         text,
         "    private let itemContainerNode: ASDisplayNode\n",
         "    private let itemContainerNode: ASDisplayNode\n"
-        "    // AorusGram: created lazily, so a profile opened with Interface 2.0 off never pays\n"
-        "    // for a visual effect view it will not show.\n"
-        "    private var aorusGlassBackgroundView: GlassBackgroundView?\n",
+        "    // AorusGram: created lazily, so a profile opened with Interface 2.0 off, and Settings,\n"
+        "    // never pay for a visual effect view they will not show.\n"
+        "    private var aorusGlassBackgroundView: AorusBlurBlockView?\n"
+        "    // Set by the screen that makes this section: Settings' sections are not a profile's.\n"
+        "    var aorusIsSettings = false\n",
         "section glass property",
     )
     text = _replace_once(
         text,
         "        self.backgroundNode.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor\n",
-        "        // AorusGram: Interface 2.0 paints the section with the system glass material and\n"
-        "        // hands the rows a theme whose labels are white, so the whole block reads as one\n"
-        "        // pane rather than as tinted text on a tinted card.\n"
-        "        let aorusGlass = AorusInterfaceV2Run.isEnabled\n"
+        "        // AorusGram: on a profile under Interface 2.0 the section is a blur block over the\n"
+        "        // page, and its rows take a theme whose labels are the page's ink, so the whole block\n"
+        "        // reads as one surface rather than as tinted text on a tinted card. Settings keeps\n"
+        "        // Telegram's card.\n"
+        "        let aorusGlass = AorusInterfaceV2Run.isEnabled && !self.aorusIsSettings\n"
         "        var presentationData = presentationData\n"
         "        if aorusGlass {\n"
         "            presentationData = presentationData.withUpdated(theme: presentationData.theme.aorusGlassProfileTheme)\n"
@@ -612,18 +604,26 @@ def _patch_profile_section_glass(tg: Path) -> None:
         "        self.backgroundNode.backgroundColor = aorusGlass ? .clear : presentationData.theme.list.itemBlocksBackgroundColor\n",
         "section glass colours",
     )
+    # The personalization pass clears the card and inks the hairlines from the profile page;
+    # Settings is not on that page.
+    text = _replace_once(
+        text,
+        "        if let aorusColors = AorusGlassProfileTint.listSectionColors {\n",
+        "        if aorusGlass, let aorusColors = AorusGlassProfileTint.listSectionColors {\n",
+        "section page colours only on a profile",
+    )
     text = _replace_once(
         text,
         "        transition.updateFrame(node: self.backgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: contentWithBackgroundOffset), size: CGSize(width: width, height: max(0.0, contentWithBackgroundHeight - contentWithBackgroundOffset))))\n",
         "        let aorusBackgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: contentWithBackgroundOffset), size: CGSize(width: width, height: max(0.0, contentWithBackgroundHeight - contentWithBackgroundOffset)))\n"
         "        transition.updateFrame(node: self.backgroundNode, frame: aorusBackgroundFrame)\n"
         "        if aorusGlass {\n"
-        "            let glassView: GlassBackgroundView\n"
+        "            let glassView: AorusBlurBlockView\n"
         "            if let current = self.aorusGlassBackgroundView {\n"
         "                glassView = current\n"
         "            } else {\n"
-        "                glassView = GlassBackgroundView(frame: aorusBackgroundFrame)\n"
-        "                glassView.isUserInteractionEnabled = false\n"
+        "                glassView = AorusBlurBlockView()\n"
+        "                glassView.frame = aorusBackgroundFrame\n"
         "                self.aorusGlassBackgroundView = glassView\n"
         "                self.view.insertSubview(glassView, at: 0)\n"
         "            }\n"
@@ -632,20 +632,13 @@ def _patch_profile_section_glass(tg: Path) -> None:
         "            glassView.update(\n"
         "                size: aorusBackgroundFrame.size,\n"
         "                // 26, not 11: the rows in this section cut their corners at the radius\n"
-        "                // Telegram uses for a glass block, and a pane rounded any tighter shows\n"
+        "                // Telegram uses for an iOS 26 block, and a block rounded any tighter shows\n"
         "                // its own square shoulders outside theirs.\n"
         "                cornerRadius: hasCorners ? 26.0 : 0.0,\n"
         "                // The page this block sits on, not the app's theme. A pale avatar puts a\n"
-        "                // light page under a dark theme, and dark material over a light page is a\n"
-        "                // grey slab a shade off the page rather than glass -- which is what a\n"
-        "                // profile with a white photograph was photographed as. The same signal\n"
-        "                // the ink over this page is chosen from, so the two cannot disagree.\n"
-        "                isDark: AorusGlassPane.profilePageIsDark,\n"
-        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "                isInteractive: false,\n"
-        "                // Settings, a profile without a photo and one whose photo ends in white\n"
-        "                // stand on a white page, where the block is the page.\n"
-        "                isVisible: !AorusGlassPane.isWhitePage(AorusGlassPane.profilePageColor),\n"
+        "                // light page under a dark theme; the same signal the ink over this page is\n"
+        "                // chosen from, so the block and its letters cannot disagree.\n"
+        "                page: AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark),\n"
         "                transition: .immediate\n"
         "            )\n"
         "        } else if let glassView = self.aorusGlassBackgroundView {\n"
@@ -655,7 +648,24 @@ def _patch_profile_section_glass(tg: Path) -> None:
         "section glass frame",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: made profile sections glass")
+
+    screen = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    screen_text = _read(screen, "PeerInfoScreen.swift")
+    for sections in ("regularSections", "editingSections"):
+        old = (
+            "                    sectionNode = PeerInfoScreenItemSectionContainerNode()\n"
+            f"                    self.{sections}[sectionId] = sectionNode\n"
+        )
+        screen_text = _replace_once(
+            screen_text,
+            old,
+            "                    sectionNode = PeerInfoScreenItemSectionContainerNode()\n"
+            "                    sectionNode.aorusIsSettings = self.isSettings\n"
+            f"                    self.{sections}[sectionId] = sectionNode\n",
+            f"settings sections keep Telegram's card ({sections})",
+        )
+    screen.write_text(screen_text, encoding="utf-8")
+    print("InterfaceV2: blur blocks behind a profile's sections; Settings keeps Telegram's")
 
 
 _EDITING_FIELD_UPDATE_ANCHOR = (
@@ -701,17 +711,19 @@ def _inset_editing_field(path: Path, label: str) -> None:
 
 
 def _patch_editing_fields_glass(tg: Path) -> None:
-    """Put the name and description fields of the editing header on glass.
+    """Put the name and description fields of a profile's editing header on a blur block.
 
     In edit mode the header keeps the profile page behind it, and the fields are the only block on
     that page still painted as an opaque card: their fill is `itemBlocksBackgroundColor` and their
-    rounding comes from `PresentationResourcesItemList.cornersImage`, which Interface 2.0 returns
-    nil for. So they end up a bare rectangle in list-background grey over the avatar's colour.
+    rounding is the page colour painted over their corners. So they end up a rectangle in
+    list-background grey over the avatar's colour.
 
-    The fix is the one every other block gets: hand the rows a derived theme, so the fill becomes
-    the invisible marker colour and the labels become ink, and put a single `GlassBackgroundView`
-    behind the whole run of them. One pane, not one per field -- the fields are rows of a block,
-    and each of them carrying its own pane would show a seam at every separator.
+    The fix is the one every other block of a profile gets: hand the rows a derived theme, so the
+    fill becomes the invisible marker colour and the labels become ink, and put a single
+    `AorusBlurBlockView` behind the whole run of them. One block, not one per field -- the fields
+    are rows of a block, and each of them carrying its own would show a seam at every separator.
+    Settings edits the same fields over its own page, and there they keep Telegram's card, like
+    the sections under them.
     """
     base = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
     _inset_editing_field(base / "PeerInfoHeaderSingleLineTextFieldNode.swift", "single line")
@@ -740,20 +752,20 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         text,
         "    var itemNodes: [PeerInfoHeaderTextFieldNodeKey: PeerInfoHeaderTextFieldNode] = [:]\n",
         "    var itemNodes: [PeerInfoHeaderTextFieldNodeKey: PeerInfoHeaderTextFieldNode] = [:]\n"
-        "    // AorusGram: created lazily, so a profile edited with Interface 2.0 off never pays for\n"
-        "    // a visual effect view it will not show.\n"
-        "    private var aorusFieldsGlassView: GlassBackgroundView?\n",
+        "    // AorusGram: created lazily, so a profile edited with Interface 2.0 off, and Settings,\n"
+        "    // never pay for a visual effect view they will not show.\n"
+        "    private var aorusFieldsGlassView: AorusBlurBlockView?\n",
         "editing header glass property",
     )
     text = _replace_once(
         text,
         "        let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0\n",
         "        // AorusGram: the derived theme is what makes the rows readable on the page -- their\n"
-        "        // fill becomes the marker colour the glass shows through, their text and cursor\n"
+        "        // fill becomes the marker colour the blur shows through, their text and cursor\n"
         "        // become ink, and their separators become a hairline of it. The Set Photo button\n"
         "        // above them takes its colour from the same accent, which is what puts it on the\n"
-        "        // page rather than in the palette's blue.\n"
-        "        let aorusGlass = AorusGlassPane.isEnabled\n"
+        "        // page rather than in the palette's blue. Settings keeps Telegram's card.\n"
+        "        let aorusGlass = AorusGlassPane.isEnabled && !isSettings\n"
         "        var presentationData = presentationData\n"
         "        if aorusGlass {\n"
         "            presentationData = presentationData.withUpdated(theme: presentationData.theme.aorusGlassProfileTheme)\n"
@@ -781,12 +793,12 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "                origin: CGPoint(x: aorusLeftInset, y: aorusFieldsTop),\n"
         "                size: CGSize(width: max(1.0, width - aorusLeftInset - aorusRightInset), height: max(0.0, contentHeight - aorusFieldsTop))\n"
         "            )\n"
-        "            let glassView: GlassBackgroundView\n"
+        "            let glassView: AorusBlurBlockView\n"
         "            if let current = self.aorusFieldsGlassView {\n"
         "                glassView = current\n"
         "            } else {\n"
-        "                glassView = GlassBackgroundView(frame: aorusGlassFrame)\n"
-        "                glassView.isUserInteractionEnabled = false\n"
+        "                glassView = AorusBlurBlockView()\n"
+        "                glassView.frame = aorusGlassFrame\n"
         "                self.aorusFieldsGlassView = glassView\n"
         "                // At the back: the field nodes are already subviews by now, and a field\n"
         "                // created on a later pass is appended above this one anyway.\n"
@@ -797,15 +809,9 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "            glassView.update(\n"
         "                size: aorusGlassFrame.size,\n"
         "                cornerRadius: AorusGlassPane.blockCornerRadius,\n"
-        "                // The page this block sits on, not the app's theme. A pale avatar puts a\n"
-        "                // light page under a dark theme, and dark material over a light page is a\n"
-        "                // grey slab a shade off the page rather than glass -- which is what a\n"
-        "                // profile with a white photograph was photographed as. The same signal\n"
-        "                // the ink over this page is chosen from, so the two cannot disagree.\n"
-        "                isDark: AorusGlassPane.profilePageIsDark,\n"
-        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "                isInteractive: false,\n"
-        "                isVisible: true,\n"
+        "                // The page this block sits on, not the app's theme: the same signal the ink\n"
+        "                // over this page is chosen from, so the block and its letters cannot disagree.\n"
+        "                page: AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark),\n"
         "                transition: .immediate\n"
         "            )\n"
         "        } else if let glassView = self.aorusFieldsGlassView {\n"
@@ -816,7 +822,7 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "editing header glass pane",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: made the editing header fields glass")
+    print("InterfaceV2: a profile's editing header fields are on a blur block")
 
 
 def _patch_badge_contrast(tg: Path) -> None:
@@ -1102,20 +1108,23 @@ def _patch_accent_fill_contrast(tg: Path) -> None:
 
 
 def _patch_corner_wedges(tg: Path) -> None:
-    """Stop rounding a block by painting the page colour over its corners.
+    """Stop rounding a profile's block by painting the page colour over its corners.
 
     This is the single function every blocks-style row in the client rounds itself with, and the
     way it works is a lie that only holds while the card is opaque: the row is a square node
     filled with `itemBlocksBackgroundColor`, and an image of `blocksBackgroundColor` -- the *page*
-    colour -- is laid over the two corners that need cutting. Over a pane of glass those two
-    corners are opaque wedges of a colour that is no longer behind anything, which is the black
-    corner in every screen that was reported.
+    colour -- is laid over the two corners that need cutting. Over a blur block those two corners
+    are opaque wedges of a colour that is no longer behind anything, which is the black corner in
+    every screen that was reported.
 
-    Under Interface 2.0 the shape comes from the pane instead: a real `GlassBackgroundView` with a
-    corner radius, one per block, put there by `_patch_item_list_glass` and by the peer-info
-    section container. So the mask has nothing left to do and returns nothing. Nil rather than a
-    transparent image, because every caller assigns this straight to an `ASImageNode`, and a nil
-    image is the cheaper way to say "draw nothing" to one of those.
+    On a profile page the shape comes from the block instead: an `AorusBlurBlockView` with a corner
+    radius, one per block, put there by `_patch_item_list_glass` and by the peer-info section
+    container. So for a row whose card is the marker the mask has nothing left to do and returns
+    nothing -- nil rather than a transparent image, because every caller assigns this straight to
+    an `ASImageNode`, and a nil image is the cheaper way to say "draw nothing" to one of those.
+
+    Every other row keeps the wedges, which on an opaque card are exactly right, at the radius its
+    own screen asks for: Telegram's card, drawn as Telegram draws it.
     """
     path = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift"
     text = _read(path, "PresentationResourcesItemList.swift")
@@ -1129,10 +1138,11 @@ def _patch_corner_wedges(tg: Path) -> None:
         "            return nil\n"
         "        }\n",
         "    public static func cornersImage(_ theme: PresentationTheme, top: Bool, bottom: Bool, glass: Bool = false) -> UIImage? {\n"
-        "        // AorusGram: the glass pane behind the block is its shape now, so there is no\n"
-        "        // corner left to paint over. Checked before the early exit below rather than after,\n"
+        "        // AorusGram: on a profile page the blur block behind the rows is their shape, so\n"
+        "        // there is no corner left to paint over -- and a profile's rows are the only ones\n"
+        "        // whose card is the marker. Checked before the early exit below rather than after,\n"
         "        // because both answers here are the same one.\n"
-        "        let aorusNoCornerWedges = AorusGlassPane.isEnabled\n"
+        "        let aorusNoCornerWedges = AorusGlassPane.isEnabled && AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor)\n"
         "        if aorusNoCornerWedges {\n"
         "            return nil\n"
         "        }\n"
@@ -2144,14 +2154,14 @@ def _patch_avatar_placeholder(tg: Path) -> None:
 
 
 def _patch_glass_placeholder_avatar(tg: Path) -> None:
-    """Put real glass under the initials of a peer that has no photo.
+    """Put a real blur under the initials of a peer that has no photo.
 
     The drawn frost `_patch_avatar_placeholder` installs is the right answer for a 40-point row:
     it is a rasterised image, so a list can scroll a hundred of them for nothing. At the size the
-    profile draws the same avatar it stops passing for glass and reads as a dimmed disc, which is
+    profile draws the same avatar it stops passing for frost and reads as a dimmed disc, which is
     the whole of the complaint. Here there is exactly one avatar on screen, so it can afford a
-    real GlassBackgroundView -- and the node is told to stop drawing its plate, since a frost
-    painted over a pane of glass is precisely how the pane stops looking like one.
+    live blur -- the same `AorusBlurBlockView` the profile's blocks are made of -- and the node is
+    told to stop drawing its plate, since a frost painted over a live one flattens it.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoAvatarTransformContainerNode.swift"
     text = _read(path, "PeerInfoAvatarTransformContainerNode.swift")
@@ -2173,9 +2183,9 @@ def _patch_glass_placeholder_avatar(tg: Path) -> None:
         "            self.containerNode.frame = CGRect(origin: CGPoint(x: -avatarSize / 2.0, y: -avatarSize / 2.0), size: CGSize(width: avatarSize, height: avatarSize))\n"
         "            self.avatarNode.frame = self.containerNode.bounds\n"
         "            self.avatarNode.font = avatarPlaceholderFont(size: floor(avatarSize * 16.0 / 37.0))\n"
-        "            // AorusGram: initials on real glass when there is no photo to show. A thread's\n"
+        "            // AorusGram: initials on a real blur when there is no photo to show. A thread's\n"
         "            // avatar is its emoji and a deleted account's is an icon -- neither draws\n"
-        "            // letters, so neither gets a pane.\n"
+        "            // letters, so neither gets one.\n"
         "            self.aorusUpdateGlassPlaceholder(\n"
         "                isPlaceholder: threadInfo == nil && !peer.isDeleted\n"
         "                    && (overrideImage != nil || peer.profileImageRepresentations.isEmpty),\n"
@@ -2187,9 +2197,9 @@ def _patch_glass_placeholder_avatar(tg: Path) -> None:
     text = _replace_once(
         text,
         "    private func updateFromParams() {\n",
-        "    private var aorusGlassPlaceholderView: GlassBackgroundView?\n"
+        "    private var aorusGlassPlaceholderView: AorusBlurBlockView?\n"
         "\n"
-        "    /// One pane of glass behind the lettered avatar, or none at all.\n"
+        "    /// One blur behind the lettered avatar, or none at all.\n"
         "    ///\n"
         "    /// Created only for a peer without a photo and released the moment one appears, so a\n"
         "    /// profile that has an avatar never pays for an effect view it cannot see. It goes\n"
@@ -2205,23 +2215,21 @@ def _patch_glass_placeholder_avatar(tg: Path) -> None:
         "            }\n"
         "            return\n"
         "        }\n"
-        "        let glassView: GlassBackgroundView\n"
+        "        let glassView: AorusBlurBlockView\n"
         "        if let current = self.aorusGlassPlaceholderView {\n"
         "            glassView = current\n"
         "        } else {\n"
-        "            glassView = GlassBackgroundView(frame: CGRect())\n"
-        "            glassView.isUserInteractionEnabled = false\n"
+        "            glassView = AorusBlurBlockView()\n"
         "            self.aorusGlassPlaceholderView = glassView\n"
         "            self.containerNode.view.insertSubview(glassView, at: 0)\n"
         "        }\n"
         "        glassView.frame = self.avatarNode.frame\n"
+        "        // The initials are drawn for the theme's side, black on a light one, so the disc\n"
+        "        // takes that side too.\n"
         "        glassView.update(\n"
         "            size: self.avatarNode.frame.size,\n"
         "            cornerRadius: cornerRadius,\n"
-        "            isDark: theme.overallDarkAppearance,\n"
-        "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "            isInteractive: false,\n"
-        "            isVisible: true,\n"
+        "            page: AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: theme.overallDarkAppearance),\n"
         "            transition: .immediate\n"
         "        )\n"
         "    }\n"
@@ -2230,7 +2238,7 @@ def _patch_glass_placeholder_avatar(tg: Path) -> None:
         "placeholder avatar glass view",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: glassed the placeholder avatar")
+    print("InterfaceV2: the placeholder avatar's initials are on a blur")
 
 
 def _patch_action_sheet_glass(tg: Path) -> None:
@@ -3531,14 +3539,18 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
         }
     }
 
-    /// One pane of real glass per block.
+    /// One blur block per block, on a screen that continues a profile's page.
     ///
-    /// Panes go under the list and over this node's own background, so the page colour is what the
-    /// material refracts. Rounding both ends of every run is safe because the list keeps a node for
+    /// Only such a screen has blocks to find: its theme is derived for that page, and that theme is
+    /// the only one whose rows wear the marker. Every other list -- Settings and everything opened
+    /// from it -- draws Telegram's own opaque cards, and this returns before walking a single row.
+    ///
+    /// Blocks go under the list and over this node's own background, so the page colour is what
+    /// they blur. Rounding both ends of every run is safe because the list keeps a node for
     /// everything inside its bounds: a run that ends where the retained rows end, rather than where
     /// its section does, ends off screen, and a corner nobody can see costs nothing.
     private func aorusUpdateListGlass() {
-        var isEnabled = AorusGlassPane.isEnabled
+        var isEnabled = AorusGlassPane.isEnabled && AorusGlassPane.isBlockMarker(self.theme?.list.itemBlocksBackgroundColor ?? UIColor.clear)
         if let listStyle = self.listStyle, case .blocks = listStyle {
         } else {
             isEnabled = false
@@ -3594,32 +3606,24 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
         }
         container.frame = CGRect(origin: CGPoint(), size: aorusLayout.size)
 
-        let isDark = self.theme?.overallDarkAppearance ?? true
-        let isWhitePage = !isDark && AorusGlassPane.isWhitePage(self.theme?.list.blocksBackgroundColor)
+        // The theme was derived for the page it continues, so its appearance is that page's side
+        // and its grouped background is that page.
+        let page = AorusBlurBlockView.Page(color: self.theme?.list.blocksBackgroundColor, isDark: self.theme?.overallDarkAppearance ?? true)
         while self.aorusGlassPanes.count > runs.count {
             self.aorusGlassPanes.removeLast().removeFromSuperview()
         }
         for i in 0 ..< runs.count {
             let run = runs[i]
-            let paneView: GlassBackgroundView
+            let paneView: AorusBlurBlockView
             if i < self.aorusGlassPanes.count {
                 paneView = self.aorusGlassPanes[i]
             } else {
-                paneView = GlassBackgroundView(frame: run)
-                paneView.isUserInteractionEnabled = false
+                paneView = AorusBlurBlockView()
                 self.aorusGlassPanes.append(paneView)
                 container.view.addSubview(paneView)
             }
             paneView.frame = run
-            paneView.update(
-                size: run.size,
-                cornerRadius: AorusGlassPane.blockCornerRadius,
-                isDark: isDark,
-                tintColor: GlassBackgroundView.TintColor(kind: .clear),
-                isInteractive: false,
-                isVisible: !isWhitePage,
-                transition: .immediate
-            )
+            paneView.update(size: run.size, cornerRadius: AorusGlassPane.blockCornerRadius, page: page, transition: .immediate)
         }
     }
 
@@ -3627,12 +3631,13 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
 
 
 def _patch_item_list_glass(tg: Path) -> None:
-    """Put one pane of real glass behind every block on every settings screen.
+    """Put one blur block behind every block of a list that continues a profile's page.
 
-    The stock blocks screen is an opaque page with opaque cards on it. Interface 2.0 keeps the page
-    -- glass needs something behind it to be glass about -- clears the cards, and lays a
-    `GlassBackgroundView` under each run of rows that share a section. The rows keep their labels,
-    their hairlines and their controls, and nothing else.
+    The stock blocks screen is an opaque page with opaque cards on it, and so is every settings
+    screen under Interface 2.0. A screen pushed out of a profile -- "Подробнее", the lists a row of
+    a profile opens -- continues that profile's page instead, in a theme derived for it: there the
+    cards go clear and an `AorusBlurBlockView` is laid under each run of rows that share a section.
+    The rows keep their labels, their hairlines and their controls, and nothing else.
 
     Finding the runs is the interesting part, and it is done by reading back the marker fill: see
     `AorusGlassPane.blockMarker`. This is the one file every ItemList screen in the app is hosted
@@ -3655,10 +3660,10 @@ def _patch_item_list_glass(tg: Path) -> None:
         text,
         "    private var previousContentOffset: ListViewVisibleContentOffset?\n",
         "    private var previousContentOffset: ListViewVisibleContentOffset?\n"
-        "    // AorusGram: created on the first pass that finds a marked row, so a screen opened with\n"
-        "    // Interface 2.0 off never builds an effect view it will not show.\n"
+        "    // AorusGram: created on the first pass that finds a marked row -- a screen continuing a\n"
+        "    // profile's page -- so every other screen never builds an effect view it will not show.\n"
         "    private var aorusGlassPaneContainer: ASDisplayNode?\n"
-        "    private var aorusGlassPanes: [GlassBackgroundView] = []\n"
+        "    private var aorusGlassPanes: [AorusBlurBlockView] = []\n"
         "    // The side insets the rows were laid out with. A row is as wide as the whole list and\n"
         "    // relies on the overlay nodes to cover its overhang, so the pane has to be told where\n"
         "    // the visible card actually starts and ends.\n"
@@ -3727,7 +3732,7 @@ def _patch_item_list_glass(tg: Path) -> None:
         "list glass layout hook",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: put every settings block on its own pane of glass")
+    print("InterfaceV2: blur blocks behind the lists that continue a profile's page")
 
 
 def _patch_nav_button_glass(tg: Path) -> None:
@@ -3766,16 +3771,19 @@ def _patch_nav_button_glass(tg: Path) -> None:
 
 
 def _patch_gift_glass(tg: Path) -> None:
-    """Give a plain gift card a real pane of glass instead of a flat block of theme colour.
+    """Give a plain gift card on a profile page a wash of that page instead of a flat slab.
 
     A gift with a cover brings its own colours and keeps every one of them -- those cards are the
-    gift, not chrome. The plain card is the one that currently fills itself with
-    `list.itemBlocksBackgroundColor`, which is exactly the opaque slab Interface 2.0 replaces
-    elsewhere, so that fill drops and the card becomes glass.
+    gift, not chrome. The plain card is the one that fills itself with `list.itemBlocksBackgroundColor`.
+    Drawn in a theme derived for a profile's page that colour is the marker, the card of a block on
+    that page, and there the fill drops and the card takes the page's wash: an `AorusBlurBlockView`
+    of the `.wash` material, with no blur of its own, because a screenful of gifts is a dozen cards
+    and a dozen live blurs on every frame would buy nothing the softened page under them does not
+    already show. Anywhere else -- the gift shop, a gift being sent -- the card is Telegram's own.
 
-    One pane per card view, reused as the grid recycles them and released the moment a card turns
-    out to have a cover, so a screenful of gifts costs a screenful of panes and nothing is held for
-    cards that are scrolled away.
+    One wash per card view, reused as the grid recycles them and released the moment a card turns
+    out to have a cover, so a screenful of gifts costs a screenful of plain views and nothing is
+    held for cards that are scrolled away.
     """
     path = tg / "submodules/TelegramUI/Components/Gifts/GiftItemComponent/Sources/GiftItemComponent.swift"
     text = _read(path, "GiftItemComponent.swift")
@@ -3818,8 +3826,11 @@ def _patch_gift_glass(tg: Path) -> None:
         "                    self.backgroundLayer.backgroundColor = component.theme.list.itemBlocksBackgroundColor.cgColor\n"
         "                }\n"
         "            }\n"
-        "            if aorusPlainCard, AorusInterfaceV2Run.isEnabled {\n"
-        "                // The fill goes, or it would sit on the glass and flatten it back into a card.\n"
+        "            // On a profile's page the card's colour is the marker, and the card is a wash of that\n"
+        "            // page; anywhere else it keeps the fill it was just given.\n"
+        "            aorusPlainCard = aorusPlainCard && AorusInterfaceV2Run.isEnabled && AorusGlassPane.isBlockMarker(component.theme.list.itemBlocksBackgroundColor)\n"
+        "            if aorusPlainCard {\n"
+        "                // The fill goes, or it would sit on the wash and flatten it back into a card.\n"
         "                self.backgroundLayer.backgroundColor = nil\n"
         "            }\n",
         "gift card plain fill",
@@ -3832,54 +3843,85 @@ def _patch_gift_glass(tg: Path) -> None:
         "                frame: backgroundFrame,\n"
         "                cornerRadius: cornerRadius,\n"
         "                isPlain: aorusPlainCard,\n"
-        "                isDark: component.theme.overallDarkAppearance\n"
+        "                page: AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: component.theme.overallDarkAppearance)\n"
         "            )\n",
         "gift card glass call",
     )
     text = _replace_once(
         text,
         "        public var pattern: UIView? {\n",
-        "        private var aorusGlassBackgroundView: GlassBackgroundView?\n"
+        "        private var aorusGlassBackgroundView: AorusBlurBlockView?\n"
         "\n"
-        "        /// The card's own pane of glass, or none.\n"
+        "        /// The card's wash of the profile page, or none.\n"
         "        ///\n"
-        "        /// Behind every other subview and above the card's own background layer, which under\n"
-        "        /// Interface 2.0 no longer paints anything -- so the icon, the title and the ribbon all\n"
-        "        /// keep the order they had and only what was behind them changes.\n"
-        "        private func aorusUpdateGlassBackground(frame: CGRect, cornerRadius: CGFloat, isPlain: Bool, isDark: Bool) {\n"
-        "            guard isPlain, AorusInterfaceV2Run.isEnabled else {\n"
+        "        /// Behind every other subview and above the card's own background layer, which then\n"
+        "        /// paints nothing -- so the icon, the title and the ribbon all keep the order they had\n"
+        "        /// and only what was behind them changes.\n"
+        "        private func aorusUpdateGlassBackground(frame: CGRect, cornerRadius: CGFloat, isPlain: Bool, page: AorusBlurBlockView.Page) {\n"
+        "            guard isPlain else {\n"
         "                if let glassView = self.aorusGlassBackgroundView {\n"
         "                    self.aorusGlassBackgroundView = nil\n"
         "                    glassView.removeFromSuperview()\n"
         "                }\n"
         "                return\n"
         "            }\n"
-        "            let glassView: GlassBackgroundView\n"
+        "            let glassView: AorusBlurBlockView\n"
         "            if let current = self.aorusGlassBackgroundView {\n"
         "                glassView = current\n"
         "            } else {\n"
-        "                glassView = GlassBackgroundView(frame: CGRect())\n"
-        "                glassView.isUserInteractionEnabled = false\n"
+        "                glassView = AorusBlurBlockView(material: .wash)\n"
         "                self.aorusGlassBackgroundView = glassView\n"
         "                self.insertSubview(glassView, at: 0)\n"
         "            }\n"
         "            glassView.frame = frame\n"
-        "            glassView.update(\n"
-        "                size: frame.size,\n"
-        "                cornerRadius: cornerRadius,\n"
-        "                isDark: isDark,\n"
-        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "                isInteractive: false,\n"
-        "                isVisible: true,\n"
-        "                transition: .immediate\n"
-        "            )\n"
+        "            glassView.update(size: frame.size, cornerRadius: cornerRadius, page: page, transition: .immediate)\n"
         "        }\n"
         "\n"
         "        public var pattern: UIView? {\n",
         "gift card glass view",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: made the gift cards glass")
+
+    # The profile's own gift grid draws its cards in the app's theme, which is no longer marked
+    # anywhere but on a profile's page. Handed the theme derived for this peer's page instead, its
+    # plain cards are that page's blocks, and their titles and prices take the page's ink as the
+    # rest of the profile does. This peer's page, not the shared slot: a profile pushed over this
+    # one owns the slot while this grid may still be laid out behind it.
+    grid = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/GiftsListView.swift"
+    grid_text = _read(grid, "GiftsListView.swift")
+    if "aorusCardTheme" not in grid_text:
+        if "import AorusGramUI\n" not in grid_text:
+            grid_text = _replace_once(grid_text, "import GiftItemComponent\n", "import GiftItemComponent\nimport AorusGramUI\n", "profile gift grid import")
+        grid_text = _replace_once(
+            grid_text,
+            "                        GiftItemComponent(\n"
+            "                            context: self.context,\n"
+            "                            style: .glass,\n"
+            "                            theme: params.presentationData.theme,\n",
+            "                        GiftItemComponent(\n"
+            "                            context: self.context,\n"
+            "                            style: .glass,\n"
+            "                            theme: self.aorusCardTheme(params.presentationData.theme),\n",
+            "profile gift card theme",
+        )
+        grid_text = _replace_once(
+            grid_text,
+            "final class GiftsListView: UIView {\n",
+            "final class GiftsListView: UIView {\n"
+            "    // AorusGram: under Interface 2.0 a plain card on this profile is a block of its page:\n"
+            "    // drawn in the theme derived for that page, which is what marks it as one.\n"
+            "    private func aorusCardTheme(_ theme: PresentationTheme) -> PresentationTheme {\n"
+            "        guard AorusInterfaceV2Run.isEnabled, !AorusOldInterface.isEnabled,\n"
+            "              let page = AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value()) ?? AorusGlassProfileTint.pageBackgroundColor else {\n"
+            "            return theme\n"
+            "        }\n"
+            "        return theme.aorusGlassTheme(dark: !AorusGlassPane.isLight(page))\n"
+            "    }\n"
+            "\n",
+            "profile gift card theme helper",
+        )
+        grid.write_text(grid_text, encoding="utf-8")
+    print("InterfaceV2: plain gift cards on a profile are a wash of its page")
 
 
 def _patch_pane_container_glass(tg: Path) -> None:
@@ -4115,8 +4157,8 @@ def _patch_sparse_grid_tiles(tg: Path) -> None:
     The defaults are upstream's own values, and nothing outside the posts pane changes them, so the
     media tabs, the story archive and every other grid in the app are untouched.
 
-    The grid also answers where its items are. The posts pane stands a pane of glass behind them,
-    and the glass has to cover exactly the rows there are, wherever the grid has been scrolled to.
+    The grid also answers where its items are. The posts pane stands a blur block behind them,
+    and the block has to cover exactly the rows there are, wherever the grid has been scrolled to.
     """
     path = tg / "submodules/SparseItemGrid/Sources/SparseItemGrid.swift"
     text = _read(path, "SparseItemGrid.swift")
@@ -4238,17 +4280,17 @@ def _patch_posts_block(tg: Path) -> None:
     band of that colour either side of it is exactly what was reported as looking cheap.
 
     So under Interface 2.0, and only on a profile, the posts become what every other section of the
-    page already is: a block inset from the edges, on a pane of real glass cornered at the page's
+    page already is: a block inset from the edges, on a blur block cornered at the page's
     radius. Inside it the posts are cards -- three to a row however many there are, a few points
     apart, each rounded concentrically with the pane around it, so that the corner of the pane and
-    the corner of the post in it run parallel. The glass shows in the gaps and round the edge, and
+    the corner of the post in it run parallel. The blur shows in the gaps and round the edge, and
     through the empty end of a last row that is not full, which is what makes it read as one block
     rather than a grid laid over a colour.
 
     The pane follows the grid rather than the other way round. The grid owns the scrolling, and
     reports every change of offset; the pane is laid behind the rows the grid says it has, and
     trimmed to the screen with a margin wider than its corner, so that a profile with a thousand
-    posts does not ask for a thousand-row pane of glass and no clipped corner is ever on screen.
+    posts does not ask for a thousand-row blur and no clipped corner is ever on screen.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift"
     text = _read(path, "PeerInfoStoryPaneNode.swift")
@@ -4294,14 +4336,14 @@ def _patch_posts_block(tg: Path) -> None:
     text = _replace_once(
         text,
         "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n",
-        "    /// AorusGram: the space between the pane of glass behind the posts and the posts on it.\n"
+        "    /// AorusGram: the space between the blur block behind the posts and the posts on it.\n"
         "    static let aorusPostsBlockPadding: CGFloat = 6.0\n"
         "\n"
-        "    private var aorusPostsBlockView: GlassBackgroundView?\n"
+        "    private var aorusPostsBlockView: AorusBlurBlockView?\n"
         "    private var aorusPostsBlockEnabled: Bool = false\n"
-        "    private var aorusPostsBlockIsDark: Bool?\n"
+        "    private var aorusPostsBlockPage: AorusBlurBlockView.Page?\n"
         "\n"
-        "    /// AorusGram: the pane of glass behind a profile's posts, laid behind the rows the grid\n"
+        "    /// AorusGram: the blur block behind a profile's posts, laid behind the rows the grid\n"
         "    /// reports and trimmed to what is on screen.\n"
         "    private func aorusLayoutPostsBlock(isEnabled: Bool? = nil) {\n"
         "        if let isEnabled {\n"
@@ -4322,34 +4364,26 @@ def _patch_posts_block(tg: Path) -> None:
         "            self.aorusPostsBlockView?.isHidden = true\n"
         "            return\n"
         "        }\n"
-        "        let glassView: GlassBackgroundView\n"
+        "        let glassView: AorusBlurBlockView\n"
         "        if let current = self.aorusPostsBlockView {\n"
         "            glassView = current\n"
         "        } else {\n"
-        "            glassView = GlassBackgroundView(frame: frame)\n"
-        "            glassView.isUserInteractionEnabled = false\n"
+        "            glassView = AorusBlurBlockView()\n"
+        "            glassView.frame = frame\n"
         "            self.aorusPostsBlockView = glassView\n"
         "        }\n"
         "        if glassView.superview !== host {\n"
         "            host.insertSubview(glassView, belowSubview: self.itemGrid.view)\n"
         "        }\n"
         "        glassView.isHidden = false\n"
-        "        // Scrolling moves the pane on every frame; the material is only rebuilt when its size\n"
-        "        // or the page under it has changed.\n"
-        "        let isDark = AorusGlassPane.profilePageIsDark\n"
+        "        // Scrolling moves the block on every frame; its wash and corners are only redone\n"
+        "        // when its size or the page under it has changed.\n"
+        "        let page = AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark)\n"
         "        let sizeChanged = glassView.bounds.size != frame.size\n"
         "        glassView.frame = frame\n"
-        "        if sizeChanged || self.aorusPostsBlockIsDark != isDark {\n"
-        "            self.aorusPostsBlockIsDark = isDark\n"
-        "            glassView.update(\n"
-        "                size: frame.size,\n"
-        "                cornerRadius: AorusGlassPane.blockCornerRadius,\n"
-        "                isDark: isDark,\n"
-        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "                isInteractive: false,\n"
-        "                isVisible: true,\n"
-        "                transition: .immediate\n"
-        "            )\n"
+        "        if sizeChanged || self.aorusPostsBlockPage != page {\n"
+        "            self.aorusPostsBlockPage = page\n"
+        "            glassView.update(size: frame.size, cornerRadius: AorusGlassPane.blockCornerRadius, page: page, transition: .immediate)\n"
         "        }\n"
         "    }\n"
         "\n"
@@ -4359,6 +4393,249 @@ def _patch_posts_block(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: posts are a block of the page")
+
+
+def _patch_media_list_block(tg: Path) -> None:
+    """Make a profile's list tabs -- files, music, voice messages -- a blur block of its page.
+
+    Those three tabs are the media pane in its list form: rows laid one under another over a card
+    Telegram draws as a rounded rectangle tinted with `itemBlocksBackgroundColor`. Over a page
+    sampled from the photo that card is the dark slab the voice messages were reported sitting
+    on. Under Interface 2.0 the card becomes an `AorusBlurBlockView`, laid where the card is and
+    following it as the list scrolls, and the rows are bound in a palette derived for this peer's
+    page, so their titles, dates and play buttons are the page's ink over the block. The page is
+    asked of this peer rather than of the shared slot, and followed when paging through the
+    avatars repaints it.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoVisualMediaPaneNode.swift"
+    text = _read(path, "PeerInfoVisualMediaPaneNode.swift")
+    if "aorusListBlockView" in text:
+        print("InterfaceV2: list tabs already a blur block")
+        return
+    for module in ("GlassBackgroundComponent", "AorusGramUI"):
+        if f"import {module}\n" not in text:
+            text = _replace_once(text, "import ComponentFlow\n", f"import ComponentFlow\nimport {module}\n", f"list tab {module} import")
+    text = _replace_once(
+        text,
+        "    private let listBackgroundView: UIImageView\n    private let listMaskView: UIImageView\n",
+        "    private let listBackgroundView: UIImageView\n"
+        "    private let listMaskView: UIImageView\n"
+        "    // AorusGram: under Interface 2.0 the card behind a list tab is a blur block of this peer's\n"
+        "    // page, and the rows on it are drawn in that page's palette.\n"
+        "    private var aorusListBlockView: AorusBlurBlockView?\n"
+        "    private var aorusListPage: AorusBlurBlockView.Page?\n"
+        "    private var aorusPageObserver: NSObjectProtocol?\n"
+        "    private var aorusPageTheme: (source: PresentationTheme, page: UIColor, derived: PresentationTheme)?\n",
+        "list tab block storage",
+    )
+    text = _replace_once(
+        text,
+        "    deinit {\n        self.listDisposable.dispose()\n",
+        "    deinit {\n"
+        "        if let aorusPageObserver = self.aorusPageObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusPageObserver)\n"
+        "        }\n"
+        "        self.listDisposable.dispose()\n",
+        "list tab page observer teardown",
+    )
+    # A theme emission rebinds the rows; in the page's palette, not the application's.
+    text = _replace_once(
+        text,
+        "            strongSelf.itemGridBinding.updatePresentationData(presentationData: presentationData)\n",
+        "            let presentationData = strongSelf.aorusPagePresentationData(presentationData)\n"
+        "            strongSelf.itemGridBinding.updatePresentationData(presentationData: presentationData)\n",
+        "list tab palette on theme change",
+    )
+    text = _replace_once(
+        text,
+        "        transition.updateFrame(view: self.listBackgroundView, frame: listBackgroundFrame)\n"
+        "        transition.updateFrame(view: self.listMaskView, frame: listMaskFrame)\n"
+        "    }\n",
+        "        transition.updateFrame(view: self.listBackgroundView, frame: listBackgroundFrame)\n"
+        "        transition.updateFrame(view: self.listMaskView, frame: listMaskFrame)\n"
+        "        self.aorusLayoutListBlock(frame: listBackgroundFrame, transition: transition)\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: whether this pane is a list tab of a profile under Interface 2.0.\n"
+        "    private var aorusUsesPageBlock: Bool {\n"
+        "        guard AorusInterfaceV2Run.isEnabled, !AorusOldInterface.isEnabled else {\n"
+        "            return false\n"
+        "        }\n"
+        "        switch self.contentType {\n"
+        "        case .files, .music, .voiceAndVideoMessages:\n"
+        "            return true\n"
+        "        default:\n"
+        "            return false\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: this peer's page: its own sampled colour, the profile on screen's before it\n"
+        "    /// has one, the theme's page before either.\n"
+        "    private func aorusPageColor(_ presentationData: PresentationData) -> UIColor? {\n"
+        "        guard self.aorusUsesPageBlock else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value()) ?? AorusGlassProfileTint.pageBackgroundColor ?? presentationData.theme.list.blocksBackgroundColor\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: the palette of this peer's page, derived once per theme and page.\n"
+        "    private func aorusPagePresentationData(_ presentationData: PresentationData) -> PresentationData {\n"
+        "        guard let page = self.aorusPageColor(presentationData) else {\n"
+        "            return presentationData\n"
+        "        }\n"
+        "        if let cached = self.aorusPageTheme, cached.source === presentationData.theme, cached.page.isEqual(page) {\n"
+        "            return presentationData.withUpdated(theme: cached.derived)\n"
+        "        }\n"
+        "        let derived = presentationData.theme.aorusGlassTheme(dark: !AorusGlassPane.isLight(page))\n"
+        "        self.aorusPageTheme = (presentationData.theme, page, derived)\n"
+        "        return presentationData.withUpdated(theme: derived)\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: the rows in the page's palette, rebound only when it is not the one they\n"
+        "    /// already have; and, once, the page followed, since paging through the avatars changes it\n"
+        "    /// and none of the parameters the wrapper lays this pane out with.\n"
+        "    private func aorusFollowPage(_ presentationData: PresentationData) {\n"
+        "        guard self.aorusUsesPageBlock else {\n"
+        "            return\n"
+        "        }\n"
+        "        if self.aorusPageObserver == nil {\n"
+        "            self.aorusPageObserver = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageDidChangeNotification, object: nil, queue: .main) { [weak self] _ in\n"
+        "                guard let self, let source = self.currentParams?.presentationData else {\n"
+        "                    return\n"
+        "                }\n"
+        "                self.aorusApplyPagePalette(source)\n"
+        "                self.updateListBackground(transition: .immediate)\n"
+        "            }\n"
+        "        }\n"
+        "        self.aorusApplyPagePalette(presentationData)\n"
+        "    }\n"
+        "\n"
+        "    private func aorusApplyPagePalette(_ presentationData: PresentationData) {\n"
+        "        let derived = self.aorusPagePresentationData(presentationData)\n"
+        "        guard self.itemGridBinding.chatPresentationData.theme.theme !== derived.theme else {\n"
+        "            return\n"
+        "        }\n"
+        "        self.itemGridBinding.updatePresentationData(presentationData: derived)\n"
+        "        self.itemGrid.updatePresentationData(theme: derived.theme)\n"
+        "        guard let (size, topInset, sideInset, bottomInset, _, _, _, _, _, _) = self.currentParams else {\n"
+        "            return\n"
+        "        }\n"
+        "        let listSideInset = sideInset + 16.0\n"
+        "        self.itemGrid.forEachVisibleItem { item in\n"
+        "            guard let itemView = item.view as? ItemView, let item = itemView.item else {\n"
+        "                return\n"
+        "            }\n"
+        "            itemView.bind(\n"
+        "                item: item,\n"
+        "                presentationData: self.itemGridBinding.chatPresentationData,\n"
+        "                context: self.itemGridBinding.context,\n"
+        "                chatLocation: self.itemGridBinding.chatLocation,\n"
+        "                interaction: self.itemGridBinding.listItemInteraction,\n"
+        "                isSelected: self.chatControllerInteraction.selectionState?.selectedIds.contains(item.message.id),\n"
+        "                size: CGSize(width: size.width, height: itemView.bounds.height),\n"
+        "                insets: UIEdgeInsets(top: topInset, left: listSideInset, bottom: bottomInset, right: listSideInset)\n"
+        "            )\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    /// AorusGram: the blur block in the place of the card, following it as the list scrolls.\n"
+        "    /// The material is only redone when its size or the page under it changes.\n"
+        "    private func aorusLayoutListBlock(frame: CGRect, transition: ContainedViewLayoutTransition) {\n"
+        "        guard self.aorusUsesPageBlock else {\n"
+        "            return\n"
+        "        }\n"
+        "        self.listBackgroundView.isHidden = true\n"
+        "        let blockView: AorusBlurBlockView\n"
+        "        if let current = self.aorusListBlockView {\n"
+        "            blockView = current\n"
+        "        } else {\n"
+        "            blockView = AorusBlurBlockView()\n"
+        "            blockView.frame = frame\n"
+        "            self.aorusListBlockView = blockView\n"
+        "            self.view.insertSubview(blockView, aboveSubview: self.listBackgroundView)\n"
+        "        }\n"
+        "        let pageColor = self.aorusPageTheme?.page ?? AorusGlassPane.profilePageColor\n"
+        "        let page = AorusBlurBlockView.Page(color: pageColor, isDark: pageColor.map { !AorusGlassPane.isLight($0) } ?? AorusGlassPane.profilePageIsDark)\n"
+        "        let sizeChanged = blockView.bounds.size != frame.size\n"
+        "        transition.updateFrame(view: blockView, frame: frame)\n"
+        "        if sizeChanged || self.aorusListPage != page {\n"
+        "            self.aorusListPage = page\n"
+        "            blockView.update(size: frame.size, cornerRadius: AorusGlassPane.blockCornerRadius, page: page, transition: .immediate)\n"
+        "        }\n"
+        "    }\n",
+        "list tab blur block",
+    )
+    text = _replace_once(
+        text,
+        "    public func update(size: CGSize, topInset: CGFloat, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, navigationHeight: CGFloat, presentationData: PresentationData, synchronous: Bool, transition: ContainedViewLayoutTransition) {\n"
+        "        self.currentParams = (size, topInset, sideInset, bottomInset, deviceMetrics, visibleHeight, isScrollingLockedAtTop, expandProgress, navigationHeight, presentationData)\n",
+        "    public func update(size: CGSize, topInset: CGFloat, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, navigationHeight: CGFloat, presentationData: PresentationData, synchronous: Bool, transition: ContainedViewLayoutTransition) {\n"
+        "        self.currentParams = (size, topInset, sideInset, bottomInset, deviceMetrics, visibleHeight, isScrollingLockedAtTop, expandProgress, navigationHeight, presentationData)\n"
+        "        // AorusGram: before the grid is laid out, so its rows are made in the page's palette.\n"
+        "        self.aorusFollowPage(presentationData)\n",
+        "list tab palette on layout",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: a profile's list tabs are a blur block of its page")
+
+
+def _patch_links_page_ink(tg: Path) -> None:
+    """Draw a profile's links tab in the ink of the page it is on.
+
+    The links tab is a chat history list in its list form, which lays its rows straight over the
+    pane, and the pane is the profile's page under Interface 2.0. Its rows took the application's
+    palette, white letters in the dark theme over whatever the photo made the page. They are
+    handed this peer's page palette instead, kept in step with the page as the avatars are paged
+    through, the way the other tabs follow it.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/Panes/PeerInfoListPaneNode.swift"
+    text = _read(path, "PeerInfoListPaneNode.swift")
+    if "aorusPagePresentationData" in text:
+        print("InterfaceV2: links tab already in the page's ink")
+        return
+    if "import AorusGramUI\n" not in text:
+        text = _replace_once(text, "import PeerInfoPaneNode\n", "import PeerInfoPaneNode\nimport AorusGramUI\n", "links tab import")
+    text = _replace_once(
+        text,
+        "        self.listNode = context.sharedContext.makeChatHistoryListNode(context: context, updatedPresentationData: updatedPresentationData ?? (context.sharedContext.currentPresentationData.with({ $0 }), context.sharedContext.presentationData),",
+        "        // AorusGram: under Interface 2.0 the rows lie on this peer's page, and are drawn in its ink.\n"
+        "        let aorusPresentationData = PeerInfoListPaneNode.aorusPagePresentationData(updatedPresentationData ?? (context.sharedContext.currentPresentationData.with({ $0 }), context.sharedContext.presentationData), peerId: peerId)\n"
+        "        self.listNode = context.sharedContext.makeChatHistoryListNode(context: context, updatedPresentationData: aorusPresentationData,",
+        "links tab page palette",
+    )
+    text = _replace_once(
+        text,
+        "final class PeerInfoListPaneNode: ASDisplayNode, PeerInfoPaneNode {\n",
+        "final class PeerInfoListPaneNode: ASDisplayNode, PeerInfoPaneNode {\n"
+        "    /// AorusGram: the presentation data the rows are drawn from, in the palette of this peer's\n"
+        "    /// page and re-sent whenever the page changes. Unchanged outside Interface 2.0.\n"
+        "    private static func aorusPagePresentationData(_ base: (initial: PresentationData, signal: Signal<PresentationData, NoError>), peerId: EnginePeer.Id) -> (initial: PresentationData, signal: Signal<PresentationData, NoError>) {\n"
+        "        guard AorusInterfaceV2Run.isEnabled, !AorusOldInterface.isEnabled else {\n"
+        "            return base\n"
+        "        }\n"
+        "        let peerKey = peerId.id._internalGetInt64Value()\n"
+        "        let derive: (PresentationData) -> PresentationData = { presentationData in\n"
+        "            guard let page = AorusGlassProfileTint.pageBackgroundColor(for: peerKey) ?? AorusGlassProfileTint.pageBackgroundColor else {\n"
+        "                return presentationData\n"
+        "            }\n"
+        "            return presentationData.withUpdated(theme: presentationData.theme.aorusGlassTheme(dark: !AorusGlassPane.isLight(page)))\n"
+        "        }\n"
+        "        let pageChanges = Signal<Void, NoError> { subscriber in\n"
+        "            subscriber.putNext(Void())\n"
+        "            let observer = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageDidChangeNotification, object: nil, queue: .main) { _ in\n"
+        "                subscriber.putNext(Void())\n"
+        "            }\n"
+        "            return ActionDisposable {\n"
+        "                NotificationCenter.default.removeObserver(observer)\n"
+        "            }\n"
+        "        }\n"
+        "        return (initial: derive(base.initial), signal: combineLatest(base.signal, pageChanges) |> map { presentationData, _ in derive(presentationData) })\n"
+        "    }\n"
+        "\n",
+        "links tab palette helper",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: the links tab is drawn in its page's ink")
 
 
 def _patch_members_pane_glass(tg: Path) -> None:
@@ -4385,7 +4662,7 @@ def _patch_members_pane_glass(tg: Path) -> None:
     stretched to different heights, and anything with a gradient down it would meet itself at the
     pane's top edge as a join.
 
-    The block behind the rows becomes real glass, cornered at the same 26 as every other block on
+    The block behind the rows becomes a blur block, cornered at the same 26 as every other block on
     the page.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/Panes/PeerInfoMembersPane.swift"
@@ -4413,9 +4690,9 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "    private let listBackgroundView: UIImageView\n"
         "    private let listMaskView: UIImageView\n"
         "    // AorusGram: the peer whose page this pane sits on, kept in the form the tint is\n"
-        "    // keyed by, and the glass and page fill that replace the card under Interface 2.0.\n"
+        "    // keyed by, and the blur block and page fill that replace the card under Interface 2.0.\n"
         "    private let aorusPeerId: Int64\n"
-        "    private var aorusGlassBackgroundView: GlassBackgroundView?\n"
+        "    private var aorusGlassBackgroundView: AorusBlurBlockView?\n"
         "    // The fill is two views: a plain one cut to the shape of the rows, and the picture\n"
         "    // inside it. They have to be two, because the shape is measured in the pane's own\n"
         "    // coordinates and the picture is laid over the screen's backdrop -- which begins a few\n"
@@ -4550,7 +4827,7 @@ def _patch_members_pane_glass(tg: Path) -> None:
         text,
         "        self.listBackgroundView.tintColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
         "        self.listMaskView.tintColor = presentationData.theme.list.blocksBackgroundColor\n",
-        "        // AorusGram: clear, because the glass laid behind it under Interface 2.0 is the\n"
+        "        // AorusGram: clear, because the blur block laid behind it under Interface 2.0 is the\n"
         "        // card now, and anything painted over that material flattens it. The mask keeps\n"
         "        // the page colour it always had unless it has been taken over as the shape of the\n"
         "        // page fill, where opaque white is what gives the template image an alpha to cut\n"
@@ -4569,7 +4846,7 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "        self.aorusUpdateGlass(backgroundFrame: listBackgroundFrame, transition: transition)\n"
         "    }\n"
         "    \n"
-        "    // AorusGram: the glass this pane's block is made of, and the page that shows through\n"
+        "    // AorusGram: the blur this pane's block is made of, and the page that shows through\n"
         "    // the frame around it. Called from the same place the two rectangles are laid out, so\n"
         "    // it tracks them through every scroll without a second pass.\n"
         "    private func aorusUpdateGlass(backgroundFrame: CGRect, transition: ContainedViewLayoutTransition) {\n"
@@ -4583,12 +4860,12 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "            return\n"
         "        }\n"
         "        \n"
-        "        let glassView: GlassBackgroundView\n"
+        "        let glassView: AorusBlurBlockView\n"
         "        if let current = self.aorusGlassBackgroundView {\n"
         "            glassView = current\n"
         "        } else {\n"
-        "            glassView = GlassBackgroundView(frame: backgroundFrame)\n"
-        "            glassView.isUserInteractionEnabled = false\n"
+        "            glassView = AorusBlurBlockView()\n"
+        "            glassView.frame = backgroundFrame\n"
         "            self.aorusGlassBackgroundView = glassView\n"
         "            self.view.insertSubview(glassView, at: 0)\n"
         "        }\n"
@@ -4596,17 +4873,11 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "        glassView.update(\n"
         "            size: backgroundFrame.size,\n"
         "            cornerRadius: 26.0,\n"
-        "            // The page this pane sits on, not the app's theme. A pale avatar puts a\n"
-        "            // light page under a dark theme, and dark material over a light page is the\n"
-        "            // black card again, one theme along. This pane's own peer, as the rows ask\n"
-        "            // it, so the block and the names on it can never disagree about which side\n"
-        "            // of readable the page is -- and a profile opened from this list cannot\n"
-        "            // repaint it behind its back.\n"
-        "            isDark: self.aorusPageIsDark,\n"
-        "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "            isInteractive: false,\n"
-        "            // On a white page the block is the page, as in the profile's own sections.\n"
-        "            isVisible: !AorusGlassPane.isWhitePage(self.aorusResolvedPageColor),\n"
+        "            // The page this block sits on, not the app's theme. This pane's own peer, as\n"
+        "            // the rows ask it, so the block and the names on it can never disagree about\n"
+        "            // which side of readable the page is -- and a profile opened from this list\n"
+        "            // cannot repaint it behind its back.\n"
+        "            page: AorusBlurBlockView.Page(color: self.aorusResolvedPageColor, isDark: self.aorusPageIsDark),\n"
         "            transition: .immediate\n"
         "        )\n"
         "        \n"
@@ -4740,7 +5011,7 @@ def _patch_members_pane_glass(tg: Path) -> None:
 
 
 def _patch_groups_pane_glass(tg: Path) -> None:
-    """Give the groups tab the same glass the members tab has, instead of a black rectangle.
+    """Give the groups tab the same blur block the members tab has, instead of a black rectangle.
 
     This is the tab a bot's profile calls "Groups" -- the groups it has been added to -- and on any
     other peer the groups you have in common. It is built the way the members tab is built, out of
@@ -4748,7 +5019,7 @@ def _patch_groups_pane_glass(tg: Path) -> None:
     rounded hole punched in the middle, so the hole reads as the block's shape and keeps the first
     row's avatar inside its corner. Everything `_patch_members_pane_glass` says about why those two
     cannot simply be turned off applies here word for word, and so does what it does about it: the
-    card becomes real glass at the same 26, and the frame around it paints the page.
+    card becomes a blur block at the same 26, and the frame around it paints the page.
 
     What is different is the rows, and it is the whole of what was reported. The members tab is
     built from `ContactsPeerItem` at `hideBackground: true`, which never assigns its background node
@@ -4872,12 +5143,12 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "    private var aorusPeerId: Int64 {\n"
         "        return self.peerId.id._internalGetInt64Value()\n"
         "    }\n"
-        "    // The glass and the page fill that replace the card under Interface 2.0. The fill is two\n"
+        "    // The blur block and the page fill that replace the card under Interface 2.0. The fill is two\n"
         "    // views: a plain one cut to the shape of the rows, and the picture inside it. They have to\n"
         "    // be two, because the shape is measured in the pane's own coordinates and the picture is\n"
         "    // laid over the screen's backdrop -- which begins a few hundred points above the pane, and\n"
         "    // often at a negative y from here.\n"
-        "    private var aorusGlassBackgroundView: GlassBackgroundView?\n"
+        "    private var aorusGlassBackgroundView: AorusBlurBlockView?\n"
         "    private var aorusPageFillView: UIView?\n"
         "    private var aorusPageImageView: UIImageView?\n"
         "    // The screen's own backdrop, so its rectangle can be asked for rather than guessed at.\n"
@@ -4996,7 +5267,7 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         text,
         "        self.listBackgroundView.tintColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
         "        self.listMaskView.tintColor = presentationData.theme.list.blocksBackgroundColor\n",
-        "        // AorusGram: clear, because the glass laid behind it under Interface 2.0 is the card\n"
+        "        // AorusGram: clear, because the blur block laid behind it under Interface 2.0 is the card\n"
         "        // now, and anything painted over that material flattens it. The mask keeps the page\n"
         "        // colour it always had unless it has been taken over as the shape of the page fill,\n"
         "        // where opaque white is what gives the template image an alpha to cut with --\n"
@@ -5015,7 +5286,7 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "        self.aorusUpdateGlass(backgroundFrame: listBackgroundFrame, transition: transition)\n"
         "    }\n"
         "    \n"
-        "    // AorusGram: the glass this pane's block is made of, and the page that shows through the\n"
+        "    // AorusGram: the blur this pane's block is made of, and the page that shows through the\n"
         "    // frame around it. Called from the same place the two rectangles are laid out, so it\n"
         "    // tracks them through every scroll without a second pass.\n"
         "    private func aorusUpdateGlass(backgroundFrame: CGRect, transition: ContainedViewLayoutTransition) {\n"
@@ -5029,12 +5300,12 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "            return\n"
         "        }\n"
         "        \n"
-        "        let glassView: GlassBackgroundView\n"
+        "        let glassView: AorusBlurBlockView\n"
         "        if let current = self.aorusGlassBackgroundView {\n"
         "            glassView = current\n"
         "        } else {\n"
-        "            glassView = GlassBackgroundView(frame: backgroundFrame)\n"
-        "            glassView.isUserInteractionEnabled = false\n"
+        "            glassView = AorusBlurBlockView()\n"
+        "            glassView.frame = backgroundFrame\n"
         "            self.aorusGlassBackgroundView = glassView\n"
         "            self.view.insertSubview(glassView, at: 0)\n"
         "        }\n"
@@ -5042,17 +5313,11 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "        glassView.update(\n"
         "            size: backgroundFrame.size,\n"
         "            cornerRadius: 26.0,\n"
-        "            // The page this pane sits on, not the app's theme. A pale avatar puts a\n"
-        "            // light page under a dark theme, and dark material over a light page is the\n"
-        "            // black card again, one theme along. This pane's own peer, as the rows ask\n"
-        "            // it, so the block and the names on it can never disagree about which side\n"
-        "            // of readable the page is -- and a profile opened from this list cannot\n"
-        "            // repaint it behind its back.\n"
-        "            isDark: self.aorusPageIsDark,\n"
-        "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "            isInteractive: false,\n"
-        "            // On a white page the block is the page, as in the profile's own sections.\n"
-        "            isVisible: !AorusGlassPane.isWhitePage(self.aorusResolvedPageColor),\n"
+        "            // The page this block sits on, not the app's theme. This pane's own peer, as\n"
+        "            // the rows ask it, so the block and the names on it can never disagree about\n"
+        "            // which side of readable the page is -- and a profile opened from this list\n"
+        "            // cannot repaint it behind its back.\n"
+        "            page: AorusBlurBlockView.Page(color: self.aorusResolvedPageColor, isDark: self.aorusPageIsDark),\n"
         "            transition: .immediate\n"
         "        )\n"
         "        \n"
@@ -5595,14 +5860,15 @@ def _patch_overlay_palette(tg: Path) -> None:
 
 _SECTION_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
 
-    /// Whether this section is drawn as a real pane of glass instead of a coloured card.
+    /// Whether this section is drawn as a blur block instead of a coloured card.
     ///
-    /// A plain-style section is the page itself rather than a card standing on it, so it keeps its
-    /// colour. Everything else -- every blocks section on every screen built out of components
-    /// rather than out of `ItemListItem`s -- becomes glass, which is the same trade
-    /// `ItemListControllerNode` makes for the older screens.
+    /// Only on a profile's page: a section drawn in a theme derived for that page is the one whose
+    /// card colour is the marker, the same signal `ItemListControllerNode` answers for the older
+    /// screens. Everywhere else -- gifts, stars, business and the other screens built out of
+    /// components -- the card is Telegram's own opaque one. A plain-style section is the page
+    /// itself rather than a card standing on it, so it keeps its colour either way.
     private func aorusUsesGlass(_ configuration: Configuration) -> Bool {
-        guard AorusGlassPane.isEnabled else {
+        guard AorusGlassPane.isEnabled, AorusGlassPane.isBlockMarker(configuration.theme.list.itemBlocksBackgroundColor) else {
             return false
         }
         if case .plain = configuration.style {
@@ -5630,15 +5896,14 @@ _SECTION_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
             }
             return
         }
-        let glassView: GlassBackgroundView
+        let glassView: AorusBlurBlockView
         if let current = self.aorusGlassView {
             glassView = current
         } else {
-            // Inside the card's own view, so the pane inherits the frame this section already keeps
-            // up to date and there is no second copy of that geometry to hold in step. The card is
-            // a shape layer and does not clip, so the pane cuts its own corners below.
-            glassView = GlassBackgroundView(frame: CGRect(origin: CGPoint(), size: size))
-            glassView.isUserInteractionEnabled = false
+            // Inside the card's own view, so the block inherits the frame this section already
+            // keeps up to date and there is no second copy of that geometry to hold in step. The
+            // card is a shape layer and does not clip, so the block cuts its own corners below.
+            glassView = AorusBlurBlockView()
             self.aorusGlassView = glassView
             self.externalContentBackgroundView.insertSubview(glassView, at: 0)
         }
@@ -5651,10 +5916,7 @@ _SECTION_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
                 bottomLeft: corners.minXMaxY,
                 bottomRight: corners.maxXMaxY
             ),
-            isDark: configuration.theme.overallDarkAppearance,
-            tintColor: GlassBackgroundView.TintColor(kind: .clear),
-            isInteractive: false,
-            isVisible: true,
+            page: AorusBlurBlockView.Page(color: configuration.theme.list.blocksBackgroundColor, isDark: configuration.theme.overallDarkAppearance),
             transition: transition
         )
     }
@@ -5663,7 +5925,7 @@ _SECTION_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
 
 
 def _patch_component_section_glass(tg: Path) -> None:
-    """Put the same glass behind the sections of every screen built out of components.
+    """Put the same blur block behind a profile's sections built out of components.
 
     `ItemListControllerNode` covers the screens made of `ItemListItem`s, which is most of the app but
     not the newer half of Settings: gifts, stars, business, the affiliate and verification screens and
@@ -5671,9 +5933,11 @@ def _patch_component_section_glass(tg: Path) -> None:
     card and never goes through an ItemList at all. Those were the blocks still coming out flat.
 
     One file covers all of them, because the card is drawn in exactly one place: a shape layer filled
-    with `itemBlocksBackgroundColor`. Under Interface 2.0 the fill goes clear and a `GlassBackgroundView`
-    goes inside that same view, cut with the same corners -- including the asymmetric ones a `.range`
-    section asks for, where only the rows below a given item are meant to be carded.
+    with `itemBlocksBackgroundColor`. On a profile's page -- a theme derived for it, whose card colour
+    is the marker -- the fill goes clear and an `AorusBlurBlockView` goes inside that same view, cut
+    with the same corners, including the asymmetric ones a `.range` section asks for, where only the
+    rows below a given item are meant to be carded. Everywhere else the card is left as Telegram
+    draws it.
     """
     path = tg / "submodules/TelegramUI/Components/ListSectionComponent/Sources/ListSectionComponent.swift"
     text = _read(path, "ListSectionComponent.swift")
@@ -5690,9 +5954,9 @@ def _patch_component_section_glass(tg: Path) -> None:
         text,
         "    public let externalContentBackgroundView: DynamicCornerRadiusView\n",
         "    public let externalContentBackgroundView: DynamicCornerRadiusView\n"
-        "    // AorusGram: built on the first pass that draws a card, so a section laid out with\n"
-        "    // Interface 2.0 off never allocates an effect view it will not show.\n"
-        "    private var aorusGlassView: GlassBackgroundView?\n",
+        "    // AorusGram: built on the first pass that draws a profile's block, so every other\n"
+        "    // section never allocates an effect view it will not show.\n"
+        "    private var aorusGlassView: AorusBlurBlockView?\n",
         "section glass property",
     )
     text = _replace_once(
@@ -5743,98 +6007,7 @@ def _patch_component_section_glass(tg: Path) -> None:
         "section glass helper",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: put every component section on its own pane of glass")
-
-
-def _patch_personal_colours_glass(tg: Path) -> None:
-    """Give Profile > Edit > Personal colours the same glass blocks as every other screen.
-
-    Upstream builds this screen as one card: the preview pinned at the top, and the first section
-    scrolling underneath it with its top 38 points tucked under the preview's bottom edge. What makes
-    the two read as a single card is a third thing nobody sees -- an opaque layer the colour of a
-    card, `itemBlocksBackgroundColor`, laid inside the scroll view from far above the content down
-    to 340 points into it, so that pulling the list down shows more card instead of the page. A
-    gradient under the preview, in the page colour on one tab and the card colour on the other, and
-    blurred on the profile tab, hides the join.
-
-    Under Interface 2.0 the sections are glass, and every one of those three pieces works against
-    it. The hidden layer is suddenly behind the top of a transparent section, so the first block is
-    grey slab down to 340 points and glass below it -- the "part native glass, part grey" that was
-    reported. The gradient lays card grey, or a blur, over the glass it is supposed to be blending
-    into, which is the smear.
-
-    So under Interface 2.0 the preview is a card of its own, rounded at both ends and standing a
-    little apart from the blocks below it, and every section is a whole block rather than the tail
-    of the preview's card. The layer that faked the continuous card goes, and the gradient under the
-    preview fades into the page, unblurred, from the preview's own bottom edge -- which is all it
-    has to do once nothing is meant to join there.
-    """
-    path = tg / "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/Sources/UserApperanceScreen.swift"
-    text = _read(path, "UserApperanceScreen.swift")
-    if "aorusGlassPreview" in text:
-        print("InterfaceV2: personal colours already on glass blocks")
-        return
-    text = _replace_once(
-        text,
-        "            let itemCornerRadius: CGFloat = 26.0\n",
-        "            let itemCornerRadius: CGFloat = 26.0\n"
-        "            // AorusGram: under Interface 2.0 the preview is a card of its own and the sections\n"
-        "            // below it are whole glass blocks, not the tail of one continuous card.\n"
-        "            let aorusGlassPreview = AorusGlassPane.isEnabled\n"
-        "            let aorusPreviewGap: CGFloat = aorusGlassPreview ? 12.0 : 0.0\n",
-        "personal colours glass flag",
-    )
-    old_corners = "bottomCornerRadius: !self.scrolledUp ? itemCornerRadius : 0.0"
-    if text.count(old_corners) != 2:
-        raise RuntimeError("InterfaceV2: personal colours preview corners anchor count changed")
-    text = text.replace(old_corners, "bottomCornerRadius: (!self.scrolledUp || aorusGlassPreview) ? itemCornerRadius : 0.0")
-    text = _replace_once(
-        text,
-        "                contentHeight += profilePreviewSize.height - 38.0\n",
-        "                contentHeight += profilePreviewSize.height - 38.0 + aorusPreviewGap\n",
-        "personal colours profile gap",
-    )
-    text = _replace_once(
-        text,
-        "                contentHeight += namePreviewSize.height - 38.0\n",
-        "                contentHeight += namePreviewSize.height - 38.0 + aorusPreviewGap\n",
-        "personal colours name gap",
-    )
-    text = _replace_once(
-        text,
-        "let previewEdgeEffectFrame = CGRect(origin: CGPoint(x: profilePreviewFrame.minX, y: profilePreviewFrame.maxY - 35.0)",
-        "let previewEdgeEffectFrame = CGRect(origin: CGPoint(x: profilePreviewFrame.minX, y: profilePreviewFrame.maxY - (aorusGlassPreview ? 0.0 : 35.0))",
-        "personal colours profile fade origin",
-    )
-    text = _replace_once(
-        text,
-        "self.previewEdgeEffectView.update(content: environment.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: previewEdgeEffectFrame",
-        "self.previewEdgeEffectView.update(content: environment.theme.list.blocksBackgroundColor, blur: !aorusGlassPreview, alpha: 1.0, rect: previewEdgeEffectFrame",
-        "personal colours profile fade",
-    )
-    text = _replace_once(
-        text,
-        "self.previewEdgeEffectView.update(content: environment.theme.list.itemBlocksBackgroundColor, alpha: 1.0, rect: previewEdgeEffectFrame",
-        "self.previewEdgeEffectView.update(content: aorusGlassPreview ? environment.theme.list.blocksBackgroundColor : environment.theme.list.itemBlocksBackgroundColor, alpha: 1.0, rect: previewEdgeEffectFrame",
-        "personal colours name fade",
-    )
-    text = _replace_once(
-        text,
-        "background: .range(from: 0, corners: DynamicCornerRadiusView.Corners(minXMinY: 0.0, maxXMinY: 0.0, minXMaxY: itemCornerRadius, maxXMaxY: itemCornerRadius)),",
-        "background: aorusGlassPreview ? .all : .range(from: 0, corners: DynamicCornerRadiusView.Corners(minXMinY: 0.0, maxXMinY: 0.0, minXMaxY: itemCornerRadius, maxXMaxY: itemCornerRadius)),",
-        "personal colours name section corners",
-    )
-    text = _replace_once(
-        text,
-        "            self.topOverscrollLayer.backgroundColor = environment.theme.list.itemBlocksBackgroundColor.cgColor\n",
-        "            self.topOverscrollLayer.backgroundColor = environment.theme.list.itemBlocksBackgroundColor.cgColor\n"
-        "            // AorusGram: the card-coloured slab that made preview and section one card. Under\n"
-        "            // Interface 2.0 it would sit behind the top of a glass block and turn it grey.\n"
-        "            self.topOverscrollLayer.isHidden = AorusGlassPane.isEnabled\n",
-        "personal colours overscroll slab",
-    )
-    path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: personal colours on glass blocks")
+    print("InterfaceV2: blur blocks behind a profile's component sections")
 
 
 def _patch_static_avatar(tg: Path) -> None:
@@ -6256,14 +6429,14 @@ def _patch_compact_music(tg: Path) -> None:
 
 
 def _patch_music_player_glass(tg: Path) -> None:
-    """Stand the whole music player on one pane of glass, and put its button in the page's ink.
+    """Stand the whole music player on one blur, and put its button in the page's ink.
 
     The player a tap on the profile's music pill opens is built out of four opaque fills: a backdrop
     behind the playlist, a 16pt strip down each side of it, a band behind the header, and a flat panel
     across the bottom with a shadow over it that the controls stand in. Under Interface 2.0 all four go
-    clear and one `GlassBackgroundView` runs from the top of the modal to the bottom of the screen.
+    clear and one `AorusBlurBlockView` runs from the top of the modal to the bottom of the screen.
 
-    One pane and not four. Glass over glass comes out brighter than either, so a player with a pane
+    One blur and not four. A wash over a wash comes out brighter than either, so a player with one
     per fill would have a bright rectangle across its foot where the controls overlap the playlist,
     and a brighter band at the top where the header does. One pane also means the seams between those
     fills stop existing rather than being painted over: the wedges Telegram draws to round the
@@ -6276,7 +6449,7 @@ def _patch_music_player_glass(tg: Path) -> None:
     and the controls all stay above the material rather than through it.
 
     "Добавить в профиль" was the one control left in the player wearing a colour that belonged to no
-    surface behind it -- the accent fill, over glass. It becomes the page's ink, white on a dark theme
+    surface behind it -- the accent fill, over the blur. It becomes the page's ink, white on a dark theme
     and near-black on a light one, with its label and glyph in the inverse: the pair the profile's own
     header buttons already use. The remove state keeps its own translucent fill, which reads over the
     material as it always did.
@@ -6284,7 +6457,7 @@ def _patch_music_player_glass(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Sources/OverlayAudioPlayerControllerNode.swift"
     text = _read(path, "OverlayAudioPlayerControllerNode.swift")
     if "aorusPlayerBackgroundView" in text:
-        print("InterfaceV2: music player already glass")
+        print("InterfaceV2: music player already on its blur")
         return
     text = _replace_once(
         text,
@@ -6298,9 +6471,9 @@ def _patch_music_player_glass(tg: Path) -> None:
         "    private let historyBackgroundContentNode: ASDisplayNode\n",
         "    private let historyBackgroundNode: ASDisplayNode\n"
         "    private let historyBackgroundContentNode: ASDisplayNode\n"
-        "    // AorusGram: the pane of glass the whole player stands on under Interface 2.0. Held so that\n"
-        "    // the second layout pass finds the one the first made instead of laying another behind it.\n"
-        "    private var aorusPlayerBackgroundView: GlassBackgroundView?\n",
+        "    // AorusGram: the blur the whole player stands on under Interface 2.0. Held so that the\n"
+        "    // second layout pass finds the one the first made instead of laying another behind it.\n"
+        "    private var aorusPlayerBackgroundView: AorusBlurBlockView?\n",
         "music player pane",
     )
     text = _replace_once(
@@ -6382,9 +6555,9 @@ def _patch_music_player_glass(tg: Path) -> None:
     )
     text = _replace_once(
         text,
-        "    private var aorusPlayerBackgroundView: GlassBackgroundView?\n",
-        "    private var aorusPlayerBackgroundView: GlassBackgroundView?\n"
-        "    // AorusGram: under Interface 2.0 the player is clear glass over the modal's dim, which is dark\n"
+        "    private var aorusPlayerBackgroundView: AorusBlurBlockView?\n",
+        "    private var aorusPlayerBackgroundView: AorusBlurBlockView?\n"
+        "    // AorusGram: under Interface 2.0 the player is a blur over the modal's dim, which is dark\n"
         "    // whatever the theme. In a light theme its words were drawn black on that dark glass: there\n"
         "    // the player is drawn in the night palette with the person's accent, so its titles, times and\n"
         "    // controls read white. Made once per theme, so a theme emission does not rebuild the player.\n"
@@ -6439,12 +6612,12 @@ def _patch_music_player_glass(tg: Path) -> None:
         "        guard frame.width > 0.0, frame.height > 0.0 else {\n"
         "            return\n"
         "        }\n"
-        "        let view: GlassBackgroundView\n"
+        "        let view: AorusBlurBlockView\n"
         "        if let current = self.aorusPlayerBackgroundView {\n"
         "            view = current\n"
         "        } else {\n"
-        "            view = GlassBackgroundView(frame: frame)\n"
-        "            view.isUserInteractionEnabled = false\n"
+        "            view = AorusBlurBlockView()\n"
+        "            view.frame = frame\n"
         "            self.aorusPlayerBackgroundView = view\n"
         "            self.contentNode.view.insertSubview(view, at: 0)\n"
         "        }\n"
@@ -6452,10 +6625,9 @@ def _patch_music_player_glass(tg: Path) -> None:
         "        view.update(\n"
         "            size: frame.size,\n"
         "            cornerRadii: GlassBackgroundView.CornerRadii(topLeft: 38.0, topRight: 38.0, bottomLeft: 0.0, bottomRight: 0.0),\n"
-        "            isDark: self.presentationData.theme.overallDarkAppearance,\n"
-        "            tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
-        "            isInteractive: false,\n"
-        "            isVisible: true,\n"
+        "            // Over the modal's dim, which is dark in either theme: the sheet lifts a shade\n"
+        "            // off it, so it reads as a sheet and not as more of the dim.\n"
+        "            page: .black,\n"
         "            transition: .immediate\n"
         "        )\n"
         "    }\n"
@@ -8504,12 +8676,13 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_header_button_set(tg)
     _patch_item_list_glass(tg)
     _patch_component_section_glass(tg)
-    _patch_personal_colours_glass(tg)
     _patch_nav_button_glass(tg)
     _patch_pane_container_glass(tg)
     _patch_pane_page_background(tg)
     _patch_sparse_grid_tiles(tg)
     _patch_posts_block(tg)
+    _patch_media_list_block(tg)
+    _patch_links_page_ink(tg)
     _patch_members_pane_glass(tg)
     _patch_groups_pane_glass(tg)
     _patch_recommended_pane_glass(tg)

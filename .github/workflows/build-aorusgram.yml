@@ -1182,6 +1182,10 @@ jobs:
           cp $PATCHES/submodules/Display/Source/AorusPersonalBadge.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
+          # Interface 2.0's profile blocks: Telegram's frosted blur and a wash, not glass
+          # (interface_v2_patch.py, docs/interface-v2.md).
+          cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusBlurBlock.swift \
+             $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
           cp $PATCHES/submodules/Display/Source/AorusTabBarLayout.swift $TG/submodules/Display/Source/AorusTabBarLayout.swift
           cp $PATCHES/submodules/Display/Source/AorusTabBarIdentity.swift $TG/submodules/Display/Source/AorusTabBarIdentity.swift

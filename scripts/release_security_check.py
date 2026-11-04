@@ -731,7 +731,8 @@ def main() -> int:
         fail(errors, "one-time voice patch is missing")
     elif branding[one_time_start:one_time_end].count("_AG_LICENSE_LOCK_KEY") < 5:
         fail(errors, "one-time voice bypass does not fully restore native behavior while locked")
-    for helper in ("aorusAmoledEnabled", "aorusInterfaceV2Enabled"):
+    # Interface 2.0 no longer has a theme helper of its own: it draws lists in the theme as it is.
+    for helper in ("aorusAmoledEnabled",):
         helper_index = branding.find(helper, branding.find("_AORUS_AMOLED_HELPER"))
         helper_tail = branding[helper_index:helper_index + 400]
         if helper_index < 0 or "_AG_LICENSE_LOCK_KEY" not in helper_tail:

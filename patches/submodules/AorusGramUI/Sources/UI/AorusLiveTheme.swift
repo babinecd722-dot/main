@@ -67,28 +67,26 @@ extension ViewController {
     }
 }
 
-/// The same material, tint, radius and white-page policy used by Telegram's
-/// Interface 2.0 ItemListControllerNode, over UIKit's native row geometry.
+/// The page Telegram's own lists are drawn on, for a UIKit screen of ours.
 func aorusPluginPageColor(_ theme: PresentationTheme) -> UIColor {
     return theme.aorusGlassListTheme.list.blocksBackgroundColor
 }
 
 // Grouped rows fill the column; the table frame supplies ItemList's gutters.
-// Both modes use the same column; the section renderer supplies the material.
+// Both modes use the same column; the section renderer supplies the card.
 func aorusPluginTableStyle() -> UITableView.Style {
     return .grouped
 }
 
 func aorusPluginFilterInk(_ theme: PresentationTheme, active: Bool) -> UIColor {
     if active { return .white }
-    let palette = theme.aorusGlassListTheme
-    return AorusGlassPane.isEnabled ? palette.list.itemPrimaryTextColor : palette.list.itemAccentColor
+    return theme.aorusGlassListTheme.list.itemAccentColor
 }
 
 func aorusConfigureTable(_ table: AorusGroupedTableView, theme: PresentationTheme) {
     table.overrideUserInterfaceStyle = theme.aorusGlassListTheme.overallDarkAppearance ? .dark : .light
     table.backgroundColor = aorusPluginPageColor(theme)
-    table.nativePanes = aorusNativeListPanes(theme: theme, isClear: true)
+    table.nativePanes = aorusNativeListPanes(theme: theme)
 }
 
 func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: ContainerViewLayout) {
@@ -99,27 +97,52 @@ func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: Container
 }
 
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {
+    let panes: AorusGroupedTableView.NativePanes?
+    if AorusGlassPane.isEnabled {
+        panes = isCapsule ? aorusNativeCapsulePanes(theme: theme) : aorusNativeListPanes(theme: theme)
+    } else {
+        panes = nil
+    }
     surface.configure(fill: theme.list.itemBlocksBackgroundColor, legacyCornerRadius: legacyCornerRadius, legacyBorderWidth: legacyBorderWidth,
-                      nativePanes: AorusGlassPane.isEnabled ? aorusNativeListPanes(theme: theme, isClear: true) : nil,
-                      isCapsule: isCapsule)
+                      nativePanes: panes, isCapsule: isCapsule)
 }
 
-private func aorusNativeListPanes(theme: PresentationTheme, isClear: Bool) -> AorusGroupedTableView.NativePanes {
-    let glass = AorusGlassPane.isEnabled
+/// Telegram's opaque card behind UIKit's own row geometry, in both interfaces. Interface 2.0 rounds
+/// it as Telegram's iOS 26 lists round theirs; the stock interface keeps the eleven points it
+/// always had. A section or a card is content, and Telegram draws content on a card.
+private func aorusNativeListPanes(theme: PresentationTheme) -> AorusGroupedTableView.NativePanes {
     let nativeTheme = theme.aorusGlassListTheme
-    let originalCardColor = theme.list.itemBlocksBackgroundColor
+    let cardColor = nativeTheme.list.itemBlocksBackgroundColor
     return AorusGroupedTableView.NativePanes(
-        cornerRadius: glass ? AorusGlassPane.blockCornerRadius : 11,
+        cornerRadius: AorusGlassPane.isEnabled ? AorusGlassPane.blockCornerRadius : 11,
         isDark: nativeTheme.overallDarkAppearance,
-        isWhitePage: glass && !nativeTheme.overallDarkAppearance && AorusGlassPane.isWhitePage(nativeTheme.list.blocksBackgroundColor),
-        cardColor: nativeTheme.list.itemBlocksBackgroundColor,
+        isWhitePage: false,
+        cardColor: cardColor,
         isCardColor: { color in
-            return AorusGlassPane.isBlockMarker(color)
-                || (originalCardColor.cgColor.alpha > 0 && color.isEqual(originalCardColor))
+            return cardColor.cgColor.alpha > 0 && color.isEqual(cardColor)
         },
         makePane: {
-            if glass { return AorusUIKitListGlassPane(isClear: isClear) }
-            return AorusUIKitOpaqueListPane(color: originalCardColor)
+            return AorusUIKitOpaqueListPane(color: cardColor)
+        }
+    )
+}
+
+/// The capsule of a control -- the search field, the filter -- under Interface 2.0: Telegram's
+/// clear glass, as its own search fields and buttons are. A control floats over the page and is
+/// pressed; it is the one kind of surface on these screens that is glass.
+private func aorusNativeCapsulePanes(theme: PresentationTheme) -> AorusGroupedTableView.NativePanes {
+    let nativeTheme = theme.aorusGlassListTheme
+    let cardColor = nativeTheme.list.itemBlocksBackgroundColor
+    return AorusGroupedTableView.NativePanes(
+        cornerRadius: AorusGlassPane.blockCornerRadius,
+        isDark: nativeTheme.overallDarkAppearance,
+        isWhitePage: !nativeTheme.overallDarkAppearance && AorusGlassPane.isWhitePage(nativeTheme.list.blocksBackgroundColor),
+        cardColor: cardColor,
+        isCardColor: { color in
+            return cardColor.cgColor.alpha > 0 && color.isEqual(cardColor)
+        },
+        makePane: {
+            return AorusUIKitListGlassPane(isClear: true)
         }
     )
 }

@@ -3267,7 +3267,13 @@ def main() -> None:
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift",
-            ("aorusGlassBackgroundView", "import GlassBackgroundComponent"),
+            (
+                "aorusGlassBackgroundView",
+                "import GlassBackgroundComponent",
+                "private var aorusGlassBackgroundView: AorusBlurBlockView?",
+                "let aorusGlass = AorusInterfaceV2Run.isEnabled && !self.aorusIsSettings",
+                "if aorusGlass, let aorusColors = AorusGlassProfileTint.listSectionColors {",
+            ),
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
@@ -3538,7 +3544,35 @@ def main() -> None:
                 "aorusGlassPanes",
                 "AorusGlassPane.isBlockMarker(color)",
                 "import GlassBackgroundComponent",
+                # Blur blocks only behind a list continuing a profile's page; every other list is
+                # Telegram's own cards and is not walked at all.
+                "AorusGlassPane.isEnabled && AorusGlassPane.isBlockMarker(self.theme?.list.itemBlocksBackgroundColor ?? UIColor.clear)",
+                "private var aorusGlassPanes: [AorusBlurBlockView] = []",
             ),
+        ),
+        # The profile's block: Telegram's frosted blur and a wash, never glass, never live outside
+        # a profile.
+        (
+            "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusBlurBlock.swift",
+            ("public final class AorusBlurBlockView: UIView", "case wash", "UIAccessibility.isReduceTransparencyEnabled", "\"colorSaturate\""),
+        ),
+        (
+            "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift",
+            ("let aorusNoCornerWedges = AorusGlassPane.isEnabled && AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor)",),
+        ),
+        # Settings is a PeerInfoScreen too: its sections keep Telegram's card while a profile's are
+        # blurred, and each section is told which it is as it is made.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift",
+            ("sectionNode.aorusIsSettings = self.isSettings",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/GiftsListView.swift",
+            ("theme: self.aorusCardTheme(params.presentationData.theme),", "theme.aorusGlassTheme(dark: !AorusGlassPane.isLight(page))"),
+        ),
+        (
+            "submodules/TelegramUI/Components/Gifts/GiftItemComponent/Sources/GiftItemComponent.swift",
+            ("AorusBlurBlockView(material: .wash)", "AorusGlassPane.isBlockMarker(component.theme.list.itemBlocksBackgroundColor)"),
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoPaneNode/Sources/PeerInfoNavigationButtons.swift",
@@ -3553,7 +3587,7 @@ def main() -> None:
         # stars and business screens keep flat cards while everything around them is glass.
         (
             "submodules/TelegramUI/Components/ListSectionComponent/Sources/ListSectionComponent.swift",
-            ("aorusUsesGlass", "aorusGlassView", "import GlassBackgroundComponent"),
+            ("aorusUsesGlass", "aorusGlassView", "import GlassBackgroundComponent", "AorusGlassPane.isBlockMarker(configuration.theme.list.itemBlocksBackgroundColor)", "AorusBlurBlockView()"),
         ),
         # The band under the profile tabs. This pane paints its own opaque background and fades
         # the list into it, both in the theme's blocks colour, which is the black the gifts tab
@@ -3565,18 +3599,6 @@ def main() -> None:
         # A profile's posts: a block on a pane of glass, three cards to a row. Without the grid
         # half the pane has nothing to follow; without the pane half a single post is one large
         # photo with the page showing down both sides of it, which is what was reported.
-        # Profile > Edit > Personal colours. Upstream fakes one continuous card out of the preview,
-        # a hidden card-coloured slab and a gradient; under glass that slab turns the top of the
-        # first block grey and the gradient smears the rest.
-        (
-            "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/Sources/UserApperanceScreen.swift",
-            (
-                "let aorusGlassPreview = AorusGlassPane.isEnabled",
-                "self.topOverscrollLayer.isHidden = AorusGlassPane.isEnabled",
-                "blur: !aorusGlassPreview",
-                "background: aorusGlassPreview ? .all : .range(",
-            ),
-        ),
         (
             "submodules/SparseItemGrid/Sources/SparseItemGrid.swift",
             (
@@ -3596,7 +3618,8 @@ def main() -> None:
                 # the application theme was black ink on a dark avatar page in the light theme.
                 "let presentationData = self.aorusPagePresentationData(presentationData)",
                 "theme: aorusTabTheme,",
-                "let isDark = self.aorusPostsPageIsDark",
+                "isDark: self.aorusPostsPageIsDark)",
+                "private var aorusPostsBlockView: AorusBlurBlockView?",
             ),
         ),
         # A bot's styled inline button: the light theme letters the plain pill in the accent with
@@ -4080,12 +4103,12 @@ def main() -> None:
             ("AorusGlassProfileTint.prepareOpeningPage(for: aorusPeerIdValue, path: path,",),
         ),
         ("submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift", ("public static func prepareOpeningPage(for peerId: Int64, path: String,",)),
-        # The native palette keeps its roles but for the light grouped page, which is its plain
-        # white under glass, and is recorded for licence screens.
+        # The native palette keeps all its roles, the light grouped page included -- Telegram's
+        # grey with white cards, now that blocks outside a profile are cards -- and is recorded
+        # for licence screens.
         (
             "submodules/TelegramPresentationData/Sources/PresentationData.swift",
             (
-                "let list = theme.list.withUpdated(blocksBackgroundColor: theme.list.plainBackgroundColor)",
                 "AorusAppearanceRecord.record(isDark: theme.overallDarkAppearance, page: theme.list.blocksBackgroundColor,",
             ),
         ),

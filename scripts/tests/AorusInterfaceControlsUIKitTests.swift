@@ -12,10 +12,8 @@ struct InterfaceSurfaceTheme {
     }
     let list: List
     let overallDarkAppearance: Bool
-    var aorusGlassListTheme: InterfaceSurfaceTheme {
-        guard InterfaceGlassPane.isEnabled else { return self }
-        return InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: InterfaceGlassPane.marker, blocksBackgroundColor: overallDarkAppearance ? .black : .white, itemPrimaryTextColor: overallDarkAppearance ? .white : .black, itemSecondaryTextColor: overallDarkAppearance ? .lightGray : .darkGray, itemAccentColor: .blue, itemPlaceholderTextColor: .gray), overallDarkAppearance: overallDarkAppearance)
-    }
+    // Ordinary lists are drawn in the theme itself under Interface 2.0, as in production.
+    var aorusGlassListTheme: InterfaceSurfaceTheme { self }
 }
 
 final class InterfaceNativePane: UIView, AorusListGlassPane {
@@ -232,17 +230,18 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         }
         expect(cell.layer.cornerRadius == nativeCell.layer.cornerRadius && cell.layer.maskedCorners == nativeCell.layer.maskedCorners && cell.clipsToBounds == nativeCell.clipsToBounds, "adapter leaves UIKit's native cell shape untouched")
     }
-    func glassPane() -> InterfaceNativePane {
-        guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).first else { fail("native section pane missing") }
+    func glassPane() -> AorusUIKitOpaqueListPane {
+        guard let pane = groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first else { fail("native section card missing") }
         return pane
     }
     func separators() -> [CALayer] {
         groups.backgroundView?.layer.sublayers?.filter { $0.name == "AorusInteriorRowSeparator" } ?? []
     }
-    expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 1, "one native glass pane per UIKit section")
-    expect(emptyBackdrop.superview === groups.backgroundView, "glass never removes the plugin empty-state view")
-    expect(glassPane().isClear && glassPane().lastRadius == InterfaceGlassPane.blockCornerRadius && InterfaceGlassPane.blockCornerRadius == InterfaceItemListReference.glassRadius, "native ItemList tint and authoritative corner radius")
-    expect(glassPane().lastIsDark && glassPane().lastIsVisible, "native dark section is visible")
+    expect(groups.backgroundView?.subviews.compactMap { $0 as? AorusUIKitOpaqueListPane }.count == 1, "one native card per UIKit section")
+    expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.isEmpty == true, "a section is a card, never glass, under Interface 2.0")
+    expect(emptyBackdrop.superview === groups.backgroundView, "the card never removes the plugin empty-state view")
+    expect(glassPane().layer.cornerRadius == InterfaceGlassPane.blockCornerRadius && InterfaceGlassPane.blockCornerRadius == InterfaceItemListReference.glassRadius, "the card is rounded at Telegram's own iOS 26 list radius")
+    expect(glassPane().backgroundColor?.isEqual(UIColor.purple) == true && !glassPane().isHidden, "the card is Telegram's opaque block colour and is visible")
     expect(groups.separatorStyle == .none && separators().count == 2, "only interior joins are drawn, without UIKit section-edge rules")
     for line in separators() {
         expect(line.frame.minX == 16 && line.frame.maxX == groups.bounds.width, "row join stays inside native card gutters")
@@ -329,7 +328,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         groups.reloadData(); groups.layoutIfNeeded()
         guard let cell = groups.cellForRow(at: IndexPath(row: 0, section: 0)) as? InterfaceWrappingCell else { fail("self-sizing row missing") }
         cell.layoutIfNeeded()
-        expect((cell.backgroundColor?.cgColor.alpha ?? 0) == 0 && groups.backgroundView?.subviews.contains(where: { $0 is InterfaceNativePane }) == true,
+        expect((cell.backgroundColor?.cgColor.alpha ?? 0) == 0 && groups.backgroundView?.subviews.contains(where: { $0 is AorusUIKitOpaqueListPane }) == true,
                "a fresh transparent-configured row acquires its native section on first display")
         heights.append(groups.rectForRow(at: IndexPath(row: 0, section: 0)).height)
         for view in [cell.label, cell.toggle] {
@@ -362,13 +361,13 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     dataSource.sections = 2
     groups.frame.size.height = 500
     groups.reloadData(); groups.layoutIfNeeded()
-    expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.count == 2 && separators().count == 4, "each section has one inset pane and no section-edge hairlines")
+    expect(groups.backgroundView?.subviews.compactMap { $0 as? AorusUIKitOpaqueListPane }.count == 2 && separators().count == 4, "each section has one inset card and no section-edge hairlines")
     dataSource.sections = 1
     groups.frame.size.height = 200
     dataSource.count = 1
     stage("single-row layout after deletion")
     for table in [groups, baseline] { table.reloadData(); table.layoutIfNeeded() }
-    expect(glassPane().lastSize.height == groups.rectForRow(at: IndexPath(row: 0, section: 0)).height, "single-row pane follows native row geometry after deletion")
+    expect(glassPane().bounds.height == groups.rectForRow(at: IndexPath(row: 0, section: 0)).height, "single-row card follows native row geometry after deletion")
     expect(separators().isEmpty, "single-row sections have no extra horizontal outline")
     dataSource.count = 50
     stage("scrolling a long group")
@@ -376,17 +375,17 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     groups.contentOffset.y = 400
     groups.setNeedsLayout(); groups.layoutIfNeeded()
     expect(glassPane().frame.minY <= -InterfaceGlassPane.blockCornerRadius, "scrolling through a section never creates a visible rounded top")
-    expect(glassPane().bounds.height <= groups.bounds.height + 4 * InterfaceGlassPane.blockCornerRadius, "long sections retain a bounded native material surface")
+    expect(glassPane().bounds.height <= groups.bounds.height + 4 * InterfaceGlassPane.blockCornerRadius, "long sections retain a bounded card surface")
     expect(separators().count <= groups.visibleCells.count, "separator layer count is bounded by visible rows")
     aorusConfigureTable(groups, theme: whiteTheme)
     stage("theme switch and standalone panes")
     groups.layoutIfNeeded()
-    expect(!glassPane().lastIsDark && !glassPane().lastIsVisible, "same white-page policy as native Interface 2.0 ItemList")
+    expect(!glassPane().isHidden && glassPane().backgroundColor?.isEqual(UIColor.purple) == true, "the light page keeps Telegram's visible white-style card, as its own lists do")
     let surface = AorusUIKitSurfaceView(frame: CGRect(x: 0, y: 0, width: 280, height: 90))
     aorusConfigureSurface(surface, theme: nativeTheme)
     surface.layoutIfNeeded()
-    let surfacePane = surface.subviews.compactMap { $0 as? InterfaceNativePane }.first!
-    expect(surfacePane.isClear && surfacePane.lastRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0, "standalone plugin cards use the native material, never a second hand-rounded plate")
+    let surfacePane = surface.subviews.compactMap { $0 as? AorusUIKitOpaqueListPane }.first!
+    expect(surfacePane.layer.cornerRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0 && surface.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty, "standalone plugin cards are one native card, never glass and never a second hand-rounded plate")
     expect(surface.isUserInteractionEnabled, "a field container never disables its text view or send button")
     stage("live install completion and UIKit state changes")
     guard let liveCell = groups.visibleCells.first as? AorusGroupedTableCell else { fail("live card missing") }
@@ -449,7 +448,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     InterfaceGlassPane.isEnabled = true
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
-    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).isEmpty == true, "returning to Interface 2.0 discards the opaque renderer")
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.layer.cornerRadius == InterfaceGlassPane.blockCornerRadius, "returning to Interface 2.0 rounds the card as Telegram's iOS 26 lists")
 
     stage("search and filter palette")
     let search = AorusPluginMarketSearchField(theme: nativeTheme, placeholder: "Search")
@@ -457,16 +456,16 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     search.layoutIfNeeded()
     expect(search.overrideUserInterfaceStyle == .dark && groups.overrideUserInterfaceStyle == .dark, "system controls follow the app palette rather than the phone appearance")
     expect(search.textField.textColor?.isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor) == true, "search ink follows the native list palette")
-    expect(aorusPluginFilterInk(nativeTheme, active: false).isEqual(nativeTheme.aorusGlassListTheme.list.itemPrimaryTextColor), "inactive filter has the same visible ink as native list controls")
+    expect(aorusPluginFilterInk(nativeTheme, active: false).isEqual(nativeTheme.list.itemAccentColor), "inactive filter is drawn in the native accent, as Telegram's own controls")
     expect(aorusPluginFilterInk(nativeTheme, active: true).isEqual(UIColor.white), "active filter uses contrasting ink on its accent fill")
     guard let searchSurface = search.subviews.compactMap({ $0 as? AorusUIKitSurfaceView }).first else { fail("search surface missing") }
     searchSurface.layoutIfNeeded()
-    expect(searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.isClear == true, "search uses the same clear material as list sections")
+    expect(searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.isClear == true, "search is a control and keeps Telegram's clear glass capsule")
     search.textField.text = "kept query"
     search.update(theme: whiteTheme)
     searchSurface.layoutIfNeeded()
     expect(search.overrideUserInterfaceStyle == .light, "theme changes update the search clear button and other system ink")
-    expect(search.textField.text == "kept query" && searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.lastIsVisible == false, "white-page search matches native glass visibility and preserves the query")
+    expect(search.textField.text == "kept query" && searchSurface.subviews.compactMap({ $0 as? InterfaceNativePane }).first?.lastIsVisible == true, "the search capsule stays visible over Telegram's grey light page and preserves the query")
     InterfaceGlassPane.isEnabled = false
     search.update(theme: nativeTheme)
     searchSurface.layoutIfNeeded()

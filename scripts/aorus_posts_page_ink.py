@@ -114,11 +114,11 @@ def patch_posts_page_ink(tg: Path) -> None:
 ''', '''lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: aorusPostsBlock ? presentationData.theme : self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)
             self.aorusLayoutPostsBlock(isEnabled: aorusPostsBlock)
 ''', 'posts grid ink')
-    # The glass under the posts takes the same page as the ink on it.
-    s = edit(s, '''        let isDark = AorusGlassPane.profilePageIsDark
+    # The blur under the posts takes the same page as the ink on it.
+    s = edit(s, '''        let page = AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark)
         let sizeChanged = glassView.bounds.size != frame.size
-''', '''        let isDark = self.aorusPostsPageIsDark
+''', '''        let page = AorusBlurBlockView.Page(color: self.aorusPageThemeCache?.page ?? AorusGlassPane.profilePageColor, isDark: self.aorusPostsPageIsDark)
         let sizeChanged = glassView.bounds.size != frame.size
-''', 'posts glass page side')
+''', 'posts blur page side')
     path.write_text(s)
     print('Posts: drawn in the ink of their own page')

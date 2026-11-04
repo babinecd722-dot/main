@@ -500,10 +500,9 @@ private final class AorusRevealTextItemNode: ListViewItemNode {
                 guard let self else { return }
                 _ = self.view // ItemList applies on the main queue.
                 let palette = AorusAIPalette.resolve(item.theme)
-                let glass = AorusGlassPane.isEnabled
-                // ItemList discovers ASDisplayNode markers, not UIKit cells.
-                // One marker per row joins this section to its native glass run.
-                self.backgroundNode.backgroundColor = glass ? item.theme.aorusGlassListTheme.list.itemBlocksBackgroundColor : nil
+                // The row is Telegram's card in both interfaces, as the rows around it are: its
+                // own fill, rounded where the section ends.
+                self.backgroundNode.backgroundColor = nil
                 self.backgroundNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: size.height)
                 self.row.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: size.height)
                 self.row.overrideUserInterfaceStyle = palette.isDark ? .dark : .light
@@ -512,11 +511,11 @@ private final class AorusRevealTextItemNode: ListViewItemNode {
                     deleteTitle: item.deleteTitle,
                     font: Font.regular(17.0),
                     foreground: item.action == nil ? palette.label : palette.accent,
-                    fill: glass ? .clear : palette.elevated,
+                    fill: palette.elevated,
                     highlight: item.theme.list.itemHighlightedBackgroundColor,
                     separator: palette.separator,
                     corners: position.maskedCorners,
-                    radius: glass ? AorusGlassPane.blockCornerRadius : (itemListHasRoundedBlockLayout(params) ? 11.0 : 0.0),
+                    radius: itemListHasRoundedBlockLayout(params) ? 11.0 : 0.0,
                     drawsSeparator: position.drawsSeparator,
                     onSelect: item.action,
                     onDelete: item.deleteAction
