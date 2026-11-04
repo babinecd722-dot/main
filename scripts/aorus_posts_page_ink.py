@@ -59,14 +59,6 @@ def patch_posts_page_ink(tg: Path) -> None:
         return presentationData.withUpdated(theme: derived)
     }
 
-    /// AorusGram: whether the page under the posts wants light ink, as the palette above says.
-    private var aorusPostsPageIsDark: Bool {
-        if let cached = self.aorusPageThemeCache {
-            return !AorusGlassPane.isLight(cached.page)
-        }
-        return AorusGlassPane.profilePageIsDark
-    }
-
     public func update(size: CGSize, topInset: CGFloat, sideInset: CGFloat, bottomInset: CGFloat, deviceMetrics: DeviceMetrics, visibleHeight: CGFloat, isScrollingLockedAtTop: Bool, expandProgress: CGFloat, navigationHeight: CGFloat, presentationData: PresentationData, synchronous: Bool, transition: ContainedViewLayoutTransition) {
         // AorusGram: paging through the avatars changes the page and none of these parameters,
         // so the wrapper lays nothing out again: the pane listens for the page itself.
@@ -108,17 +100,11 @@ def patch_posts_page_ink(tg: Path) -> None:
                 ),
                 theme: aorusTabTheme,
 ''', 'posts album tabs ink')
-    # The grid's scroll marks and placeholders, on the block.
-    s = edit(s, '''lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)
-            self.aorusLayoutPostsBlock(isEnabled: aorusPostsBlock)
-''', '''lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: aorusPostsBlock ? presentationData.theme : self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)
-            self.aorusLayoutPostsBlock(isEnabled: aorusPostsBlock)
-''', 'posts grid ink')
-    # The blur under the posts takes the same page as the ink on it.
-    s = edit(s, '''        let page = AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark)
-        let sizeChanged = glassView.bounds.size != frame.size
-''', '''        let page = AorusBlurBlockView.Page(color: self.aorusPageThemeCache?.page ?? AorusGlassPane.profilePageColor, isDark: self.aorusPostsPageIsDark)
-        let sizeChanged = glassView.bounds.size != frame.size
-''', 'posts blur page side')
+    # The grid's scroll marks and placeholders, on the page.
+    s = edit(s, '''            self.itemGridBinding.aorusTiles = aorusPostsBlock
+            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering
+            self.itemGrid.update(size: size, insets: aorusGridInsets, useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme,''', '''            self.itemGridBinding.aorusTiles = aorusPostsBlock
+            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering
+            self.itemGrid.update(size: size, insets: aorusGridInsets, useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: aorusPostsBlock ? presentationData.theme : self.itemGridBinding.chatPresentationData.theme.theme,''', 'posts grid ink')
     path.write_text(s)
     print('Posts: drawn in the ink of their own page')

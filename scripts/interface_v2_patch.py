@@ -4210,9 +4210,6 @@ def _patch_sparse_grid_tiles(tg: Path) -> None:
 
     The defaults are upstream's own values, and nothing outside the posts pane changes them, so the
     media tabs, the story archive and every other grid in the app are untouched.
-
-    The grid also answers where its items are. The posts pane stands a blur block behind them,
-    and the block has to cover exactly the rows there are, wherever the grid has been scrolled to.
     """
     path = tg / "submodules/SparseItemGrid/Sources/SparseItemGrid.swift"
     text = _read(path, "SparseItemGrid.swift")
@@ -4301,22 +4298,6 @@ def _patch_sparse_grid_tiles(tg: Path) -> None:
         "    public var aorusItemSpacing: CGFloat = 1.0\n"
         "    public var aorusItemCornerRadius: CGFloat = 0.0\n"
         "\n"
-        "    /// AorusGram: the rectangle the items take up, in this grid's own coordinates and as it is\n"
-        "    /// scrolled right now -- from the first column to the last and from the top of the first row\n"
-        "    /// to the bottom of the last. Nil before the first layout and while there is nothing to show.\n"
-        "    public var aorusItemsFrame: CGRect? {\n"
-        "        guard let currentViewport = self.currentViewport, let layout = currentViewport.layout, let items = currentViewport.items, items.count > 0 else {\n"
-        "            return nil\n"
-        "        }\n"
-        "        let containerLayout = layout.containerLayout\n"
-        "        let first = layout.frame(at: 0)\n"
-        "        let last = layout.frame(at: items.count - 1)\n"
-        "        let minX: CGFloat = containerLayout.useSideInsets ? containerLayout.insets.left : 0.0\n"
-        "        let maxX: CGFloat = containerLayout.useSideInsets ? containerLayout.size.width - containerLayout.insets.right : containerLayout.size.width\n"
-        "        let rect = CGRect(x: minX, y: first.minY, width: max(0.0, maxX - minX), height: max(0.0, last.maxY - first.minY))\n"
-        "        return self.view.convert(rect, from: currentViewport.scrollView)\n"
-        "    }\n"
-        "\n"
         "    public var cancelExternalContentGestures: (() -> Void)?\n",
         "grid public tile parameters",
     )
@@ -4325,31 +4306,37 @@ def _patch_sparse_grid_tiles(tg: Path) -> None:
 
 
 def _patch_posts_block(tg: Path) -> None:
-    """Make a profile's posts a block of the page instead of a photo wall with gutters.
+    """Lay a profile's posts out as tiles on the page, with badges that read on any picture.
 
-    Upstream lays a profile's posts out edge to edge, and when there are one or two of them it
-    doubles their size and, for a single post, centres it -- one large picture with the page
-    showing down both sides of it. On the stock interface the page there is the theme's grey and
-    it passes. Under Interface 2.0 it is the colour sampled off the avatar, and a lone photo with a
-    band of that colour either side of it is exactly what was reported as looking cheap.
+    Upstream lays a profile's posts out edge to edge, doubles one or two of them and centres a
+    single one -- one large picture with the page showing down both sides of it -- and marks each
+    with small white figures over a dark gradient in its corners: a gallery wall from before the
+    profile was a page. Under Interface 2.0 the page is the colour of the photo, and the wall with
+    its corner shadows on it is what was reported as looking old.
 
-    So under Interface 2.0, and only on a profile, the posts become what every other section of the
-    page already is: a block inset from the edges, on a blur block cornered at the page's
-    radius. Inside it the posts are cards -- three to a row however many there are, a few points
-    apart, each rounded concentrically with the pane around it, so that the corner of the pane and
-    the corner of the post in it run parallel. The blur shows in the gaps and round the edge, and
-    through the empty end of a last row that is not full, which is what makes it read as one block
-    rather than a grid laid over a colour.
+    So under Interface 2.0, and only on a profile, the posts are tiles laid on the page itself:
+    three to a row however many there are, inset from the edges as every block of the page is, a
+    few points apart and rounded on a continuous curve. Nothing stands behind them -- a picture is
+    its own surface, the way the gift cards on the same page are, and a pane behind the pictures
+    only framed them, at the price of a blur the size of the grid. The figures on a tile are
+    capsules: the view count with its eye at the bottom left, a video's length at the bottom right
+    and the pin or the audience at the top right, each on a pill of translucent black that reads
+    over white as well as over black, so the corner gradients go.
 
-    The pane follows the grid rather than the other way round. The grid owns the scrolling, and
-    reports every change of offset; the pane is laid behind the rows the grid says it has, and
-    trimmed to the screen with a margin wider than its corner, so that a profile with a thousand
-    posts does not ask for a thousand-row blur and no clipped corner is ever on screen.
+    A post opened from a tile grows out of the tile's rounded corners, and one closed goes back into
+    them: the viewer was told the tile was square, and closed into a square that turned round only
+    once it had landed. The tile handed to the viewer for its way back rounds on the same clock, from
+    the viewer's twelve points to the tile's own, and the copy a long press lifts keeps the tile's
+    corners while it is on screen and returns to them.
+
+    Cheap where it runs. The badges are drawn once per text and kept, so a grid scrolled back and
+    forth asks for no new images; the tiles drop four corner gradients each; and the blur that stood
+    behind the grid is gone.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift"
     text = _read(path, "PeerInfoStoryPaneNode.swift")
-    if "aorusPostsBlockView" in text:
-        print("InterfaceV2: posts already a block of the page")
+    if "aorusTileCornerRadius" in text:
+        print("InterfaceV2: posts already tiles on the page")
         return
     if _GLASS_IMPORT not in text:
         text = _replace_once(
@@ -4362,11 +4349,10 @@ def _patch_posts_block(tg: Path) -> None:
         text,
         "            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering\n"
         "            self.itemGrid.update(size: size, insets: UIEdgeInsets(top: gridTopInset, left: sideInset, bottom:  listBottomInset, right: sideInset), useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)\n",
-        "            // AorusGram: under Interface 2.0 a profile's posts are a block of the page. Inset\n"
-        "            // from the edges by what every block is inset by and by the pane's own padding,\n"
-        "            // three to a row however few there are, and cards rather than a wall.\n"
-        "            // A bot's preview media keeps its own layout: a footer is laid out against the\n"
-        "            // last row there, and the block's padding would put that footer on the pane.\n"
+        "            // AorusGram: under Interface 2.0 a profile's posts are tiles on the page: inset as\n"
+        "            // every block of the page is, three to a row however few there are, apart and\n"
+        "            // rounded. A bot's preview media keeps its own layout: a footer is laid out\n"
+        "            // against the last row there.\n"
         "            var aorusPostsBlock = self.isProfileEmbedded && AorusGlassPane.isEnabled\n"
         "            if case .botPreview = self.scope {\n"
         "                aorusPostsBlock = false\n"
@@ -4374,79 +4360,422 @@ def _patch_posts_block(tg: Path) -> None:
         "            var aorusGridInsets = UIEdgeInsets(top: gridTopInset, left: sideInset, bottom: listBottomInset, right: sideInset)\n"
         "            if aorusPostsBlock {\n"
         "                adjustForSmallCount = false\n"
-        "                let aorusInset = AorusGlassPane.blockSideInset + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
-        "                aorusGridInsets.left += aorusInset\n"
-        "                aorusGridInsets.right += aorusInset\n"
-        "                aorusGridInsets.top += 10.0 + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
-        "                aorusGridInsets.bottom += 16.0 + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
+        "                aorusGridInsets.left += AorusGlassPane.blockSideInset\n"
+        "                aorusGridInsets.right += AorusGlassPane.blockSideInset\n"
+        "                aorusGridInsets.top += 10.0\n"
+        "                aorusGridInsets.bottom += 16.0\n"
         "            }\n"
-        "            self.itemGrid.aorusItemSpacing = aorusPostsBlock ? 4.0 : 1.0\n"
-        "            self.itemGrid.aorusItemCornerRadius = aorusPostsBlock ? AorusGlassPane.blockCornerRadius - PeerInfoStoryPaneNode.aorusPostsBlockPadding : 0.0\n"
+        "            self.itemGrid.aorusItemSpacing = aorusPostsBlock ? PeerInfoStoryPaneNode.aorusTileSpacing : 1.0\n"
+        "            self.itemGrid.aorusItemCornerRadius = aorusPostsBlock ? PeerInfoStoryPaneNode.aorusTileCornerRadius : 0.0\n"
+        "            self.itemGridBinding.aorusTiles = aorusPostsBlock\n"
         "            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering\n"
-        "            self.itemGrid.update(size: size, insets: aorusGridInsets, useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)\n"
-        "            self.aorusLayoutPostsBlock(isEnabled: aorusPostsBlock)\n",
+        "            self.itemGrid.update(size: size, insets: aorusGridInsets, useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)\n",
         "posts grid layout",
     )
     text = _replace_once(
         text,
         "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n",
-        "    /// AorusGram: the space between the blur block behind the posts and the posts on it.\n"
-        "    static let aorusPostsBlockPadding: CGFloat = 6.0\n"
+        "    /// AorusGram: Interface 2.0's tiles: the gap between two and the corner of each.\n"
+        "    static let aorusTileSpacing: CGFloat = 4.0\n"
+        "    static let aorusTileCornerRadius: CGFloat = 14.0\n"
         "\n"
-        "    private var aorusPostsBlockView: AorusBlurBlockView?\n"
-        "    private var aorusPostsBlockEnabled: Bool = false\n"
-        "    private var aorusPostsBlockPage: AorusBlurBlockView.Page?\n"
-        "\n"
-        "    /// AorusGram: the blur block behind a profile's posts, laid behind the rows the grid\n"
-        "    /// reports and trimmed to what is on screen.\n"
-        "    private func aorusLayoutPostsBlock(isEnabled: Bool? = nil) {\n"
-        "        if let isEnabled {\n"
-        "            self.aorusPostsBlockEnabled = isEnabled\n"
-        "        }\n"
-        "        guard self.aorusPostsBlockEnabled, let host = self.itemGrid.view.superview, let itemsFrame = self.itemGrid.aorusItemsFrame else {\n"
-        "            self.aorusPostsBlockView?.isHidden = true\n"
+        "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n",
+        "posts tile metrics",
+    )
+
+    # The binding knows whether its tiles are Interface 2.0's, and tells each layer it binds.
+    text = _replace_once(
+        text,
+        "    var revealedSpoilerMessageIds = Set<EngineMessage.Id>()\n",
+        "    var revealedSpoilerMessageIds = Set<EngineMessage.Id>()\n"
+        "    /// AorusGram: the posts are Interface 2.0's tiles, badged with capsules.\n"
+        "    var aorusTiles: Bool = false\n",
+        "posts binding tiles",
+    )
+    text = _replace_once(
+        text,
+        "        layer.updateDuration(size: layer.bounds.size, viewCount: viewCount,",
+        "        layer.aorusTiles = self.aorusTiles\n"
+        "        layer.updateDuration(size: layer.bounds.size, viewCount: viewCount,",
+        "posts layer tiles",
+    )
+    text = _replace_once(
+        text,
+        "    var minFactor: CGFloat = 1.0\n",
+        "    var minFactor: CGFloat = 1.0\n"
+        "    /// AorusGram: badged as Interface 2.0's tiles, and what the badges were last drawn as.\n"
+        "    var aorusTiles: Bool = false\n"
+        "    private var aorusAppliedTiles: Bool = false\n",
+        "posts layer tiles storage",
+    )
+    text = _replace_once(
+        text,
+        "        if self.currentParams == params {\n"
+        "            return\n"
+        "        }\n",
+        "        if self.currentParams == params, self.aorusAppliedTiles == self.aorusTiles {\n"
         "            return\n"
         "        }\n"
-        "        let padding = PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
-        "        let block = self.itemGrid.view.convert(itemsFrame.insetBy(dx: -padding, dy: -padding), to: host)\n"
-        "        // Trimmed to the screen, with a margin wider than the corner so that the rounded\n"
-        "        // edge of a trimmed pane is never inside it.\n"
-        "        let margin = AorusGlassPane.blockCornerRadius * 2.0\n"
-        "        let visible = host.bounds.insetBy(dx: -margin, dy: -margin)\n"
-        "        let frame = block.intersection(visible)\n"
-        "        if frame.isNull || frame.isEmpty {\n"
-        "            self.aorusPostsBlockView?.isHidden = true\n"
+        "        self.aorusAppliedTiles = self.aorusTiles\n",
+        "posts layer tiles change",
+    )
+    # Each badge layer is told, before it draws, whether it is a capsule.
+    for name in ("viewCountLayer", "durationLayer", "privacyTypeLayer"):
+        update = {
+            "viewCountLayer": "update(viewCount: viewCount, isMin: isMin)",
+            "durationLayer": "update(duration: duration, isMin: isMin)",
+            "privacyTypeLayer": "update(topRightIcon: topRightIcon, isMin: isMin)",
+        }[name]
+        text = _replace_once(
+            text,
+            f"            if let {name} = self.{name} {{\n"
+            f"                {name}.{update}\n",
+            f"            if let {name} = self.{name} {{\n"
+            f"                {name}.aorusCapsule = self.aorusTiles\n"
+            f"                {name}.{update}\n",
+            f"posts {name} capsule",
+        )
+        text = _replace_once(
+            text,
+            f"                let {name} = DurationLayer()\n",
+            f"                let {name} = DurationLayer()\n"
+            f"                {name}.aorusCapsule = self.aorusTiles\n",
+            f"posts new {name} capsule",
+        )
+    # No corner gradients under capsules: each pill carries its own contrast.
+    # The author's line keeps its own: it is a name, not a capsule.
+    for badge, shadow in (("viewCountLayer", "leftShadowLayer"), ("durationLayer", "rightShadowLayer"), ("privacyTypeLayer", "topRightShadowLayer")):
+        text = _replace_once(
+            text,
+            f"        if self.{badge} != nil {{\n"
+            f"            if self.{shadow} == nil {{\n",
+            f"        if self.{badge} != nil, !self.aorusTiles {{\n"
+            f"            if self.{shadow} == nil {{\n",
+            f"posts {shadow}",
+        )
+    # Capsules sit six points in from the tile's edges, on both creation and every layout.
+    text = _replace_once(
+        text,
+        "        let size = self.bounds.size\n"
+        "        \n"
+        "        if self.viewCountLayer != nil, !self.aorusTiles",
+        "        let size = self.bounds.size\n"
+        "        self.aorusPlaceCapsules(size: size)\n"
+        "        \n"
+        "        if self.viewCountLayer != nil, !self.aorusTiles",
+        "posts capsules placed on update",
+    )
+    text = _replace_once(
+        text,
+        "        if let authorLayer = self.authorLayer {\n"
+        "            authorLayer.frame = CGRect(origin: CGPoint(x: 17.0, y: 3.0), size: CGSize())\n"
+        "        }\n"
+        "        \n"
+        "        if let leftShadowLayer = self.leftShadowLayer {\n",
+        "        if let authorLayer = self.authorLayer {\n"
+        "            authorLayer.frame = CGRect(origin: CGPoint(x: 17.0, y: 3.0), size: CGSize())\n"
+        "        }\n"
+        "        self.aorusPlaceCapsules(size: size)\n"
+        "        \n"
+        "        if let leftShadowLayer = self.leftShadowLayer {\n",
+        "posts capsules placed on layout",
+    )
+    text = _replace_once(
+        text,
+        "    func updateSelection(theme: CheckNodeTheme, isSelected: Bool?, animated: Bool) {\n"
+        "        if let isSelected = isSelected {\n"
+        "            if let selectionLayer = self.selectionLayer {\n"
+        "                selectionLayer.updateSelected(isSelected, animated: animated)\n"
+        "            } else {\n"
+        "                let selectionLayer = GridMessageSelectionLayer(theme: theme)\n"
+        "                selectionLayer.updateSelected(isSelected, animated: false)\n"
+        "                self.selectionLayer = selectionLayer\n"
+        "                self.addSublayer(selectionLayer)\n",
+        "    /// AorusGram: a capsule's corner six points in from the tile's, each layer anchored where\n"
+        "    /// its contents' gravity anchors it -- the same zero-sized frames the stock badges use.\n"
+        "    private func aorusPlaceCapsules(size: CGSize) {\n"
+        "        guard self.aorusTiles else {\n"
         "            return\n"
         "        }\n"
-        "        let glassView: AorusBlurBlockView\n"
-        "        if let current = self.aorusPostsBlockView {\n"
-        "            glassView = current\n"
+        "        let inset = AorusPostBadge.inset\n"
+        "        self.viewCountLayer?.frame = CGRect(origin: CGPoint(x: inset, y: size.height - inset), size: CGSize())\n"
+        "        self.durationLayer?.frame = CGRect(origin: CGPoint(x: size.width - inset, y: size.height - inset), size: CGSize())\n"
+        "        self.privacyTypeLayer?.frame = CGRect(origin: CGPoint(x: size.width - inset, y: inset), size: CGSize())\n"
+        "    }\n"
+        "\n"
+        "    func updateSelection(theme: CheckNodeTheme, isSelected: Bool?, animated: Bool) {\n"
+        "        if let isSelected = isSelected {\n"
+        "            if let selectionLayer = self.selectionLayer {\n"
+        "                selectionLayer.updateSelected(isSelected, animated: animated)\n"
+        "            } else {\n"
+        "                let selectionLayer = GridMessageSelectionLayer(theme: theme)\n"
+        "                selectionLayer.updateSelected(isSelected, animated: false)\n"
+        "                self.selectionLayer = selectionLayer\n"
+        "                self.addSublayer(selectionLayer)\n",
+        "posts capsule placement",
+    )
+
+    # The capsules themselves.
+    text = _replace_once(
+        text,
+        "    func update(viewCount: Int32, isMin: Bool) {\n"
+        "        if isMin {\n",
+        "    /// AorusGram: drawn as Interface 2.0's capsule rather than as figures over a gradient.\n"
+        "    var aorusCapsule: Bool = false\n"
+        "\n"
+        "    func update(viewCount: Int32, isMin: Bool) {\n"
+        "        if self.aorusCapsule, !isMin {\n"
+        "            self.contents = AorusPostBadge.viewCount(viewCount)?.cgImage\n"
+        "            return\n"
+        "        }\n"
+        "        if isMin {\n",
+        "posts view count capsule",
+    )
+    text = _replace_once(
+        text,
+        "    func update(duration: Int32, isMin: Bool) {\n"
+        "        if isMin {\n",
+        "    func update(duration: Int32, isMin: Bool) {\n"
+        "        if self.aorusCapsule, !isMin {\n"
+        "            self.contents = AorusPostBadge.duration(duration)?.cgImage\n"
+        "            return\n"
+        "        }\n"
+        "        if isMin {\n",
+        "posts duration capsule",
+    )
+    text = _replace_once(
+        text,
+        "    func update(topRightIcon: ItemTopRightIcon, isMin: Bool) {\n"
+        "        if isMin {\n",
+        "    func update(topRightIcon: ItemTopRightIcon, isMin: Bool) {\n"
+        "        if self.aorusCapsule, !isMin {\n"
+        "            self.contents = AorusPostBadge.icon(topRightIcon)?.cgImage\n"
+        "            return\n"
+        "        }\n"
+        "        if isMin {\n",
+        "posts icon capsule",
+    )
+    text = _replace_once(
+        text,
+        "private enum ItemTopRightIcon {\n",
+        "/// AorusGram: Interface 2.0's badges on a profile's posts: a pill of translucent black with\n"
+        "/// white on it, which reads on a white picture and on a black one alike. Each text is drawn once\n"
+        "/// and kept -- a grid reuses its layers as it scrolls and rebinds them every time -- and the cache\n"
+        "/// is emptied as a whole once it holds more than a screenful of different ones.\n"
+        "private enum AorusPostBadge {\n"
+        "    static let inset: CGFloat = 6.0\n"
+        "    private static let height: CGFloat = 20.0\n"
+        "    private static let fill = UIColor(white: 0.0, alpha: 0.42)\n"
+        "    private static let font = Font.with(size: 11.0, design: .round, weight: .semibold, traits: [.monospacedNumbers])\n"
+        "    private static var cache: [String: UIImage] = [:]\n"
+        "\n"
+        "    private static let eye: UIImage? = AorusPostBadge.glyph(UIImage(systemName: \"eye.fill\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9.0, weight: .semibold)), side: 11.0)\n"
+        "    private static let pin: UIImage? = AorusPostBadge.glyph(UIImage(bundleImageName: \"Chat/Message/Pinned\"), side: 11.0)\n"
+        "    private static let contacts: UIImage? = AorusPostBadge.glyph(privacyTypeContactsImage, side: 12.0)\n"
+        "    private static let closeFriends: UIImage? = AorusPostBadge.glyph(privacyTypeCloseFriendsImage, side: 12.0)\n"
+        "    private static let selected: UIImage? = AorusPostBadge.glyph(privacyTypeSelectedImage, side: 12.0)\n"
+        "\n"
+        "    static func viewCount(_ count: Int32) -> UIImage? {\n"
+        "        let text: String\n"
+        "        if count >= 1_000_000 {\n"
+        "            text = AorusPostBadge.abbreviated(Double(count) / 1_000_000.0, suffix: \"M\")\n"
+        "        } else if count >= 1_000 {\n"
+        "            text = AorusPostBadge.abbreviated(Double(count) / 1_000.0, suffix: \"K\")\n"
         "        } else {\n"
-        "            glassView = AorusBlurBlockView()\n"
-        "            glassView.frame = frame\n"
-        "            self.aorusPostsBlockView = glassView\n"
+        "            text = \"\\(count)\"\n"
         "        }\n"
-        "        if glassView.superview !== host {\n"
-        "            host.insertSubview(glassView, belowSubview: self.itemGrid.view)\n"
-        "        }\n"
-        "        glassView.isHidden = false\n"
-        "        // Scrolling moves the block on every frame; its wash and corners are only redone\n"
-        "        // when its size or the page under it has changed.\n"
-        "        let page = AorusBlurBlockView.Page(color: AorusGlassPane.profilePageColor, isDark: AorusGlassPane.profilePageIsDark)\n"
-        "        let sizeChanged = glassView.bounds.size != frame.size\n"
-        "        glassView.frame = frame\n"
-        "        if sizeChanged || self.aorusPostsBlockPage != page {\n"
-        "            self.aorusPostsBlockPage = page\n"
-        "            glassView.update(size: frame.size, cornerRadius: AorusGlassPane.blockCornerRadius, page: page, transition: .immediate)\n"
+        "        return AorusPostBadge.capsule(key: \"v\" + text, icon: AorusPostBadge.eye, text: text)\n"
+        "    }\n"
+        "\n"
+        "    static func duration(_ duration: Int32) -> UIImage? {\n"
+        "        let text = stringForDuration(duration)\n"
+        "        return AorusPostBadge.capsule(key: \"d\" + text, icon: nil, text: text)\n"
+        "    }\n"
+        "\n"
+        "    static func icon(_ icon: ItemTopRightIcon) -> UIImage? {\n"
+        "        switch icon {\n"
+        "        case .pinned:\n"
+        "            return AorusPostBadge.capsule(key: \"p\", icon: AorusPostBadge.pin, text: nil)\n"
+        "        case .privacyContacts:\n"
+        "            return AorusPostBadge.capsule(key: \"c\", icon: AorusPostBadge.contacts, text: nil)\n"
+        "        case .privacyCloseFriends:\n"
+        "            return AorusPostBadge.capsule(key: \"f\", icon: AorusPostBadge.closeFriends, text: nil)\n"
+        "        case .privacySelected:\n"
+        "            return AorusPostBadge.capsule(key: \"s\", icon: AorusPostBadge.selected, text: nil)\n"
         "        }\n"
         "    }\n"
         "\n"
-        "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n"
-        "        self.aorusLayoutPostsBlock()\n",
-        "posts glass block",
+        "    /// One decimal while it says something -- 1.5K, 12K -- and none once it would not.\n"
+        "    private static func abbreviated(_ value: Double, suffix: String) -> String {\n"
+        "        if value < 10.0 {\n"
+        "            let tenths = (value * 10.0).rounded(.down) / 10.0\n"
+        "            if tenths == tenths.rounded(.down) {\n"
+        "                return \"\\(Int(tenths))\\(suffix)\"\n"
+        "            }\n"
+        "            return String(format: \"%.1f\", tenths) + suffix\n"
+        "        }\n"
+        "        return \"\\(Int(value))\\(suffix)\"\n"
+        "    }\n"
+        "\n"
+        "    /// A glyph in white, fitted inside a square of `side`.\n"
+        "    private static func glyph(_ image: UIImage?, side: CGFloat) -> UIImage? {\n"
+        "        guard let image, let tinted = generateTintedImage(image: image, color: .white), tinted.size.width > 0.0, tinted.size.height > 0.0 else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        let scale = min(1.0, side / max(tinted.size.width, tinted.size.height))\n"
+        "        let size = CGSize(width: floor(tinted.size.width * scale), height: floor(tinted.size.height * scale))\n"
+        "        return generateImage(size, rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            UIGraphicsPushContext(context)\n"
+        "            tinted.draw(in: CGRect(origin: CGPoint(), size: size))\n"
+        "            UIGraphicsPopContext()\n"
+        "        })\n"
+        "    }\n"
+        "\n"
+        "    /// A pill as tall as `height`: round at the ends, the glyph and the text in its middle, and a\n"
+        "    /// circle when there is a glyph and nothing else.\n"
+        "    private static func capsule(key: String, icon: UIImage?, text: String?) -> UIImage? {\n"
+        "        if let cached = AorusPostBadge.cache[key] {\n"
+        "            return cached\n"
+        "        }\n"
+        "        var string: NSAttributedString?\n"
+        "        var textSize = CGSize()\n"
+        "        if let text {\n"
+        "            let value = NSAttributedString(string: text, font: AorusPostBadge.font, textColor: .white)\n"
+        "            let bounds = value.boundingRect(with: CGSize(width: 200.0, height: 100.0), options: .usesLineFragmentOrigin, context: nil)\n"
+        "            textSize = CGSize(width: ceil(bounds.width), height: ceil(bounds.height))\n"
+        "            string = value\n"
+        "        }\n"
+        "        let iconSize = icon?.size ?? CGSize()\n"
+        "        let spacing: CGFloat = icon != nil && string != nil ? 3.0 : 0.0\n"
+        "        let content = iconSize.width + spacing + textSize.width\n"
+        "        let height = AorusPostBadge.height\n"
+        "        let width = string == nil ? height : max(height, ceil(content + 14.0))\n"
+        "        let image = generateImage(CGSize(width: width, height: height), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            context.setFillColor(AorusPostBadge.fill.cgColor)\n"
+        "            context.addPath(UIBezierPath(roundedRect: CGRect(origin: CGPoint(), size: size), cornerRadius: size.height * 0.5).cgPath)\n"
+        "            context.fillPath()\n"
+        "            UIGraphicsPushContext(context)\n"
+        "            var x = floor((size.width - content) * 0.5)\n"
+        "            if let icon {\n"
+        "                icon.draw(in: CGRect(origin: CGPoint(x: x, y: floor((size.height - iconSize.height) * 0.5)), size: iconSize))\n"
+        "                x += iconSize.width + spacing\n"
+        "            }\n"
+        "            string?.draw(at: CGPoint(x: x, y: floor((size.height - textSize.height) * 0.5)))\n"
+        "            UIGraphicsPopContext()\n"
+        "        })\n"
+        "        if AorusPostBadge.cache.count >= 96 {\n"
+        "            AorusPostBadge.cache.removeAll()\n"
+        "        }\n"
+        "        AorusPostBadge.cache[key] = image\n"
+        "        return image\n"
+        "    }\n"
+        "}\n"
+        "\n"
+        "private enum ItemTopRightIcon {\n",
+        "posts badge capsules",
+    )
+
+    # A post opens out of the tile's corners and closes back into them.
+    text = _replace_once(
+        text,
+        "                        sourceCornerRadius: 0.0,\n",
+        "                        sourceCornerRadius: self.itemGrid.aorusItemCornerRadius,\n",
+        "posts open from rounded tile",
+    )
+    text = _replace_once(
+        text,
+        "                            let itemRect = self.itemGrid.frameForItem(layer: foundItemLayer)\n"
+        "                            return StoryContainerScreen.TransitionOut(\n",
+        "                            let itemRect = self.itemGrid.frameForItem(layer: foundItemLayer)\n"
+        "                            let aorusTileCornerRadius = self.itemGrid.aorusItemCornerRadius\n"
+        "                            return StoryContainerScreen.TransitionOut(\n",
+        "posts close radius",
+    )
+    text = _replace_once(
+        text,
+        "                                        return ItemTransitionView(itemLayer: foundItemLayer)\n",
+        "                                        return ItemTransitionView(itemLayer: foundItemLayer, aorusCornerRadius: aorusTileCornerRadius)\n",
+        "posts close copy rounds",
+    )
+    text = _replace_once(
+        text,
+        "                                destinationCornerRadius: 0.0,\n",
+        "                                destinationCornerRadius: aorusTileCornerRadius,\n",
+        "posts close into rounded tile",
+    )
+    text = _replace_once(
+        text,
+        "destinationRect: foundItemLayer?.frame ?? .zero, destinationCornerRadius: 0.0),",
+        "destinationRect: foundItemLayer?.frame ?? .zero, destinationCornerRadius: self.itemGrid.aorusItemCornerRadius),",
+        "posts editor closes into rounded tile",
+    )
+    text = _replace_once(
+        text,
+        "    init(itemLayer: CALayer?) {\n"
+        "        self.itemLayer = itemLayer\n"
+        "        \n"
+        "        super.init(frame: CGRect())\n",
+        "    /// AorusGram: the tile's corner this copy lands in, and the viewer's it leaves: rounded on\n"
+        "    /// the clock that moves it. Zero leaves the copy square, as upstream's is.\n"
+        "    private let aorusCornerRadius: CGFloat\n"
+        "    private static let aorusViewerCornerRadius: CGFloat = 12.0\n"
+        "\n"
+        "    init(itemLayer: CALayer?, aorusCornerRadius: CGFloat = 0.0) {\n"
+        "        self.itemLayer = itemLayer\n"
+        "        self.aorusCornerRadius = aorusCornerRadius\n"
+        "        \n"
+        "        super.init(frame: CGRect())\n"
+        "        \n"
+        "        if aorusCornerRadius > 0.0 {\n"
+        "            self.layer.masksToBounds = true\n"
+        "            self.layer.cornerCurve = .continuous\n"
+        "            self.layer.cornerRadius = ItemTransitionView.aorusViewerCornerRadius\n"
+        "        }\n",
+        "posts transition copy corners",
+    )
+    text = _replace_once(
+        text,
+        "    func update(state: StoryContainerScreen.TransitionState, transition: ComponentTransition) {\n"
+        "        let size = state.sourceSize.interpolate(to: state.destinationSize, amount: state.progress)\n",
+        "    func update(state: StoryContainerScreen.TransitionState, transition: ComponentTransition) {\n"
+        "        let size = state.sourceSize.interpolate(to: state.destinationSize, amount: state.progress)\n"
+        "        if self.aorusCornerRadius > 0.0 {\n"
+        "            let viewer = ItemTransitionView.aorusViewerCornerRadius\n"
+        "            transition.setCornerRadius(layer: self.layer, cornerRadius: viewer + (self.aorusCornerRadius - viewer) * state.progress)\n"
+        "        }\n",
+        "posts transition copy rounds on the clock",
+    )
+    # A long press lifts a copy of the tile; it keeps the tile's corners at rest.
+    text = _replace_once(
+        text,
+        "        self.itemView = ItemTransitionView(itemLayer: itemLayer)\n"
+        "        self.itemLayer = itemLayer\n",
+        "        self.itemView = ItemTransitionView(itemLayer: itemLayer)\n"
+        "        self.itemLayer = itemLayer\n"
+        "        // AorusGram: the tile's own corner, which is not square under Interface 2.0.\n"
+        "        let aorusRestCornerRadius = itemLayer.cornerRadius\n",
+        "posts lifted copy corner",
+    )
+    text = _replace_once(
+        text,
+        "        self.contextSourceNode.contentNode.view.addSubview(self.itemView)\n"
+        "        self.itemView.clipsToBounds = true\n",
+        "        self.contextSourceNode.contentNode.view.addSubview(self.itemView)\n"
+        "        self.itemView.clipsToBounds = true\n"
+        "        self.itemView.layer.cornerRadius = aorusRestCornerRadius\n"
+        "        self.itemView.layer.cornerCurve = .continuous\n",
+        "posts lifted copy corners",
+    )
+    text = _replace_once(
+        text,
+        "            transition.updateCornerRadius(layer: self.itemView.layer, cornerRadius: isExtracted ? 10.0 : 0.0)\n",
+        "            transition.updateCornerRadius(layer: self.itemView.layer, cornerRadius: isExtracted ? max(10.0, aorusRestCornerRadius) : aorusRestCornerRadius)\n",
+        "posts lifted copy returns to its corners",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: posts are a block of the page")
+    print("InterfaceV2: posts are tiles on the page")
 
 
 def _patch_media_list_block(tg: Path) -> None:
@@ -8085,6 +8414,9 @@ def _patch_profile_expansion(tg: Path) -> None:
     screen fades in with the page's colour, and the glass capsule behind the music strip rides and
     fades with the strip. The page colour 2.0 sets is the expansion's background view's while one
     is lent, as Telegram's own colour is, rather than the node's, which the expansion keeps clear.
+
+    The photo itself is not lent to the flying circle under 2.0: it is the page's top, and it fades
+    in with the page in its own place while everything else moves as Telegram moves it.
     """
     component = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleComponent.swift"
     text = _read(component, "ChatTitleComponent.swift")
@@ -8229,11 +8561,72 @@ def _patch_profile_expansion(tg: Path) -> None:
     text = _replace_once(
         text,
         "            backgroundViews: [background, banner],\n",
-        "            // AorusGram: Interface 2.0's photo behind the whole page fades in with the page's colour.\n"
-        "            backgroundViews: [background, banner] + node.view.subviews.filter { $0.tag == AorusGlassProfileTint.backdropTag },\n",
+        "            // AorusGram: Interface 2.0's photo behind the whole page fades in with the page's colour,\n"
+        "            // and so does the photo itself, which is that page's top rather than an avatar.\n"
+        "            backgroundViews: [background, banner] + node.view.subviews.filter { $0.tag == AorusGlassProfileTint.backdropTag } + (aorusPhotoIsPage ? [header.avatarListNode.view] : []),\n",
         "expansion destination backdrop",
     )
+    # The photo under 2.0 arrives as the page arrives. Telegram's photo path lends the expanded photo
+    # to the flying circle and grows it out of the chat's avatar into the header; under 2.0 that
+    # photo is the top of the page and the page is made of it, so a picture zooming out of a circle
+    # in front of a page of its own colour read as the photo being stretched into place. Here the
+    # photo is not lent: it stays where it is, in the profile seen through the card, and fades in
+    # with the page and its backdrop, while the card, the name, the status and the buttons move
+    # exactly as Telegram's do. The expansion takes the path without a photo for that, the name and
+    # status still lent from their expanded state, which is the one on screen.
+    text = _replace_once(
+        text,
+        "        let header = node.headerNode\n",
+        "        let header = node.headerNode\n"
+        "        // AorusGram: Interface 2.0's photo is the top of the page, not an avatar to fly.\n"
+        "        let aorusPhotoIsPage = AorusInterfaceV2Run.isEnabled && header.isAvatarExpanded\n",
+        "expansion destination photo is page",
+    )
+    text = _replace_once(
+        text,
+        "        let avatarView = header.avatarListNode.view\n"
+        "        self.remember(avatarView)\n",
+        "        let avatarView: UIView? = aorusPhotoIsPage ? nil : header.avatarListNode.view\n"
+        "        if let avatarView {\n"
+        "            self.remember(avatarView)\n"
+        "        }\n",
+        "expansion destination photo not lent",
+    )
+    text = _replace_once(
+        text,
+        "        let key: AnyHashable = self.expansionPath == .photo ? TitleNodeStateExpanded : TitleNodeStateRegular\n",
+        "        let key: AnyHashable = (self.expansionPath == .photo || aorusPhotoIsPage) ? TitleNodeStateExpanded : TitleNodeStateRegular\n",
+        "expansion destination expanded labels",
+    )
+    text = _replace_once(
+        text,
+        "            photoControls.append(header.avatarListNode.listContainerNode.controlsContainerNode.view)\n"
+        "        }\n",
+        "            photoControls.append(header.avatarListNode.listContainerNode.controlsContainerNode.view)\n"
+        "        }\n"
+        "        if aorusPhotoIsPage {\n"
+        "            photoControls.append(header.avatarListNode.listContainerNode.controlsContainerNode.view)\n"
+        "        }\n",
+        "expansion destination photo controls",
+    )
+    text = _replace_once(
+        text,
+        "            avatar: avatarFrame,\n",
+        "            avatar: aorusPhotoIsPage ? nil : avatarFrame,\n",
+        "expansion destination no circle",
+    )
     destination.write_text(text, encoding="utf-8")
+
+    screen = profile / "PeerInfoScreen.swift"
+    text = _read(screen, "PeerInfoScreen.swift")
+    text = _replace_once(
+        text,
+        "        let path: ExpansionPath = peerInfoExpansionPath(isAvatarExpanded: node.headerNode.isAvatarExpanded) == .photo ? .photo : .origin\n",
+        "        // AorusGram: under Interface 2.0 the photo arrives with the page; see PeerInfoExpansionDestination.\n"
+        "        let path: ExpansionPath = !AorusInterfaceV2Run.isEnabled && peerInfoExpansionPath(isAvatarExpanded: node.headerNode.isAvatarExpanded) == .photo ? .photo : .origin\n",
+        "expansion path under Interface 2.0",
+    )
+    screen.write_text(text, encoding="utf-8")
 
     header = profile / "PeerInfoHeaderNode.swift"
     text = _read(header, "PeerInfoHeaderNode.swift")

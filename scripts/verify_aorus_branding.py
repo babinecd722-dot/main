@@ -3596,30 +3596,34 @@ def main() -> None:
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
             ("aorusContinuesPage",),
         ),
-        # A profile's posts: a block on a pane of glass, three cards to a row. Without the grid
-        # half the pane has nothing to follow; without the pane half a single post is one large
-        # photo with the page showing down both sides of it, which is what was reported.
+        # A profile's posts: tiles on the page, three to a row, apart and rounded, with capsule
+        # badges instead of figures over corner gradients -- a single post is no longer one large
+        # photo with the page down both sides of it, and the wall no longer reads as old.
         (
             "submodules/SparseItemGrid/Sources/SparseItemGrid.swift",
             (
                 "self.itemSpacing = containerLayout.itemSpacing",
                 "itemCornerRadius = layout.containerLayout.itemCornerRadius",
-                "public var aorusItemsFrame: CGRect?",
             ),
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
             (
-                "aorusPostsBlockView",
-                "self.aorusLayoutPostsBlock()",
-                "adjustForSmallCount = false\n                let aorusInset",
-                "import GlassBackgroundComponent",
+                "static let aorusTileCornerRadius: CGFloat = 14.0",
+                "self.itemGridBinding.aorusTiles = aorusPostsBlock",
+                "private enum AorusPostBadge {",
+                "if self.viewCountLayer != nil, !self.aorusTiles {",
+                # A post opens out of the tile's corners and closes back into them, the copy that
+                # lands rounding on the viewer's clock instead of turning round after it lands.
+                "sourceCornerRadius: self.itemGrid.aorusItemCornerRadius,",
+                "destinationCornerRadius: aorusTileCornerRadius,",
+                "return ItemTransitionView(itemLayer: foundItemLayer, aorusCornerRadius: aorusTileCornerRadius)",
+                "transition.setCornerRadius(layer: self.layer, cornerRadius: viewer + (self.aorusCornerRadius - viewer) * state.progress)",
                 # The album tabs, the empty state and the grid take this peer's page palette:
                 # the application theme was black ink on a dark avatar page in the light theme.
                 "let presentationData = self.aorusPagePresentationData(presentationData)",
                 "theme: aorusTabTheme,",
-                "isDark: self.aorusPostsPageIsDark)",
-                "private var aorusPostsBlockView: AorusBlurBlockView?",
+                "theme: aorusPostsBlock ? presentationData.theme : self.itemGridBinding.chatPresentationData.theme.theme,",
             ),
         ),
         # A bot's styled inline button: the light theme letters the plain pill in the accent with
@@ -4066,17 +4070,6 @@ def main() -> None:
             ),
         ),
         (
-            "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift",
-            (
-                # Interface 2.0 grows the photo out of the circle at one scale: the circle shows the
-                # square picture, not the whole view squeezed down with its darkened strip.
-                "private let aorusUniformPhoto = AorusInterfaceV2Run.isEnabled",
-                "return navigationExpansionRoundedPath(rect: window.rect,",
-                "return (CGPoint(x: photo.midX, y: photo.minY + rest.height * scale * 0.5), CATransform3DMakeScale(scale, scale, 1.0))",
-                "y: aorusStartCenterY + (screenFrame.midY - start.midY) * scaleY)",
-            ),
-        ),
-        (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
             (
                 "self.avatarListNode.listContainerNode.aorusShowEntry(entry)",
@@ -4221,6 +4214,11 @@ def main() -> None:
         ("submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/ExpansionChoreography.swift", ("glass: g.aorusGlassRisesIn ? min(",)),
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoExpansionDestination.swift", ("$0.tag == AorusGlassProfileTint.backdropTag",)),
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift", ("expansionBackgroundView.backgroundColor = aorusPageColor",)),
+        # The photo under 2.0 is the top of the page: it is not lent to the flying circle and arrives
+        # with the page, and the chat's avatar fades where it is instead of popping out.
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift", ("let path: ExpansionPath = !AorusInterfaceV2Run.isEnabled && peerInfoExpansionPath(",)),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoExpansionDestination.swift", ("let aorusPhotoIsPage = AorusInterfaceV2Run.isEnabled && header.isAvatarExpanded", "(aorusPhotoIsPage ? [header.avatarListNode.view] : [])", "avatar: aorusPhotoIsPage ? nil : avatarFrame,")),
+        ("submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift", ("private let aorusFadesUncarriedCompanion = AorusInterfaceV2Run.isEnabled", "if destinationLoan.avatarView == nil, self.aorusFadesUncarriedCompanion,")),
         # The fade under a profile's top bar is the profile's page, not the plain theme white.
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                            tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),
     )
