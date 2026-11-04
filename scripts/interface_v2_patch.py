@@ -1468,6 +1468,78 @@ def _patch_glass_action_buttons(tg: Path) -> None:
             "                if highlighted {\n",
             "button glass press",
         )
+        # The long press. Telegram arms its context gesture on More, Mute and Voice Chat, and
+        # 0.32 s into a hold it opens the menu and cancels every other gesture in the window --
+        # the glass's own among them, so a held More button was "pressed" exactly when it
+        # should have started to stretch. More opens the very same menu on a tap, so on glass
+        # it has no long press at all and behaves as the buttons around it do: it stretches
+        # while held and opens on release. Mute and Voice Chat keep theirs (a menu a tap does
+        # not always give), but a finger that moves is stretching the glass rather than
+        # waiting for a menu, and the first movement a pan recognises calls the press off.
+        text = _replace_once(
+            text,
+            "            self.containerNode.isGestureEnabled = isGestureEnabled\n",
+            "            if self.aorusGlassBackground != nil && icon == .more {\n"
+            "                isGestureEnabled = false\n"
+            "            }\n"
+            "            self.containerNode.isGestureEnabled = isGestureEnabled\n",
+            "button glass long press",
+        )
+        text = _replace_once(
+            text,
+            "            if self.containerNode.view.superview !== glassBackground.contentView {\n"
+            "                glassBackground.contentView.addSubview(self.containerNode.view)\n"
+            "            }\n",
+            "            if self.containerNode.view.superview !== glassBackground.contentView {\n"
+            "                glassBackground.contentView.addSubview(self.containerNode.view)\n"
+            "            }\n"
+            "            if self.aorusDragGuard == nil {\n"
+            "                let dragGuard = UIPanGestureRecognizer(target: self, action: #selector(self.aorusGlassDragged(_:)))\n"
+            "                // Watches without taking anything: the tap still fires on release, the\n"
+            "                // glass still follows the finger, the page still scrolls.\n"
+            "                dragGuard.cancelsTouchesInView = false\n"
+            "                dragGuard.delaysTouchesEnded = false\n"
+            "                dragGuard.delegate = AorusGlassDragGuardDelegate.shared\n"
+            "                self.containerNode.view.addGestureRecognizer(dragGuard)\n"
+            "                self.aorusDragGuard = dragGuard\n"
+            "            }\n",
+            "button glass drag guard",
+        )
+        text = _replace_once(
+            text,
+            "    private let aorusGlassBackground: GlassBackgroundView?\n",
+            "    private let aorusGlassBackground: GlassBackgroundView?\n"
+            "    // Calls the long press off once the finger moves; see aorusGlassDragged.\n"
+            "    private var aorusDragGuard: UIPanGestureRecognizer?\n",
+            "button glass drag guard property",
+        )
+        text = _replace_once(
+            text,
+            "    @objc private func buttonPressed() {\n",
+            "    // AorusGram: a press that has started to travel is a stretch of the glass, not a\n"
+            "    // long press, so the context menu it would open 0.32 s in is called off. Only before\n"
+            "    // the menu opens: once it is open, its own gesture cancelled this one with the rest.\n"
+            "    @objc private func aorusGlassDragged(_ recognizer: UIPanGestureRecognizer) {\n"
+            "        if recognizer.state == .began, self.containerNode.isGestureEnabled {\n"
+            "            self.containerNode.cancelGesture()\n"
+            "        }\n"
+            "    }\n"
+            "\n"
+            "    @objc private func buttonPressed() {\n",
+            "button glass drag handler",
+        )
+        text = text.rstrip("\n") + (
+            "\n\n"
+            "// AorusGram: lets the drag guard on a glass header button see a pan alongside every\n"
+            "// other recogniser -- the page's scroll, the glass's own, the button's tracking.\n"
+            "private final class AorusGlassDragGuardDelegate: NSObject, UIGestureRecognizerDelegate {\n"
+            "    static let shared = AorusGlassDragGuardDelegate()\n"
+            "\n"
+            "    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {\n"
+            "        return true\n"
+            "    }\n"
+            "}\n"
+        )
         button.write_text(text, encoding="utf-8")
         print("InterfaceV2: made the action buttons glass")
 

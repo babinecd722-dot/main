@@ -296,6 +296,25 @@ def patch_picker(tg):
     }
 '''
     s = edit(s, anchor, gateway, 'picker bridge')
+    # The camera tile. A picker the composer opens only to read a draft back into -- for the
+    # editor a strip tile opens, or for the send button -- is never on screen, yet its tile
+    # started the camera all the same and kept it on while the editor or the conversion ran.
+    # And the sheet's own picker stopped its camera only once it was released, which a draft
+    # still being saved or a send still being tracked holds back past the sheet closing.
+    anchor = '    public var aorusPersistAttachmentDraft: ((@escaping (Bool) -> Void) -> Void)?\n'
+    s = edit(s, anchor, anchor + '''    /// Set before the picker loads, on one that is never shown: it gets no camera tile at all.
+    public var aorusRunsWithoutCamera = false
+
+    /// The sheet this picker was in has closed: its camera stops now, not whenever the picker
+    /// itself is released. The same suspension the sheet gives it on a switch to another tab;
+    /// a camera that has gone full screen is left to the full-screen camera, which stops it.
+    public func aorusSuspendCamera() {
+        guard self.isNodeLoaded else { return }
+        self.controllerNode.isSuspended = true
+        self.controllerNode.updateIsCameraActive()
+    }
+''', 'picker camera controls')
+    s = edit(s, '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = true\n', '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = !controller.aorusRunsWithoutCamera\n', 'hidden picker has no camera')
     # A capture prepared in the background and never committed is discarded here directly: the
     # chat's discard closure holds this picker weakly, and a weak reference reads nil in deinit.
     s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        if let draft = self.aorusPreparedDraftCapture?.capture.draft {\n            AorusAttachmentDraftCleanup.discard(accountBasePath: self.context.account.basePath, draft: draft)\n        }\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
@@ -621,6 +640,13 @@ def patch_controller(tg):
                     currentMediaController.with { $0 }?.aorusRequestAttachmentPersistence(completion: {})
                 }
 ''' + anchor, 'programmatic dismissal persistence')
+    native = 'enableMultiselection: Bool, isEditingMessage: Bool = false, mainButton: (state: AttachmentMainButtonState, action: () -> Void)? = nil, present: @escaping (MediaPickerScreenImpl, AttachmentMediaPickerContext?) -> Void,'
+    s = edit(s, native, native.replace('isEditingMessage: Bool = false, ', 'isEditingMessage: Bool = false, aorusWithoutCamera: Bool = false, '), 'picker that is never shown')
+    native = '        controller.openBoost = { [weak self, weak controller] in\n'
+    # Before the configuration below: it loads the picker, and the tile is made as it loads.
+    s = edit(s, native, '        controller.aorusRunsWithoutCamera = aorusWithoutCamera\n' + native, 'no camera for a picker that is never shown')
+    native = '                attachmentController.didDismiss = { [weak self] in\n                    self?.attachmentController = nil\n'
+    s = edit(s, native, native + '                    currentMediaController.with { $0 }?.aorusSuspendCamera()\n', 'camera stops with the sheet')
     anchor = '        let mediaPickerContext = controller.mediaPickerContext\n'
     # Gallery selections only. A pasted picture or video is not a library item: kept as a
     # draft it came back into a gallery picker whose send path only takes library assets and

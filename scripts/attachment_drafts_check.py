@@ -397,6 +397,24 @@ def check_bindings(tg):
     request = block(picker, '    public func requestDismiss(')
     if request.index('aorusRequestAttachmentPersistence') > request.index('Attachment_DiscardPasteboardAlertText'):
         raise RuntimeError('A media draft still enters the discard flow')
+    # The camera tile: none in a picker the composer never shows, and the sheet's own picker
+    # stops its camera when the sheet closes, not when something finally releases the picker.
+    if picker.count('useLegacyCamera = !controller.aorusRunsWithoutCamera') != 1:
+        raise RuntimeError('A picker that is never shown still starts the camera')
+    suspend = block(picker, '    public func aorusSuspendCamera() {')
+    if 'self.controllerNode.isSuspended = true' not in suspend or 'self.controllerNode.updateIsCameraActive()' not in suspend:
+        raise RuntimeError('Closing the sheet does not stop the picker camera')
+    menu = (tg / 'submodules/TelegramUI/Sources/ChatControllerOpenAttachmentMenu.swift').read_text()
+    presenter = block(menu, '    func presentMediaPicker(')
+    if presenter.index('controller.aorusRunsWithoutCamera = aorusWithoutCamera') > presenter.index('self.aorusConfigureAttachmentDraftPicker(controller)'):
+        raise RuntimeError('The camera choice is made after the picker has loaded')
+    dismissed = block(menu, '                attachmentController.didDismiss = {')
+    if 'currentMediaController.with { $0 }?.aorusSuspendCamera()' not in dismissed:
+        raise RuntimeError('The attachment sheet closes with its camera running')
+    drafts = (tg / 'submodules/TelegramUI/Sources/AorusAttachmentDraftController.swift').read_text()
+    hidden = drafts.count('self.presentMediaPicker(')
+    if hidden < 2 or drafts.count('enableMultiselection: true, aorusWithoutCamera: true, present:') != hidden:
+        raise RuntimeError('A draft picker that is never shown has a camera tile')
     row = (tg / 'submodules/ChatListUI/Sources/Node/ChatListItem.swift').read_text()
     if 'draftState?.attachmentPreviews ?? []' not in row or 'aorusHideProtectedDraft ? nil : draftStateValue' not in row:
         raise RuntimeError('Media thumbnails bypass native draft privacy')

@@ -3435,7 +3435,15 @@ def main() -> None:
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift",
-            ("aorusGlassBackground", "import GlassBackgroundComponent", "AorusGlassPane.profilePageInk"),
+            (
+                "aorusGlassBackground",
+                "import GlassBackgroundComponent",
+                "AorusGlassPane.profilePageInk",
+                # Held glass stretches instead of opening a menu: More has no long press on
+                # glass, and a moving finger calls the long press off on Mute and Voice Chat.
+                "if self.aorusGlassBackground != nil && icon == .more {",
+                "self.containerNode.cancelGesture()",
+            ),
         ),
         (
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift",

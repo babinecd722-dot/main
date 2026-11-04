@@ -217,7 +217,9 @@ extension ChatControllerImpl {
         // The editor covers the chat, so the keyboard goes first, the way opening a photo in the
         // chat dismisses it -- whichever input holds it, the composer's or the expanded editor's.
         self.chatDisplayNode.dismissInput()
-        self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, present: { [weak self] controller, _ in
+        // The picker only carries the draft into the editor and is never on screen, so it has no
+        // camera tile: one would turn the camera on for as long as the editor is open.
+        self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: nil, bannedSendVideos: nil, enableMultiselection: true, aorusWithoutCamera: true, present: { [weak self] controller, _ in
             guard let self else { return }
             // Held while the draft is read in, so a second tap cannot open a second editor.
             self.aorusAttachmentPreviewPicker = controller
@@ -341,7 +343,9 @@ extension ChatControllerImpl {
             self.aorusShowAttachmentDraftError()
             return true
         }
-        self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: bannedPhotos, bannedSendVideos: bannedVideos, enableMultiselection: true, present: { [weak self] controller, context in
+        // Never on screen either: the draft is read into it and sent from it, with no camera tile
+        // running while the media converts.
+        self.presentMediaPicker(saveEditedPhotos: false, bannedSendPhotos: bannedPhotos, bannedSendVideos: bannedVideos, enableMultiselection: true, aorusWithoutCamera: true, present: { [weak self] controller, context in
             guard let self else { return }
             // The send is this one from here on, while the draft is read in as well: a second
             // press waits for it, as it does for the conversion that follows.
