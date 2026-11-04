@@ -1160,7 +1160,11 @@ public enum AorusGlassProfileTint {
         for lane in 0 ..< bytesPerRow {
             means[lane] = lanes[lane] / totalWeight
         }
-        let smoothed = AorusGlassProfileTint.horizontallyBlurred(means, width: size, sigma: sigma)
+        let smoothed = AorusGlassProfileTint.dissolvingLines(
+            AorusGlassProfileTint.horizontallyBlurred(means, width: size, sigma: sigma),
+            width: size,
+            sigma: sigma
+        )
         var row = [UInt8](repeating: 0, count: bytesPerRow)
         for column in 0 ..< size {
             row[column * 4] = AorusGlassProfileTint.byte(smoothed[column * 4])
@@ -1186,6 +1190,57 @@ public enum AorusGlassProfileTint {
             return nil
         }
         return UIImage(cgImage: flattened, scale: 1.0, orientation: .up)
+    }
+
+    /// The steepest edge a page may keep as it is: a third of the way from black to white in the
+    /// photo, after the block's own shadow.
+    ///
+    /// The row is stretched down the whole screen, so every edge in it becomes a line from the
+    /// header to the bottom. A photograph's own light makes soft edges, and its page reads as a
+    /// wash. A subject on a plain background -- a face or a figure on white, an object on a
+    /// studio backdrop -- has a silhouette, and its page used to be a dark line down the middle
+    /// of a white screen. Below this figure a row is left exactly as it was sampled.
+    private static let pageEdgeLimit: Double = 255.0 * (1.0 - AorusGlassProfileTint.bandShadow) / 3.0
+
+    /// The row with its lines dissolved into the page's broad light, by as much as they stand
+    /// out, and left untouched when nothing in it does.
+    ///
+    /// An edge is measured by its steepest step between two columns, turned back into the height
+    /// of the step it would be under the block's own blur -- a gaussian of `sigma` turns a step of
+    /// `h` into a slope of `h / (sqrt(2 pi) sigma)` -- so the figure means the same on a phone and
+    /// on an iPad, whose sample has fewer pixels to a point. The largest of the three colour lanes,
+    /// because a red shirt on a blue wall is as much of a line as black on white. Lane three is
+    /// alpha, which the caller makes opaque anyway.
+    ///
+    /// What the line dissolves into is the same row blurred across a third of its width: a face on
+    /// white becomes a light page a shade darker in the middle, a figure standing on the left of a
+    /// picture a wash that darkens towards the left -- what the photo is made of, without the
+    /// silhouette. The share of the row that is kept falls with the square of how far its edge
+    /// is over the limit: a row just over it changes by a few levels, a black line on white keeps
+    /// a tenth of its contrast. Both steps are means, so the page's colour does not move.
+    private static func dissolvingLines(_ lanes: [Double], width: Int, sigma: Double) -> [Double] {
+        let lanesPerPixel = 4
+        guard width > 1, sigma > 0.05, lanes.count == width * lanesPerPixel else {
+            return lanes
+        }
+        var steepest = 0.0
+        for column in 0 ..< width - 1 {
+            let base = column * lanesPerPixel
+            for lane in 0 ..< 3 {
+                steepest = max(steepest, abs(lanes[base + lanesPerPixel + lane] - lanes[base + lane]))
+            }
+        }
+        let edge = steepest * (2.0 * Double.pi).squareRoot() * sigma
+        guard edge > AorusGlassProfileTint.pageEdgeLimit else {
+            return lanes
+        }
+        let kept = pow(AorusGlassProfileTint.pageEdgeLimit / edge, 2.0)
+        let broad = AorusGlassProfileTint.horizontallyBlurred(lanes, width: width, sigma: Double(width) / 3.0)
+        var result = lanes
+        for index in 0 ..< lanes.count {
+            result[index] = broad[index] + (lanes[index] - broad[index]) * kept
+        }
+        return result
     }
 
     /// A weighted mean back into the lane it came from, clamped rather than trusted: the arithmetic

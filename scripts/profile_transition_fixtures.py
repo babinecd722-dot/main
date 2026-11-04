@@ -7,6 +7,7 @@ from chat_avatar_layout_fixtures import chat_avatar_layout_source
 def profile_transition_test_source(tg: Path) -> str:
     renderer = (tg / "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift").read_text()
     lend = block(renderer, "            if let companionView = sourceLoan.companionView, let choreography")
+    window = block(renderer, "    private func aorusPhotoWindow(").replace("    private func", "    func", 1)
     apply = block(renderer, "        if self.companionHome != nil {")
     animate = block(renderer, "        if self.companionHome != nil, let companionView = sourceLoan.companionView {")
     start = renderer.index("        if let companionView = self.sourceLoan?.companionView, let home = self.companionHome {")
@@ -43,7 +44,9 @@ private struct GhostChoreography {
     var choreography: GhostChoreography?
     var companionHome: (superview: UIView?, index: Int, center: CGPoint, bounds: CGRect, transform: CGAffineTransform)?
     var aorusCompanionHomes: [(view: UIView, superview: UIView?, index: Int, bounds: CGRect, center: CGPoint, transform: CGAffineTransform)] = []
+    var aorusUniformPhoto = false
     init() { photoHost.addSubview(photoWrapper); photoHost.addSubview(aorusCompanionHost) }
+''' + window + r'''
     func lend(screen: UIView, rest: CGRect, time: CGFloat, isOpening: Bool) {
         guard let sourceLoan = self.sourceLoan else { preconditionFailure() }
         photoWrapper.bounds = CGRect(origin: .zero, size: rest.size)
@@ -92,6 +95,39 @@ private struct GhostChoreography {
     snapshotProbe.install(AvatarSnapshotProbe.SnapshotState(snapshotView: snapshot))
     expect(snapshot.frame == snapshotProbe.avatarNode.frame, "avatar snapshot uses the inner container's coordinates")
     expect(snapshot.frame.minX != snapshotProbe.frame.minX, "the ghost's 40-point offset is never applied twice")
+    // Interface 2.0's photo window: one scale on both axes, the square picture in the circle, the
+    // whole view at a scale of one on the last frame, and the chat's avatar exactly where it was.
+    do {
+        let probe = ProfileLoanProbe()
+        let rest = CGRect(x: 0, y: -12, width: 390, height: 488)
+        let circle = CGRect(x: 145, y: 80, width: 100, height: 100)
+        let first = probe.aorusPhotoWindow(circle, rest: rest)
+        expect(abs(first.scale - 100.0 / 390.0) < 0.0001 && abs(first.rect.width - 390) < 0.001 && abs(first.rect.height - 390) < 0.001 && first.rect.minY == 0, "the circle shows the square picture, not the whole view squeezed")
+        let last = probe.aorusPhotoWindow(rest, rest: rest)
+        expect(abs(last.scale - 1) < 0.0001 && last.rect == CGRect(origin: .zero, size: rest.size), "the last frame is the whole view at a scale of one")
+        let overshoot = probe.aorusPhotoWindow(rest.insetBy(dx: -20, dy: -40), rest: rest)
+        expect(overshoot.rect.width <= rest.width && overshoot.rect.height <= rest.height + 0.0001 && overshoot.scale * overshoot.rect.height >= rest.height + 80 - 0.001, "an overshoot is still covered without leaving the view")
+        let screen = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let bar = UIView(frame: CGRect(x: 286, y: 54, width: 84, height: 44))
+        let avatar = UIView(frame: CGRect(x: 40, y: 0, width: 44, height: 44))
+        let ghost = UIView(frame: bar.bounds)
+        screen.addSubview(bar); bar.addSubview(ghost); bar.addSubview(avatar)
+        let screenFrame = avatar.convert(avatar.bounds, to: screen)
+        let ghostFrame = ghost.convert(ghost.bounds, to: screen)
+        probe.aorusUniformPhoto = true
+        probe.sourceLoan = GhostSourceLoan(avatar: avatar, ghost: ghost)
+        probe.choreography = GhostChoreography(start: screenFrame)
+        screen.addSubview(probe.photoHost)
+        probe.lend(screen: screen, rest: rest, time: 0, isOpening: true)
+        let s0 = probe.aorusPhotoWindow(screenFrame, rest: rest).scale
+        expect(abs(avatar.transform.a - avatar.transform.d) < 0.0001 && abs(avatar.transform.a - 1 / s0) < 0.0001, "the chat's avatar is scaled alike on both axes")
+        let mapped = CGPoint(x: screenFrame.midX + (avatar.center.x - rest.width * 0.5) * s0, y: screenFrame.minY + avatar.center.y * s0)
+        expect(abs(mapped.x - screenFrame.midX) < 0.001 && abs(mapped.y - screenFrame.midY) < 0.001, "the chat's avatar starts exactly where it was")
+        let ghostMapped = CGPoint(x: screenFrame.midX + (ghost.center.x - rest.width * 0.5) * s0, y: screenFrame.minY + ghost.center.y * s0)
+        expect(abs(ghostMapped.x - ghostFrame.midX) < 0.001 && abs(ghostMapped.y - ghostFrame.midY) < 0.001 && abs(ghost.transform.a - ghost.transform.d) < 0.0001, "the ghost rides the same mapping")
+        probe.restore()
+        probe.photoHost.removeFromSuperview()
+    }
     for opening in [false, true] { for expanded in [false, true] {
         let screen = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         let bar = UIView(frame: CGRect(x: 286, y: 54, width: 84, height: 44))

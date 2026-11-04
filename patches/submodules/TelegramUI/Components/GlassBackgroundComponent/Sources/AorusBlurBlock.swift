@@ -75,6 +75,10 @@ public final class AorusBlurBlockView: UIView {
     private var page: Page?
     private var radii: GlassBackgroundView.CornerRadii?
     private var maskSize: CGSize?
+    /// What the block was last laid out for. A list lays its blocks out again on every frame of a
+    /// scroll, where a block that has only moved has nothing of its own to redo: its frame is the
+    /// caller's to set.
+    private var applied: (size: CGSize, radii: GlassBackgroundView.CornerRadii, page: Page, blurs: Bool)?
 
     public init(material: Material = .blur) {
         self.material = material
@@ -98,7 +102,14 @@ public final class AorusBlurBlockView: UIView {
     }
 
     public func update(size: CGSize, cornerRadii: GlassBackgroundView.CornerRadii, page: Page, transition: ComponentTransition) {
-        self.updateMaterial(page: page)
+        // Asked at every update rather than observed: the switch is in Settings, and a block is
+        // laid out again as soon as the screen it is on comes back.
+        let blurs = self.material == .blur && !UIAccessibility.isReduceTransparencyEnabled
+        if let applied = self.applied, applied.size == size, applied.radii == cornerRadii, applied.page == page, applied.blurs == blurs {
+            return
+        }
+        self.applied = (size, cornerRadii, page, blurs)
+        self.updateMaterial(page: page, blurs: blurs)
 
         let bounds = CGRect(origin: CGPoint(), size: size)
         transition.setFrame(view: self.washView, frame: bounds)
@@ -108,10 +119,7 @@ public final class AorusBlurBlockView: UIView {
         self.updateCorners(cornerRadii, size: size)
     }
 
-    private func updateMaterial(page: Page) {
-        // Asked at every update rather than observed: the switch is in Settings, and a block is
-        // laid out again as soon as the screen it is on comes back.
-        let blurs = self.material == .blur && !UIAccessibility.isReduceTransparencyEnabled
+    private func updateMaterial(page: Page, blurs: Bool) {
         if blurs, self.effectView == nil {
             let effectView = AorusBlurBlockView.makeEffectView()
             effectView.frame = self.washView.frame

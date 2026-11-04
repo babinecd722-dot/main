@@ -3685,6 +3685,12 @@ def main() -> None:
                 "sampleBlurSigma(width:",
                 "horizontallyBlurred(",
                 "flattenedRow(of image:",
+                # A silhouette on a plain background -- a face on white -- is a sharp edge in the
+                # row, and stretched down the screen it was a dark line to the bottom. Rows whose
+                # steepest edge is past a third of black-to-white are dissolved into their own broad
+                # light; every other row is left exactly as sampled.
+                "dissolvingLines(",
+                "pageEdgeLimit",
                 # The vertical weight is half a gaussian and not a tent: the block's bottom edge is
                 # both where the page joins and where its kernel is renormalised, so its last line
                 # averages rows from inside the block only. A symmetric tent spent half its weight
@@ -4052,6 +4058,22 @@ def main() -> None:
                 "expandedAvatarListHeight = navigationHeight + 4.0 + (self.isMyProfile ? -2.0 : 43.0) + bottomInset",
                 "let aorusPhotoAlpha: CGFloat = aorusPhotolessHeader && self.isAvatarExpanded ? 0.0 : 1.0",
                 "aorusSettle(self.avatarListNode.layer)",
+                # The premium cover goes with the photo, so the top of a turned profile is its page.
+                "            if backgroundCoverView.alpha != aorusPhotoAlpha {\n",
+                # The expanded name is centred with its badges, a bot's verification before it
+                # included -- not pushed a badge's width right of the middle.
+                "titleExpandedHorizontalOffset = floorToScreenPixels((aorusLeadingBadge - aorusTrailingBadges) * expandedTitleScale / 2.0)",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift",
+            (
+                # Interface 2.0 grows the photo out of the circle at one scale: the circle shows the
+                # square picture, not the whole view squeezed down with its darkened strip.
+                "private let aorusUniformPhoto = AorusInterfaceV2Run.isEnabled",
+                "return navigationExpansionRoundedPath(rect: window.rect,",
+                "return (CGPoint(x: photo.midX, y: photo.minY + rest.height * scale * 0.5), CATransform3DMakeScale(scale, scale, 1.0))",
+                "y: aorusStartCenterY + (screenFrame.midY - start.midY) * scaleY)",
             ),
         ),
         (

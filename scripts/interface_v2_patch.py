@@ -1182,6 +1182,31 @@ def _patch_header_centering(tg: Path) -> None:
         "        let usernameFrame: CGRect\n",
         "centred header flag",
     )
+    # The expanded name carries its badges as the collapsed one does -- a status, a premium star
+    # or a check after it, a bot's verification before it -- and Telegram moves it right by the
+    # width of the one before it, because its expanded name is pinned to the left margin and that
+    # badge needs the room. Centred, that shift is the whole of the error: with a badge on each
+    # side the run was symmetric already and still stood a badge's width right of the middle. What
+    # is centred here is the run, badges included, as the collapsed state centres it -- at the
+    # scale the expanded name is drawn at, because the badges are laid out in its own points.
+    text = _replace_once(
+        text,
+        "        let expandedTitleScale: CGFloat = 0.8\n",
+        "        let expandedTitleScale: CGFloat = 0.8\n"
+        "        if aorusCentredHeader {\n"
+        "            var aorusLeadingBadge: CGFloat = 0.0\n"
+        "            if let verifiedIconSize = self.verifiedIconSize, let titleExpandedVerifiedIconSize = self.titleExpandedVerifiedIconSize, verifiedIconSize.width > 0.0 {\n"
+        "                if case .verified = verifiedIcon {\n"
+        "                    aorusLeadingBadge = 0.0\n"
+        "                } else {\n"
+        "                    aorusLeadingBadge = titleExpandedVerifiedIconSize.width + 4.0\n"
+        "                }\n"
+        "            }\n"
+        "            let aorusTrailingBadges = nextExpandedIconX - titleExpandedSize.width\n"
+        "            titleExpandedHorizontalOffset = floorToScreenPixels((aorusLeadingBadge - aorusTrailingBadges) * expandedTitleScale / 2.0)\n"
+        "        }\n",
+        "centred header badges",
+    )
     # titleFrame is derived from minTitleFrame.midX, so centring that frame centres the title. 13.1
     # lays the header out in the band between the side strips (iPhone Duo); the collapsed state
     # centres with bandCenteredOrigin there, and the expanded one does the same here.
@@ -3078,6 +3103,35 @@ def _patch_landscape_profile(tg: Path) -> None:
             "            }\n"
             "        }\n",
             "photoless wide header",
+        )
+        # The cover goes with the photo. A profile with a colour of its own or a collectible gift
+        # draws Telegram's cover under the header, and while the photo is there the photo hides
+        # it; on a phone on its side the photo was faded out and left the cover standing over the
+        # top of the page, in the profile's premium colour, where every other profile shows the
+        # page the photo gave it. Same alpha, same timing as the photo's, so turning back never
+        # shows the cover through a photo that is still fading in.
+        header = _replace_once(
+            header,
+            "        if let backgroundCoverView = self.backgroundCover.view as? PeerInfoCoverComponent.View {\n"
+            "            if backgroundCoverView.superview == nil {\n"
+            "                self.backgroundBannerView.addSubview(backgroundCoverView)\n"
+            "            }\n",
+            "        if let backgroundCoverView = self.backgroundCover.view as? PeerInfoCoverComponent.View {\n"
+            "            if backgroundCoverView.superview == nil {\n"
+            "                self.backgroundBannerView.addSubview(backgroundCoverView)\n"
+            "                backgroundCoverView.alpha = aorusPhotoAlpha\n"
+            "            }\n"
+            "            if backgroundCoverView.alpha != aorusPhotoAlpha {\n"
+            "                if case let .animated(duration, _) = transition {\n"
+            "                    let aorusFadesIn = aorusPhotoAlpha > 0.0 && self.isAvatarExpanded\n"
+            "                    UIView.animate(withDuration: duration * (aorusFadesIn ? 0.6 : 0.5), delay: aorusFadesIn ? duration * 0.4 : 0.0, options: [.beginFromCurrentState, .curveEaseInOut], animations: {\n"
+            "                        backgroundCoverView.alpha = aorusPhotoAlpha\n"
+            "                    })\n"
+            "                } else {\n"
+            "                    backgroundCoverView.alpha = aorusPhotoAlpha\n"
+            "                }\n"
+            "            }\n",
+            "photoless wide header cover",
         )
         # The label under a photo someone else set is hit-tested by its own frame; it is part of
         # the photo, and takes no touch while the photo is hidden.
