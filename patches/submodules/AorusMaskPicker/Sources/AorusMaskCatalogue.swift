@@ -149,7 +149,6 @@ public enum AorusMaskCatalogue {
 
     /// The blur has no artwork: its circle shows a face, blurred as the face in the video is.
     private static func blurThumbnail() -> UIImage? {
-        guard #available(iOS 13.0, *) else { return nil }
         let configuration = UIImage.SymbolConfiguration(pointSize: 92.0, weight: .regular)
         guard let symbol = (UIImage(systemName: "face.smiling", withConfiguration: configuration)
             ?? UIImage(systemName: "person.fill", withConfiguration: configuration))?

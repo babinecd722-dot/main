@@ -200,9 +200,7 @@ final class AorusPluginWebPageController: ViewController {
             // Off the screen — another tab, a screen pushed over it, the app in the background —
             // whatever the page was playing stops.
             guard !onScreen, let webView else { return }
-            if #available(iOS 15.0, *) {
-                webView.pauseAllMediaPlayback(completionHandler: nil)
-            }
+            webView.pauseAllMediaPlayback(completionHandler: nil)
         }
         webView.navigationDelegate = events
         webView.uiDelegate = events

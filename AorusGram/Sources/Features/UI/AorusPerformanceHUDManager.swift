@@ -365,8 +365,7 @@ private final class AorusPerformanceHUDView: UIView {
             .font: font,
             .foregroundColor: color,
         ])
-        if #available(iOS 13.0, *),
-           let image = UIImage(systemName: trailingSymbolName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)) {
+        if let image = UIImage(systemName: trailingSymbolName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)) {
             let attachment = NSTextAttachment()
             attachment.image = image.withTintColor(color, renderingMode: .alwaysOriginal)
             attachment.bounds = CGRect(x: 0.0, y: -1.0, width: 8.5, height: 10.5)
@@ -492,10 +491,8 @@ public final class AorusPerformanceHUDManager {
                                                    name: UIDevice.orientationDidChangeNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(onThermalChanged),
                                                    name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
-            if #available(iOS 13.0, *) {
-                NotificationCenter.default.addObserver(self, selector: #selector(onSceneDidActivate),
-                                                       name: UIScene.didActivateNotification, object: nil)
-            }
+            NotificationCenter.default.addObserver(self, selector: #selector(onSceneDidActivate),
+                                                   name: UIScene.didActivateNotification, object: nil)
         }
 
         let manager = AorusPerformanceHUDSettings.current
@@ -664,26 +661,23 @@ public final class AorusPerformanceHUDManager {
 
     private func isWindowUsable(_ window: UIWindow) -> Bool {
         guard !window.isHidden else { return false }
-        if #available(iOS 13.0, *), let scene = window.windowScene {
+        if let scene = window.windowScene {
             return scene.activationState == .foregroundActive
         }
         return true
     }
 
     private func makeWindow() -> UIWindow? {
-        if #available(iOS 13.0, *) {
-            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            let activeScene = scenes.first(where: { scene in
-                scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden && $0.isKeyWindow })
-            }) ?? scenes.first(where: { scene in
-                scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden })
-            }) ?? scenes.first(where: { $0.activationState == .foregroundActive })
-            if let scene = activeScene {
-                return UIWindow(windowScene: scene)
-            }
-            return nil
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let activeScene = scenes.first(where: { scene in
+            scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden && $0.isKeyWindow })
+        }) ?? scenes.first(where: { scene in
+            scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden })
+        }) ?? scenes.first(where: { $0.activationState == .foregroundActive })
+        if let scene = activeScene {
+            return UIWindow(windowScene: scene)
         }
-        return UIWindow(frame: UIScreen.main.bounds)
+        return nil
     }
 
     private func layoutHUD() {

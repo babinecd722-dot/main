@@ -307,11 +307,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
                 }
             }
         }
-        if #available(iOS 14.0, *) {
-            PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: handler)
-        } else {
-            PHPhotoLibrary.requestAuthorization(handler)
-        }
+        PHPhotoLibrary.requestAuthorization(for: .readWrite, handler: handler)
     }
 
     private func loadAssets() {
@@ -416,14 +412,8 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
             }
         }
 
-        if #available(iOS 13.0, *) {
-            self.imageManager.requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
-                DispatchQueue.main.async { completion(data) }
-            }
-        } else {
-            self.imageManager.requestImageData(for: asset, options: options) { data, _, _, _ in
-                DispatchQueue.main.async { completion(data) }
-            }
+        self.imageManager.requestImageDataAndOrientation(for: asset, options: options) { data, _, _, _ in
+            DispatchQueue.main.async { completion(data) }
         }
     }
 

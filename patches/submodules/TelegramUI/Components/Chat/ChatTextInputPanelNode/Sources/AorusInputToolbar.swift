@@ -733,25 +733,12 @@ private struct AorusGlass: View {
 
         return Group {
             if glassEffects.isEnabled {
-                if #available(iOS 15.0, *) {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Circle()
-                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                        )
-                } else {
-                    Circle()
-                        .fill(Color.clear)
-                        .background(
-                            AorusBlurView(style: .systemThinMaterial)
-                                .clipShape(Circle())
-                        )
-                        .overlay(
-                            Circle()
-                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                        )
-                }
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                    )
             } else {
                 Circle()
                     .fill(Color(UIColor.secondarySystemBackground))

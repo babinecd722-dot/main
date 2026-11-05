@@ -526,9 +526,7 @@ class AorusClassicChatTimerScreenNode: ViewControllerTracingNode, ASScrollViewDe
             pickerView.datePickerMode = .dateAndTime
             pickerView.minimumDate = Date()
             pickerView.maximumDate = Date(timeIntervalSince1970: Double(Int32.max - 1))
-            if #available(iOS 13.4, *) {
-                pickerView.preferredDatePickerStyle = .wheels
-            }
+            pickerView.preferredDatePickerStyle = .wheels
             pickerView.setValue(self.presentationData.theme.list.itemPrimaryTextColor, forKey: "textColor")
             pickerView.setValue(false, forKey: "highlightsToday")
             pickerView.selectorColor = UIColor(rgb: 0xffffff, alpha: 0.18)
@@ -783,9 +781,7 @@ class AorusClassicChatTimerScreenNode: ViewControllerTracingNode, ASScrollViewDe
             pickerView.datePickerMode = .time
             pickerView.timeZone = TimeZone(secondsFromGMT: 0)
             pickerView.locale = Locale.current
-            if #available(iOS 13.4, *) {
-                pickerView.preferredDatePickerStyle = .wheels
-            }
+            pickerView.preferredDatePickerStyle = .wheels
             pickerView.setValue(self.aorusPickerTextColor(configuration: configuration, theme: theme), forKey: "textColor")
             pickerView.selectorColor = self.aorusPickerTextColor(configuration: configuration, theme: theme).withMultipliedAlpha(0.18)
             pickerView.addTarget(self, action: #selector(self.dataPickerChanged), for: .valueChanged)
@@ -804,9 +800,7 @@ class AorusClassicChatTimerScreenNode: ViewControllerTracingNode, ASScrollViewDe
             pickerView.datePickerMode = .date
             pickerView.timeZone = TimeZone(secondsFromGMT: 0)
             pickerView.locale = localeWithStrings(strings)
-            if #available(iOS 13.4, *) {
-                pickerView.preferredDatePickerStyle = .wheels
-            }
+            pickerView.preferredDatePickerStyle = .wheels
             pickerView.minimumDate = configuration.minimumDate
             pickerView.maximumDate = configuration.maximumDate ?? Date(timeIntervalSince1970: Double(Int32.max - 1))
             pickerView.setValue(self.aorusPickerTextColor(configuration: configuration, theme: theme), forKey: "textColor")
@@ -834,9 +828,7 @@ class AorusClassicChatTimerScreenNode: ViewControllerTracingNode, ASScrollViewDe
             pickerView.locale = localeWithStrings(strings)
             pickerView.minimumDate = configuration.minimumDate ?? Date()
             pickerView.maximumDate = configuration.maximumDate ?? Date(timeIntervalSince1970: Double(Int32.max - 1))
-            if #available(iOS 13.4, *) {
-                pickerView.preferredDatePickerStyle = .wheels
-            }
+            pickerView.preferredDatePickerStyle = .wheels
             pickerView.setValue(self.aorusPickerTextColor(configuration: configuration, theme: theme), forKey: "textColor")
             pickerView.setValue(false, forKey: "highlightsToday")
             pickerView.selectorColor = self.aorusPickerTextColor(configuration: configuration, theme: theme).withMultipliedAlpha(0.18)

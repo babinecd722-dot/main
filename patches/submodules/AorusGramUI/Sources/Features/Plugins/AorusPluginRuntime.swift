@@ -2600,7 +2600,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                         // The move runs on the media box's queue, ahead of the upload that reads it.
                         context.account.postbox.mediaBox.moveResourceData(resource.id, fromTempPath: entry.url.path)
                         var mime = "application/octet-stream"
-                        if #available(iOS 14.0, *) { mime = UTType(filenameExtension: (entry.name as NSString).pathExtension)?.preferredMIMEType ?? mime }
+                        mime = UTType(filenameExtension: (entry.name as NSString).pathExtension)?.preferredMIMEType ?? mime
                         let file = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil,
                             resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil,
                             mimeType: mime, size: Int64(entry.size), attributes: [.FileName(fileName: entry.name)], alternativeRepresentations: [])
@@ -3446,7 +3446,9 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     private func topController() -> UIViewController? {
-        var controller = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        // Every scene's windows, not the deprecated flat list: the key one is in one of them.
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
+        var controller = windows.first(where: { $0.isKeyWindow })?.rootViewController
         while let current = controller {
             if let presented = current.presentedViewController { controller = presented; continue }
             if let navigation = current as? UINavigationController, let top = navigation.topViewController { controller = top; continue }
@@ -3865,9 +3867,7 @@ final class AorusPluginFilePickerDelegate: NSObject, UIDocumentPickerDelegate {
             do {
                 let handle = try FileHandle(forReadingFrom: source)
                 defer { handle.closeFile() }
-                let data: Data
-                if #available(iOS 13.4, *) { data = try handle.read(upToCount: AorusPluginFiles.maximumFileBytes + 1) ?? Data() }
-                else { data = handle.readData(ofLength: AorusPluginFiles.maximumFileBytes + 1) }
+                let data = try handle.read(upToCount: AorusPluginFiles.maximumFileBytes + 1) ?? Data()
                 guard data.count <= AorusPluginFiles.maximumFileBytes else { throw AorusPluginFiles.FileError.tooLarge }
                 result = .success(try AorusPluginFiles(directory: self.directory).importData(data, suggestedName: source.lastPathComponent))
             } catch { result = .failure(error) }

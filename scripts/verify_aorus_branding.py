@@ -3734,7 +3734,8 @@ def main() -> None:
         ),
         (
             "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponentContent.swift",
-            ("var aorusGlasslessRightNode: Bool", "self.rightButtons.count == 1, case .node = self.rightButtons[0].content"),
+            # Only the chat's avatar and its ghost: a profile's lone "…" keeps its glass.
+            ("var aorusGlasslessRightNode: Bool", "self.rightButtons.count == 1, case let .node(node) = self.rightButtons[0].content, node is AorusGlasslessNavigationNode"),
         ),
         (
             "submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponent.swift",
@@ -4180,7 +4181,7 @@ def main() -> None:
         # its width does, or the avatar is left 40 points to the right, half off the screen.
         ("submodules/Display/Source/NavigationBar.swift", ("public protocol AorusNavigationBarLayoutNode: AnyObject",)),
         ("submodules/TelegramUI/Sources/ChatController.swift", (
-            "final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode {",
+            "final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode, AorusGlasslessNavigationNode {",
             "self.aorusNavigationBarLayoutRevision += 1",
         )),
         ("submodules/TelegramUI/Components/NavigationBarNode/Sources/NavigationBarItemContent.swift", ("button.aorusNodeLayoutRevision = (item.customDisplayNode as? AorusNavigationBarResizingNode)?.aorusNavigationBarLayoutRevision",)),
@@ -4218,6 +4219,11 @@ def main() -> None:
         # with the page, and the chat's avatar fades where it is instead of popping out.
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift", ("let path: ExpansionPath = !AorusInterfaceV2Run.isEnabled && peerInfoExpansionPath(",)),
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoExpansionDestination.swift", ("let aorusPhotoIsPage = AorusInterfaceV2Run.isEnabled && header.isAvatarExpanded", "(aorusPhotoIsPage ? [header.avatarListNode.view] : [])", "avatar: aorusPhotoIsPage ? nil : avatarFrame,")),
+        # The page holds still under 2.0: riding the status it came down past its place and back,
+        # and a black strip showed above it while it was below.
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoExpansionDestination.swift", ("pageViews: AorusInterfaceV2Run.isEnabled ? [] :", "pageEdgeViews: AorusInterfaceV2Run.isEnabled ? [] :", "landingViews: AorusInterfaceV2Run.isEnabled ? [] :")),
+        # The profile's glass buttons merge when one is stretched into the next.
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("let container = GlassBackgroundContainerView(spacing: 6.0)", "aorusGlassContainer.contentView.addSubview(buttonNode.view)")),
         ("submodules/TelegramUI/Components/NavigationExpansionTransition/Sources/NavigationExpansionRendererImpl.swift", ("private let aorusFadesUncarriedCompanion = AorusInterfaceV2Run.isEnabled", "if destinationLoan.avatarView == nil, self.aorusFadesUncarriedCompanion,")),
         # The fade under a profile's top bar is the profile's page, not the plain theme white.
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift", ("isDark: aorusHeaderPageIsDark,\n                            tintColor: GlassBackgroundView.TintColor(kind: .clear)", "self.headerEdgeEffectView.update(content: aorusOverlayPalette ? aorusHeaderPage :")),

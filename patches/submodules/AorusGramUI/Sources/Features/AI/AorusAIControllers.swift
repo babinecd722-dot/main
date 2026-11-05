@@ -9753,9 +9753,7 @@ private final class AorusAIPeriodPickerController: UIViewController {
         picker.tintColor = AorusAIPalette.resolve(theme).accent
         // `.compact` keeps the sheet the height of two rows; on anything older the
         // system default (a wheel) is used and the row simply grows.
-        if #available(iOS 13.4, *) {
-            picker.preferredDatePickerStyle = .compact
-        }
+        picker.preferredDatePickerStyle = .compact
         picker.setContentHuggingPriority(.required, for: .horizontal)
     }
 

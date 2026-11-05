@@ -24,9 +24,11 @@ def chat_avatar_layout_source(tg: Path) -> str:
     assert controller.index('aorusGhostAvatarNode.updateGhost(', seed) < controller.index('chatInfoButtonItem = UIBarButtonItem(customDisplayNode: aorusGhostAvatarNode)', seed)
     display = (tg / 'submodules/Display/Source/NavigationBar.swift').read_text()
     content = (tg / 'submodules/TelegramUI/Components/NavigationBarComponent/Sources/NavigationBarComponentContent.swift').read_text()
+    run = (tg / 'submodules/Display/Source/AorusInterfaceV2Run.swift').read_text()
     protocols = '\n'.join(declaration(source, marker).replace('public protocol', '@MainActor private protocol')
                           for source, marker in [(display, 'public protocol AorusNavigationBarLayoutNode'),
-                                                 (content, 'public protocol AorusNavigationBarResizingNode')])
+                                                 (content, 'public protocol AorusNavigationBarResizingNode'),
+                                                 (run, 'public protocol AorusGlasslessNavigationNode')])
     fixture = r'''import UIKit
 private typealias PeerId = Int
 private struct PresentationTheme { var overallDarkAppearance = true }

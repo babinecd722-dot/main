@@ -131,28 +131,17 @@ private func aorusTabSettingsController(context: AccountContext) -> ViewControll
         let appearance = AorusTabBarSettings.current.appearance(dark: dark)
         let current = (active ? appearance.active : appearance.inactive).flatMap(aorusLookColor) ?? (active ? data.theme.rootController.tabBar.selectedIconColor : data.theme.rootController.tabBar.iconColor)
         let title = active ? aorusL("Цвет активной вкладки", "Active Tab Color") : aorusL("Цвет неактивной вкладки", "Inactive Tab Color")
-        if #available(iOS 14.0, *) {
-            let picker = UIColorPickerViewController()
-            picker.title = title
-            picker.supportsAlpha = true
-            picker.selectedColor = current
-            let delegate = AorusLookColorPickerDelegate { color in
-                colorThrottle.run(active ? "active" : "inactive") { setColor(active, aorusLookHex(color)) }
-            }
-            screen.pickerDelegate = delegate
-            picker.delegate = delegate
-            if #available(iOS 15.0, *), let sheet = picker.sheetPresentationController { sheet.detents = [.medium(), .large()]; sheet.prefersGrabberVisible = true }
-            controller.present(picker, animated: true)
-        } else {
-            let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
-            alert.addTextField { $0.placeholder = "RRGGBBAA"; $0.text = aorusLookHex(current); $0.autocapitalizationType = .allCharacters; $0.autocorrectionType = .no }
-            alert.addAction(UIAlertAction(title: data.strings.Common_Cancel, style: .cancel))
-            alert.addAction(UIAlertAction(title: data.strings.Common_Done, style: .default) { [weak alert] _ in
-                let value = (alert?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "").uppercased()
-                if aorusLookColor(value) != nil { setColor(active, value) }
-            })
-            controller.present(alert, animated: true)
+        let picker = UIColorPickerViewController()
+        picker.title = title
+        picker.supportsAlpha = true
+        picker.selectedColor = current
+        let delegate = AorusLookColorPickerDelegate { color in
+            colorThrottle.run(active ? "active" : "inactive") { setColor(active, aorusLookHex(color)) }
         }
+        screen.pickerDelegate = delegate
+        picker.delegate = delegate
+        if let sheet = picker.sheetPresentationController { sheet.detents = [.medium(), .large()]; sheet.prefersGrabberVisible = true }
+        controller.present(picker, animated: true)
     }, reset: {
         guard let controller = weakController else { return }
         let data = context.sharedContext.currentPresentationData.with { $0 }

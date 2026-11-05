@@ -490,28 +490,24 @@ final class DeletedMessagesCache {
     // MARK: - BGTask
 
     func registerBackgroundTask() {
-        if #available(iOS 13.0, *) {
-            BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.bgTaskID, using: nil) { [weak self] task in
-                // Conditional, not forced. Only a BGAppRefreshTaskRequest is ever submitted
-                // for this identifier, so the cast holds today — but a forced one turns a
-                // future change of task type into a crash in the background, where nobody
-                // sees it and the system withdraws the app's refresh budget for it. An
-                // unexpected task is completed instead, which is what the scheduler needs.
-                guard let refresh = task as? BGAppRefreshTask else {
-                    task.setTaskCompleted(success: false)
-                    return
-                }
-                self?.handleBGTask(refresh)
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.bgTaskID, using: nil) { [weak self] task in
+            // Conditional, not forced. Only a BGAppRefreshTaskRequest is ever submitted
+            // for this identifier, so the cast holds today — but a forced one turns a
+            // future change of task type into a crash in the background, where nobody
+            // sees it and the system withdraws the app's refresh budget for it. An
+            // unexpected task is completed instead, which is what the scheduler needs.
+            guard let refresh = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
             }
+            self?.handleBGTask(refresh)
         }
     }
 
     func scheduleBackgroundSync() {
-        if #available(iOS 13.0, *) {
-            let req = BGAppRefreshTaskRequest(identifier: Self.bgTaskID)
-            req.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-            try? BGTaskScheduler.shared.submit(req)
-        }
+        let req = BGAppRefreshTaskRequest(identifier: Self.bgTaskID)
+        req.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        try? BGTaskScheduler.shared.submit(req)
     }
 
     private func handleBGTask(_ task: BGAppRefreshTask) {

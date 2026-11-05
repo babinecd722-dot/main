@@ -572,11 +572,9 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     private func detectPose(in image: CGImage, sourceExtent: CGRect, previous: FacePose?, time: CFTimeInterval) -> FacePose? {
         let request = VNDetectFaceLandmarksRequest()
-        if #available(iOS 13.0, *) {
-            // The denser constellation outlines the eyes, the nose and the lips more closely,
-            // and it is their corners the turn of the head is read from.
-            request.constellation = .constellation76Points
-        }
+        // The denser constellation outlines the eyes, the nose and the lips more closely,
+        // and it is their corners the turn of the head is read from.
+        request.constellation = .constellation76Points
         let handler = VNImageRequestHandler(cgImage: image, orientation: .up, options: [:])
         do {
             try handler.perform([request])

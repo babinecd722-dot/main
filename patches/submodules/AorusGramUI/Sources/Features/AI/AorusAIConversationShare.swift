@@ -605,7 +605,7 @@ final class AorusAIConversationShare {
                 popover.sourceRect = sourceView.convert(sourceView.bounds, to: previewController.view)
             }
             // Undimmed at its first height, so the slide above it stays bright.
-            if #available(iOS 15.0, *), let sheet = activity.sheetPresentationController {
+            if let sheet = activity.sheetPresentationController {
                 sheet.largestUndimmedDetentIdentifier = .medium
             }
             previewController.present(activity, animated: true)

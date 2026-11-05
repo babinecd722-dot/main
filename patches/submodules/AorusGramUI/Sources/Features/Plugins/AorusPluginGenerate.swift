@@ -65,7 +65,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         self.onDraft = onDraft
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
-        if #available(iOS 15.0, *), let sheet = sheetPresentationController {
+        if let sheet = sheetPresentationController {
             // One height, so there is nothing to expand to when the keyboard comes up. From
             // iOS 16 it is exactly the content's; before that the system's half.
             if #available(iOS 16.0, *) {

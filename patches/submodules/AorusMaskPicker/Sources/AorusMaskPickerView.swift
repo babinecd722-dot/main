@@ -40,18 +40,12 @@ public final class AorusMaskPickerView: UIView {
 
     public init(accentColor: UIColor) {
         self.accentColor = accentColor
-        if #available(iOS 13.0, *) {
-            self.backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
-        } else {
-            self.backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        }
+        self.backgroundView = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
         super.init(frame: CGRect())
 
         self.backgroundView.clipsToBounds = true
         self.backgroundView.layer.cornerRadius = Self.cornerRadius
-        if #available(iOS 13.0, *) {
-            self.backgroundView.layer.cornerCurve = .continuous
-        }
+        self.backgroundView.layer.cornerCurve = .continuous
         self.addSubview(self.backgroundView)
 
         self.scrollView.showsHorizontalScrollIndicator = false
@@ -185,7 +179,6 @@ public final class AorusMaskPickerView: UIView {
     /// The control that opens the strip. A system symbol, so it matches the weight of the
     /// call buttons next to it on every OS version instead of shipping a bitmap that drifts.
     public static func buttonIcon(pointSize: CGFloat = 24.0, color: UIColor = .white) -> UIImage? {
-        guard #available(iOS 13.0, *) else { return nil }
         let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .medium)
         guard let symbol = UIImage(systemName: "theatermasks.fill", withConfiguration: configuration) else {
             return nil
@@ -223,7 +216,7 @@ private final class AorusMaskItemView: UIView {
         // would be a lie. Such an entry stays an empty circle instead.
         if item.key != AorusMaskCatalogue.offKey {
             self.imageView.image = item.image
-        } else if #available(iOS 13.0, *) {
+        } else {
             // The "no mask" entry: a system slashed circle, so it matches the weight of the
             // artwork beside it without shipping a bitmap of our own.
             let configuration = UIImage.SymbolConfiguration(pointSize: 22.0, weight: .regular)

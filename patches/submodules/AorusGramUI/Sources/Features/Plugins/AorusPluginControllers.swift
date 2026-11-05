@@ -1336,10 +1336,6 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
     }
 
     @objc private func chooseCustomColor() {
-        guard #available(iOS 14.0, *) else {
-            promptHexColor()
-            return
-        }
         let picker = UIColorPickerViewController()
         picker.selectedColor = pluginColor(selected)
         picker.supportsAlpha = false
@@ -1350,22 +1346,6 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
         colorPickerDelegate = delegate
         picker.delegate = delegate
         present(picker, animated: true)
-    }
-
-    /// iOS 13 has no system colour picker, and a feature that simply vanishes on an older
-    /// phone is not a feature. Six hex digits reach the same place.
-    private func promptHexColor() {
-        let alert = UIAlertController(title: AorusPluginUIString.customColor.text, message: "RRGGBB", preferredStyle: .alert)
-        alert.addTextField { field in
-            field.text = self.selected
-            field.autocapitalizationType = .allCharacters
-        }
-        alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
-        alert.addAction(UIAlertAction(title: AorusPluginUIString.save.text, style: .default) { [weak self, weak alert] _ in
-            guard let self, let value = alert?.textFields?.first?.text else { return }
-            self.apply(AorusPluginAccent.normalized(value))
-        })
-        present(alert, animated: true)
     }
 
     private func apply(_ value: String) {
@@ -2480,7 +2460,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
             } catch { showSettingsError(error) }
             return
         }
-        if field.kind == .colorPicker, #available(iOS 14.0, *) {
+        if field.kind == .colorPicker {
             let picker = UIColorPickerViewController()
             picker.supportsAlpha = false
             picker.selectedColor = pluginColor((values[field.key] ?? field.defaultValue)?.stringValue ?? AorusPluginAccent.fallback)
@@ -3687,7 +3667,6 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private var chipOffsets: [String: CGFloat] = [:]
     private var colorPickerDelegate: AnyObject?
     /// The row and the wheels of the date sheet shown on iOS 13, until Done or Cancel.
-    private var dateSheet: (rowId: String, picker: UIDatePicker, sheet: UIViewController)?
 
     private var palette: AorusPluginPagePalette {
         let list = presentationData.theme.list
@@ -3844,19 +3823,13 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             swatch.layer.borderColor = presentationData.theme.aorusGlassListTheme.list.itemBlocksSeparatorColor.cgColor
             cell.accessoryView = swatch
         case .date:
-            if #available(iOS 14.0, *) {
-                cell.selectionStyle = .none
-                let picker = datePicker(for: row)
-                picker.preferredDatePickerStyle = .compact
-                picker.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
-                picker.addTarget(self, action: #selector(dateChanged(_:)), for: .valueChanged)
-                picker.sizeToFit()
-                cell.accessoryView = picker
-            } else {
-                // No compact picker before iOS 14: the date is the detail line and a tap opens
-                // the wheels.
-                cell.accessoryType = .disclosureIndicator
-            }
+            cell.selectionStyle = .none
+            let picker = datePicker(for: row)
+            picker.preferredDatePickerStyle = .compact
+            picker.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
+            picker.addTarget(self, action: #selector(dateChanged(_:)), for: .valueChanged)
+            picker.sizeToFit()
+            cell.accessoryView = picker
         case .hero, .progress, .ring, .chart, .stat, .segmented, .chips, .image, .code, .rating:
             break
         }
@@ -4041,88 +4014,17 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         return picker
     }
 
-    /// The wheels in a sheet of their own, for iOS 13: the date is kept on Done and dropped
-    /// on Cancel.
-    private func presentDateSheet(row: AorusPluginUIPage.Row) {
-        let picker = datePicker(for: row)
-        picker.translatesAutoresizingMaskIntoConstraints = false
-        let sheet = UIViewController()
-        sheet.view.backgroundColor = presentationData.theme.aorusGlassListTheme.list.plainBackgroundColor
-        sheet.view.addSubview(picker)
-        NSLayoutConstraint.activate([
-            picker.leadingAnchor.constraint(equalTo: sheet.view.leadingAnchor),
-            picker.trailingAnchor.constraint(equalTo: sheet.view.trailingAnchor),
-            picker.centerYAnchor.constraint(equalTo: sheet.view.centerYAnchor),
-        ])
-        sheet.title = row.title
-        sheet.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(dateSheetCancelled))
-        sheet.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dateSheetDone))
-        let navigation = UINavigationController(rootViewController: sheet)
-        navigation.navigationBar.tintColor = presentationData.theme.aorusGlassListTheme.list.itemAccentColor
-        // Only Done and Cancel close it, so the date is never half kept.
-        navigation.isModalInPresentation = true
-        dateSheet = (row.id, picker, navigation)
-        present(navigation, animated: true)
-    }
-
-    @objc private func dateSheetDone() {
-        if let current = dateSheet {
-            update(rowId: current.rowId, value: .number((current.picker.date.timeIntervalSince1970 * 1000.0).rounded()))
-        }
-        closeDateSheet()
-    }
-
-    @objc private func dateSheetCancelled() {
-        closeDateSheet()
-    }
-
-    /// The sheet itself is dismissed: this controller's own dismiss takes the page off
-    /// Telegram's stack.
-    private func closeDateSheet() {
-        let sheet = dateSheet?.sheet
-        dateSheet = nil
-        sheet?.dismiss(animated: true)
-    }
-
     private func presentColorPicker(row: AorusPluginUIPage.Row) {
         let rowId = row.id
-        if #available(iOS 14.0, *) {
-            let picker = UIColorPickerViewController()
-            picker.selectedColor = aorusPageColor(row.value?.stringValue ?? "007AFF")
-            picker.supportsAlpha = false
-            let delegate = AorusPluginColorPickerDelegate { [weak self] color in
-                self?.update(rowId: rowId, value: .string(aorusHexString(color)))
-            }
-            colorPickerDelegate = delegate
-            picker.delegate = delegate
-            present(picker, animated: true)
-        } else {
-            // iOS 13 has no system colour picker: the system's own colours, each shown as a
-            // coloured circle and its code, which read the same in every language.
-            let sheet = UIAlertController(title: row.title, message: nil, preferredStyle: .actionSheet)
-            let choices: [(String, String)] = [
-                ("🔴", "FF3B30"),
-                ("🟠", "FF9500"),
-                ("🟡", "FFCC00"),
-                ("🟢", "34C759"),
-                ("🔵", "007AFF"),
-                ("🟣", "AF52DE"),
-                ("🟤", "A2845E"),
-                ("⚫", "1C1C1E"),
-                ("⚪", "F2F2F7"),
-            ]
-            for (circle, hex) in choices {
-                sheet.addAction(UIAlertAction(title: circle + "  #" + hex, style: .default) { [weak self] _ in
-                    self?.update(rowId: rowId, value: .string(hex))
-                })
-            }
-            sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
-            if let popover = sheet.popoverPresentationController {
-                popover.sourceView = view
-                popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1.0, height: 1.0)
-            }
-            present(sheet, animated: true)
+        let picker = UIColorPickerViewController()
+        picker.selectedColor = aorusPageColor(row.value?.stringValue ?? "007AFF")
+        picker.supportsAlpha = false
+        let delegate = AorusPluginColorPickerDelegate { [weak self] color in
+            self?.update(rowId: rowId, value: .string(aorusHexString(color)))
         }
+        colorPickerDelegate = delegate
+        picker.delegate = delegate
+        present(picker, animated: true)
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -4190,11 +4092,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         case .color:
             presentColorPicker(row: row)
         case .date:
-            if #available(iOS 14.0, *) {
-                // The compact picker in the cell is the control.
-            } else {
-                presentDateSheet(row: row)
-            }
+            // The compact picker in the cell is the control.
         case .text, .toggle, .slider, .stepper, .segmented, .chips, .rating:
             break
         }
@@ -4257,17 +4155,8 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             return value.rounded() == value ? String(Int(value)) : String(value)
         }
         if row.kind == .date {
-            if #available(iOS 14.0, *) {
-                // The compact picker beside the title already shows the date.
-                return row.subtitle
-            }
-        }
-        if row.kind == .date, let value = row.value?.doubleValue {
-            // What the compact picker shows, for a phone too old to have one.
-            let formatter = DateFormatter()
-            formatter.dateStyle = row.style == "time" ? .none : .medium
-            formatter.timeStyle = row.style == "date" ? .none : .short
-            return formatter.string(from: Date(timeIntervalSince1970: value / 1000.0))
+            // The compact picker beside the title already shows the date.
+            return row.subtitle
         }
         return row.subtitle
     }

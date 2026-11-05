@@ -394,9 +394,7 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
         self.cardNode.frame = cardRect
         self.cardNode.bounds = cardRect
         self.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
-        if #available(iOS 13.0, *) {
-            self.cardNode.layer.cornerCurve = .continuous
-        }
+        self.cardNode.layer.cornerCurve = .continuous
         self.maskNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset * 2.0), height: contentSize.height)
     }
 
@@ -1447,42 +1445,24 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let dark = presentationData.theme.overallDarkAppearance
             let current = row.selected.flatMap(aorusLookColor) ?? aorusLookColor(aorusGlassDefaultHex(row.key, dark: dark)) ?? .white
-            if #available(iOS 14.0, *) {
-                let picker = UIColorPickerViewController()
-                picker.title = row.title
-                picker.supportsAlpha = true
-                picker.selectedColor = current
-                let delegate = AorusLookColorPickerDelegate(changed: { color in
-                    let hex = aorusLookHex(color)
-                    throttle.run(row.key + "#\(row.stop)") {
-                        aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)
-                    }
-                })
-                screen.pickerDelegate = delegate
-                picker.delegate = delegate
-                // Half the screen, so the header above stays in sight while the colour changes.
-                if #available(iOS 15.0, *), let sheet = picker.sheetPresentationController {
-                    sheet.detents = [.medium(), .large()]
-                    sheet.prefersGrabberVisible = true
+            let picker = UIColorPickerViewController()
+            picker.title = row.title
+            picker.supportsAlpha = true
+            picker.selectedColor = current
+            let delegate = AorusLookColorPickerDelegate(changed: { color in
+                let hex = aorusLookHex(color)
+                throttle.run(row.key + "#\(row.stop)") {
+                    aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)
                 }
-                controller.present(picker, animated: true)
-            } else {
-                let alert = UIAlertController(title: row.title, message: nil, preferredStyle: .alert)
-                alert.addTextField { field in
-                    field.placeholder = "RRGGBBAA"
-                    field.text = aorusLookHex(current)
-                    field.autocapitalizationType = .allCharacters
-                    field.autocorrectionType = .no
-                }
-                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: nil))
-                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Done, style: .default, handler: { [weak alert] _ in
-                    let text = (alert?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "").uppercased()
-                    if aorusLookColor(text) != nil {
-                        aorusGlassStoreColor(row, text, dark: screen.theme?.overallDarkAppearance ?? row.dark)
-                    }
-                }))
-                controller.present(alert, animated: true)
+            })
+            screen.pickerDelegate = delegate
+            picker.delegate = delegate
+            // Half the screen, so the header above stays in sight while the colour changes.
+            if let sheet = picker.sheetPresentationController {
+                sheet.detents = [.medium(), .large()]
+                sheet.prefersGrabberVisible = true
             }
+            controller.present(picker, animated: true)
         },
         setIconLook: { look in
             iconThrottle.cancelAll()

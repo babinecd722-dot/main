@@ -109,10 +109,8 @@ public final class AorusCodeHintOverlay: UIView {
         let icon = UIImageView()
         icon.contentMode = .center
         icon.tintColor = .white
-        if #available(iOS 13.0, *) {
-            let cfg = UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)
-            icon.image = UIImage(systemName: "paperclip", withConfiguration: cfg)
-        }
+        let cfg = UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)
+        icon.image = UIImage(systemName: "paperclip", withConfiguration: cfg)
 
         let maxBubbleWidth = min(self.bounds.width - 32.0, 330.0)
         let inset = UIEdgeInsets(top: 13.0, left: 13.0, bottom: 13.0, right: 15.0)

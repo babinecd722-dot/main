@@ -1699,10 +1699,8 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
         let isAuthorized: Bool
         if status == .authorized {
             isAuthorized = true
-        } else if #available(iOS 14.0, *) {
-            isAuthorized = status == .limited
         } else {
-            isAuthorized = false
+            isAuthorized = status == .limited
         }
         if isAuthorized {
             presentAuthorized()
@@ -1712,10 +1710,8 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
                     let authorized: Bool
                     if status == .authorized {
                         authorized = true
-                    } else if #available(iOS 14.0, *) {
-                        authorized = status == .limited
                     } else {
-                        authorized = false
+                        authorized = status == .limited
                     }
                     if authorized {
                         presentAuthorized()

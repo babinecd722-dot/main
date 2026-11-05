@@ -888,9 +888,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             strongSelf.cardNode.frame = cardRect
             strongSelf.cardNode.bounds = cardRect
             strongSelf.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
-            if #available(iOS 13.0, *) {
-                strongSelf.cardNode.layer.cornerCurve = .continuous
-            }
+            strongSelf.cardNode.layer.cornerCurve = .continuous
             // The rounded card is exactly the row. The list gives a row its final size at once and
             // only slides the rows around it, so the edges are placed there, not at a height that
             // is still on its way.
@@ -2777,44 +2775,26 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let current = row.selected.flatMap(aorusLookColor) ?? aorusLookThemeColor(row.key, theme: presentationData.theme)
-            if #available(iOS 14.0, *) {
-                let picker = UIColorPickerViewController()
-                picker.title = row.title
-                picker.supportsAlpha = true
-                picker.selectedColor = current
-                let delegate = AorusLookColorPickerDelegate(changed: { color in
-                    let hex = aorusLookHex(color)
-                    previewThrottle.run(row.key + "#\(row.stop)") {
-                        screen.themeRevision += 1
-                        aorusLookStoreColor(row, hex, theme: screen.theme, preview: true)
-                    }
-                    announce()
-                })
-                screen.pickerDelegate = delegate
-                picker.delegate = delegate
-                // Half the screen, so the message above stays in sight while the colour changes.
-                if #available(iOS 15.0, *), let sheet = picker.sheetPresentationController {
-                    sheet.detents = [.medium(), .large()]
-                    sheet.prefersGrabberVisible = true
+            let picker = UIColorPickerViewController()
+            picker.title = row.title
+            picker.supportsAlpha = true
+            picker.selectedColor = current
+            let delegate = AorusLookColorPickerDelegate(changed: { color in
+                let hex = aorusLookHex(color)
+                previewThrottle.run(row.key + "#\(row.stop)") {
+                    screen.themeRevision += 1
+                    aorusLookStoreColor(row, hex, theme: screen.theme, preview: true)
                 }
-                controller.present(picker, animated: true)
-            } else {
-                let alert = UIAlertController(title: row.title, message: nil, preferredStyle: .alert)
-                alert.addTextField { field in
-                    field.placeholder = "RRGGBB"
-                    field.text = aorusLookHex(current)
-                    field.autocapitalizationType = .allCharacters
-                    field.autocorrectionType = .no
-                }
-                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: nil))
-                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Done, style: .default, handler: { [weak alert] _ in
-                    let text = (alert?.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "").uppercased()
-                    if aorusLookColor(text) != nil {
-                        aorusLookStoreColor(row, text, theme: screen.theme)
-                    }
-                }))
-                controller.present(alert, animated: true)
+                announce()
+            })
+            screen.pickerDelegate = delegate
+            picker.delegate = delegate
+            // Half the screen, so the message above stays in sight while the colour changes.
+            if let sheet = picker.sheetPresentationController {
+                sheet.detents = [.medium(), .large()]
+                sheet.prefersGrabberVisible = true
             }
+            controller.present(picker, animated: true)
         },
         applyStyle: { id in
             previewThrottle.cancelAll()

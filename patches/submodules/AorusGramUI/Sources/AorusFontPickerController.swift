@@ -160,22 +160,20 @@ public enum AorusFontStore {
         case .system:
             return UIFont.systemFont(ofSize: size, weight: weight)
         case let .systemDesign(design):
-            if #available(iOS 13.0, *) {
-                let base = UIFont.systemFont(ofSize: size, weight: weight)
-                let descriptor: UIFontDescriptor?
-                switch design {
-                case "rounded":
-                    descriptor = base.fontDescriptor.withDesign(.rounded)
-                case "serif":
-                    descriptor = base.fontDescriptor.withDesign(.serif)
-                case "monospace":
-                    descriptor = base.fontDescriptor.withDesign(.monospaced)
-                default:
-                    descriptor = base.fontDescriptor.withDesign(.default)
-                }
-                if let descriptor {
-                    return UIFont(descriptor: descriptor, size: size)
-                }
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            let descriptor: UIFontDescriptor?
+            switch design {
+            case "rounded":
+                descriptor = base.fontDescriptor.withDesign(.rounded)
+            case "serif":
+                descriptor = base.fontDescriptor.withDesign(.serif)
+            case "monospace":
+                descriptor = base.fontDescriptor.withDesign(.monospaced)
+            default:
+                descriptor = base.fontDescriptor.withDesign(.default)
+            }
+            if let descriptor {
+                return UIFont(descriptor: descriptor, size: size)
             }
             return UIFont.systemFont(ofSize: size, weight: weight)
         case let .postScript(name), let .imported(name):
@@ -668,11 +666,7 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
                 }
                 if let _ = item.deleteAction {
                     let trashIcon: UIImage?
-                    if #available(iOS 13.0, *) {
-                        trashIcon = UIImage(systemName: "trash.fill")
-                    } else {
-                        trashIcon = nil
-                    }
+                    trashIcon = UIImage(systemName: "trash.fill")
                     let revealIcon: ItemListRevealOptionIcon = trashIcon.map { .image(image: $0) } ?? .none
                     self.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.deleteTitle, icon: revealIcon, color: item.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor)]))
                 } else {

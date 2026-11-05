@@ -57,12 +57,10 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
     guard let snapshot = source(), !snapshot.phases.isEmpty else { return nil }
     let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
     controller.modalPresentationStyle = .pageSheet
-    if #available(iOS 15.0, *) {
-        controller.sheetPresentationController?.detents = [.medium(), .large()]
-        controller.sheetPresentationController?.selectedDetentIdentifier = .medium
-        controller.sheetPresentationController?.prefersGrabberVisible = true
-        controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
-    }
+    controller.sheetPresentationController?.detents = [.medium(), .large()]
+    controller.sheetPresentationController?.selectedDetentIdentifier = .medium
+    controller.sheetPresentationController?.prefersGrabberVisible = true
+    controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
     controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
     presenter.present(controller, animated: true)
     return AorusAIWorkTrailHandle(controller: controller)

@@ -273,13 +273,7 @@ private final class AorusAttachmentDraftTile: UIView {
 /// replaced costs the main thread nothing but handing the pictures over.
 private func aorusDecodedDraftPreview(path: String) -> UIImage? {
     guard let image = UIImage(contentsOfFile: path) else { return nil }
-    if #available(iOS 15.0, *) {
-        return image.preparingForDisplay() ?? image
-    }
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = image.scale
-    format.opaque = true
-    return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in image.draw(at: .zero) }
+    return image.preparingForDisplay() ?? image
 }
 
 /// A stable image for both directions of the native editor transition. Rendering local

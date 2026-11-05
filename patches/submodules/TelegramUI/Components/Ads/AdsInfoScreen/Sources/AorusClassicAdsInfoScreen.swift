@@ -807,12 +807,10 @@ public class AorusClassicAdsInfoScreen: ViewController {
                     self.containerView.layer.cornerRadius = 10.0
                 }
 
-                if #available(iOS 11.0, *) {
-                    if layout.safeInsets.bottom.isZero {
-                        self.containerView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-                    } else {
-                        self.containerView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
-                    }
+                if layout.safeInsets.bottom.isZero {
+                    self.containerView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+                } else {
+                    self.containerView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
                 }
 
                 if isLandscape {

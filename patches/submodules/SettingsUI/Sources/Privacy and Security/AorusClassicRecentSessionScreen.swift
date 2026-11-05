@@ -763,9 +763,7 @@ private class AorusClassicRecentSessionScreenNode: ViewControllerTracingNode, AS
         } else if let animationNode = self.animationNode, let animationBackgroundNode = self.animationBackgroundNode {
             transition.updateFrame(node: animationNode, frame: iconFrame)
             transition.updateFrame(node: animationBackgroundNode, frame: iconFrame)
-            if #available(iOS 13.0, *) {
-                animationBackgroundNode.layer.cornerCurve = .continuous
-            }
+            animationBackgroundNode.layer.cornerCurve = .continuous
             if isFirstTime {
                 Queue.mainQueue().after(0.5) {
                     animationNode.playOnce()

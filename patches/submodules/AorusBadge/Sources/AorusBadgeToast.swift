@@ -102,6 +102,9 @@ public enum AorusBadgeToast {
                 return first
             }
         }
-        return UIApplication.shared.windows.first(where: { $0.isKeyWindow }) ?? UIApplication.shared.windows.first
+        // No active scene yet (launch, or a scene still coming forward): any scene's key window,
+        // then its first -- what the deprecated flat list of windows used to answer.
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
+        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
     }
 }

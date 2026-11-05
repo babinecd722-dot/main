@@ -33,10 +33,8 @@ class AorusGroupedTableCell: UITableViewCell {
         insetsLayoutMarginsFromSafeArea = false
         directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
         contentView.preservesSuperviewLayoutMargins = true
-        if #available(iOS 14.0, *) {
-            automaticallyUpdatesBackgroundConfiguration = false
-            backgroundConfiguration = UIBackgroundConfiguration.clear()
-        }
+        automaticallyUpdatesBackgroundConfiguration = false
+        backgroundConfiguration = UIBackgroundConfiguration.clear()
     }
 
     override var backgroundColor: UIColor? {
@@ -91,16 +89,12 @@ class AorusGroupedTableCell: UITableViewCell {
         if multipleSelectionBackgroundView != nil { multipleSelectionBackgroundView = nil }
         if (backgroundColor?.cgColor.alpha ?? 0) > 0 { backgroundColor = .clear }
         if (contentView.backgroundColor?.cgColor.alpha ?? 0) > 0 { contentView.backgroundColor = .clear }
-        if #available(iOS 14.0, *) {
-            if automaticallyUpdatesBackgroundConfiguration { automaticallyUpdatesBackgroundConfiguration = false }
-            let current = backgroundConfiguration
-            let hasImage: Bool
-            if #available(iOS 15.0, *) { hasImage = current?.image != nil }
-            else { hasImage = false }
-            if current == nil || (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
-                || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
-                backgroundConfiguration = UIBackgroundConfiguration.clear()
-            }
+        if automaticallyUpdatesBackgroundConfiguration { automaticallyUpdatesBackgroundConfiguration = false }
+        let current = backgroundConfiguration
+        let hasImage = current?.image != nil
+        if current == nil || (current?.backgroundColor?.cgColor.alpha ?? 0) > 0
+            || current?.visualEffect != nil || hasImage || current?.strokeWidth != 0 {
+            backgroundConfiguration = UIBackgroundConfiguration.clear()
         }
     }
 }
@@ -226,8 +220,7 @@ final class AorusGroupedTableView: UITableView {
             guard let index = super.indexPath(for: cell) else { continue }
             var isCard = (cell as? AorusGroupedTableCell)?.listAppearance != nil
                 || (cell.backgroundColor.map(appearance.isCardColor) ?? false)
-            if #available(iOS 14.0, *),
-               let configuredColor = cell.backgroundConfiguration?.backgroundColor {
+            if let configuredColor = cell.backgroundConfiguration?.backgroundColor {
                 isCard = isCard || appearance.isCardColor(configuredColor)
             }
             guard isCard else { continue }

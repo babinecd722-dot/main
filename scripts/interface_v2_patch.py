@@ -3031,6 +3031,88 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
     print("InterfaceV2: patched avatar expansion")
 
 
+def _patch_action_buttons_merge(tg: Path) -> None:
+    """Let the profile's glass buttons flow into each other when one is pulled towards the next.
+
+    Each button under Interface 2.0 is its own pane of liquid glass, which stretches towards a finger
+    that holds and drags it. Stretched far enough it reached the button beside it and slid over or
+    under it, two panes overlapping, where iOS's own controls -- the Phone app's call and video
+    buttons -- run into one another and merge into a single drop of glass. That is a property of
+    the glass, not of the buttons: panes merge when they share a glass container
+    (`UIGlassContainerEffect`, `GlassBackgroundContainerView` in Telegram) and come within its
+    spacing of each other.
+
+    So under Interface 2.0, where the system draws the glass and merges it, the row's buttons are
+    laid inside one such container. Each keeps its own pane, its content inside the pane and its
+    own tap, long press and stretch -- the button views move as they are, so nothing about how a
+    touch reaches them changes. The spacing is six points against the row's eight: at rest every
+    button stands apart, and only one pulled towards its neighbour flows into it, and back out as
+    it springs home.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    text = _read(path, "PeerInfoHeaderNode.swift")
+    if "aorusButtonsGlassContainer" in text:
+        print("InterfaceV2: action buttons already merge")
+        return
+    text = _replace_once(
+        text,
+        "    let buttonsContainerNode: SparseNode\n",
+        "    let buttonsContainerNode: SparseNode\n"
+        "    /// AorusGram: the one glass container the row's buttons are laid in under Interface 2.0, so\n"
+        "    /// that a button stretched into its neighbour merges with it. Nil until the first button,\n"
+        "    /// and where the system draws no glass that merges.\n"
+        "    private var aorusButtonsGlassContainerView: GlassBackgroundContainerView?\n"
+        "\n"
+        "    private func aorusButtonsGlassContainer() -> GlassBackgroundContainerView? {\n"
+        "        guard AorusInterfaceV2Run.isEnabled, GlassBackgroundContainerView.mergesShapes else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        if let current = self.aorusButtonsGlassContainerView {\n"
+        "            return current\n"
+        "        }\n"
+        "        let container = GlassBackgroundContainerView(spacing: 6.0)\n"
+        "        self.buttonsContainerNode.view.insertSubview(container, aboveSubview: self.buttonsBackgroundNode.view)\n"
+        "        self.aorusButtonsGlassContainerView = container\n"
+        "        return container\n"
+        "    }\n",
+        "action buttons glass container",
+    )
+    text = _replace_once(
+        text,
+        "                self.buttonNodes[buttonKey] = buttonNode\n"
+        "                self.buttonsContainerNode.addSubnode(buttonNode)\n"
+        "                self.buttonsMaskView.addSubview(buttonNode.backgroundContainerView)\n",
+        "                self.buttonNodes[buttonKey] = buttonNode\n"
+        "                // AorusGram: in the row's glass container under Interface 2.0, where it merges\n"
+        "                // with a neighbour it is stretched into. The view moves, the node and its\n"
+        "                // touches stay as they are; removal takes the view out either way.\n"
+        "                if let aorusGlassContainer = self.aorusButtonsGlassContainer() {\n"
+        "                    aorusGlassContainer.contentView.addSubview(buttonNode.view)\n"
+        "                } else {\n"
+        "                    self.buttonsContainerNode.addSubnode(buttonNode)\n"
+        "                }\n"
+        "                self.buttonsMaskView.addSubview(buttonNode.backgroundContainerView)\n",
+        "action buttons into the glass container",
+    )
+    text = _replace_once(
+        text,
+        "        transition.updateFrameAdditive(node: self.buttonsContainerNode, frame: CGRect(origin: CGPoint(x: 0.0, y: apparentBackgroundHeight - backgroundHeight), size: CGSize(width: width, height: 1000.0)))\n",
+        "        transition.updateFrameAdditive(node: self.buttonsContainerNode, frame: CGRect(origin: CGPoint(x: 0.0, y: apparentBackgroundHeight - backgroundHeight), size: CGSize(width: width, height: 1000.0)))\n"
+        "        if let aorusGlassContainer = self.aorusButtonsGlassContainerView {\n"
+        "            // The container is the row's own coordinates: the buttons' frames are set in it\n"
+        "            // exactly as they were set in the row.\n"
+        "            let aorusContainerSize = CGSize(width: width, height: 1000.0)\n"
+        "            if aorusGlassContainer.frame.size != aorusContainerSize {\n"
+        "                aorusGlassContainer.frame = CGRect(origin: CGPoint(), size: aorusContainerSize)\n"
+        "            }\n"
+        "            aorusGlassContainer.update(size: aorusContainerSize, isDark: AorusGlassPane.profilePageIsDark, transition: .immediate)\n"
+        "        }\n",
+        "action buttons glass container frame",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: action buttons merge as liquid glass")
+
+
 def _patch_landscape_profile(tg: Path) -> None:
     """Lay the open header out for a wide screen, and settle the profile on return.
 
@@ -4261,9 +4343,7 @@ def _patch_sparse_grid_tiles(tg: Path) -> None:
         "                        // exactly the layers it had.\n"
         "                        if layout.containerLayout.itemCornerRadius > 0.0, let itemLayerValue = itemLayer.layer {\n"
         "                            itemLayerValue.masksToBounds = true\n"
-        "                            if #available(iOS 13.0, *) {\n"
-        "                                itemLayerValue.cornerCurve = .continuous\n"
-        "                            }\n"
+        "                            itemLayerValue.cornerCurve = .continuous\n"
         "                        }\n"
         "                        if transition.animation.isImmediate || isNewlyAdded {\n",
         "grid item clipping",
@@ -7332,9 +7412,12 @@ def _patch_chat_nav_glass(tg: Path) -> None:
     text = text.rstrip("\n") + "\n\n" + (
         "public extension NavigationBarComponent.Content {\n"
         "    /// AorusGram: Interface 2.0 shows a lone screen node on the right -- a chat's avatar, or the\n"
-        "    /// ghost-mode badge that stands in for it -- without the glass behind it.\n"
+        "    /// ghost-mode badge that stands in for it -- without the glass behind it. Only those: they\n"
+        "    /// say so (`AorusGlasslessNavigationNode`). A profile's \"…\", search or sort is a lone node\n"
+        "    /// too, and taking its glass away turned the bar's change from Edit to \"…\" into a pane\n"
+        "    /// that vanished half way through its own morph.\n"
         "    var aorusGlasslessRightNode: Bool {\n"
-        "        guard AorusInterfaceV2Run.isEnabled, self.rightButtons.count == 1, case .node = self.rightButtons[0].content else {\n"
+        "        guard AorusInterfaceV2Run.isEnabled, self.rightButtons.count == 1, case let .node(node) = self.rightButtons[0].content, node is AorusGlasslessNavigationNode else {\n"
         "            return false\n"
         "        }\n"
         "        return true\n"
@@ -7342,6 +7425,13 @@ def _patch_chat_nav_glass(tg: Path) -> None:
         "}\n"
     )
     content_path.write_text(text, encoding="utf-8")
+
+    # The chat's avatar is the one lone node that stands on the bar without glass.
+    avatar_path = tg / "submodules/TelegramUI/Components/Chat/ChatAvatarNavigationNode/Sources/ChatAvatarNavigationNode.swift"
+    avatar = _read(avatar_path, "ChatAvatarNavigationNode.swift")
+    if "AorusGlasslessNavigationNode" not in avatar:
+        avatar = avatar.rstrip("\n") + "\n\n// AorusGram: stands on the bar without a pane of glass under Interface 2.0.\nextension ChatAvatarNavigationNode: AorusGlasslessNavigationNode {\n}\n"
+        avatar_path.write_text(avatar, encoding="utf-8")
 
     bar = sources / "NavigationBarComponent.swift"
     text = _read(bar, "NavigationBarComponent.swift")
@@ -8615,6 +8705,25 @@ def _patch_profile_expansion(tg: Path) -> None:
         "            avatar: aorusPhotoIsPage ? nil : avatarFrame,\n",
         "expansion destination no circle",
     )
+    # The page stays where it is under 2.0. Telegram's page rides the status on the expansion's
+    # spring: it starts a whole header above its place, comes down, passes it and comes back up,
+    # and while it is below its place the strip it has left between itself and the header shows
+    # through as a black band. Under 2.0 the page is the photo continued downwards, already where
+    # it belongs, so it holds still and fades in with the list as everything else on it does; the
+    # buttons and the music strip with it, and the cover and the gifts round the avatar, which
+    # land with the page, likewise.
+    for line, label in (
+        ("            pageViews: [node.scrollNode.view] + header.expansionPageViews,\n", "pages"),
+        ("            pageEdgeViews: [banner],\n", "page edges"),
+        ("            landingViews: header.giftsCover.view.flatMap { [$0] } ?? [],\n", "landing views"),
+    ):
+        name, value = line.strip().rstrip(",").split(": ", 1)
+        text = _replace_once(
+            text,
+            line,
+            f"            {name}: AorusInterfaceV2Run.isEnabled ? [] : {value},\n",
+            f"expansion destination still {label}",
+        )
     destination.write_text(text, encoding="utf-8")
 
     screen = profile / "PeerInfoScreen.swift"
@@ -9138,6 +9247,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_disabled_row_wash(tg)
     _patch_proxy_connection_section(tg)
     _patch_profile_expansion(tg)
+    _patch_action_buttons_merge(tg)
     # After the expansion pass, which anchors on the strip's stock entries this one rewrites.
     _patch_music_capsule_content(tg)
     _patch_build(tg)

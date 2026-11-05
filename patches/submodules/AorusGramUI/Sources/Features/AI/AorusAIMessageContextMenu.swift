@@ -38,12 +38,10 @@ public func aorusAIPresentMessageActions(
             reference: reference
         )
         controller.modalPresentationStyle = .pageSheet
-        if #available(iOS 15.0, *) {
-            controller.sheetPresentationController?.detents = [.medium(), .large()]
-            controller.sheetPresentationController?.selectedDetentIdentifier = .medium
-            controller.sheetPresentationController?.prefersGrabberVisible = true
-            controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
-        }
+        controller.sheetPresentationController?.detents = [.medium(), .large()]
+        controller.sheetPresentationController?.selectedDetentIdentifier = .medium
+        controller.sheetPresentationController?.prefersGrabberVisible = true
+        controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
         controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
         let presenter = navigationController.topViewController
             ?? navigationController.view.window?.rootViewController

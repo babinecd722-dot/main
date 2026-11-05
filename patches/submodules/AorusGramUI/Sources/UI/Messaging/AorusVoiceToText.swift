@@ -56,7 +56,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         self.onContinue = onContinue
         super.init(nibName: nil, bundle: nil)
         self.modalPresentationStyle = .pageSheet
-        if #available(iOS 15.0, *), let sheet = self.sheetPresentationController {
+        if let sheet = self.sheetPresentationController {
             sheet.detents = [.medium()]
             sheet.prefersGrabberVisible = true
             sheet.preferredCornerRadius = 30.0

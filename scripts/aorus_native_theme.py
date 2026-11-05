@@ -33,10 +33,8 @@ def patch_native_theme(tg: Path) -> None:
     edit(tg, controller, "private func aorusUpdatePresentationStyle", [
         ("        super.init(nibName: nil, bundle: nil)\n", "        super.init(nibName: nil, bundle: nil)\n        if let navigationBarPresentationData { self.aorusUpdatePresentationStyle(navigationBarPresentationData) }\n"),
         ("    public func setNavigationBarPresentationData(_ presentationData: NavigationBarPresentationData, animated: Bool) {", """    private func aorusUpdatePresentationStyle(_ presentationData: NavigationBarPresentationData) {
-        if #available(iOS 13.0, *) {
-            let style: UIUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
-            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
-        }
+        let style: UIUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
+        if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
     }
 
     public func setNavigationBarPresentationData(_ presentationData: NavigationBarPresentationData, animated: Bool) {
@@ -44,30 +42,26 @@ def patch_native_theme(tg: Path) -> None:
     ])
     edit(tg, controller, "private func aorusApplyNativeViewStyle", [
         ("    private func aorusUpdatePresentationStyle", """    private func aorusApplyNativeViewStyle(_ style: UIUserInterfaceStyle) {
-        if #available(iOS 13.0, *), let view = self.viewIfLoaded, view.overrideUserInterfaceStyle != style {
+        if let view = self.viewIfLoaded, view.overrideUserInterfaceStyle != style {
             view.overrideUserInterfaceStyle = style
         }
     }
 
     private func aorusUpdatePresentationStyle"""),
-        ("            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }", "            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n            self.aorusApplyNativeViewStyle(style)"),
-        ("        self.view = self.displayNode.view\n", "        self.view = self.displayNode.view\n        // AorusGram: apply presentation traits to the custom display-node root.\n        if #available(iOS 13.0, *) { self.aorusApplyNativeViewStyle(self.overrideUserInterfaceStyle) }\n"),
+        ("        if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n    }\n\n    public func setNavigationBarPresentationData", "        if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n        self.aorusApplyNativeViewStyle(style)\n    }\n\n    public func setNavigationBarPresentationData"),
+        ("        self.view = self.displayNode.view\n", "        self.view = self.displayNode.view\n        // AorusGram: apply presentation traits to the custom display-node root.\n        self.aorusApplyNativeViewStyle(self.overrideUserInterfaceStyle)\n"),
     ])
     # A decorative navigation bar is not the screen's appearance. Profiles deliberately
     # use white navigation ink, and component screens can have no navigation bar at all.
     edit(tg, controller, "public func aorusSetNativeStyle", [
         ("""    private func aorusUpdatePresentationStyle(_ presentationData: NavigationBarPresentationData) {
-        if #available(iOS 13.0, *) {
-            let style: UIUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
-            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
-            self.aorusApplyNativeViewStyle(style)
-        }
+        let style: UIUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
+        if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
+        self.aorusApplyNativeViewStyle(style)
     }""", """    public func aorusSetNativeStyle(dark: Bool) {
-        if #available(iOS 13.0, *) {
-            let style: UIUserInterfaceStyle = dark ? .dark : .light
-            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
-            self.aorusApplyNativeViewStyle(style)
-        }
+        let style: UIUserInterfaceStyle = dark ? .dark : .light
+        if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }
+        self.aorusApplyNativeViewStyle(style)
     }
 
     private func aorusUpdatePresentationStyle(_ presentationData: NavigationBarPresentationData) {
@@ -106,7 +100,7 @@ def patch_native_theme(tg: Path) -> None:
     edit(tg, controller, "AorusGram: a presented UIKit controller takes this screen's theme", [
         ("        self.view.window?.rootViewController?.present(viewControllerToPresent, animated: flag, completion: completion)\n",
          "        // AorusGram: a presented UIKit controller takes this screen's theme.\n"
-         "        if #available(iOS 13.0, *), viewControllerToPresent.overrideUserInterfaceStyle == .unspecified, self.overrideUserInterfaceStyle != .unspecified {\n"
+         "        if viewControllerToPresent.overrideUserInterfaceStyle == .unspecified, self.overrideUserInterfaceStyle != .unspecified {\n"
          "            viewControllerToPresent.overrideUserInterfaceStyle = self.overrideUserInterfaceStyle\n"
          "        }\n"
          "        self.view.window?.rootViewController?.present(viewControllerToPresent, animated: flag, completion: completion)\n"),

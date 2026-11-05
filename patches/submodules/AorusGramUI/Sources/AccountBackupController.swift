@@ -327,7 +327,7 @@ public func accountBackupController(context: AccountContext) -> ViewController {
     //
     // With the switch off it is the other way round: the port is the pixel-faithful copy of
     // Swiftgram's screen and stays the default, with the list as the iOS 12 fallback.
-    if #available(iOS 13.0, *), !AorusInterfaceV2.isEnabled {
+    if !AorusInterfaceV2.isEnabled {
         return AorusSessionBackupHostController(context: context)
     }
     return accountBackupControllerLegacy(context: context)

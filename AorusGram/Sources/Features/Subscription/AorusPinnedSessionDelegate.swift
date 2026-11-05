@@ -79,16 +79,8 @@ final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate, URLSession
     }
 
     private func certificateChain(_ trust: SecTrust) -> [SecCertificate] {
-        if #available(iOS 15.0, *) {
-            return (SecTrustCopyCertificateChain(trust) as? [SecCertificate]) ?? []
-        } else {
-            var out: [SecCertificate] = []
-            let count = SecTrustGetCertificateCount(trust)
-            for i in 0..<count {
-                if let c = SecTrustGetCertificateAtIndex(trust, i) { out.append(c) }
-            }
-            return out
-        }
+        // iOS 15 is the app's floor, and the index-by-index API it replaced is deprecated there.
+        return (SecTrustCopyCertificateChain(trust) as? [SecCertificate]) ?? []
     }
 
     private func spkiSHA256Base64(_ cert: SecCertificate) -> String? {

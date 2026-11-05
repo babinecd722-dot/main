@@ -16359,8 +16359,7 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         "        btn.layer.borderWidth = 0.5\n"
         "        btn.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor\n"
         "        btn.addTarget(self, action: #selector(_aorusVOSave), for: .touchUpInside)\n"
-        "        let _agBlurStyle: UIBlurEffect.Style = { if #available(iOS 13.0, *) { return .systemThinMaterialDark } else { return .dark } }()\n"
-        "        let _agBlur = UIVisualEffectView(effect: UIBlurEffect(style: _agBlurStyle))\n"
+        "        let _agBlur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))\n"
         "        _agBlur.frame = btn.bounds\n"
         "        _agBlur.autoresizingMask = [.flexibleWidth, .flexibleHeight]\n"
         "        _agBlur.isUserInteractionEnabled = false\n"
@@ -16411,17 +16410,9 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         "                }\n"
         "            }\n"
         "        }\n"
-        "        if #available(iOS 14, *) {\n"
-        "            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in\n"
-        "                if status == .authorized || status == .limited { doSave() } else {\n"
-        "                    do { try FileManager.default.removeItem(atPath: dstPath) } catch {}\n"
-        "                }\n"
-        "            }\n"
-        "        } else {\n"
-        "            PHPhotoLibrary.requestAuthorization { status in\n"
-        "                if status == .authorized { doSave() } else {\n"
-        "                    do { try FileManager.default.removeItem(atPath: dstPath) } catch {}\n"
-        "                }\n"
+        "        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in\n"
+        "            if status == .authorized || status == .limited { doSave() } else {\n"
+        "                do { try FileManager.default.removeItem(atPath: dstPath) } catch {}\n"
         "            }\n"
         "        }\n"
         "    }\n"
@@ -16834,7 +16825,7 @@ import GlassBackgroundComponent
 import NavigationBarComponent
 
 // AorusGram: embedded ghost/avatar capsule node
-final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode {
+final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarResizingNode, AorusGlasslessNavigationNode {
     let avatarNode: ChatAvatarNavigationNode
     private var glassView: GlassBackgroundView?
     // The ghost and its pill, without the avatar: what goes out of sight while the profile opens.
@@ -18161,10 +18152,8 @@ def patch_video_masks(tg: Path) -> None:
             "            }\n"
             "            " + stream_sentinel + "\n"
             "            var isFrontSource = self.currentPosition == .front\n"
-            "            if #available(iOS 13.0, *) {\n"
-            "                if let sourcePosition = connection.inputPorts.first?.sourceDevicePosition, sourcePosition != .unspecified {\n"
-            "                    isFrontSource = sourcePosition == .front\n"
-            "                }\n"
+            "            if let sourcePosition = connection.inputPorts.first?.sourceDevicePosition, sourcePosition != .unspecified {\n"
+            "                isFrontSource = sourcePosition == .front\n"
             "            }\n"
             "            let selectedPosition = self.masterOutput?.currentPosition ?? self.currentPosition\n"
             "            let publishesPreview = self.exclusive || (isFrontSource ? selectedPosition == .front : selectedPosition == .back)\n"
@@ -23599,12 +23588,10 @@ def patch_aorus_code_compose(tg: Path) -> None:
         # chat, which is the same as sending without one.
         "        let compose = AorusCodeComposeViewController(context: context, peerId: peerId, threadId: chatLocation.threadId)\n"
         "        compose.modalPresentationStyle = .pageSheet\n"
-        "        if #available(iOS 15.0, *) {\n"
-        "            if let sheet = compose.sheetPresentationController {\n"
-        "                sheet.detents = [.medium(), .large()]\n"
-        "                sheet.prefersGrabberVisible = true\n"
-        "                sheet.preferredCornerRadius = 20\n"
-        "            }\n"
+        "        if let sheet = compose.sheetPresentationController {\n"
+        "            sheet.detents = [.medium(), .large()]\n"
+        "            sheet.prefersGrabberVisible = true\n"
+        "            sheet.preferredCornerRadius = 20\n"
         "        }\n"
         "        parentVC.present(compose, animated: true)\n"
         "    }\n"
@@ -25452,36 +25439,29 @@ private enum AorusRuntimeFont {
         // Formatting panel `M` must remain visibly monospaced even when a
         // client-wide custom font is selected.
         if designKey == "monospace" {
-            let base: UIFont
-            if #available(iOS 13.0, *) {
-                base = UIFont.monospacedSystemFont(ofSize: size, weight: weight)
-            } else {
-                base = UIFont(name: "Courier", size: size) ?? UIFont.systemFont(ofSize: size, weight: weight)
-            }
+            let base = UIFont.monospacedSystemFont(ofSize: size, weight: weight)
             let descriptor = applyTraits(to: base.fontDescriptor, weight: weight, traitsRaw: traitsRaw)
             return UIFont(descriptor: descriptor, size: size)
         }
 
-        if #available(iOS 13.0, *) {
-            let systemDesign: UIFontDescriptor.SystemDesign?
-            switch choice {
-            case "rounded":
-                systemDesign = .rounded
-            case "serif":
-                systemDesign = .serif
-            case "mono":
-                systemDesign = .monospaced
-            default:
-                systemDesign = nil
+        let systemDesign: UIFontDescriptor.SystemDesign?
+        switch choice {
+        case "rounded":
+            systemDesign = .rounded
+        case "serif":
+            systemDesign = .serif
+        case "mono":
+            systemDesign = .monospaced
+        default:
+            systemDesign = nil
+        }
+        if let systemDesign {
+            let base = UIFont.systemFont(ofSize: size, weight: weight)
+            if var descriptor = base.fontDescriptor.withDesign(systemDesign) {
+                descriptor = applyTraits(to: descriptor, weight: weight, traitsRaw: traitsRaw)
+                return UIFont(descriptor: descriptor, size: size)
             }
-            if let systemDesign {
-                let base = UIFont.systemFont(ofSize: size, weight: weight)
-                if var descriptor = base.fontDescriptor.withDesign(systemDesign) {
-                    descriptor = applyTraits(to: descriptor, weight: weight, traitsRaw: traitsRaw)
-                    return UIFont(descriptor: descriptor, size: size)
-                }
-                return base
-            }
+            return base
         }
 
         for name in fontNames(for: choice, weight: weight, italic: (traitsRaw & 1) != 0) {
@@ -26995,9 +26975,7 @@ private final class AorusGifCarouselVideoView: UIView {
         // calls, so leaving those categories untouched means real audio is never
         // disturbed; we only soften the otherwise-interrupting default.
         Self.aorusRelaxAudioSession()
-        if #available(iOS 13.0, *) {
-            self.layer.cornerCurve = .continuous
-        }
+        self.layer.cornerCurve = .continuous
         NotificationCenter.default.addObserver(self, selector: #selector(self.resume), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 

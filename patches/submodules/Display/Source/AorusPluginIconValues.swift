@@ -719,24 +719,20 @@ public enum AorusPluginIconValues {
             guard let name = spec["symbol"] as? String else {
                 return nil
             }
-            if #available(iOS 13.0, *) {
-                let configuration = UIImage.SymbolConfiguration(pointSize: side, weight: symbolWeight(spec["weight"] as? String))
-                guard let symbol = UIImage(systemName: name, withConfiguration: configuration)?.withTintColor(color, renderingMode: .alwaysOriginal) else {
-                    return nil
-                }
-                let symbolSize = symbol.size
-                guard symbolSize.width > 0.0, symbolSize.height > 0.0 else {
-                    return nil
-                }
-                return generateImage(symbolSize, opaque: false, scale: scale, rotatedContext: { size, context in
-                    context.clear(CGRect(origin: CGPoint(), size: size))
-                    UIGraphicsPushContext(context)
-                    symbol.draw(in: CGRect(origin: CGPoint(), size: size))
-                    UIGraphicsPopContext()
-                })
-            } else {
+            let configuration = UIImage.SymbolConfiguration(pointSize: side, weight: symbolWeight(spec["weight"] as? String))
+            guard let symbol = UIImage(systemName: name, withConfiguration: configuration)?.withTintColor(color, renderingMode: .alwaysOriginal) else {
                 return nil
             }
+            let symbolSize = symbol.size
+            guard symbolSize.width > 0.0, symbolSize.height > 0.0 else {
+                return nil
+            }
+            return generateImage(symbolSize, opaque: false, scale: scale, rotatedContext: { size, context in
+                context.clear(CGRect(origin: CGPoint(), size: size))
+                UIGraphicsPushContext(context)
+                symbol.draw(in: CGRect(origin: CGPoint(), size: size))
+                UIGraphicsPopContext()
+            })
         case "text":
             guard let text = spec["text"] as? String else {
                 return nil
@@ -802,17 +798,15 @@ public enum AorusPluginIconValues {
 
     private static func textFont(size: CGFloat, design: String?, weight: String?) -> UIFont {
         let base = UIFont.systemFont(ofSize: size, weight: fontWeight(weight))
-        if #available(iOS 13.0, *) {
-            let systemDesign: UIFontDescriptor.SystemDesign
-            switch design {
-            case "rounded": systemDesign = .rounded
-            case "serif": systemDesign = .serif
-            case "mono": systemDesign = .monospaced
-            default: systemDesign = .default
-            }
-            if let descriptor = base.fontDescriptor.withDesign(systemDesign) {
-                return UIFont(descriptor: descriptor, size: size)
-            }
+        let systemDesign: UIFontDescriptor.SystemDesign
+        switch design {
+        case "rounded": systemDesign = .rounded
+        case "serif": systemDesign = .serif
+        case "mono": systemDesign = .monospaced
+        default: systemDesign = .default
+        }
+        if let descriptor = base.fontDescriptor.withDesign(systemDesign) {
+            return UIFont(descriptor: descriptor, size: size)
         }
         return base
     }
@@ -2841,7 +2835,6 @@ private final class AorusBundleIconResolver: NSObject, AppBundleImageResolver {
 
 private extension UIImage {
     static func aorusInstallSymbolResolver() {
-        guard #available(iOS 13.0, *) else { return }
         for (original, replacement) in [
             ("systemImageNamed:", "aorusOriginalSystemImageNamed:"),
             ("systemImageNamed:withConfiguration:", "aorusOriginalSystemImageNamed:withConfiguration:"),

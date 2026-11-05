@@ -288,21 +288,13 @@ private final class AorusPluginPhotoPicker: NSObject, UIImagePickerControllerDel
 
     func present(from controller: UIViewController) {
         AorusPluginPhotoPicker.active = self
-        if #available(iOS 14.0, *) {
-            var configuration = PHPickerConfiguration()
-            configuration.filter = .images
-            configuration.selectionLimit = 1
-            let photoPicker = PHPickerViewController(configuration: configuration)
-            photoPicker.delegate = self
-            photoPicker.overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
-            controller.present(photoPicker, animated: true)
-        } else {
-            let imagePicker = UIImagePickerController()
-            imagePicker.sourceType = .photoLibrary
-            imagePicker.mediaTypes = ["public.image"]
-            imagePicker.delegate = self
-            controller.present(imagePicker, animated: true)
-        }
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        let photoPicker = PHPickerViewController(configuration: configuration)
+        photoPicker.delegate = self
+        photoPicker.overrideUserInterfaceStyle = theme.overallDarkAppearance ? .dark : .light
+        controller.present(photoPicker, animated: true)
     }
 
     fileprivate func finish(_ image: UIImage?) {

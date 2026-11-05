@@ -32,3 +32,10 @@ public enum AorusInterfaceV2Run {
         return defaults.bool(forKey: AorusInterfaceV2Run.key)
     }()
 }
+
+/// AorusGram: a node the navigation bar shows on its own, with no pane of glass behind it, under
+/// Interface 2.0 -- a chat's avatar, or the ghost badge that stands in for it. Every other lone item
+/// on the right of a bar keeps its glass: the profile's "…", search and sort among them, which a
+/// rule by shape alone stripped of their glass in the middle of the bar's change of buttons.
+public protocol AorusGlasslessNavigationNode: AnyObject {
+}

@@ -353,16 +353,9 @@ final class AorusUpdateDownloadController: SubscriptionBaseController, UIDocumen
 
     @objc private func openTapped() {
         guard let url = downloadedURL else { return }
-        if #available(iOS 14.0, *) {
-            let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
-            picker.modalPresentationStyle = .formSheet
-            present(picker, animated: true)
-        } else {
-            let controller = UIDocumentInteractionController(url: url)
-            controller.delegate = self
-            documentInteractionController = controller
-            controller.presentOptionsMenu(from: view.bounds, in: view, animated: true)
-        }
+        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        picker.modalPresentationStyle = .formSheet
+        present(picker, animated: true)
     }
 
     private static func speedText(_ bytesPerSecond: Int64) -> String {

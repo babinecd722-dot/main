@@ -499,8 +499,7 @@ enum AorusPluginMarketStatsText {
 
     /// 950, 1,2K, 3,4M — short enough for a row, in the reader's own number format.
     static func count(_ value: Int) -> String {
-        if #available(iOS 15.0, *) { return value.formatted(.number.notation(.compactName)) }
-        return NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
+        return value.formatted(.number.notation(.compactName))
     }
 }
 
@@ -1156,7 +1155,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         // grouped style's defaults, which differ between releases.
         tableView.estimatedSectionHeaderHeight = 0
         tableView.estimatedSectionFooterHeight = 0
-        if #available(iOS 15.0, *) { tableView.sectionHeaderTopPadding = 0 }
+        tableView.sectionHeaderTopPadding = 0
         refresh.addTarget(self, action: #selector(reload), for: .valueChanged)
         tableView.refreshControl = refresh
         addSubview(tableView)
@@ -1820,11 +1819,9 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         self.host = host
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
-        if #available(iOS 15.0, *) {
-            sheetPresentationController?.detents = [.large()]
-            sheetPresentationController?.prefersGrabberVisible = true
-            sheetPresentationController?.preferredCornerRadius = 28
-        }
+        sheetPresentationController?.detents = [.large()]
+        sheetPresentationController?.prefersGrabberVisible = true
+        sheetPresentationController?.preferredCornerRadius = 28
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.theme }, { [weak self] presentationData in
             self?.updateTheme(presentationData.theme)
         })
