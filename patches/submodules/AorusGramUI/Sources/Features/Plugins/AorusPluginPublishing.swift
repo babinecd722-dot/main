@@ -276,7 +276,7 @@ enum AorusPluginBanner {
 
 /// The system photo picker, which needs no access to the library, and the older image picker
 /// where it is not there.
-private final class AorusPluginPhotoPicker: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+private final class AorusPluginPhotoPicker: NSObject {
     private let theme: PresentationTheme
     private var completion: ((UIImage?) -> Void)?
     private static var active: AorusPluginPhotoPicker?
@@ -303,19 +303,9 @@ private final class AorusPluginPhotoPicker: NSObject, UIImagePickerControllerDel
         AorusPluginPhotoPicker.active = nil
         completion?(image)
     }
-
-    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-        let image = info[.originalImage] as? UIImage
-        picker.dismiss(animated: true) { [weak self] in self?.finish(image) }
-    }
-
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true) { [weak self] in self?.finish(nil) }
-    }
 }
 
-// The system photo picker's delegate, where the picker exists.
-@available(iOS 14.0, *)
+// The system photo picker's delegate.
 extension AorusPluginPhotoPicker: PHPickerViewControllerDelegate {
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {

@@ -254,7 +254,7 @@ private final class RGBProgressView: UIView {
     }
 }
 
-final class AorusUpdateDownloadController: SubscriptionBaseController, UIDocumentInteractionControllerDelegate {
+final class AorusUpdateDownloadController: SubscriptionBaseController {
     private let downloader = AorusUpdateDownloader()
     private let progress = RGBProgressView()
     private let statusLabel = SubscriptionStyle.body(SubL10n.checkingUpdate)
@@ -262,7 +262,6 @@ final class AorusUpdateDownloadController: SubscriptionBaseController, UIDocumen
     private let completionIcon = UIImageView()
     private let openButton = SubscriptionStyle.primaryButton(SubL10n.openInFiles)
     private var downloadedURL: URL?
-    private var documentInteractionController: UIDocumentInteractionController?
 
     override func viewDidLoad() {
         super.viewDidLoad()

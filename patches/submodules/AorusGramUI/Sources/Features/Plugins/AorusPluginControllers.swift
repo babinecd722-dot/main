@@ -4094,6 +4094,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             presentColorPicker(row: row)
         case .date:
             // The compact picker in the cell is the control.
+            break
         case .text, .toggle, .slider, .stepper, .segmented, .chips, .rating:
             break
         }
@@ -4155,10 +4156,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         if [.number, .slider, .stepper].contains(row.kind), let value = row.value?.doubleValue {
             return value.rounded() == value ? String(Int(value)) : String(value)
         }
-        if row.kind == .date {
-            // The compact picker beside the title already shows the date.
-            return row.subtitle
-        }
+        // A date row's own compact picker shows its date; its detail line is the subtitle.
         return row.subtitle
     }
 

@@ -606,17 +606,6 @@ private struct AorusActivityIndicator: UIViewRepresentable {
 private var aorusCodeToolbarIcon: UIImage? { UIImage(bundleImageName: "Avatar/AnonymousSenderIcon")?.withRenderingMode(.alwaysTemplate) }
 private var aorusTranslateToolbarIcon: UIImage? { UIImage(bundleImageName: "Chat/Context Menu/Translate")?.withRenderingMode(.alwaysTemplate) }
 
-// iOS 13–14 blur fallback.
-private struct AorusBlurView: UIViewRepresentable {
-    let style: UIBlurEffect.Style
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        UIVisualEffectView(effect: UIBlurEffect(style: style))
-    }
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        uiView.effect = UIBlurEffect(style: style)
-    }
-}
-
 // SwiftUI's AppStorage wrapper is iOS 14+, while Telegram builds this for iOS 13.
 // Keep a single process-wide observable mirror so visible toolbars update as soon
 // as AorusGramManager writes the setting, without recreating the chat controller.
