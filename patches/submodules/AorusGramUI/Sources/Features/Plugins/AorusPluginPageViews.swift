@@ -42,11 +42,16 @@ func aorusPageNumber(_ value: Double) -> String {
     if value.rounded() == value, abs(value) < 1e15 {
         return String(Int64(value))
     }
+    return aorusPageNumberFormatter.string(from: NSNumber(value: value)) ?? String(value)
+}
+
+/// Made once: a page redraws its numbers with every value a plugin sends.
+private let aorusPageNumberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
     formatter.maximumFractionDigits = 2
     formatter.minimumFractionDigits = 0
-    return formatter.string(from: NSNumber(value: value)) ?? String(value)
-}
+    return formatter
+}()
 
 /// A card across the section: a gradient with two soft circles over it, a glyph or an emoji,
 /// a title and a line under it.
@@ -504,7 +509,7 @@ final class AorusPluginChipsView: UIView {
         ])
         for (index, option) in options.enumerated() {
             let selected = chosen.contains(option.value)
-            let button = UIButton(type: .system)
+            let button = AorusInsetButton(type: .system)
             button.tag = index
             button.setTitle(option.title, for: .normal)
             button.titleLabel?.font = aorusUIFont(15.0, selected ? .semibold : .regular)
@@ -512,7 +517,7 @@ final class AorusPluginChipsView: UIView {
             button.backgroundColor = selected ? color : palette.track
             button.layer.cornerRadius = 17.0
             button.layer.cornerCurve = .continuous
-            button.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 14.0, bottom: 0.0, right: 14.0)
+            button.aorusContentInsets = UIEdgeInsets(top: 0.0, left: 14.0, bottom: 0.0, right: 14.0)
             button.accessibilityTraits = selected ? [.button, .selected] : [.button]
             button.addTarget(self, action: #selector(tapped(_:)), for: .touchUpInside)
             stack.addArrangedSubview(button)

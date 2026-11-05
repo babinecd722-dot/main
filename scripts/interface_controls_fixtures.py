@@ -72,4 +72,4 @@ enum InterfaceGlassPane {
 '''.replace('RADIUS', radius)
     search = declaration(source, 'final class AorusPluginMarketSearchField: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('aorusUIFont(', 'UIFont.systemFont(ofSize:')
     filter_control = declaration(source, 'final class AorusPluginFilterControl: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme')
-    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: UIButton'), search, filter_control, surface, defaults, corner_reference, layout, policy))
+    return '\n'.join(('import UIKit', declaration(source, 'final class AorusPluginPillButton: AorusInsetButton'), search, filter_control, surface, defaults, corner_reference, layout, policy))

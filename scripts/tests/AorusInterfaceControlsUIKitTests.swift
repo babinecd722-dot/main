@@ -531,6 +531,18 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
         pill.layoutIfNeeded()
         expect(pill.layer.cornerRadius == min(size.width, size.height) / 2, "pill stays round after layout and resizing")
     }
+    // The room around a pill's title, kept without the `contentEdgeInsets` iOS 15 deprecated.
+    let padded = AorusPluginPillButton(frame: .zero)
+    padded.apply(.init(title: "Install", foreground: .white, background: .blue), animated: false)
+    let bare = padded.intrinsicContentSize
+    padded.aorusContentInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+    let roomy = padded.intrinsicContentSize
+    expect(abs(roomy.width - bare.width - 28) < 0.5 && abs(roomy.height - bare.height - 12) < 0.5, "the pill's insets add to its natural size")
+    padded.frame = CGRect(x: 0, y: 0, width: 60, height: 30)
+    padded.layoutIfNeeded()
+    if let title = padded.titleLabel {
+        expect(title.frame.minX >= 13.5 && title.frame.maxX <= 46.5, "a narrow pill keeps its title inside its insets")
+    }
     let row = AorusSwipeDeleteRow(frame: CGRect(x: 16, y: 160, width: 280, height: 48))
     window.addSubview(row)
     defer { row.removeFromSuperview() }

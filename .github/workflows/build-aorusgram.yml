@@ -253,7 +253,7 @@ jobs:
           # too-new API would be caught before the build.
           swiftc -typecheck \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             aorusgram/AorusGram/Sources/Features/AI/AorusAIMath.swift \
             aorusgram/AorusGram/Sources/Features/AI/AorusAIMathTypesetter.swift
           # The same treatment for the glass freeze: it is UIKit and nothing else, apart from
@@ -261,16 +261,16 @@ jobs:
           # iOS the app deploys to.
           swiftc -typecheck \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             aorusgram/AorusGram/Sources/Features/UI/AorusGlassSnapshot.swift \
             aorusgram/scripts/tests/AorusGlassSnapshotStubs.swift
           # Screen effects: UIKit and QuartzCore over the request the model has validated.
           # Every CAEmitterCell and CAEmitterLayer property the renderer sets is checked here
-          # against the SDK, and against iOS 13, in seconds rather than an hour into the build.
+          # against the SDK, and against iOS 15, the oldest the app deploys to, in seconds rather than an hour into the build.
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/UI/AorusPluginEffects.swift
           # The UIKit calls the AI chat makes, repeated against the real SDK. Those two files
@@ -282,7 +282,7 @@ jobs:
           # method one label out is not an error, it is a method nobody ever calls.
           swiftc -typecheck -warnings-as-errors \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             aorusgram/scripts/tests/AorusUIKitApiProbe.swift \
             aorusgram/scripts/tests/AorusAIChatToolsProbe.swift
           # The mask compositor and its camera preview: Vision, Core Image and UIKit over the
@@ -291,7 +291,7 @@ jobs:
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             -Xfrontend -disable-availability-checking \
             aorusgram/AorusGram/Sources/Features/AorusFaceGeometry.swift \
             aorusgram/AorusGram/Sources/Features/AorusVideoMaskProcessor.swift \
@@ -388,7 +388,7 @@ jobs:
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginGenerate.swift \
             > /tmp/aorus-plugin-ui/AorusPluginGenerate.swift
           # The drawn rows of a plugin page: UIKit and Core Animation over the page model,
-          # every API checked against iOS 13 like the screen that shows them.
+          # every API checked against iOS 15 like the screen that shows them.
           sed -E '/^import (Display|AorusGram)$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginPageViews.swift \
             > /tmp/aorus-plugin-ui/AorusPluginPageViews.swift
@@ -402,7 +402,7 @@ jobs:
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -target arm64-apple-ios13.0 \
+            -target arm64-apple-ios15.0 \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginStore.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginArchive.swift \

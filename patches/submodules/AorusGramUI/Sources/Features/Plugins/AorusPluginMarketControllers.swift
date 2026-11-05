@@ -1498,7 +1498,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 /// what the pill says is one crossfade of title and colour together, working is the title
 /// giving way to a spinner in the same place, and pressing dims and shrinks it a little, the
 /// way the system's own filled buttons answer a touch.
-final class AorusPluginPillButton: UIButton {
+final class AorusPluginPillButton: AorusInsetButton {
     struct Style: Equatable {
         let title: String
         let foreground: UIColor
@@ -1679,7 +1679,7 @@ final class AorusPluginMarketCell: AorusGroupedTableCell {
         summaryLabel.font = aorusUIFont(14)
         summaryLabel.numberOfLines = 2
         actionButton.titleLabel?.font = aorusUIFont(14, .bold)
-        actionButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
+        actionButton.aorusContentInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
         actionButton.layer.cornerRadius = 15
         actionButton.addTarget(self, action: #selector(actionTapped), for: .touchUpInside)
         [icon, nameLabel, statsView, summaryLabel, actionButton].forEach {

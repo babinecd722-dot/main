@@ -53,12 +53,17 @@ extension AorusAIMarkdown {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Compiled once: an answer is read line by line, and each line passes through all three.
+    private static let listMarkerExpression = try? NSRegularExpression(pattern: #"^\s*(?:[-–—•◦▪*+]|☐|☑\x{FE0E}?)\s+"#)
+    private static let addressExpression = try? NSRegularExpression(pattern: #"https?://(?:www\.)?([^/\s]+)\S*"#, options: [.caseInsensitive])
+    private static let spacesExpression = try? NSRegularExpression(pattern: #"[ \t]{2,}"#)
+
     private static func spokenLine(_ line: String) -> String {
         var value = line.replacingOccurrences(of: "\u{FFFC}", with: "")
-        if let marker = try? NSRegularExpression(pattern: #"^\s*(?:[-–—•◦▪*+]|☐|☑\x{FE0E}?)\s+"#) {
+        if let marker = listMarkerExpression {
             value = marker.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: "")
         }
-        if let address = try? NSRegularExpression(pattern: #"https?://(?:www\.)?([^/\s]+)\S*"#, options: [.caseInsensitive]) {
+        if let address = addressExpression {
             value = address.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: "$1")
         }
         var scalars = String.UnicodeScalarView()
@@ -75,7 +80,7 @@ extension AorusAIMarkdown {
             scalars.append(scalar)
         }
         value = String(scalars)
-        if let spaces = try? NSRegularExpression(pattern: #"[ \t]{2,}"#) {
+        if let spaces = spacesExpression {
             value = spaces.stringByReplacingMatches(in: value, range: NSRange(location: 0, length: (value as NSString).length), withTemplate: " ")
         }
         return value.trimmingCharacters(in: .whitespaces)

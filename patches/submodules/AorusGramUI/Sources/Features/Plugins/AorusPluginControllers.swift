@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 import AppBundle
 import Display
 import AccountContext
@@ -365,7 +366,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     }
 
     private func importPlugin() {
-        let picker = UIDocumentPickerViewController(documentTypes: ["public.data", "com.netscape.javascript-source"], in: .import)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .javaScript], asCopy: true)
         picker.delegate = self
         picker.allowsMultipleSelection = false
         present(picker, animated: true)
@@ -4452,13 +4453,19 @@ private final class AorusPluginConsoleController: ViewController {
         textView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 
+    /// The log is read twice a second; its time stamps share one formatter.
+    private static let stampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     private func refresh() {
         let entries = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.recentLog ?? []
         guard entries != shownEntries else { return }
         shownEntries = entries
         emptyLabel.isHidden = !entries.isEmpty
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
+        let formatter = Self.stampFormatter
         let text = NSMutableAttributedString()
         for entry in entries {
             let stamp = NSAttributedString(

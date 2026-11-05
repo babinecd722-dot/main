@@ -16,6 +16,19 @@ public final class DeletedMessageBubbleView: UIView {
         didSet { configure() }
     }
 
+    /// One formatter for every bubble in the chat, made again only when the language changes.
+    private static var cachedRelativeFormatter: (localeIdentifier: String, formatter: RelativeDateTimeFormatter)?
+
+    private static func relativeFormatter(localeIdentifier: String) -> RelativeDateTimeFormatter {
+        if let cached = cachedRelativeFormatter, cached.localeIdentifier == localeIdentifier {
+            return cached.formatter
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: localeIdentifier)
+        cachedRelativeFormatter = (localeIdentifier, formatter)
+        return formatter
+    }
+
     public override init(frame: CGRect) {
         super.init(frame: frame)
         setup()
@@ -110,9 +123,7 @@ public final class DeletedMessageBubbleView: UIView {
         }
 
         let aorusL10n = AorusL10n.current
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: aorusL10n.lang == .ru ? "ru_RU" : "en_US")
-        timeLabel.text = aorusL10n.deletedPrefix + formatter.localizedString(for: msg.deletedAt, relativeTo: Date())
+        timeLabel.text = aorusL10n.deletedPrefix + Self.relativeFormatter(localeIdentifier: aorusL10n.lang == .ru ? "ru_RU" : "en_US").localizedString(for: msg.deletedAt, relativeTo: Date())
 
         // Если своё исходящее — выравниваем вправо
         if msg.isOutgoing {

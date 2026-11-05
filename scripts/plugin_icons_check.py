@@ -248,7 +248,7 @@ def main():
             classic.write_text(native_hit_test_source(args.telegram_source))
             countdown = args.repo / "patches/submodules/Display/Source/AorusRoundVideoCountdownView.swift"
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer), str(swiftui), str(rgb), str(countdown), str(badges)], check=True)
+            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(stub), str(renderer), str(swiftui), str(rgb), str(countdown), str(badges)], check=True)
             print("Icon resolver UIKit SDK type-check passed", flush=True)
             # Exercise Objective-C dispatch and all three UIKit initializers, rather than
             # trusting a type-check to establish that method exchange actually runs.
@@ -282,7 +282,7 @@ def main():
                     "CFBundleIdentifier": bundle_id, "CFBundleExecutable": executable.name,
                     "CFBundleName": "PluginIconTests", "CFBundlePackageType": "APPL",
                     "CFBundleShortVersionString": "1.0", "CFBundleVersion": "1",
-                    "MinimumOSVersion": "13.0", "LSRequiresIPhoneOS": True,
+                    "MinimumOSVersion": "15.0", "LSRequiresIPhoneOS": True,
                     "UIDeviceFamily": [1, 2], "UILaunchScreen": {},
                     # iOS 27 requires the scene lifecycle of an application built with its SDK.
                     "UIApplicationSceneManifest": {
@@ -298,19 +298,19 @@ def main():
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
                 editor_object = work / "NativeRoundEditor.o"
-                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(native_editor), "-o", str(editor_object)], check=True)
+                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios15.0-simulator", "-c", str(native_editor), "-o", str(editor_object)], check=True)
                 from draft_transition_fixtures import objc_source as draft_transition_source
                 signal_root = args.telegram_source / "submodules/SSignalKit/SSignalKit/Source"
                 signal_objects = []
                 for signal_source in sorted((signal_root / "SSignalKit").glob("*.m")):
                     signal_object = work / ("SSignalKit-" + signal_source.stem + ".o")
-                    subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wno-deprecated-declarations", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(signal_source), "-o", str(signal_object)], check=True)
+                    subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Wno-deprecated-declarations", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios15.0-simulator", "-c", str(signal_source), "-o", str(signal_object)], check=True)
                     signal_objects.append(str(signal_object))
                 draft_transition = work / "NativeDraftTransition.m"
                 draft_transition.write_text(draft_transition_source(args.telegram_source))
                 draft_transition_object = work / "NativeDraftTransition.o"
-                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", "-c", str(draft_transition), "-o", str(draft_transition_object)], check=True)
-                checked_compile(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(profile_transition), str(share_preview), str(username_keyboard), str(classic_interaction), str(light_page), str(tab_model), str(tab_identity), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(draft_transition_object), *signal_objects, str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), str(interface_controls), str(personal_badge), str(personal_name), str(swipe_row), str(grouped_table), str(entitlement), str(args.repo / "scripts/tests/AorusInterfaceControlsUIKitTests.swift"), "-o", str(executable)], env=simulator_environment)
+                subprocess.run(["xcrun", "clang", "-fobjc-arc", "-Werror", "-I", str(signal_root), "-isysroot", simulator_sdk, "-target", platform.machine() + "-apple-ios15.0-simulator", "-c", str(draft_transition), "-o", str(draft_transition_object)], check=True)
+                checked_compile(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios15.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(tabs), str(avatar_dismiss), str(profile_transition), str(share_preview), str(username_keyboard), str(classic_interaction), str(light_page), str(tab_model), str(tab_identity), str(rgb), str(bubbles), str(quotes), str(countdown), str(badges), str(classic), str(args.repo / "scripts/tests/AorusClassicUIKitTests.swift"), str(args.repo / "scripts/tests/AorusMediaDraftUIKitTests.swift"), str(editor_object), str(draft_transition_object), *signal_objects, str(args.repo / "scripts/tests/AorusBadgeMetricsTests.swift"), str(args.repo / "scripts/tests/AorusRoundVideoUIKitTests.swift"), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), str(interface_controls), str(personal_badge), str(personal_name), str(swipe_row), str(grouped_table), str(entitlement), str(args.repo / "scripts/tests/AorusInterfaceControlsUIKitTests.swift"), "-o", str(executable)], env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 checked_compile(["xcrun", "simctl", "boot", device["udid"]])
                 checked_compile(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], timeout=240)

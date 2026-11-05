@@ -157,7 +157,7 @@ func aorusProbeShare(from presenter: UIViewController, sourceView: UIView, previ
         popover.sourceView = preview.view
         popover.sourceRect = sourceView.convert(sourceView.bounds, to: preview.view)
     }
-    if #available(iOS 15.0, *), let sheet = activity.sheetPresentationController {
+    if let sheet = activity.sheetPresentationController {
         sheet.largestUndimmedDetentIdentifier = .medium
     }
     preview.modalPresentationStyle = .overFullScreen

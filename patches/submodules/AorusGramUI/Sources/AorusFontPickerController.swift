@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import CoreText
+import UniformTypeIdentifiers
 import Security
 import Display
 import AsyncDisplayKit
@@ -729,7 +730,8 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         }
     }, importFont: {
         guard let controller = weakController else { return }
-        let picker = UIDocumentPickerViewController(documentTypes: ["public.truetype-ttf-font", "com.apple.truetype-ttf-font"], in: .import)
+        let fontTypes = ["public.truetype-ttf-font", "com.apple.truetype-ttf-font"].compactMap { UTType($0) }
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: fontTypes.isEmpty ? [.font] : fontTypes, asCopy: true)
         aorusFontImportDelegate = AorusFontImportDelegate(context: context, controller: controller, didImport: {
             updateSelected(AorusFontStore.selectedId)
         })

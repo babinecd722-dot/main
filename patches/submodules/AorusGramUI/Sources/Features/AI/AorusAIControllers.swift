@@ -6340,9 +6340,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// Glyphs only, in a grey a step lighter than the hint text, so the row is there when it
     /// is looked for and quiet when it is not.
     private let assistantActions = UIStackView()
-    private let copyButton = UIButton(type: .system)
-    private let shareButton = UIButton(type: .system)
-    private let moreButton = UIButton(type: .system)
+    private let copyButton = AorusInsetButton(type: .system)
+    private let shareButton = AorusInsetButton(type: .system)
+    private let moreButton = AorusInsetButton(type: .system)
     private var copyResetWork: DispatchWorkItem?
     private let retryButton = UIButton(type: .system)
     private let typingIndicator = AorusAITypingIndicatorView()
@@ -6520,8 +6520,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             // A 32pt square to touch around a 16pt glyph, the squares side by side, so the
             // glyphs stand a glyph's width apart; the first glyph's left edge sits on the
             // answer's text edge, so the row starts where the answer does.
-            button.contentEdgeInsets = UIEdgeInsets(top: 8.0, left: 8.0, bottom: 8.0, right: 8.0)
-            button.adjustsImageWhenHighlighted = true
+            button.aorusContentInsets = UIEdgeInsets(top: 8.0, left: 8.0, bottom: 8.0, right: 8.0)
             // `contentStack` stretches this row to the full body width, and a horizontal
             // stack with the default `.fill` distribution hands all of that width to its
             // buttons. They hug their glyphs and the trailing spacer takes the remainder.

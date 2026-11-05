@@ -1695,25 +1695,14 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
             }
         }
 
-        let status = PHPhotoLibrary.authorizationStatus()
-        let isAuthorized: Bool
-        if status == .authorized {
-            isAuthorized = true
-        } else {
-            isAuthorized = status == .limited
-        }
-        if isAuthorized {
+        // The picker lists the library, so it asks to read it; a limited selection is enough.
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if status == .authorized || status == .limited {
             presentAuthorized()
         } else if status == .notDetermined {
-            PHPhotoLibrary.requestAuthorization { status in
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
                 DispatchQueue.main.async {
-                    let authorized: Bool
-                    if status == .authorized {
-                        authorized = true
-                    } else {
-                        authorized = status == .limited
-                    }
-                    if authorized {
+                    if status == .authorized || status == .limited {
                         presentAuthorized()
                     } else {
                         self.finish(error: AorusAnimatedProfileMediaError.unsupported)

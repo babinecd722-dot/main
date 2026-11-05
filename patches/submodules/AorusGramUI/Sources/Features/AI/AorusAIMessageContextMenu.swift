@@ -64,7 +64,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
     private let closeButton = UIButton(type: .system)
     private let segments: UISegmentedControl
     private let tableView = UITableView(frame: .zero, style: .plain)
-    private let newChatButton = UIButton(type: .system)
+    private let newChatButton = AorusInsetButton(type: .system)
     private var selectedItems: [AorusAIMessageMenu.Item] = []
 
     init(context: AccountContext, navigationController: NavigationController, reference: AorusAIReferencedMessage) {
@@ -164,7 +164,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         newChatButton.tintColor = palette.accent
         newChatButton.titleLabel?.font = aorusUIFont(15.0, .semibold)
         newChatButton.semanticContentAttribute = .forceLeftToRight
-        newChatButton.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -5.0, bottom: 0.0, right: 5.0)
+        newChatButton.aorusImageOffset = -5.0
         newChatButton.backgroundColor = palette.accentSoft
         newChatButton.layer.cornerRadius = 20.0
         newChatButton.layer.cornerCurve = .continuous

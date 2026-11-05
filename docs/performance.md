@@ -99,7 +99,17 @@ Markdown-рендерер ответа компилировал регулярн
 с колёсами вместо компактного выбора даты, `UIDocumentInteractionController` вместо экспорта,
 `UIImagePickerController` вместо `PHPickerViewController`. Устаревшие в iOS 15 API заменены:
 список окон берётся из сцен (`connectedScenes`), а не из `UIApplication.shared.windows`, а
-цепочка сертификатов — через `SecTrustCopyCertificateChain`.
+цепочка сертификатов — через `SecTrustCopyCertificateChain`. Отступы кнопок, которые давали
+`contentEdgeInsets` и `imageEdgeInsets`, держит `AorusInsetButton`
+(`AorusUIKitSurfaces.swift`): он отвечает на `contentRect(forBounds:)` и
+`imageRect(forContentRect:)`, поэтому заголовок, цвет и шрифт остаются те, что кнопке заданы, —
+конфигурация забрала бы их себе. Выбор шрифта и плагина открывает
+`UIDocumentPickerViewController(forOpeningContentTypes:asCopy:)`, а доступ к фото для фона
+профиля запрашивается через `authorizationStatus(for: .readWrite)`.
+
+Проверки типов на macOS в CI (`build-aorusgram.yml`, `plugin_icons_check.py`) собирают файлы
+под ту же iOS 15.0, что и приложение. Раньше они стояли на iOS 13.0 и сочли бы ошибкой каждый
+API, которому iOS 15 достаточно без проверки `#available`.
 
 Полный лог сборки уходит в артефакт, а лог задачи CI хранит только последние строки. Поэтому
 после сборки шаг «Report AorusGram compiler warnings»
