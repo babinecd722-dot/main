@@ -173,6 +173,7 @@ private extension AorusGhostAvatarNavigationNode {
         'GlassBackgroundView': 'AvatarLayoutGlassBackgroundView',
         'AorusNavigationBarLayoutNode': 'AvatarLayoutHostNode',
         'AorusNavigationBarResizingNode': 'AvatarLayoutResizingNode',
+        'AorusGlasslessNavigationNode': 'AvatarLayoutGlasslessNode',
         'AorusGhostAvatarNavigationNode': 'AvatarLayoutCapsule',
         'AvatarNativeHost': 'AvatarLayoutNativeHost',
         'AvatarClassicHost': 'AvatarLayoutClassicHost',
