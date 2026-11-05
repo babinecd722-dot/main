@@ -1127,23 +1127,12 @@ def patch_deleted_messages_interception(tg: Path) -> None:
     else:
         print("TelegramEngineMessages.swift: file not found — skipped")
 
-    # --- 1b. Edit-message capture + inline original display ---
-    # Two injection points inside AccountStateManagementUtils.swift:
-    #
-    #   A. Right after `case let .EditMessage(id, message):`
-    #      - Capture the pre-edit message into a `let aorusPrev` so it's reachable
-    #        from the AFTER-edit augmentation block (postbox state will have been
-    #        rewritten by `transaction.updateMessage` by then).
-    #      - Post the willEditMessage notification (cache bookkeeping in main app).
-    #
-    #   B. Right BEFORE the next `case let .UpdateMessagePoll(...)`
-    #      - When the feature flag is on (default true), run a SECOND
-    #        `transaction.updateMessage` that rebuilds the StoreMessage with the
-    #        new text appended by "\n\n✏️ Оригинал:\n<old text>".
-    #      - Idempotent — checks for the marker before re-applying.
-    #
-    # Together these mean: when someone edits a message, the chat keeps showing
-    # the new text but with the original right below it inside the same bubble.
+    # --- 1b. Edit-message capture ---
+    # Right after `case let .EditMessage(id, message):` in AccountStateManagementUtils.swift,
+    # before Telegram stores the server's message: AorusEditHistory (TelegramCore) records
+    # the new version of an incoming message when the edit is real, and the willEditMessage
+    # notification goes to the deleted-messages cache and the plugins. The message is stored
+    # as the server sent it; its earlier texts are shown on the Edit History screen.
     utils_path_edit = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
     if utils_path_edit.is_file():
         t = utils_path_edit.read_text(encoding="utf-8")
@@ -1157,22 +1146,16 @@ def patch_deleted_messages_interception(tg: Path) -> None:
             edit_hook = (
                 "            case let .EditMessage(id, message):\n"
                 "                " + edit_sentinel + "\n"
-                "                let aorusPrev = transaction.getMessage(id)\n"
                 # A message arrives through this case for reasons that are not edits. A
-                # reaction is delivered as an edited message — `messages.sendReaction`
-                # answers with updateEditMessage carrying the whole message — and
-                # AorusGram's own Edit Locally and Translate rewrite the stored text, so
-                # from then on our text differs from the server's on every delivery and
-                # comparing the two marks the message as edited forever after. The server's
-                # edit date is the only thing that says an edit happened: it advances on
-                # every real edit and never on a reaction.
-                "                let aorusPrevEditDate = (aorusPrev?.attributes.first(where: { $0 is EditedMessageAttribute }) as? EditedMessageAttribute)?.date\n"
-                "                let aorusNewEditDate = (message.attributes.first(where: { $0 is EditedMessageAttribute }) as? EditedMessageAttribute)?.date\n"
-                "                var aorusIsRealEdit = false\n"
-                "                if let aorusNewEditDate = aorusNewEditDate {\n"
-                "                    aorusIsRealEdit = aorusPrevEditDate.map { aorusNewEditDate > $0 } ?? true\n"
-                "                }\n"
-                "                if aorusIsRealEdit, let prev = aorusPrev, prev.text != message.text {\n"
+                # reaction is delivered as an edited message, and so are a link preview the
+                # server fills in later and a bot's new buttons, with the edit hidden; and
+                # AorusGram's own Edit Locally and Translate rewrite the stored text, so our
+                # text differs from the server's on every delivery. AorusEditHistory decides:
+                # the edit date has to move forward on a visible edit and the text or its
+                # formatting has to change. The message itself is stored exactly as the
+                # server sent it; its earlier texts are kept apart, for the history screen.
+                "                let aorusPrev = transaction.getMessage(id)\n"
+                "                if let aorusEdit = AorusEditHistory.capture(transaction: transaction, basePath: mediaBox.basePath, previous: aorusPrev, updated: message) {\n"
                 "                    NotificationCenter.default.post(\n"
                 "                        name: NSNotification.Name(\"aorusgram.willEditMessage\"),\n"
                 "                        object: nil,\n"
@@ -1181,9 +1164,9 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                            \"peerId\":       NSNumber(value: id.peerId.toInt64()),\n"
                 "                            \"msgNs\":        NSNumber(value: id.namespace),\n"
                 "                            \"accountPath\":  mediaBox.basePath,\n"
-                "                            \"originalText\": prev.text,\n"
+                "                            \"originalText\": aorusEdit.previousText,\n"
                 "                            \"newText\":      message.text,\n"
-                "                            \"date\":         NSNumber(value: prev.timestamp),\n"
+                "                            \"date\":         NSNumber(value: aorusPrev?.timestamp ?? 0),\n"
                 "                        ])\n"
                 "                }\n"
                 "                var generatedEvent:"
@@ -1193,112 +1176,6 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 print("AccountStateManagementUtils.swift: edit-capture hook injected")
             else:
                 print("AccountStateManagementUtils.swift: EditMessage anchor not found — skipped")
-
-            # --- B. append original under new text ---
-            tail_anchor = (
-                "                if let generatedEvent = generatedEvent {\n"
-                "                    addedReactionEvents.append(generatedEvent)\n"
-                "                }\n"
-                "            case let .UpdateMessagePoll(pollId, apiPoll, results):"
-            )
-            tail_hook = (
-                "                if let generatedEvent = generatedEvent {\n"
-                "                    addedReactionEvents.append(generatedEvent)\n"
-                "                }\n"
-                "                // AorusGram: inline original under edited text (own toggle, separate from deleted)\n"
-                "                let __aorusEditEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_edited_messages\") as? Bool) ?? true\n"
-                # Not gated on `aorusIsRealEdit`: Telegram has just replaced the stored
-                # message with the server's, which carries no history, so a delivery that is
-                # not an edit still has to put the history back. What the flag decides is
-                # whether the body that arrived is a NEW version or the one we already had.
-                "                if __aorusEditEnabled, let prev = aorusPrev, prev.flags.contains(.Incoming), prev.text != message.text, !prev.text.isEmpty, ((transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo == nil) {\n"
-                "                    transaction.updateMessage(id, update: { currentMessage -> PostboxUpdateMessage in\n"
-                "                        // AorusGram: rebuild the FULL edit history with proper labels.\n"
-                "                        // Bottom (oldest) = Оригинал:, newer versions above = Изменение #N.\n"
-                "                        // Bold on EVERY label, one BlockQuote around the whole history.\n"
-                # The labels below are written into the message text and stay there. The
-                # detector has to recognise every language ever written, so both the labels
-                # and the pattern come from the same two dictionaries — a label the pattern
-                # cannot match would make the full history append itself again on every edit.
-                # TelegramCore sits below AorusGramUI and cannot call aorusL(), so the
-                # language is read from the key AppDelegate publishes.
-                "                        let aorusLangRaw = (UserDefaults.standard.string(forKey: \"aorusgram_lang_code\") ?? UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? \"en\").lowercased()\n"
-                # The full code is tried before the base so that zh-hans and zh-hant, which
-                # Telegram serves as two separate packs, do not collapse onto one another.
-                "                        let aorusLangNorm = aorusLangRaw.replacingOccurrences(of: \"_\", with: \"-\")\n"
-                "                        let aorusLangBase = String(aorusLangNorm.prefix(while: { $0 != \"-\" }))\n"
-                "                        let aorusOriginalLabels: [String: String] = [\"en\": \"Original:\", \"ru\": \"Оригинал:\", \"uk\": \"Оригінал:\", \"es\": \"Original:\", \"pt\": \"Original:\", \"de\": \"Original:\", \"fr\": \"Original :\", \"tr\": \"Orijinal:\", \"it\": \"Originale:\", \"pl\": \"Oryginał:\", \"nl\": \"Origineel:\", \"id\": \"Asli:\", \"ms\": \"Asal:\", \"ca\": \"Original:\", \"be\": \"Арыгінал:\", \"uz\": \"Asl matn:\", \"ko\": \"원본:\", \"ar\": \"الأصل:\", \"fa\": \"اصلی:\", \"kk\": \"Түпнұсқа:\", \"ja\": \"原文:\", \"fi\": \"Alkuperäinen:\", \"he\": \"מקור:\", \"zh-hans\": \"原文：\", \"zh-hant\": \"原文：\", \"hr\": \"Izvornik:\", \"sr\": \"Оригинал:\", \"cs\": \"Originál:\", \"sk\": \"Originál:\", \"ro\": \"Original:\", \"hu\": \"Eredeti:\", \"nb\": \"Original:\", \"sv\": \"Original:\", \"vi\": \"Bản gốc:\"]\n"
-                "                        let aorusChangeLabels: [String: String] = [\"en\": \"Change #%@:\", \"ru\": \"Изменение #%@:\", \"uk\": \"Зміна #%@:\", \"es\": \"Cambio n.º %@:\", \"pt\": \"Alteração n.º %@:\", \"de\": \"Änderung #%@:\", \"fr\": \"Modification n° %@ :\", \"tr\": \"Değişiklik #%@:\", \"it\": \"Modifica n. %@:\", \"pl\": \"Zmiana #%@:\", \"nl\": \"Wijziging #%@:\", \"id\": \"Perubahan #%@:\", \"ms\": \"Perubahan #%@:\", \"ca\": \"Canvi núm. %@:\", \"be\": \"Змена #%@:\", \"uz\": \"O‘zgarish #%@:\", \"ko\": \"수정 #%@:\", \"ar\": \"التعديل رقم %@:\", \"fa\": \"تغییر #%@:\", \"kk\": \"Өзгеріс #%@:\", \"ja\": \"変更 #%@:\", \"fi\": \"Muutos #%@:\", \"he\": \"שינוי #%@:\", \"zh-hans\": \"修改 #%@：\", \"zh-hant\": \"修改 #%@：\", \"hr\": \"Izmjena #%@:\", \"sr\": \"Измена #%@:\", \"cs\": \"Změna #%@:\", \"sk\": \"Zmena #%@:\", \"ro\": \"Modificarea nr. %@:\", \"hu\": \"%@. módosítás:\", \"nb\": \"Endring #%@:\", \"sv\": \"Ändring #%@:\", \"vi\": \"Thay đổi #%@:\"]\n"
-                "                        let aorusOriginalLabel = aorusOriginalLabels[aorusLangNorm] ?? aorusOriginalLabels[aorusLangBase] ?? \"Original:\"\n"
-                "                        let aorusChangeTemplate = aorusChangeLabels[aorusLangNorm] ?? aorusChangeLabels[aorusLangBase] ?? \"Change #%@:\"\n"
-                "                        let aorusOriginalAlternatives = aorusOriginalLabels.values.map { NSRegularExpression.escapedPattern(for: $0) }\n"
-                "                        let aorusChangeAlternatives = aorusChangeLabels.values.map { NSRegularExpression.escapedPattern(for: $0).replacingOccurrences(of: \"%@\", with: \"\\\\d+\") }\n"
-                "                        let aorusHistPattern = \"\\n(?:\" + (aorusOriginalAlternatives + aorusChangeAlternatives).joined(separator: \"|\") + \")\\n\"\n"
-                "                        if currentMessage.text.range(of: aorusHistPattern, options: .regularExpression) != nil { return .skip }\n"
-                "                        let aorusPrevFull = prev.text\n"
-                "                        let aorusFlat: String\n"
-                "                        if let aorusRe = try? NSRegularExpression(pattern: aorusHistPattern) {\n"
-                "                            aorusFlat = aorusRe.stringByReplacingMatches(in: aorusPrevFull, options: [], range: NSRange(aorusPrevFull.startIndex..., in: aorusPrevFull), withTemplate: \"\\u{0001}\")\n"
-                "                        } else {\n"
-                "                            aorusFlat = aorusPrevFull\n"
-                "                        }\n"
-                "                        var aorusVersions = aorusFlat.components(separatedBy: \"\\u{0001}\")\n"
-                # When nothing was edited, the body the server just sent is the body we
-                # already had — a reaction is delivered as the whole message — so it is not
-                # a new version. Only the history under it goes back, unchanged and with the
-                # same numbers. With no history to restore there is nothing to do at all.
-                "                        if !aorusIsRealEdit {\n"
-                "                            guard aorusVersions.count > 1 else { return .skip }\n"
-                "                            aorusVersions.removeFirst()\n"
-                "                        }\n"
-                "                        let aorusCount = aorusVersions.count\n"
-                "                        var newText = currentMessage.text\n"
-                "                        var aorusEntities: [MessageTextEntity] = []\n"
-                "                        for attr in currentMessage.attributes { if let te = attr as? TextEntitiesMessageAttribute { aorusEntities.append(contentsOf: te.entities) } }\n"
-                "                        var aorusQuoteStart = -1\n"
-                "                        for (aorusIdx, aorusVer) in aorusVersions.enumerated() {\n"
-                "                            let aorusLabel = (aorusIdx == aorusCount - 1) ? aorusOriginalLabel : aorusChangeTemplate.replacingOccurrences(of: \"%@\", with: \"\\(aorusCount - aorusIdx)\")\n"
-                "                            newText += \"\\n\"\n"
-                "                            let aorusLabelLoc = (newText as NSString).length\n"
-                "                            if aorusQuoteStart < 0 { aorusQuoteStart = aorusLabelLoc }\n"
-                "                            newText += aorusLabel\n"
-                "                            let aorusLabelEnd = (newText as NSString).length\n"
-                "                            aorusEntities.append(MessageTextEntity(range: aorusLabelLoc ..< aorusLabelEnd, type: .Bold))\n"
-                "                            newText += \"\\n\" + aorusVer\n"
-                "                        }\n"
-                "                        if aorusQuoteStart >= 0 {\n"
-                "                            let aorusQuoteEnd = (newText as NSString).length\n"
-                "                            aorusEntities.append(MessageTextEntity(range: aorusQuoteStart ..< aorusQuoteEnd, type: .BlockQuote(isCollapsed: false)))\n"
-                "                        }\n"
-                "                        var aorusNewAttrs = currentMessage.attributes.filter { !($0 is TextEntitiesMessageAttribute) }\n"
-                "                        aorusNewAttrs.append(TextEntitiesMessageAttribute(entities: aorusEntities))\n"
-                "                        return .update(StoreMessage(\n"
-                "                            id: currentMessage.id, customStableId: nil,\n"
-                "                            globallyUniqueId: currentMessage.globallyUniqueId,\n"
-                "                            groupingKey: currentMessage.groupingKey,\n"
-                "                            threadId: currentMessage.threadId,\n"
-                "                            timestamp: currentMessage.timestamp,\n"
-                "                            flags: StoreMessageFlags(currentMessage.flags),\n"
-                "                            tags: currentMessage.tags,\n"
-                "                            globalTags: currentMessage.globalTags,\n"
-                "                            localTags: currentMessage.localTags,\n"
-                "                            forwardInfo: currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init),\n"
-                "                            authorId: currentMessage.author?.id,\n"
-                "                            text: newText,\n"
-                "                            attributes: aorusNewAttrs,\n"
-                "                            media: currentMessage.media))\n"
-                "                    })\n"
-                "                    var preservedList = (UserDefaults.standard.array(forKey: \"aorusgram_preserved_msgs\") as? [[String: Int64]]) ?? []\n"
-                "                    preservedList.append([\"peerId\": id.peerId.toInt64(), \"msgId\": Int64(id.id), \"namespace\": Int64(id.namespace)])\n"
-                "                    UserDefaults.standard.set(preservedList, forKey: \"aorusgram_preserved_msgs\")\n"
-                "                }\n"
-                "            case let .UpdateMessagePoll(pollId, apiPoll, results):"
-            )
-            if tail_anchor in t:
-                t = t.replace(tail_anchor, tail_hook, 1)
-                print("AccountStateManagementUtils.swift: edit-augment tail hook injected")
-            else:
-                print("AccountStateManagementUtils.swift: edit-augment tail anchor not found — skipped")
 
             utils_path_edit.write_text(t, encoding="utf-8")
 
@@ -31313,6 +31190,11 @@ def main() -> None:
     patch_chat_context_menu_hide_name_forward(tg)
     from aorus_wall_context_menu import patch_wall_context_menu
     patch_wall_context_menu(tg)
+    # After the menu items it sits among (Edit Locally, Metadata, Hide Name) and the
+    # screens whose titles and menus it extends (User's Messages, the Wall).
+    from aorus_edit_history import patch_edit_history, patch_one_time_round_video
+    patch_edit_history(tg)
+    patch_one_time_round_video(tg, _licensed_flag_expr(_AG_K_BYPASS_ONCE), _AG_LICENSE_LOCK_KEY)
     patch_forward_hide_names_default(tg)
     patch_device_spoof(tg)
     patch_session_platform_icon(tg)

@@ -922,6 +922,9 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarRating.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGramAmount.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalMessageEditing.swift $TG/submodules/TelegramCore/Sources/
+          # The texts an incoming message has had, kept apart from the message for the Edit
+          # History screen; the capture in AccountStateManagementUtils is injected by aorus_branding.py.
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusEditHistory.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarsTopUp.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusFakeGramStore.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusFakeUsernamesStore.swift $TG/submodules/TelegramCore/Sources/
@@ -1086,6 +1089,9 @@ jobs:
           #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the
           #    single "Go to message" action are injected by aorus_branding.py.
           cp $PATCHES/submodules/TelegramUI/Sources/AorusUserMessages.swift $TG/submodules/TelegramUI/Sources/
+          # Edit History: the versions of a message, shown as a chat (menu item and title are
+          # injected by aorus_edit_history.py).
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusEditHistoryScreen.swift $TG/submodules/TelegramUI/Sources/
           cp $PATCHES/submodules/TelegramUI/Sources/AorusWall.swift $TG/submodules/TelegramUI/Sources/
           # AorusGram → Interface → Message Settings: its preview is a real group message drawn
           # by the chat's own code, so the screen is built here and handed to AorusGramUI at

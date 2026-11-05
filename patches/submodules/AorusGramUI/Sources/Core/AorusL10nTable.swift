@@ -1105,6 +1105,8 @@ enum AorusL10nTable {
         "Forwarded": "Inoltrati",
         "My messages": "I miei messaggi",
         "Others' messages": "Messaggi degli altri",
+        "Edit History": "Cronologia modifiche",
+        "Change": "Modifica",
     ]
 
     private static let pl: [String: String] = [
@@ -2160,6 +2162,8 @@ enum AorusL10nTable {
         "Forwarded": "Przekazane",
         "My messages": "Moje wiadomości",
         "Others' messages": "Wiadomości innych",
+        "Edit History": "Historia zmian",
+        "Change": "Zmiana",
     ]
 
     private static let nl: [String: String] = [
@@ -3215,6 +3219,8 @@ enum AorusL10nTable {
         "Forwarded": "Doorgestuurd",
         "My messages": "Mijn berichten",
         "Others' messages": "Berichten van anderen",
+        "Edit History": "Bewerkingsgeschiedenis",
+        "Change": "Wijziging",
     ]
 
     private static let ca: [String: String] = [
@@ -4270,6 +4276,8 @@ enum AorusL10nTable {
         "Forwarded": "Reenviats",
         "My messages": "Els meus missatges",
         "Others' messages": "Missatges dels altres",
+        "Edit History": "Historial de canvis",
+        "Change": "Canvi",
     ]
 
     private static let id: [String: String] = [
@@ -5325,6 +5333,8 @@ enum AorusL10nTable {
         "Forwarded": "Diteruskan",
         "My messages": "Pesan saya",
         "Others' messages": "Pesan orang lain",
+        "Edit History": "Riwayat Perubahan",
+        "Change": "Perubahan",
     ]
 
     private static let ms: [String: String] = [
@@ -6380,6 +6390,8 @@ enum AorusL10nTable {
         "Forwarded": "Dimajukan",
         "My messages": "Mesej saya",
         "Others' messages": "Mesej orang lain",
+        "Edit History": "Sejarah Suntingan",
+        "Change": "Perubahan",
     ]
 
     private static let be: [String: String] = [
@@ -7435,6 +7447,8 @@ enum AorusL10nTable {
         "Forwarded": "Перасланыя",
         "My messages": "Мае паведамленні",
         "Others' messages": "Чужыя паведамленні",
+        "Edit History": "Гісторыя змен",
+        "Change": "Змена",
     ]
 
     private static let uz: [String: String] = [
@@ -8490,6 +8504,8 @@ enum AorusL10nTable {
         "Forwarded": "Uzatilganlar",
         "My messages": "Mening xabarlarim",
         "Others' messages": "Boshqalarning xabarlari",
+        "Edit History": "Tahrirlar tarixi",
+        "Change": "O‘zgarish",
     ]
 
     private static let ko: [String: String] = [
@@ -9545,6 +9561,8 @@ enum AorusL10nTable {
         "Forwarded": "전달된 메시지",
         "My messages": "내 메시지",
         "Others' messages": "다른 사람의 메시지",
+        "Edit History": "수정 기록",
+        "Change": "수정",
     ]
 
     private static let ar: [String: String] = [
@@ -10600,6 +10618,8 @@ enum AorusL10nTable {
         "Forwarded": "المُعاد توجيهها",
         "My messages": "رسائلي",
         "Others' messages": "رسائل الآخرين",
+        "Edit History": "سجل التعديلات",
+        "Change": "تعديل",
     ]
 
     private static let fa: [String: String] = [
@@ -11655,6 +11675,8 @@ enum AorusL10nTable {
         "Forwarded": "بازارسال‌شده‌ها",
         "My messages": "پیام‌های من",
         "Others' messages": "پیام‌های دیگران",
+        "Edit History": "تاریخچهٔ ویرایش",
+        "Change": "تغییر",
     ]
 
     private static let kk: [String: String] = [
@@ -12710,6 +12732,8 @@ enum AorusL10nTable {
         "Forwarded": "Қайта жіберілгендер",
         "My messages": "Менің хабарларым",
         "Others' messages": "Басқалардың хабарлары",
+        "Edit History": "Өзгерістер тарихы",
+        "Change": "Өзгеріс",
     ]
 
     private static let zhHans: [String: String] = [
@@ -13765,6 +13789,8 @@ enum AorusL10nTable {
         "Forwarded": "转发的消息",
         "My messages": "我的消息",
         "Others' messages": "他人的消息",
+        "Edit History": "编辑历史",
+        "Change": "修改",
     ]
 
 
@@ -14821,6 +14847,8 @@ enum AorusL10nTable {
         "Forwarded": "轉傳的訊息",
         "My messages": "我的訊息",
         "Others' messages": "他人的訊息",
+        "Edit History": "編輯紀錄",
+        "Change": "修改",
     ]
 
     private static let ja: [String: String] = [
@@ -15876,6 +15904,8 @@ enum AorusL10nTable {
         "Forwarded": "転送されたメッセージ",
         "My messages": "自分のメッセージ",
         "Others' messages": "他の人のメッセージ",
+        "Edit History": "編集履歴",
+        "Change": "変更",
     ]
 
     private static let fi: [String: String] = [
@@ -16931,6 +16961,8 @@ enum AorusL10nTable {
         "Forwarded": "Välitetyt",
         "My messages": "Omat viestit",
         "Others' messages": "Muiden viestit",
+        "Edit History": "Muokkaushistoria",
+        "Change": "Muutos",
     ]
 
     private static let he: [String: String] = [
@@ -17986,6 +18018,8 @@ enum AorusL10nTable {
         "Forwarded": "הודעות שהועברו",
         "My messages": "ההודעות שלי",
         "Others' messages": "הודעות של אחרים",
+        "Edit History": "היסטוריית עריכות",
+        "Change": "שינוי",
     ]
 
     private static let hr: [String: String] = [
@@ -19041,6 +19075,8 @@ enum AorusL10nTable {
         "Forwarded": "Proslijeđene",
         "My messages": "Moje poruke",
         "Others' messages": "Tuđe poruke",
+        "Edit History": "Povijest izmjena",
+        "Change": "Izmjena",
     ]
 
     private static let sr: [String: String] = [
@@ -20096,6 +20132,8 @@ enum AorusL10nTable {
         "Forwarded": "Прослеђене",
         "My messages": "Моје поруке",
         "Others' messages": "Туђе поруке",
+        "Edit History": "Историја измена",
+        "Change": "Измена",
     ]
 
     private static let cs: [String: String] = [
@@ -21151,6 +21189,8 @@ enum AorusL10nTable {
         "Forwarded": "Přeposlané",
         "My messages": "Moje zprávy",
         "Others' messages": "Zprávy ostatních",
+        "Edit History": "Historie úprav",
+        "Change": "Změna",
     ]
 
     private static let sk: [String: String] = [
@@ -22206,6 +22246,8 @@ enum AorusL10nTable {
         "Forwarded": "Preposlané",
         "My messages": "Moje správy",
         "Others' messages": "Správy ostatných",
+        "Edit History": "História úprav",
+        "Change": "Zmena",
     ]
 
     private static let ro: [String: String] = [
@@ -23261,6 +23303,8 @@ enum AorusL10nTable {
         "Forwarded": "Redirecționate",
         "My messages": "Mesajele mele",
         "Others' messages": "Mesajele altora",
+        "Edit History": "Istoricul modificărilor",
+        "Change": "Modificare",
     ]
 
     private static let hu: [String: String] = [
@@ -24316,6 +24360,8 @@ enum AorusL10nTable {
         "Forwarded": "Továbbítottak",
         "My messages": "Saját üzeneteim",
         "Others' messages": "Mások üzenetei",
+        "Edit History": "Szerkesztési előzmények",
+        "Change": "Módosítás",
     ]
 
     private static let nb: [String: String] = [
@@ -25371,6 +25417,8 @@ enum AorusL10nTable {
         "Forwarded": "Videresendte",
         "My messages": "Mine meldinger",
         "Others' messages": "Andres meldinger",
+        "Edit History": "Redigeringshistorikk",
+        "Change": "Endring",
     ]
 
     private static let sv: [String: String] = [
@@ -26426,6 +26474,8 @@ enum AorusL10nTable {
         "Forwarded": "Vidarebefordrade",
         "My messages": "Mina meddelanden",
         "Others' messages": "Andras meddelanden",
+        "Edit History": "Redigeringshistorik",
+        "Change": "Ändring",
     ]
 
     private static let vi: [String: String] = [
@@ -27481,6 +27531,8 @@ enum AorusL10nTable {
         "Forwarded": "Tin nhắn chuyển tiếp",
         "My messages": "Tin nhắn của tôi",
         "Others' messages": "Tin nhắn của người khác",
+        "Edit History": "Lịch sử chỉnh sửa",
+        "Change": "Thay đổi",
     ]
 
     private static let uk: [String: String] = [
@@ -28545,6 +28597,8 @@ enum AorusL10nTable {
         "Forwarded": "Переслані",
         "My messages": "Мої повідомлення",
         "Others' messages": "Чужі повідомлення",
+        "Edit History": "Історія змін",
+        "Change": "Зміна",
     ]
 
     private static let es: [String: String] = [
@@ -29609,6 +29663,8 @@ enum AorusL10nTable {
         "Forwarded": "Reenviados",
         "My messages": "Mis mensajes",
         "Others' messages": "Mensajes de otros",
+        "Edit History": "Historial de cambios",
+        "Change": "Cambio",
     ]
 
     private static let pt: [String: String] = [
@@ -30673,6 +30729,8 @@ enum AorusL10nTable {
         "Forwarded": "Encaminhadas",
         "My messages": "Minhas mensagens",
         "Others' messages": "Mensagens de outros",
+        "Edit History": "Histórico de edições",
+        "Change": "Alteração",
     ]
 
     private static let de: [String: String] = [
@@ -31737,6 +31795,8 @@ enum AorusL10nTable {
         "Forwarded": "Weitergeleitete",
         "My messages": "Eigene Nachrichten",
         "Others' messages": "Nachrichten anderer",
+        "Edit History": "Bearbeitungsverlauf",
+        "Change": "Änderung",
     ]
 
     private static let fr: [String: String] = [
@@ -32801,6 +32861,8 @@ enum AorusL10nTable {
         "Forwarded": "Transférés",
         "My messages": "Mes messages",
         "Others' messages": "Messages des autres",
+        "Edit History": "Historique des modifications",
+        "Change": "Modification",
     ]
 
     private static let tr: [String: String] = [
@@ -33865,5 +33927,7 @@ enum AorusL10nTable {
         "Forwarded": "İletilenler",
         "My messages": "Mesajlarım",
         "Others' messages": "Başkalarının mesajları",
+        "Edit History": "Düzenleme geçmişi",
+        "Change": "Değişiklik",
     ]
 }

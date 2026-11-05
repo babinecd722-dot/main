@@ -1582,6 +1582,8 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .default))
                 weakController?.present(alert, animated: true)
             }
+            // The texts edited messages had are kept apart from the messages; they go too.
+            AorusEditHistory.removeAll(basePath: context.account.postbox.mediaBox.basePath)
             let ids: [MessageId] = stored.compactMap { entry in
                 guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
                 return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))

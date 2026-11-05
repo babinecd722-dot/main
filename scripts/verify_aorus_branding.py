@@ -4583,6 +4583,30 @@ def main() -> None:
         if "//submodules/ContextUI:ContextUI" not in ai_ui_build_text:
             err.append("AorusAI: AorusGramUI BUILD is missing ContextUI (the native message menu)")
 
+    # Edit History: versions are kept apart from the message and shown on their own screen;
+    # nothing writes a history into a message's text any more. One-time round videos show
+    # their picture while they play in the chat and can be saved from their menu.
+    edit_state = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if edit_state.is_file():
+        edit_state_text = edit_state.read_text(encoding="utf-8")
+        if "AorusEditHistory.capture(transaction: transaction, basePath: mediaBox.basePath" not in edit_state_text:
+            err.append("EditHistory: edits are not captured into the store")
+        if "rebuild the FULL edit history" in edit_state_text or "aorusHistPattern" in edit_state_text:
+            err.append("EditHistory: the history is still written into message texts")
+    for relative, markers in (
+        ("submodules/TelegramCore/Sources/AorusEditHistory.swift", ("public static func migrateLegacy(postbox: Postbox)", "!newEdit.isHidden")),
+        ("submodules/TelegramUI/Sources/AorusEditHistoryScreen.swift", ("public final class AorusEditHistoryChatContents", "public func openAorusEditHistory(")),
+        ("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift", ("// AorusGram: edit history v1", "let aorusHistory = aorusContents as? AorusEditHistoryChatContents", "// AorusGram: one-time round video save v1")),
+        ("submodules/TelegramUI/Sources/ChatControllerContentData.swift", ("customChatContents as? AorusEditHistoryChatContents",)),
+        ("submodules/TelegramUI/Sources/AppDelegate.swift", ("AorusEditHistory.migrateLegacy(postbox: context.context.account.postbox)",)),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode/Sources/ChatMessageInteractiveInstantVideoNode.swift", ("|| item.associatedData.isStandalone || aorusOneTimeInChat {",)),
+    ):
+        path = tg / relative
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        for marker in markers:
+            if marker not in text:
+                err.append(f"EditHistory/OneTimeRound: {relative} is missing {marker!r}")
+
     ai_menu_host = tg / "submodules" / "TelegramUI" / "Sources" / "ChatInterfaceStateContextMenus.swift"
     if not ai_menu_host.is_file():
         err.append("AorusAI: missing ChatInterfaceStateContextMenus.swift")
