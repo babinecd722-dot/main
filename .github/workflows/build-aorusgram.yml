@@ -1687,7 +1687,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          python3 aorusgram/scripts/compiler_warnings_report.py "$RUNNER_TEMP/build.log" telegram-ios
+          python3 aorusgram/scripts/compiler_warnings_report.py "$RUNNER_TEMP/build.log" telegram-ios telegram-ios-pristine
 
       - name: Collect build artifacts info
         if: always()
