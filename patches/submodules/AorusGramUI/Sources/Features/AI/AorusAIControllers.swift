@@ -1048,7 +1048,7 @@ private final class AorusAIConversationListController: ViewController, UITableVi
             topBar.backButton.onPress = { [weak self] in
                 guard let self else { return }
                 if let navigationController = self.navigationController as? NavigationController, navigationController.viewControllers.count > 1 {
-                    navigationController.popViewController(animated: true)
+                    _ = navigationController.popViewController(animated: true)
                 } else {
                     self.dismiss()
                 }
@@ -2335,7 +2335,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// Back, as the navigation bar's own button does it.
     private func aorusGoBack() {
         if let navigationController = self.navigationController as? NavigationController, navigationController.viewControllers.count > 1 {
-            navigationController.popViewController(animated: true)
+            _ = navigationController.popViewController(animated: true)
         } else {
             self.dismiss()
         }

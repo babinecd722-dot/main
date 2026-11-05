@@ -1526,7 +1526,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         // guard. The scheme and the blocklist above still refuse tg://, file://, loopback,
         // private ranges and the control plane, and the page itself goes on refusing them
         // for every navigation after the first.
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [self] in
             guard self.pluginExecutionAllowed,
                   let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
@@ -2331,7 +2331,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             completion(.failure(AorusPluginRequestError("Dialogs permission is not granted")))
             return
         }
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [self] in
             guard let presenter = self.topController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return

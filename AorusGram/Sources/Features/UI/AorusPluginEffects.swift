@@ -685,7 +685,7 @@ public final class AorusPluginEffectsRenderer {
         for layer in layers { layer.birthRate = 0 }
         CATransaction.commit()
         retiring[key, default: []].append(contentsOf: layers)
-        let begin = {
+        let begin = { [weak self] in
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             for layer in layers where layer.superlayer != nil {

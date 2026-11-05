@@ -116,7 +116,7 @@ final class AorusBackupHeaderItemNode: ListViewItemNode, ItemListItemNode {
     }
 
     func asyncLayout() -> (_ item: AorusBackupHeaderItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [weak self] item, params, neighbors in
             // 180 rather than the 110–128 the stock headers use. This screen has one
             // illustration and a short list under it, so the header carries the screen;
             // at the stock size it read as an afterthought floating above the first row.

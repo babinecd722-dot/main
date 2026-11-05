@@ -1396,7 +1396,7 @@ private enum AorusAnimatedProfileMediaProcessor {
         }
         let frameCount = CGImageSourceGetCount(source)
         guard frameCount > 0,
-              let firstFrame = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+              CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else {
             return .failure(AorusAnimatedProfileMediaError.unreadable)
         }
 

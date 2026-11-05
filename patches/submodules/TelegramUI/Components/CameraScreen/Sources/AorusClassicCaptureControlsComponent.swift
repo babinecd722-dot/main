@@ -410,7 +410,8 @@ final class AorusClassicFlipButtonContentComponent: Component {
             animation.damping = 90.0
             animation.duration = animation.settlingDuration
             let maxFps = Float(UIScreen.main.maximumFramesPerSecond)
-            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 30.0, maximum: maxFps, preferred: maxFps)
+            let frameRateRange = CAFrameRateRange(minimum: 30.0, maximum: maxFps, preferred: maxFps)
+            animation.preferredFrameRateRange = frameRateRange
             self.icon.add(animation, forKey: "transform.rotation.z")
 
             let darkAnimation = CASpringAnimation(keyPath: "transform.rotation.z")
@@ -420,8 +421,7 @@ final class AorusClassicFlipButtonContentComponent: Component {
             darkAnimation.stiffness = 900.0
             darkAnimation.damping = 90.0
             darkAnimation.duration = darkAnimation.settlingDuration
-            let maxFps = Float(UIScreen.main.maximumFramesPerSecond)
-            darkAnimation.preferredFrameRateRange = CAFrameRateRange(minimum: 30.0, maximum: maxFps, preferred: maxFps)
+            darkAnimation.preferredFrameRateRange = frameRateRange
             self.darkIcon.add(darkAnimation, forKey: "transform.rotation.z")
         }
 

@@ -266,7 +266,7 @@ public final class AorusChatLock {
         }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
             DispatchQueue.main.async {
-                withStateLock {
+                _ = withStateLock {
                     promptingAccounts.remove(accountId)
                 }
                 if success {

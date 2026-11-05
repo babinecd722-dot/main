@@ -207,7 +207,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
 
     func asyncLayout() -> (AorusIntervalSliderItem, ListViewItemLayoutParams, ItemListNeighbors)
         -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [weak self] item, params, neighbors in
             let sep = UIScreenPixel
             let contentSize = CGSize(width: params.width, height: 74)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)

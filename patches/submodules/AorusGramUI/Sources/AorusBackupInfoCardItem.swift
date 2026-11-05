@@ -96,7 +96,7 @@ final class AorusBackupInfoCardItemNode: ListViewItemNode, ItemListItemNode {
         let makeTextLayout = TextNode.asyncLayout(self.textNode)
         let currentItem = self.item
 
-        return { item, params, neighbors in
+        return { [weak self] item, params, neighbors in
             var updatedTheme: PresentationTheme?
             if currentItem?.presentationData.theme !== item.presentationData.theme {
                 updatedTheme = item.presentationData.theme

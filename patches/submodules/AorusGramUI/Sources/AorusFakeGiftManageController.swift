@@ -303,7 +303,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
             AorusFakeGiftsStore.remove(instanceId: giftInstanceId)
             onChanged()
             if let navigationController = weakController?.navigationController as? NavigationController {
-                navigationController.popViewController(animated: true)
+                _ = navigationController.popViewController(animated: true)
             } else {
                 weakController?.dismiss()
             }

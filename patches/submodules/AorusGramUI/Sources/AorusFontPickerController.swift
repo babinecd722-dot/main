@@ -612,7 +612,7 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
     }
 
     func asyncLayout() -> (AorusFontPreviewItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [weak self] item, params, neighbors in
             let contentSize = CGSize(width: params.width, height: 64.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
             let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)

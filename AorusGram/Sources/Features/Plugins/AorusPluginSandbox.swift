@@ -1022,7 +1022,7 @@ public final class AorusPluginSandbox {
         stateLock.lock()
         retiring = false
         stateLock.unlock()
-        queue.async {
+        queue.async { [self] in
             if self.context != nil {
                 completion?(nil)
                 return

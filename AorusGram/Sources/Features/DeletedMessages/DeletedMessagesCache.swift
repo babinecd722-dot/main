@@ -21,7 +21,7 @@ private func aorusBindText(_ statement: OpaquePointer?, _ index: Int32, _ value:
         sqlite3_bind_text(statement, index, "", 0, transient)
         return
     }
-    bytes.withUnsafeBufferPointer { buffer in
+    _ = bytes.withUnsafeBufferPointer { buffer in
         buffer.baseAddress!.withMemoryRebound(to: CChar.self, capacity: buffer.count) { pointer in
             sqlite3_bind_text(statement, index, pointer, Int32(buffer.count), transient)
         }
