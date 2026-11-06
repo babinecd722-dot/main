@@ -225,7 +225,7 @@ print("Profile editing row geometry: \(checks) checks passed")
 def checkout(tg):
     path = tg / "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen/Sources/StarsPurchaseScreen.swift"
     source = path.read_text()
-    route = block(source, "            if product.localPack != nil {")
+    route = block(source, "            if let localPack = product.localPack {")
     mode_guard = block(source, "            if aorusLocalStarsEnabled(self.purpose) {")
     enabled = block(source, "private func aorusLocalStarsEnabled(")
     assert source.index(route) < source.index("inAppPurchaseManager.buyProduct(")
@@ -233,14 +233,24 @@ def checkout(tg):
     assert ".storeProduct.id" not in source and ".storeProduct.priceCurrencyAndAmount" not in source
     assert "self.animateSuccess()" in block(source, "        completionImpl =")
     return r'''import Foundation
-private enum StarsPurchasePurpose { case generic, gift(Int) }
+private enum StarsPurchasePurpose { case generic, gift(peerId: Int) }
 private enum AorusFakeStarsStore {
     static var isEnabled = true, canCredit = true
     static var amount: Int64 = 0
     static func topUp(accountPeerId: Int, count: Int64) -> Bool { guard canCredit else { return false }; amount += count; return true }
 }
-private struct Product { let count: Int64; let localPack: Bool? }
-private struct Context { struct Account { let peerId = 1 }; let account = Account() }
+private struct Account { let peerId = 1 }
+private enum AorusFakeGiftsStore {
+    static var sent: [(peerId: Int, count: Int64, currency: String, amount: Int64)] = []
+    static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: Int, count: Int64, currency: String, amount: Int64) -> Bool {
+        guard AorusFakeStarsStore.isEnabled, recipientPeerId != account.peerId else { return false }
+        sent.append((recipientPeerId, count, currency, amount))
+        return true
+    }
+}
+private struct Pack { let currency: String; let amount: Int64 }
+private struct Product { let count: Int64; let localPack: Pack? }
+private struct Context { let account = Account() }
 private struct Transition { static func easeInOut(duration: Double) -> Transition { Transition() } }
 private final class HapticFeedback { func error() {} }
 ''' + enabled + r'''
@@ -261,7 +271,7 @@ private final class PurchaseProbe {
 }
 var checks = 0
 func expect(_ value: Bool, _ name: String) { checks += 1; precondition(value, name) }
-private let local = Product(count: 100, localPack: true)
+private let local = Product(count: 100, localPack: Pack(currency: "KZT", amount: 119000))
 private let probe = PurchaseProbe()
 probe.buy(product: local)
 expect(AorusFakeStarsStore.amount == 100 && probe.completions == [100], "lot credits before invoking the native success completion")
@@ -275,8 +285,17 @@ AorusFakeStarsStore.isEnabled = true
 AorusFakeStarsStore.canCredit = false
 private let rejected = PurchaseProbe(); rejected.buy(product: local)
 expect(rejected.completions.isEmpty && rejected.progressProduct == nil && rejected.progress == [true,false], "failed credit resets progress without a fake success effect")
-private let gift = PurchaseProbe(); gift.purpose = .gift(2); gift.buy(product: local)
-expect(gift.completions.isEmpty && gift.realPurchases == 0, "a gift-to-another-account flow never credits one's own balance")
+AorusFakeStarsStore.canCredit = true
+private let balanceBeforeGift = AorusFakeStarsStore.amount
+private let gift = PurchaseProbe(); gift.purpose = .gift(peerId: 2); gift.buy(product: local)
+expect(AorusFakeGiftsStore.sent.count == 1 && AorusFakeGiftsStore.sent[0].peerId == 2 && AorusFakeGiftsStore.sent[0].count == 100, "a gift lot is delivered to the friend's chat")
+expect(AorusFakeGiftsStore.sent[0].currency == "KZT" && AorusFakeGiftsStore.sent[0].amount == 119000, "the gift message names the lot's own price")
+expect(gift.completions == [100] && gift.progress == [true,false] && gift.realPurchases == 0, "a gift ends in the native success completion without StoreKit")
+expect(AorusFakeStarsStore.amount == balanceBeforeGift, "a gift never credits one's own balance")
+gift.buy(product: local)
+expect(AorusFakeGiftsStore.sent.count == 1 && gift.completions.count == 1, "repeated taps cannot send a gift twice")
+private let selfGift = PurchaseProbe(); selfGift.purpose = .gift(peerId: 1); selfGift.buy(product: local)
+expect(selfGift.completions.isEmpty && selfGift.progressProduct == nil && AorusFakeGiftsStore.sent.count == 1, "a gift that cannot be delivered resets progress without success")
 private let staleReal = PurchaseProbe(); staleReal.buy(product: Product(count: 100, localPack: nil))
 expect(staleReal.realPurchases == 0 && staleReal.completions.isEmpty, "enabling local mode blocks stale StoreKit rows before replacement products arrive")
 AorusFakeStarsStore.isEnabled = false

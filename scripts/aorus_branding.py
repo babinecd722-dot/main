@@ -10831,6 +10831,24 @@ public enum AorusFakeGiftsStore {
         }.startStandalone()
     }
 
+    /// Stars bought for a friend. Telegram sells them like a top-up, for money, so one's own
+    /// balance stays as it is; what the friend's chat gets is the message Telegram posts for
+    /// such a gift, with the lot and the price it was bought for, opening the same gift
+    /// screen. A chat that was not in the list yet joins it, as when a first message is sent.
+    @discardableResult
+    public static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: PeerId, count: Int64, currency: String, amount: Int64) -> Bool {
+        guard AorusFakeStarsStore.isEnabled, count > 0, amount > 0, recipientPeerId != account.peerId else { return false }
+        let action = TelegramMediaActionType.giftStars(currency: currency, amount: amount, count: count, cryptoCurrency: nil, cryptoAmount: nil, transactionId: nil)
+        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: account.peerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
+        let _ = account.postbox.transaction { transaction -> Void in
+            if case .notIncluded = transaction.getPeerChatListInclusion(recipientPeerId) {
+                transaction.updatePeerChatListInclusion(recipientPeerId, inclusion: .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: nil))
+            }
+            let _ = transaction.addMessages([message], location: .Random)
+        }.startStandalone()
+        return true
+    }
+
     // Best-effort: rewrite the encoded gift JSON so the unique gift's ownerPeerId is the
     // user (the gift object is nested inside the StarGift enum payload).
     private static func dataWithOwner(_ giftData: Data, ownerPeerId: Int64) -> Data? {

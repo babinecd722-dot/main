@@ -10,7 +10,7 @@ import AorusGramUI
 // AorusGram: the Edit History screen. A chat-like screen, built like the one that shows a
 // user's messages in a group, holding one bubble per version of a message: the original
 // first, then "Change #1", "Change #2" and on, each in the chat's own bubbles with the time
-// it was written. In a change, what it added is bold and underlined and what it took out
+// it was written. In a change, what it added is bold and what it took out
 // stays in place, struck through, so the difference reads at a glance.
 //
 // The versions come from AorusEditHistory (TelegramCore), which records an incoming
@@ -159,7 +159,6 @@ enum AorusEditDiff {
                 placements.append((newPosition, newPosition + length, displayPosition))
                 if segment.kind == .inserted && !segment.text.allSatisfy({ $0.isWhitespace }) {
                     entities.append(MessageTextEntity(range: displayPosition ..< displayPosition + length, type: .Bold))
-                    entities.append(MessageTextEntity(range: displayPosition ..< displayPosition + length, type: .Underline))
                 }
                 text += segment.text
                 newPosition += length

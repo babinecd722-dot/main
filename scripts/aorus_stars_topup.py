@@ -24,8 +24,12 @@ def patch(tg: Path, native: str, redirects: str) -> str:
         self.localPrice = nil
     }
 
-    init(localPack: AorusLocalStarsTopUp.Pack, locale: Locale) {
-        self.option = .topUp(StarsTopUpOption(count: localPack.count, storeProductId: nil, currency: localPack.currency, amount: localPack.amount, isExtended: false))
+    init(localPack: AorusLocalStarsTopUp.Pack, locale: Locale, isGift: Bool = false, isExtended: Bool = false) {
+        if isGift {
+            self.option = .gift(StarsGiftOption(count: localPack.count, storeProductId: nil, currency: localPack.currency, amount: localPack.amount, isExtended: isExtended))
+        } else {
+            self.option = .topUp(StarsTopUpOption(count: localPack.count, storeProductId: nil, currency: localPack.currency, amount: localPack.amount, isExtended: isExtended))
+        }
         self.storeProduct = nil
         self.localPack = localPack
         self.localPrice = localPack.price(locale: locale)
@@ -68,6 +72,33 @@ def patch(tg: Path, native: str, redirects: str) -> str:
     text = text[:start] + real_products + '''            let products = aorusLocalStarsMode(purpose)
             |> mapToSignal { isLocal -> Signal<[StarsProduct], NoError> in
                 guard isLocal else { return realProducts }
+                if case .gift = purpose {
+                    // Telegram's own lots for a gift, priced by the same regional catalog as a
+                    // top-up. Like the original screen it is empty until they arrive; without
+                    // them (offline, or no answer in a few seconds) the whole catalog is offered.
+                    let giftOptions: Signal<[StarsGiftOption]?, NoError>
+                    if !initialOptions.isEmpty, let initialGiftOptions = initialOptions as? [StarsGiftOption] {
+                        giftOptions = .single(initialGiftOptions)
+                    } else {
+                        giftOptions = .single(nil)
+                        |> then(context.engine.payments.starsGiftOptions(peerId: nil)
+                            |> map(Optional.init)
+                            |> timeout(5.0, queue: Queue.mainQueue(), alternate: .single([])))
+                    }
+                    return combineLatest(giftOptions, context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)))
+                    |> deliverOnMainQueue
+                    |> map { options, peer -> [StarsProduct] in
+                        guard let options else { return [] }
+                        let region = aorusStarsRegion(peer)
+                        let language = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
+                        let quotes = options.map { StarsTopUpOption(count: $0.count, storeProductId: $0.storeProductId, currency: $0.currency, amount: $0.amount, isExtended: $0.isExtended) }
+                        let catalog = AorusLocalStarsTopUp.packs(region: region, quotes: quotes)
+                        let offered = catalog.filter { pack in options.contains(where: { $0.count == pack.count }) }
+                        return (offered.isEmpty ? catalog : offered).map { pack in
+                            StarsProduct(localPack: pack, locale: Locale(identifier: language), isGift: true, isExtended: options.first(where: { $0.count == pack.count })?.isExtended ?? false)
+                        }
+                    }
+                }
                 let initialQuotes = (initialOptions as? [StarsTopUpOption]) ?? []
                 let quotes = Signal<[StarsTopUpOption], NoError>.single(initialQuotes)
                 |> then(context.engine.payments.starsTopUpOptions())
@@ -83,12 +114,20 @@ def patch(tg: Path, native: str, redirects: str) -> str:
 ''' + text[end:]
     anchor = "        func buy(product: StarsProduct) {\n"
     text = replace(text, anchor, anchor + '''            // AorusGram: native local Stars top-up, before every StoreKit/network purchase path.
-            if product.localPack != nil {
+            if let localPack = product.localPack {
                 guard aorusLocalStarsEnabled(self.purpose), self.progressProduct == nil else { return }
                 self.progressProduct = product
                 self.updateInProgress(true)
                 self.updated(transition: .easeInOut(duration: 0.2))
-                guard AorusFakeStarsStore.topUp(accountPeerId: self.context.account.peerId, count: product.count) else {
+                let delivered: Bool
+                if case let .gift(peerId) = self.purpose {
+                    // Stars for a friend are bought, not taken from one's own balance: the
+                    // friend's chat gets Telegram's gift message and the balance stays.
+                    delivered = AorusFakeGiftsStore.recordLocalStarsGiftMessage(account: self.context.account, recipientPeerId: peerId, count: product.count, currency: localPack.currency, amount: localPack.amount)
+                } else {
+                    delivered = AorusFakeStarsStore.topUp(accountPeerId: self.context.account.peerId, count: product.count)
+                }
+                guard delivered else {
                     self.progressProduct = nil
                     self.updateInProgress(false)
                     self.updated(transition: .easeInOut(duration: 0.2))
@@ -107,9 +146,9 @@ def patch(tg: Path, native: str, redirects: str) -> str:
             guard let storeProduct = product.storeProduct, let inAppPurchaseManager = self.context.inAppPurchaseManager, self.progressProduct == nil else {''', "real purchase guard")
     text = text.replace("product.storeProduct.priceCurrencyAndAmount", "storeProduct.priceCurrencyAndAmount", 1).replace("inAppPurchaseManager.buyProduct(product.storeProduct, purpose:", "inAppPurchaseManager.buyProduct(storeProduct, purpose:", 1)
     text += '''
-// AorusStarsPurchaseRedirects: real-money routes are kept outside the local top-up mode.
+// AorusStarsPurchaseRedirects: the real-money routes are shown only while local Stars are off,
+// for a top-up and for Stars gifted to a friend alike.
 private func aorusLocalStarsEnabled(_ purpose: StarsPurchasePurpose) -> Bool {
-    if case .gift = purpose { return false }
     return AorusFakeStarsStore.isEnabled
 }
 

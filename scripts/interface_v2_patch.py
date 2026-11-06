@@ -754,7 +754,11 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "    var itemNodes: [PeerInfoHeaderTextFieldNodeKey: PeerInfoHeaderTextFieldNode] = [:]\n"
         "    // AorusGram: created lazily, so a profile edited with Interface 2.0 off, and Settings,\n"
         "    // never pay for a visual effect view they will not show.\n"
-        "    private var aorusFieldsGlassView: AorusBlurBlockView?\n",
+        "    private var aorusFieldsGlassView: AorusBlurBlockView?\n"
+        "    // AorusGram: set by the header -- whether these fields stand on the profile's own page,\n"
+        "    // the colour taken from the avatar. Your own profile is edited with Settings' fields\n"
+        "    // (`isSettings` arrives true for it) but over that page, not over Settings'.\n"
+        "    var aorusOnProfilePage = false\n",
         "editing header glass property",
     )
     text = _replace_once(
@@ -764,8 +768,10 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "        // fill becomes the marker colour the blur shows through, their text and cursor\n"
         "        // become ink, and their separators become a hairline of it. The Set Photo button\n"
         "        // above them takes its colour from the same accent, which is what puts it on the\n"
-        "        // page rather than in the palette's blue. Settings keeps Telegram's card.\n"
-        "        let aorusGlass = AorusGlassPane.isEnabled && !isSettings\n"
+        "        // page rather than in the palette's blue. Settings keeps Telegram's card; your own\n"
+        "        // profile, edited with the same fields, stands on its page and takes the block, or\n"
+        "        // its dark card and the black wedges at its corners read as a black square there.\n"
+        "        let aorusGlass = AorusGlassPane.isEnabled && (!isSettings || self.aorusOnProfilePage)\n"
         "        var presentationData = presentationData\n"
         "        if aorusGlass {\n"
         "            presentationData = presentationData.withUpdated(theme: presentationData.theme.aorusGlassProfileTheme)\n"
@@ -822,6 +828,20 @@ def _patch_editing_fields_glass(tg: Path) -> None:
         "editing header glass pane",
     )
     path.write_text(text, encoding="utf-8")
+    header = base / "PeerInfoHeaderNode.swift"
+    header_text = _read(header, "PeerInfoHeaderNode.swift")
+    if "self.editingContentNode.aorusOnProfilePage" not in header_text:
+        anchor = "        let editingContentHeight = self.editingContentNode.update(width: width, leftInset: sideInsets.sectionLeft, rightInset: sideInsets.sectionRight,"
+        header_text = _replace_once(
+            header_text,
+            anchor,
+            "        // AorusGram: the editing fields stand on the profile's page wherever the header\n"
+            "        // draws one -- every profile but Settings', your own included.\n"
+            "        self.editingContentNode.aorusOnProfilePage = AorusInterfaceV2Run.isEnabled && !isSettings && !isMediaOnly\n"
+            + anchor,
+            "editing fields on the profile page",
+        )
+        header.write_text(header_text, encoding="utf-8")
     print("InterfaceV2: a profile's editing header fields are on a blur block")
 
 
