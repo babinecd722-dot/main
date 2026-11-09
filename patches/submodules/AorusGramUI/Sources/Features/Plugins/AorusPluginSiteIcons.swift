@@ -445,7 +445,7 @@ private final class AorusPluginSiteIconRedirects: NSObject, URLSessionTaskDelega
 
 /// One icon download, read up to a limit. A response that says it is larger, or grows past it,
 /// is cancelled at once. Redirects are still decided by the session's own delegate.
-private final class AorusPluginSiteIconReceiver: NSObject, URLSessionDataDelegate {
+private final class AorusPluginSiteIconReceiver: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let limit: Int
     private let done: () -> Void
     private let lock = NSLock()

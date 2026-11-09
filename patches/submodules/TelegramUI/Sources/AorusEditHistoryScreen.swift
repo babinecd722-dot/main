@@ -232,12 +232,17 @@ public final class AorusEditHistoryChatContents: ChatCustomContentsProtocol {
             if !shown.entities.isEmpty {
                 attributes.append(TextEntitiesMessageAttribute(entities: shown.entities))
             }
+            // Without its author. Every bubble here is one version of one person's message, and
+            // in a group Telegram set aside a column for that person's avatar beside each of them
+            // -- a column the history never fills, so the bubbles stood away from the edge with
+            // nothing beside them. Without an author they sit at the edge, as in a private chat.
             let versionMessage = message
                 .withUpdatedStableId(stableId: UInt32.max - UInt32(index))
                 .withUpdatedId(id: id)
                 .withUpdatedTimestamp(version.date)
                 .withUpdatedText(shown.text)
                 .withUpdatedAttributes(attributes)
+                .withUpdatedAuthor(nil)
             plainTexts[id] = version.text
             entries.append(EngineRawMessageHistoryEntry(message: versionMessage, isRead: true, location: nil, monthLocation: nil, attributes: EngineRawMutableMessageHistoryEntryAttributes(authorIsContact: false)))
         }
@@ -285,8 +290,8 @@ public func openAorusEditHistory(context: AccountContext, message: Message, navi
     guard versions.count >= 2 else {
         return
     }
-    // The media and the author come from the message as it is now; each version only
-    // brings its text and its time.
+    // The media comes from the message as it is now; each version only brings its text and
+    // its time.
     let contents = AorusEditHistoryChatContents(message: message, versions: versions)
     let controller = context.sharedContext.makeChatController(context: context, chatLocation: .customChatContents, subject: .customChatContents(contents: contents), botStart: nil, mode: .standard(.default), params: nil)
     navigationController.pushViewController(controller)
