@@ -8,8 +8,14 @@ import CryptoKit
 //
 // The signed message binds:
 //   - the client's request nonce  → a captured "paid_active" cannot be replayed
-//     against a different request / device,
-//   - a server timestamp          → stale captures are rejected (freshness window).
+//     against a different request / device; the nonce is fresh for every request, so a
+//     response bearing it was made after the request was sent,
+//   - a server timestamp          → the server's own clock, which a verified response
+//     lends to LicenseClock.
+//
+// The timestamp is not compared with the device clock. That check added no freshness the
+// nonce does not already prove, and it turned a phone whose clock was a few minutes off
+// into one that could not confirm a paid licence at all.
 //
 // ROLLOUT SAFETY (this is critical): with no public key provisioned
 // (SubscriptionConfig.responseSigningPublicKeyHex == "") verification is INERT —
@@ -40,11 +46,6 @@ enum LicenseResponseVerifier {
             return .unsigned                              // server did not sign
         }
 
-        // Freshness: reject responses outside the allowed clock-skew window.
-        if abs(Date().timeIntervalSince1970 - ts) > SubscriptionConfig.responseMaxSkew {
-            return .invalid
-        }
-
         // message = ts \n requestNonce \n sha256Hex(body)
         let bodySha = LicenseCrypto.sha256Hex(bodyData)
         let message = Data((tsStr + "\n" + requestNonce + "\n" + bodySha).utf8)
@@ -54,7 +55,9 @@ enum LicenseResponseVerifier {
         guard let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData) else {
             return .invalid
         }
-        return pub.isValidSignature(sigData, for: message) ? .ok : .invalid
+        guard pub.isValidSignature(sigData, for: message) else { return .invalid }
+        LicenseClock.observe(serverTime: ts)
+        return .ok
     }
 
     // HTTP header names are case-insensitive; allHeaderFields preserves server casing.
@@ -66,5 +69,34 @@ enum LicenseResponseVerifier {
             }
         }
         return nil
+    }
+}
+
+/// The server's clock, as last seen. Requests are stamped with it, so a device whose clock
+/// is wrong still has its requests accepted once one answer has told it the time. Only a
+/// verified response, or the transport's `Date` when none could be verified, moves it, and
+/// it only ever affects the timestamp the client sends.
+enum LicenseClock {
+    private static let lock = NSLock()
+    private static var offset: TimeInterval = 0
+
+    static func now() -> TimeInterval {
+        lock.lock()
+        defer { lock.unlock() }
+        return Date().timeIntervalSince1970 + offset
+    }
+
+    /// Takes a server time in. Returns whether the device clock was off by more than the
+    /// tolerated skew, which is when a refused request is worth sending once more.
+    @discardableResult
+    static func observe(serverTime: TimeInterval) -> Bool {
+        guard serverTime > 0 else { return false }
+        let measured = serverTime - Date().timeIntervalSince1970
+        lock.lock()
+        defer { lock.unlock() }
+        let wasOff = abs(measured - offset) > SubscriptionConfig.responseMaxSkew
+        // Small differences are network latency, not a wrong clock.
+        offset = abs(measured) > SubscriptionConfig.responseMaxSkew ? measured : 0
+        return wasOff
     }
 }

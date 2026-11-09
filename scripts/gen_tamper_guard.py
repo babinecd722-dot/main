@@ -58,7 +58,10 @@ DYLIB_SUSPECTS = [
 DYLD_ENV = ["DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH"]
 SANDBOX_PREFIX = "/private/.ag_"   # write-probe path prefix (was /private/jb_test_ag_)
 SYSTEM_PREFIXES = ["/System/", "/usr/lib/", "/private/preboot/"]
-BUNDLE_ALLOWED = ["ph.telegra.Telegraph", "aorusgram", "com.aorusgram"]
+# There is deliberately no bundle id check. AorusGram is installed by re-signing, and the
+# signer may give it any bundle id (docs/license.md): a check that counted every other id
+# as tampering added one to the persistent counter on each launch of a legitimate install,
+# and three launches switched every feature off for good under an active subscription.
 PTRACE = "ptrace"
 FRIDA_LOOPBACK = "127.0.0.1"
 # UserDefaults keys are duplicated from their canonical definitions; the cross-module
@@ -128,8 +131,6 @@ public final class AorusSessionMetrics {
     parts.append("")
     parts.append(obf_list("systemPrefixes", SYSTEM_PREFIXES))
     parts.append("")
-    parts.append(obf_list("bundleAllowed", BUNDLE_ALLOWED))
-    parts.append("")
     parts.append(f"    private static let sandboxPrefix: [UInt8] = {obf(SANDBOX_PREFIX)}")
     parts.append(f"    private static let ptraceSym: [UInt8] = {obf(PTRACE)}")
     parts.append(f"    private static let loopback: [UInt8] = {obf(FRIDA_LOOPBACK)}")
@@ -139,23 +140,12 @@ public final class AorusSessionMetrics {
 
     public func collect() {
         sampleTrace()
-        sampleBundle()
         sampleStorage()
         sampleModules()
         sampleFrameworks()
         sampleBindings()
         sampleAttach()
         samplePort()
-    }
-
-    private func sampleBundle() {
-        guard let bundleId = Bundle.main.bundleIdentifier?.lowercased() else {
-            flag(1); return
-        }
-        let allowed = Self.bundleAllowed.map { Self.s($0).lowercased() }
-        if !allowed.contains(where: { bundleId.contains($0) }) {
-            flag(2)
-        }
     }
 
     private func sampleStorage() {

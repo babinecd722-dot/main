@@ -1164,10 +1164,41 @@ public final class AorusPluginSandbox {
             stateLock.unlock()
             guard listening else { return }
         }
+        // A bounded backlog. A handler slower than the events reaching it collected their
+        // payloads without end, and `stop` waited behind every one of them. Past the limit an
+        // event is dropped and the console says how many were; once the plugin is stopping,
+        // nothing more is queued and what is queued is not delivered.
+        stateLock.lock()
+        guard !retiring else {
+            stateLock.unlock()
+            return
+        }
+        guard queuedEvents < AorusPluginSandbox.queuedEventLimit else {
+            droppedEvents += 1
+            stateLock.unlock()
+            return
+        }
+        queuedEvents += 1
+        stateLock.unlock()
         queue.async {
+            self.stateLock.lock()
+            self.queuedEvents -= 1
+            let dropped = self.droppedEvents
+            self.droppedEvents = 0
+            let stopping = self.retiring
+            self.stateLock.unlock()
+            guard !stopping else { return }
+            if dropped > 0 {
+                self.record(.warn, "\(dropped) events were dropped: the plugin was not keeping up with them")
+            }
             self.deliver(event: event, payload: payload)
         }
     }
+
+    /// Events waiting on the plugin's queue at most; see `dispatch`.
+    public static let queuedEventLimit = 256
+    private var queuedEvents = 0
+    private var droppedEvents = 0
 
     private func deliver(event: String, payload: [String: Any]?) {
         // No `isHung` here on purpose. A timeout means one synchronous call was slow; it

@@ -28,8 +28,17 @@ public final class AorusPluginSiteIcons {
 
     private let queue = DispatchQueue(label: "aorusgram.plugins.siteIcons", qos: .utility)
     private let lock = NSLock()
-    private var memory: [String: UIImage] = [:]
+    /// Decoded tiles. A cache the system empties under memory pressure, with a limit of its
+    /// own: a dictionary kept every tile of every site ever looked at for the life of the app.
+    private let memory: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 128
+        cache.totalCostLimit = 12 * 1024 * 1024
+        return cache
+    }()
     private var inFlight: Set<String> = []
+    /// Failed sites wait before the next try; entries older than the wait are dropped as new
+    /// ones come in, so this stays as small as the number of sites failing now.
     private var failedAt: [String: Date] = [:]
     private let directory: URL
     private let session: URLSession
@@ -58,23 +67,22 @@ public final class AorusPluginSiteIcons {
     /// fetched, and `aorusgram.plugins.integrationsChanged` is posted once it is.
     public func icon(for url: URL) -> UIImage? {
         guard let key = Self.key(for: url) else { return nil }
-        lock.lock()
-        if let image = memory[key] {
-            lock.unlock()
+        if let image = memory.object(forKey: key as NSString) {
             refreshIfStale(url, key: key)
             return image
         }
-        lock.unlock()
         let file = fileURL(for: key)
         if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
-            lock.lock()
-            memory[key] = image
-            lock.unlock()
+            memory.setObject(image, forKey: key as NSString, cost: Self.cost(of: image))
             refreshIfStale(url, key: key)
             return image
         }
         fetch(url, key: key)
         return nil
+    }
+
+    private static func cost(of image: UIImage) -> Int {
+        return Int(image.size.width * image.scale * image.size.height * image.scale * 4)
     }
 
     static func key(for url: URL) -> String? {
@@ -112,14 +120,16 @@ public final class AorusPluginSiteIcons {
             let tile = self.resolve(pageURL).flatMap(Self.makeTile)
             self.lock.lock()
             self.inFlight.remove(key)
-            if tile == nil { self.failedAt[key] = Date() }
+            if tile == nil {
+                let now = Date()
+                self.failedAt = self.failedAt.filter { now.timeIntervalSince($0.value) < Self.retryAfterFailure }
+                self.failedAt[key] = now
+            }
             self.lock.unlock()
             guard let tile, let data = tile.pngData() else { return }
             try? FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
             try? data.write(to: self.fileURL(for: key), options: .atomic)
-            self.lock.lock()
-            self.memory[key] = tile
-            self.lock.unlock()
+            self.memory.setObject(tile, forKey: key as NSString, cost: Self.cost(of: tile))
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: Notification.Name("aorusgram.plugins.integrationsChanged"), object: nil)
             }
@@ -216,19 +226,18 @@ public final class AorusPluginSiteIcons {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         let semaphore = DispatchSemaphore(value: 0)
-        var result: (Data, URL)?
-        let task = session.dataTask(with: request) { data, response, _ in
-            defer { semaphore.signal() }
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let data, !data.isEmpty, data.count <= limit else { return }
-            result = (data, http.url ?? url)
-        }
+        // The limit holds while the body arrives, not after: a site answering with far more
+        // than an icon is cut off at the limit instead of being read into memory whole first.
+        let receiver = AorusPluginSiteIconReceiver(limit: limit) { semaphore.signal() }
+        let task = session.dataTask(with: request)
+        task.delegate = receiver
         task.resume()
         if semaphore.wait(timeout: .now() + 20) == .timedOut {
             task.cancel()
             return nil
         }
-        return result
+        guard let data = receiver.result, !data.isEmpty else { return nil }
+        return (data, receiver.finalURL ?? url)
     }
 
     // MARK: - The tile
@@ -431,5 +440,72 @@ private final class AorusPluginSiteIconRedirects: NSObject, URLSessionTaskDelega
             return
         }
         completionHandler(request)
+    }
+}
+
+/// One icon download, read up to a limit. A response that says it is larger, or grows past it,
+/// is cancelled at once. Redirects are still decided by the session's own delegate.
+private final class AorusPluginSiteIconReceiver: NSObject, URLSessionDataDelegate {
+    private let limit: Int
+    private let done: () -> Void
+    private let lock = NSLock()
+    private var data = Data()
+    private var failed = false
+    private var finished = false
+    private var url: URL?
+
+    init(limit: Int, done: @escaping () -> Void) {
+        self.limit = limit
+        self.done = done
+    }
+
+    var result: Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return failed ? nil : data
+    }
+
+    var finalURL: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return url
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              http.expectedContentLength <= Int64(limit) else {
+            lock.lock()
+            failed = true
+            lock.unlock()
+            completionHandler(.cancel)
+            return
+        }
+        lock.lock()
+        url = http.url
+        lock.unlock()
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+        lock.lock()
+        let exceeded = data.count + chunk.count > limit
+        if exceeded {
+            failed = true
+        } else {
+            data.append(chunk)
+        }
+        lock.unlock()
+        if exceeded {
+            dataTask.cancel()
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        if error != nil { failed = true }
+        let alreadyFinished = finished
+        finished = true
+        lock.unlock()
+        if !alreadyFinished { done() }
     }
 }

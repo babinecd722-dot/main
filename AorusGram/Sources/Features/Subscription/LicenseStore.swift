@@ -13,7 +13,14 @@ final class LicenseStore {
     private init() {}
 
     private let lock = NSLock()
+    /// Keychain writes, one at a time and in order. Each writes the snapshot as it stands
+    /// when its turn comes, so an older write can never land after a newer one, and the
+    /// state lock is never held across a Secure Enclave or keychain call -- every feature
+    /// check reads that lock.
+    private let persistQueue = DispatchQueue(label: "com.aorusgram.license.persist")
     private let kcService = "com.aorusgram.license"
+    // One licence covers the whole client, every account signed in to it: there is one
+    // snapshot, and switching accounts keeps it.
     private let kcAccount = "cache_v1"
     private let udTelegramKey = "aorusgram_lic_tg_uid"   // non-sensitive UI/id mirror
 
@@ -34,6 +41,12 @@ final class LicenseStore {
     }
 
     private var snapshotValue: Snapshot?
+    /// The last load could not read the keychain, so nothing is known yet -- which is not
+    /// the same as knowing there is no licence. Loaded again once the device is unlocked.
+    private var loadDeferred = false
+    /// The in-memory verdict has not reached the keychain yet; written again at the next
+    /// chance. A successful activation must not be lost to one refused keychain write.
+    private var persistPending = false
 
     var snapshot: Snapshot? {
         lock.lock()
@@ -41,29 +54,64 @@ final class LicenseStore {
         return snapshotValue
     }
 
+    /// Whether the stored verdict could not be read yet (the device is still locked).
+    var isLoadDeferred: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return loadDeferred
+    }
+
     func load() {
-        guard let stored = readKeychain() else {
+        // Integrity + device binding: a tampered blob, or one lifted from another device, is
+        // ignored. That only forces a fresh online check; the server verdict restores access.
+        // With the device identity itself unreadable nothing can be judged, so nothing is,
+        // and the verdict is read again once the device is unlocked.
+        guard DeviceFingerprint.isIdentityAvailable else {
             lock.lock()
             snapshotValue = nil
+            loadDeferred = true
             lock.unlock()
             return
         }
-        let s = stored.snapshot
-        // Integrity + device binding: a tampered blob, or one lifted from another
-        // device, is ignored. This only forces a fresh online check — it can never
-        // lock out a legitimate user (the server verdict restores access).
-        if s.sig == sign(s), s.deviceHash == DeviceFingerprint.deviceHash() {
+        switch readVerified() {
+        case let .found(snapshot, needsMigration):
             lock.lock()
-            snapshotValue = s
+            snapshotValue = snapshot
+            loadDeferred = false
             lock.unlock()
-            if stored.needsMigration {
-                writeKeychain(s)
+            if needsMigration {
+                persistLatest()
             }
-        } else {
+        case .absent:
             lock.lock()
             snapshotValue = nil
+            loadDeferred = false
+            lock.unlock()
+        case .unavailable:
+            lock.lock()
+            snapshotValue = nil
+            loadDeferred = true
             lock.unlock()
         }
+    }
+
+    /// Loads again what could not be read before, and writes what could not be written.
+    /// Called when the device's protected data becomes available and on returning to the app.
+    /// Returns true when a verdict that was unknown has just been read.
+    @discardableResult
+    func recoverAfterUnlock() -> Bool {
+        lock.lock()
+        let deferred = loadDeferred
+        let pending = persistPending
+        lock.unlock()
+        if deferred {
+            load()
+            return !isLoadDeferred
+        }
+        if pending {
+            persistLatest()
+        }
+        return false
     }
 
     /// Whether a response is a verdict worth remembering.
@@ -87,8 +135,11 @@ final class LicenseStore {
         return until > now
     }
 
-    func save(response: LicenseResponse, telegramUserId: Int64?) {
-        guard Self.isStorableVerdict(response) else { return }
+    /// Stores a verdict. Returns whether it reached the keychain; when it did not, the verdict
+    /// still holds for this launch and is written again at the next chance.
+    @discardableResult
+    func save(response: LicenseResponse, telegramUserId: Int64?) -> Bool {
+        guard Self.isStorableVerdict(response) else { return false }
         lock.lock()
         let snap = Snapshot(
             statusRaw: response.status.rawValue,
@@ -101,10 +152,9 @@ final class LicenseStore {
             elapsedFloor: .start(uptime: LicenseElapsedFloor.currentUptime())
         )
         snapshotValue = snap
-        // Keep the persisted blob in the same order as the in-memory snapshot. A
-        // concurrent account-id update must not be overwritten by an older write.
-        writeKeychain(snap)
+        loadDeferred = false
         lock.unlock()
+        let persisted = persistLatest()
 
         // UI mirror — non-sensitive only.
         let ud = UserDefaults.standard
@@ -124,19 +174,23 @@ final class LicenseStore {
             BadgeSnapshotService.shared.licenseDidBecomeInactive()
             AorusBadge.clearServerBadgeSnapshot()
         }
+        return persisted
     }
 
     func clear() {
         lock.lock()
         let clearedPeerId = snapshotValue?.telegramUserId
         snapshotValue = nil
-        let base: [String: Any] = [
-            kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrService as String: kcService,
-            kSecAttrAccount as String: kcAccount,
-        ]
-        SecItemDelete(base as CFDictionary)
+        persistPending = false
         lock.unlock()
+        persistQueue.sync {
+            let base: [String: Any] = [
+                kSecClass as String:       kSecClassGenericPassword,
+                kSecAttrService as String: kcService,
+                kSecAttrAccount as String: kcAccount,
+            ]
+            SecItemDelete(base as CFDictionary)
+        }
         let ud = UserDefaults.standard
         ud.removeObject(forKey: "aorusgram_lic_status")
         ud.removeObject(forKey: "aorusgram_lic_days_left")
@@ -159,20 +213,20 @@ final class LicenseStore {
     var daysLeft: Int? { snapshot?.daysLeft }
 
     // Persist the Telegram account id independently of the license snapshot, so the
-    // first /license/check, /bootstrap and /activate after login carry the real id.
+    // first /license/check, /bootstrap and /activate after login carry the real id. The
+    // licence is the client's, so the snapshot stays as it is and only records the account.
     func setTelegramUserId(_ id: Int64) {
         guard id != 0 else { return }
         UserDefaults.standard.set(NSNumber(value: id), forKey: udTelegramKey)
         lock.lock()
-        var snap = snapshotValue
-        if snap != nil {
-            snap?.telegramUserId = id
-            snapshotValue = snap
+        guard var snap = snapshotValue, snap.telegramUserId != id else {
+            lock.unlock()
+            return
         }
-        if let snap {
-            writeKeychain(snap)
-        }
+        snap.telegramUserId = id
+        snapshotValue = snap
         lock.unlock()
+        persistLatest()
     }
 
     // Estimated current server time = server anchor + elapsed wall clock since the
@@ -206,10 +260,14 @@ final class LicenseStore {
     /// as the app goes to the background and comes back, not from the checks themselves.
     func recordElapsedFloor() {
         lock.lock()
-        defer { lock.unlock() }
-        guard let current = snapshotWithCurrentFloorLocked(), current.elapsedFloor != snapshotValue?.elapsedFloor else { return }
+        guard let current = snapshotWithCurrentFloorLocked(), current.elapsedFloor != snapshotValue?.elapsedFloor else {
+            lock.unlock()
+            return
+        }
         snapshotValue = current
-        writeKeychain(current)
+        lock.unlock()
+        // Off the caller's thread: this runs as the app goes to the background and returns.
+        persistQueue.async { [weak self] in self?.persistLatestOnQueue() }
     }
 
     /// How long the stored licence still has, in seconds, or nil when there is no active
@@ -285,14 +343,40 @@ final class LicenseStore {
         } ?? ""
     }
 
+    // MARK: - Persistence
+
+    /// Writes the snapshot as it stands now. Returns whether it reached the keychain.
+    @discardableResult
+    private func persistLatest() -> Bool {
+        return persistQueue.sync { persistLatestOnQueue() }
+    }
+
+    @discardableResult
+    private func persistLatestOnQueue() -> Bool {
+        lock.lock()
+        let snap = snapshotValue
+        lock.unlock()
+        guard let snap else { return true }
+        // Never under a stand-in identity: the blob would be bound to a device that is not
+        // this one and refused on the next read.
+        let written = DeviceFingerprint.isIdentityAvailable && writeKeychain(snap)
+        lock.lock()
+        // Pending only if what failed is still what is in memory; a newer write has its own turn.
+        if snapshotValue?.lastCheckWall == snap.lastCheckWall {
+            persistPending = !written
+        }
+        lock.unlock()
+        return written
+    }
+
     // MARK: - Keychain (JSON blob)
 
-    private func writeKeychain(_ snap: Snapshot) {
+    private func writeKeychain(_ snap: Snapshot) -> Bool {
         var s = snap
         s.deviceHash = DeviceFingerprint.deviceHash()
         s.sig = nil
         s.sig = sign(s)            // sign over the canonical fields (incl. deviceHash)
-        guard let data = try? JSONEncoder().encode(s) else { return }
+        guard let data = try? JSONEncoder().encode(s) else { return false }
         // The self-describing envelope, for the same reason the VPN store uses it: `bind`
         // returns plaintext when no Secure Enclave key can be had and the reader cannot
         // tell, so a cache written before the device's first unlock became unreadable for
@@ -313,19 +397,40 @@ final class LicenseStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         let updated = SecItemUpdate(base as CFDictionary, attributes as CFDictionary)
-        if updated == errSecSuccess { return }
+        if updated == errSecSuccess { return true }
         guard updated == errSecItemNotFound else {
             // Something else went wrong. Whatever is stored is still the last thing that
-            // was successfully written, which is better than nothing at all.
-            return
+            // was successfully written, which is better than nothing at all; the caller
+            // keeps the write pending and tries again.
+            return false
         }
         var add = base
         add[kSecValueData as String] = protectedData
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        _ = SecItemAdd(add as CFDictionary, nil)
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
-    private func readKeychain() -> (snapshot: Snapshot, needsMigration: Bool)? {
+    private enum StoredVerdict {
+        case found(Snapshot, needsMigration: Bool)
+        /// Nothing usable is stored: no item, or one that is not this device's or was altered.
+        case absent
+        /// The keychain could not answer (the device has not been unlocked since it booted).
+        case unavailable
+    }
+
+    private func readVerified() -> StoredVerdict {
+        switch readKeychain() {
+        case .unavailable:
+            return .unavailable
+        case .absent:
+            return .absent
+        case let .found(s, needsMigration):
+            guard s.sig == sign(s), s.deviceHash == DeviceFingerprint.deviceHash() else { return .absent }
+            return .found(s, needsMigration: needsMigration)
+        }
+    }
+
+    private func readKeychain() -> StoredVerdict {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,
@@ -334,28 +439,29 @@ final class LicenseStore {
             kSecMatchLimit as String:  kSecMatchLimitOne,
         ]
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return .absent }
+        guard status == errSecSuccess, let data = result as? Data else { return .unavailable }
 
         // The current format says how it was protected, so no guessing is involved.
         if let opened = AorusSeKeyBinder.open(data),
            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: opened) {
-            return (snapshot, false)
+            return .found(snapshot, needsMigration: false)
         }
 
         // Written by a build that wrapped with `bind`: ciphertext, or the plaintext its
         // fallback produced. Both are read here and rewritten in the current format.
         if let unbound = AorusSeKeyBinder.unbind(data),
            let snapshot = try? JSONDecoder().decode(Snapshot.self, from: unbound) {
-            return (snapshot, true)
+            return .found(snapshot, needsMigration: true)
         }
 
         // Older still: no wrapping at all. Accepting it is safe because the snapshot
         // carries its own signature over the device hash — a blob that was tampered with
         // fails that check whatever wrapper it arrived in.
         if let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
-            return (snapshot, true)
+            return .found(snapshot, needsMigration: true)
         }
-        return nil
+        return .absent
     }
 }

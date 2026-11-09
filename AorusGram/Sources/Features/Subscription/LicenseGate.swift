@@ -29,6 +29,18 @@ final class LicenseGate {
     private var telegramUserId: Int64?
     private var bannerShownThisLaunch = false
     private var inFlight = false
+    /// When the `/check` in flight left. One that never answers must not block every later
+    /// check for the rest of the launch.
+    private var inFlightSince: TimeInterval = 0
+    private var inFlightGeneration: UInt64 = 0
+    /// A check was asked for while another, or a trial request, was on its way: it runs as
+    /// soon as that one is done, so the newer question is never simply dropped.
+    private var refreshQueued = false
+    /// The trial request is on its way; a `/check` waits for it rather than racing it.
+    private var bootstrapInFlight = false
+    /// A defaults change since the lock last swept the feature flags.
+    private var defaultsChangedSinceSweep = true
+    private var defaultsObserver: NSObjectProtocol?
     /// Which round of licence traffic is current.
     ///
     /// `inFlight` only stopped a second `refresh()`; it did nothing about the five other
@@ -36,7 +48,9 @@ final class LicenseGate {
     /// after it was a correctly signed answer to its own older question — and it put the
     /// pre-activation `expired` back, locking a user who had just paid. Every write now
     /// carries the generation it was asked in, and anything from an older one is dropped.
-    /// Activation, bootstrap and a change of account all move the generation on.
+    /// Activation and bootstrap move the generation on. A change of account does not: one
+    /// licence covers every account in the client, so the answer still on its way is still
+    /// the client's verdict, and the check with the new id is queued behind it.
     private static var licenseGeneration: UInt64 = 0
     /// Starts a new round and returns its number.
     static func beginLicenseGeneration() -> UInt64 {
@@ -71,7 +85,8 @@ final class LicenseGate {
         guard let id = id, id != 0 else { return }
         guard id != telegramUserId else { return }
         telegramUserId = id
-        // Persist so check/bootstrap/activate keep sending the real id across launches.
+        // Persist so check/bootstrap/activate keep sending the real id across launches. One
+        // licence covers every account in the client, so the verdict itself stays.
         LicenseStore.shared.setTelegramUserId(id)
         if trialAwaitsAccount {
             // Signed in from the trial screen: cover the chat list at once and ask for the
@@ -80,6 +95,8 @@ final class LicenseGate {
             startTrial(telegramUserId: id, from: nil)
             return
         }
+        // A check already on its way is answered first; this one, with the new id, follows it
+        // instead of being dropped (`refresh` queues it).
         if started { refresh() }
     }
 
@@ -112,6 +129,11 @@ final class LicenseGate {
 
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification, object: nil)
+        // Launched before the device was first unlocked (a push, a background fetch), the
+        // keychain could not be read: the licence is unknown, not absent. It is read the
+        // moment the device is unlocked, without waiting for the next launch.
+        NotificationCenter.default.addObserver(self, selector: #selector(protectedDataDidBecomeAvailable),
+                                               name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil)
         // The offline clock's floor is kept as the app leaves, so a restart while it is away
         // costs only the time after that.
         NotificationCenter.default.addObserver(self, selector: #selector(didEnterBackground),
@@ -143,7 +165,7 @@ final class LicenseGate {
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil, queue: .main
         ) { [weak self] _ in
-            self?.presentPurchaseModally()
+            self?.openSubscription()
         }
 
         // Defer so the app's scene/window exists before we draw the overlay.
@@ -171,8 +193,28 @@ final class LicenseGate {
         LicenseStore.shared.recordElapsedFloor()
     }
 
+    @objc private func protectedDataDidBecomeAvailable() {
+        guard started else { return }
+        reconsiderAfterUnlock()
+    }
+
+    /// The stored verdict could not be read before; now that it can, the gate decides on it
+    /// and asks the server. Returns whether it did.
+    @discardableResult
+    private func reconsiderAfterUnlock() -> Bool {
+        guard LicenseStore.shared.recoverAfterUnlock() else { return false }
+        if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
+        let status = LicenseStore.shared.effectiveOfflineStatus()
+        if status.allowsAppAccess {
+            hideLock()
+        }
+        refresh()
+        return true
+    }
+
     @objc private func didBecomeActive() {
         guard started else { return }
+        if reconsiderAfterUnlock() { return }
         LicenseStore.shared.recordElapsedFloor()
         // The licence can simply have run out while the app was away, and asking the
         // network is throttled to once every half hour. Nothing checked the date itself,
@@ -238,17 +280,34 @@ final class LicenseGate {
     // MARK: - Resolution
 
     private func refresh() {
-        guard started, !inFlight else { return }
-        inFlight = true
+        guard started else { return }
+        // A check that has been on its way for longer than any request may take is given up
+        // on: its generation is passed below, so a late answer is dropped.
+        if inFlight, ProcessInfo.processInfo.systemUptime - inFlightSince > SubscriptionConfig.requestDeadline + 5 {
+            inFlight = false
+        }
+        guard !inFlight, !bootstrapInFlight else {
+            refreshQueued = true
+            return
+        }
+        // Under a stand-in identity the server would be asked about another device, and
+        // could answer that this one has no licence. Wait for the device to be unlocked.
+        guard DeviceFingerprint.isIdentityAvailable else { return }
+        refreshQueued = false
         let uid = telegramUserId
         let generation = Self.beginLicenseGeneration()
+        inFlight = true
+        inFlightSince = ProcessInfo.processInfo.systemUptime
+        inFlightGeneration = generation
         LicenseAPIClient.shared.check(telegramUserId: uid) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                self.inFlight = false
+                // The slot is this check's only while no later one has taken it over.
+                if self.inFlightGeneration == generation { self.inFlight = false }
+                defer { self.runQueuedRefresh() }
                 // An answer to a question that has since been superseded — by an
-                // activation, a bootstrap or a change of account — is not the current
-                // verdict, however correctly it is signed.
+                // activation or a bootstrap — is not the current verdict, however correctly
+                // it is signed.
                 guard Self.licenseGenerationIsCurrent(generation) else { return }
                 switch result {
                 case .success(let response):
@@ -266,6 +325,28 @@ final class LicenseGate {
                 }
             }
         }
+    }
+
+    /// After an answer arrives: the check asked for meanwhile goes out now. A superseded
+    /// answer frees the slot too, since the check it belonged to is over.
+    private func runQueuedRefresh() {
+        guard refreshQueued, !inFlight, !bootstrapInFlight else { return }
+        refresh()
+    }
+
+    /// An activation the server granted, checked before anything says it worked.
+    ///
+    /// Activation used to save whatever came back and report success: an "active" with no
+    /// usable dates was refused by the store, the lock stayed, and the screen said "Done".
+    /// Now the verdict must be one the store keeps and must actually open the client; only
+    /// then is it reported as a success. The licence is the client's, whichever account was
+    /// signed in when the key was entered.
+    static func acceptActivation(_ response: LicenseResponse, telegramUserId uid: Int64?) -> Bool {
+        guard response.status.allowsAppAccess, LicenseStore.isStorableVerdict(response) else { return false }
+        _ = beginLicenseGeneration()
+        // Written to the keychain now, or kept in memory and written at the next chance.
+        LicenseStore.shared.save(response: response, telegramUserId: uid ?? shared.telegramUserId)
+        return AorusLicenseAccess.canUnlock
     }
 
     // The license just became active. Start the embedded REALITY core immediately;
@@ -353,8 +434,10 @@ final class LicenseGate {
     /// Ask the server for the trial of this Telegram account. From the welcome screen its
     /// button spins; on arriving from sign-in the loading screen covers the app instead.
     private func startTrial(telegramUserId uid: Int64, from vc: TrialWelcomeController?) {
-        // A `/check` already on its way was asked without this request in mind.
-        _ = Self.beginLicenseGeneration()
+        // A `/check` already on its way was asked without this request in mind; one asked
+        // while this is on its way waits for it (`refresh`).
+        let generation = Self.beginLicenseGeneration()
+        bootstrapInFlight = true
         let fromSignIn = vc == nil
         if let vc {
             vc.setLoading(true)
@@ -365,9 +448,18 @@ final class LicenseGate {
         LicenseAPIClient.shared.bootstrap(telegramUserId: uid) { [weak self, weak vc] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                self.bootstrapInFlight = false
                 vc?.setLoading(false)
+                defer { self.runQueuedRefresh() }
+                // Superseded by an activation while on its way.
+                guard Self.licenseGenerationIsCurrent(generation) else { return }
                 switch result {
                 case .success(let response):
+                    guard LicenseStore.isStorableVerdict(response) else {
+                        if fromSignIn { self.showTrialWelcome() }
+                        self.presentAlert(SubL10n.errActivateRetry)
+                        return
+                    }
                     _ = Self.beginLicenseGeneration()
                     LicenseStore.shared.save(response: response, telegramUserId: uid)
                     if response.status.allowsAppAccess {
@@ -594,6 +686,15 @@ final class LicenseGate {
 
     private func startLockSweep() {
         guard lockSweepTimer == nil else { return }
+        // The flags only need sweeping after something changed them. Walking every default
+        // once a second for as long as the lock lasts cost a full read of the store each time
+        // and woke the main thread for nothing.
+        defaultsChangedSinceSweep = true
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.defaultsChangedSinceSweep = true
+        }
         lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             let ud = UserDefaults.standard
             guard !AorusLicenseAccess.canUnlock else { return }
@@ -604,6 +705,8 @@ final class LicenseGate {
                 window.isUserInteractionEnabled = true
                 if window.isHidden { window.isHidden = false }
             }
+            guard self.defaultsChangedSinceSweep else { return }
+            self.defaultsChangedSinceSweep = false
             var backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) ?? [:]
             var changed = false
             for (key, _) in self.aorusBooleanFlags(in: ud) {
@@ -623,6 +726,10 @@ final class LicenseGate {
     private func stopLockSweep() {
         lockSweepTimer?.invalidate()
         lockSweepTimer = nil
+        if let defaultsObserver {
+            NotificationCenter.default.removeObserver(defaultsObserver)
+            self.defaultsObserver = nil
+        }
     }
 
     private func makeNav(_ root: UIViewController) -> UINavigationController {
@@ -683,6 +790,40 @@ final class LicenseGate {
                 self?.presentPurchaseModally()
             }
         }
+    }
+
+    /// The AorusGram entry and its Subscription row.
+    ///
+    /// With a licence that opens the client this is the management screen, a sheet that
+    /// closes like any other. Without one the client is not to be used: this used to open
+    /// the same management sheet -- "Subscription active", over a client whose features were
+    /// all off -- with a close button that led straight back into it. What opens now is the
+    /// lock the gate shows for that state, which nothing closes but a key or a purchase.
+    private func openSubscription() {
+        if AorusLicenseAccess.canUnlock {
+            if !AorusLicenseAccess.isAllowed { hideLock() }
+            presentPurchaseModally()
+            return
+        }
+        dismissModal()
+        setFeatureAccess(active: false)
+        switch LicenseStore.shared.effectiveOfflineStatus() {
+        case .clientOutdated:
+            showOutdated()
+        case .banned:
+            showExpired(banned: true)
+        case .trialActive, .paidActive:
+            // The licence is valid; it is this device the client refuses (an injected
+            // library, a debugger). Telling the user the subscription ended would be false.
+            showExpired(banned: true)
+        case .expired:
+            showExpired(banned: false)
+        case .notStarted:
+            showLoading()
+        case .networkError:
+            showConnection()
+        }
+        refresh()
     }
 
     // MARK: - Active-mode purchase/activate (own window over the running app)

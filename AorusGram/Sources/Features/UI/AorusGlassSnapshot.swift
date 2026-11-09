@@ -74,7 +74,10 @@ public enum AorusGlassSnapshot {
         weak var window: UIWindow?
         let host: UIView
         let picture: UIImageView
-        let source: UIImage
+        /// The whole window's photograph. Needed only until the app is in the background, for
+        /// re-cuts; held after that it was a full-screen image kept for as long as the app was
+        /// away, on top of the pictures themselves.
+        var source: UIImage?
         var rect: CGRect
 
         init(pane: UIView, window: UIWindow, host: UIView, picture: UIImageView,
@@ -108,6 +111,13 @@ public enum AorusGlassSnapshot {
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             self.refit()
             self.reveal()
+            // The last re-cut is done: the photographs have served their purpose.
+            self.releaseSources()
+        }
+        // Under memory pressure the photographs go at once; a later re-cut then simply keeps
+        // the picture it has.
+        center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
+            self.releaseSources()
         }
         // Live again the moment the app is on its way back, not only once it is active: a
         // passcode or Face ID prompt on return can keep it inactive for a while, and the
@@ -186,8 +196,8 @@ public enum AorusGlassSnapshot {
                 entry.picture.removeFromSuperview()
                 continue
             }
-            if !rect.equalTo(entry.rect) {
-                guard let cropped = self.crop(entry.source, to: rect) else {
+            if !rect.equalTo(entry.rect), let source = entry.source {
+                guard let cropped = self.crop(source, to: rect) else {
                     entry.picture.image = nil
                     entry.picture.removeFromSuperview()
                     continue
@@ -202,6 +212,12 @@ public enum AorusGlassSnapshot {
             kept.append(entry)
         }
         self.frozen = kept
+    }
+
+    private static func releaseSources() {
+        for entry in self.frozen {
+            entry.source = nil
+        }
     }
 
     /// Where a pane is, in its window, clipped to what is on screen.

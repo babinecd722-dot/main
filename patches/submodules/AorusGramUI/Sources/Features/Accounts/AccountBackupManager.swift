@@ -255,14 +255,27 @@ public final class AccountBackupManager {
             return .failure(localized("Бэкап слишком большой", "Backup is too large"))
         }
 
-        let key = loadKey() ?? SymmetricKey(size: .bits256)
-
         // The key is committed BEFORE the archive, and never by deleting the live one. The old
         // order wrote the archive over the previous one first and, if the key then failed to
         // save, deleted the archive it had just written — so a failed backup destroyed the
         // working backup and, because saveKey deleted before it added, could destroy the key
         // that made the Keychain copy readable as well.
-        guard saveKey(key) else {
+        //
+        // A key the keychain could not hand over is not a missing one. Treating a failed read
+        // as "no key" made a new key and wrote it over the old, so a backup that then failed
+        // left the previous one with no key to open it. A new key is made only when there is
+        // genuinely none, and it is added, never written over anything.
+        let key: SymmetricKey
+        switch readKey() {
+        case let .found(existing):
+            key = existing
+        case .missing:
+            let fresh = SymmetricKey(size: .bits256)
+            guard addKey(fresh) else {
+                return .failure(localized("Не удалось сохранить ключ в Keychain", "Failed to save key in Keychain"))
+            }
+            key = fresh
+        case .unavailable:
             return .failure(localized("Не удалось сохранить ключ в Keychain", "Failed to save key in Keychain"))
         }
 
@@ -626,38 +639,57 @@ public final class AccountBackupManager {
         }
 
         // Snapshot whatever currently occupies those top-level slots, so a failed
-        // or unwanted restore stays recoverable.
-        let snapshot = URL(fileURLWithPath: rootPath)
-            .appendingPathComponent(snapshotPrefix + String(Int(Date().timeIntervalSince1970)))
-        try? fm.createDirectory(at: snapshot, withIntermediateDirectories: true)
+        // or unwanted restore stays recoverable. Everything goes aside before anything new
+        // comes in; if any of it cannot, the restore does not happen and what was moved goes
+        // back -- an unrecorded failure here used to leave a restore with no way back.
+        let root = URL(fileURLWithPath: rootPath)
+        let snapshot = root.appendingPathComponent(snapshotPrefix + String(Int(Date().timeIntervalSince1970)))
+        do {
+            try fm.createDirectory(at: snapshot, withIntermediateDirectories: true)
+        } catch {
+            try? fm.removeItem(at: staging)
+            return
+        }
+        var setAside: [String] = []
         for name in staged {
-            let current = URL(fileURLWithPath: rootPath).appendingPathComponent(name)
-            if fm.fileExists(atPath: current.path) {
-                try? fm.moveItem(at: current, to: snapshot.appendingPathComponent(name))
+            let current = root.appendingPathComponent(name)
+            guard fm.fileExists(atPath: current.path) else { continue }
+            do {
+                try fm.moveItem(at: current, to: snapshot.appendingPathComponent(name))
+                setAside.append(name)
+            } catch {
+                for moved in setAside.reversed() {
+                    try? fm.moveItem(at: snapshot.appendingPathComponent(moved), to: root.appendingPathComponent(moved))
+                }
+                try? fm.removeItem(at: staging)
+                return
             }
         }
 
+        var placed: [String] = []
         var allMoved = true
         for name in staged {
             let src = staging.appendingPathComponent(name)
-            let dst = URL(fileURLWithPath: rootPath).appendingPathComponent(name)
+            let dst = root.appendingPathComponent(name)
             do {
                 try fm.moveItem(at: src, to: dst)
+                placed.append(name)
             } catch {
                 allMoved = false
+                break
             }
         }
         try? fm.removeItem(at: staging)
 
         if !allMoved {
-            // Roll back from the snapshot.
-            for name in staged {
-                let dst = URL(fileURLWithPath: rootPath).appendingPathComponent(name)
-                let snap = snapshot.appendingPathComponent(name)
-                if fm.fileExists(atPath: snap.path) {
-                    try? fm.removeItem(at: dst)
-                    try? fm.moveItem(at: snap, to: dst)
-                }
+            // Roll back: everything the restore put in goes, including slots that were empty
+            // before (they have no snapshot, and used to be left behind), and what was set
+            // aside comes back.
+            for name in placed {
+                try? fm.removeItem(at: root.appendingPathComponent(name))
+            }
+            for name in setAside {
+                try? fm.moveItem(at: snapshot.appendingPathComponent(name), to: root.appendingPathComponent(name))
             }
         }
     }
@@ -985,28 +1017,29 @@ public final class AccountBackupManager {
     // is never deleted to be rewritten: an unchanged key is left alone, and a changed one is
     // updated in place. The old delete-then-add lost the key outright whenever the add failed,
     // taking the archive on disk and every Keychain chunk of the previous backup with it.
-    private func saveKey(_ key: SymmetricKey) -> Bool {
-        if let existing = loadKey(), existing == key { return true }
+    /// Adds a new key where there was none. Never replaces one: if another appeared meanwhile,
+    /// that one stands and the backup fails rather than orphan what it encrypts.
+    private func addKey(_ key: SymmetricKey) -> Bool {
         let data = key.withUnsafeBytes { Data($0) }
-        let query: [String: Any] = [
+        let add: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainKeyName,
-        ]
-        let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
-        let updated = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updated == errSecSuccess { return true }
-        guard updated == errSecItemNotFound else { return false }
-        var add = query
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
-    private func loadKey() -> SymmetricKey? {
+    private enum KeyRead {
+        case found(SymmetricKey)
+        /// The keychain is sure there is no key.
+        case missing
+        /// The keychain could not answer, or holds something that is not a key.
+        case unavailable
+    }
+
+    private func readKey() -> KeyRead {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -1015,10 +1048,16 @@ public final class AccountBackupManager {
             kSecMatchLimit as String:  kSecMatchLimitOne,
         ]
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data, data.count == 32 else { return nil }
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return .missing }
+        guard status == errSecSuccess, let data = result as? Data, data.count == 32 else { return .unavailable }
         hardenKeychainAccessibility(keychainKeyName)
-        return SymmetricKey(data: data)
+        return .found(SymmetricKey(data: data))
+    }
+
+    private func loadKey() -> SymmetricKey? {
+        if case let .found(key) = readKey() { return key }
+        return nil
     }
 
     private func deleteKey() {

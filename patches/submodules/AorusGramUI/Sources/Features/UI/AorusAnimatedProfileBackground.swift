@@ -1496,7 +1496,15 @@ private enum AorusAnimatedProfileMediaProcessor {
                 frameIndex += 1
             }
         }
-        semaphore.wait()
+        // A writer that fails without asking for more data never reaches either signal above;
+        // the conversion is given up after a bounded wait instead of blocking for good.
+        if semaphore.wait(timeout: .now() + 120) == .timedOut {
+            writingQueue.sync {
+                appendFailed = true
+                writer.cancelWriting()
+            }
+            return .failure(AorusAnimatedProfileMediaError.conversion)
+        }
 
         guard !appendFailed, writer.status == .completed else {
             return .failure(writer.error ?? AorusAnimatedProfileMediaError.conversion)

@@ -122,8 +122,10 @@ def patch(tg: Path, native: str, redirects: str) -> str:
                 let delivered: Bool
                 if case let .gift(peerId) = self.purpose {
                     // Stars for a friend are bought, not taken from one's own balance: the
-                    // friend's chat gets Telegram's gift message and the balance stays.
-                    delivered = AorusFakeGiftsStore.recordLocalStarsGiftMessage(account: self.context.account, recipientPeerId: peerId, count: product.count, currency: localPack.currency, amount: localPack.amount)
+                    // friend's chat gets Telegram's gift message, the history lists the
+                    // purchase under the friend as Telegram's "Sent Gift", and the balance stays.
+                    let historyTitle = self.context.sharedContext.currentPresentationData.with { $0 }.strings.Stars_Gift_Sent_Title
+                    delivered = AorusFakeGiftsStore.recordLocalStarsGiftMessage(account: self.context.account, recipientPeerId: peerId, count: product.count, currency: localPack.currency, amount: localPack.amount, historyTitle: historyTitle)
                 } else {
                     delivered = AorusFakeStarsStore.topUp(accountPeerId: self.context.account.peerId, count: product.count)
                 }

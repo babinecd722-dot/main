@@ -31,6 +31,12 @@ public final class AntiScreenshotManager {
     private weak var protectedRootView: UIView?
     private weak var originalSuperlayer: CALayer?
     private var retryCount = 0
+    /// While the app is in front: the protection is checked once a second. The checks at the
+    /// moments the app returns were not enough -- iOS can rebuild the field's layers later, on
+    /// a layout pass or when the root view controller is replaced with no lifecycle event at
+    /// all, and the app then stayed frozen on screen until the next return. The check is a
+    /// walk up a handful of layers.
+    private var integrityTimer: Timer?
 
     // MARK: - Lifecycle
 
@@ -50,7 +56,10 @@ public final class AntiScreenshotManager {
                        name: UIApplication.didBecomeActiveNotification, object: nil)
         nc.addObserver(self, selector: #selector(appDidBecomeActive),
                        name: UIApplication.willEnterForegroundNotification, object: nil)
+        nc.addObserver(self, selector: #selector(appWillResignActive),
+                       name: UIApplication.willResignActiveNotification, object: nil)
         retryCount = 0
+        startIntegrityTimer()
         // A settings toggle happens with an existing key window, so install in
         // the same run-loop turn. The bounded retry remains for early startup.
         verifyAndInstall()
@@ -66,6 +75,7 @@ public final class AntiScreenshotManager {
         guard isEnabled || protectedField != nil || brandingWindow != nil else { return }
         isEnabled = false
         NotificationCenter.default.removeObserver(self)
+        stopIntegrityTimer()
         // Remove the secure canvas immediately. Deferring this to the next
         // run-loop turn made the switch appear unreliable and could leave a
         // stale installation owned by an earlier module singleton.
@@ -93,6 +103,26 @@ public final class AntiScreenshotManager {
         for delay in [0.0, 0.35, 1.2] {
             scheduleVerify(delay: delay)
         }
+        startIntegrityTimer()
+    }
+
+    @objc private func appWillResignActive() {
+        stopIntegrityTimer()
+    }
+
+    private func startIntegrityTimer() {
+        guard integrityTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.verifyAndInstall()
+        }
+        timer.tolerance = 0.25
+        RunLoop.main.add(timer, forMode: .common)
+        integrityTimer = timer
+    }
+
+    private func stopIntegrityTimer() {
+        integrityTimer?.invalidate()
+        integrityTimer = nil
     }
 
     // MARK: - Install / verify
@@ -221,11 +251,18 @@ public final class AntiScreenshotManager {
 
     // MARK: - Helpers
 
+    /// The app's own window. A licence or purchase sheet is a window of its own above it and
+    /// can be the key one while it is up; protecting that sheet instead left the chats behind it
+    /// open to capture, and the protection moved back and forth as the sheet came and went.
     private func findKeyWindow() -> UIWindow? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let active = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
         guard let scene = active else { return nil }
-        return scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
+        let appWindows = scene.windows.filter { $0.windowLevel == .normal && $0.rootViewController != nil && $0 !== brandingWindow }
+        return appWindows.first(where: { $0.isKeyWindow })
+            ?? appWindows.first
+            ?? scene.windows.first(where: { $0.isKeyWindow })
+            ?? scene.windows.first
     }
 
     private func makeBrandingView(frame: CGRect) -> UIView {

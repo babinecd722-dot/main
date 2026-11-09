@@ -376,7 +376,11 @@ public final class AorusPluginRuntimeManager {
 
     /// `threadId` and `replyTo` are where the typed message was going, for a command that
     /// answers later to answer there.
-    public func processOutgoing(text: String, peerId: Int64, accountId: Int64, threadId: Int64? = nil, replyTo: EngineMessageReplySubject? = nil) -> AorusPluginOutgoingVerdict {
+    ///
+    /// `deadline` is shared by every message of one send: a batch of messages waits on plugins
+    /// a tenth of a second in all, not a tenth of a second each. Without one, this message has
+    /// its own tenth.
+    public func processOutgoing(text: String, peerId: Int64, accountId: Int64, threadId: Int64? = nil, replyTo: EngineMessageReplySubject? = nil, deadline sharedDeadline: Date? = nil) -> AorusPluginOutgoingVerdict {
         guard AorusPluginEntitlement.isAllowed else { return .passThrough }
         let outgoing = AorusPluginOutgoingContext(
             peerId: peerId,
@@ -388,7 +392,7 @@ public final class AorusPluginRuntimeManager {
         let active = Array(sandboxes.values)
         lock.unlock()
         var replacement = text
-        let deadline = Date().addingTimeInterval(0.1)
+        let deadline = sharedDeadline ?? Date().addingTimeInterval(0.1)
         // Only a plugin this text means something to is asked: one with a `send` handler, or
         // one whose command it is. Every other message goes out without waiting on anyone.
         for sandbox in active where sandbox.wantsOutgoing(replacement) {

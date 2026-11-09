@@ -24,6 +24,31 @@ public final class AorusAIStore {
 
     private init() {}
 
+    /// Upserts that have not reached the queue yet: the newest copy of each conversation, and
+    /// every caller's completion. A conversation saved again and again while its answer streams
+    /// in is written once per turn of the queue, not once per save -- each write reads, decrypts
+    /// and rewrites the whole history, so queued saves of one conversation used to repeat all
+    /// of that for copies that were already out of date.
+    private struct PendingUpserts {
+        /// Which turn of the queue this batch belongs to; see `upsert`.
+        let batch = UUID()
+        var conversations: [UUID: AorusAIConversation] = [:]
+        var order: [UUID] = []
+        var completions: [(Bool) -> Void] = []
+    }
+    private let pendingLock = NSLock()
+    private var pendingUpserts: [Int64: PendingUpserts] = [:]
+
+    /// The batch waiting for this account -- only the one named, when a batch is named: a turn
+    /// of the queue scheduled for one batch must not take a later one, which belongs after
+    /// whatever save or delete was queued in between.
+    private func takePendingUpserts(accountId: Int64, batch: UUID? = nil) -> PendingUpserts? {
+        pendingLock.lock()
+        defer { pendingLock.unlock() }
+        if let batch, pendingUpserts[accountId]?.batch != batch { return nil }
+        return pendingUpserts.removeValue(forKey: accountId)
+    }
+
     public func load(accountId: Int64, completion: @escaping ([AorusAIConversation]) -> Void) {
         queue.async {
             let result: [AorusAIConversation]
@@ -47,7 +72,10 @@ public final class AorusAIStore {
     /// decode the entire file purely to ask whether it was corrupt, then throw the answer
     /// away and overwrite it regardless.
     public func save(_ conversations: [AorusAIConversation], accountId: Int64, completion: ((Bool) -> Void)? = nil) {
+        // Upserts asked for before this go before it, as they always did.
+        let pending = takePendingUpserts(accountId: accountId)
         queue.async {
+            if let pending { self.applyUpserts(pending, accountId: accountId) }
             let result = self.write(conversations, accountId: accountId)
             DispatchQueue.main.async {
                 if result {
@@ -59,43 +87,71 @@ public final class AorusAIStore {
     }
 
     public func upsert(_ conversation: AorusAIConversation, accountId: Int64, completion: ((Bool) -> Void)? = nil) {
+        pendingLock.lock()
+        let scheduled = pendingUpserts[accountId] != nil
+        var pending = pendingUpserts[accountId] ?? PendingUpserts()
+        if pending.conversations.updateValue(conversation, forKey: conversation.id) == nil {
+            pending.order.append(conversation.id)
+        }
+        if let completion { pending.completions.append(completion) }
+        pendingUpserts[accountId] = pending
+        let batch = pending.batch
+        pendingLock.unlock()
+        // One turn of the queue takes every upsert of its batch waiting by then.
+        guard !scheduled else { return }
         queue.async {
-            var conversations: [AorusAIConversation]
-            switch self.read(accountId: accountId) {
-            case .missing:
-                conversations = []
-            case let .conversations(value):
-                conversations = value
-            case .unavailable:
-                // The history is there and cannot be read at this moment. Writing now would
-                // replace everything the user has with this one conversation, so the save is
-                // abandoned instead. The caller keeps its copy in memory and will try again.
-                DispatchQueue.main.async { completion?(false) }
-                return
-            case .corrupt:
-                // Genuinely undecodable: moved aside so a new store can be started, rather
-                // than bricking history forever.
-                self.quarantineUnreadable(accountId: accountId)
-                conversations = []
+            if let pending = self.takePendingUpserts(accountId: accountId, batch: batch) {
+                self.applyUpserts(pending, accountId: accountId)
             }
+        }
+    }
+
+    /// On the queue: one read, every waiting upsert, one write.
+    private func applyUpserts(_ pending: PendingUpserts, accountId: Int64) {
+        let finish: (Bool) -> Void = { result in
+            DispatchQueue.main.async {
+                if result {
+                    NotificationCenter.default.post(name: Self.changedNotification, object: NSNumber(value: accountId))
+                }
+                for completion in pending.completions { completion(result) }
+            }
+        }
+        var conversations: [AorusAIConversation]
+        switch self.read(accountId: accountId) {
+        case .missing:
+            conversations = []
+        case let .conversations(value):
+            conversations = value
+        case .unavailable:
+            // The history is there and cannot be read at this moment. Writing now would
+            // replace everything the user has with these conversations, so the save is
+            // abandoned instead. The callers keep their copies in memory and will try again.
+            finish(false)
+            return
+        case .corrupt:
+            // Genuinely undecodable: moved aside so a new store can be started, rather
+            // than bricking history forever.
+            self.quarantineUnreadable(accountId: accountId)
+            conversations = []
+        }
+        for id in pending.order {
+            guard let conversation = pending.conversations[id] else { continue }
             if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
                 conversations[index] = conversation
             } else {
                 conversations.append(conversation)
             }
-            conversations.sort { $0.updatedAt > $1.updatedAt }
-            let result = self.write(conversations, accountId: accountId)
-            DispatchQueue.main.async {
-                if result {
-                    NotificationCenter.default.post(name: Self.changedNotification, object: NSNumber(value: accountId))
-                }
-                completion?(result)
-            }
         }
+        conversations.sort { $0.updatedAt > $1.updatedAt }
+        finish(self.write(conversations, accountId: accountId))
     }
 
     public func delete(conversationId: UUID, accountId: Int64, completion: ((Bool) -> Void)? = nil) {
+        // Upserts asked for before the delete land before it, so a later upsert of the same
+        // conversation still follows it, as it always did.
+        let pending = takePendingUpserts(accountId: accountId)
         queue.async {
+            if let pending { self.applyUpserts(pending, accountId: accountId) }
             let conversations: [AorusAIConversation]
             switch self.read(accountId: accountId) {
             case .missing:

@@ -40,12 +40,30 @@ public final class AorusConnectionPreferences {
     private let lock = NSLock()
     private var cached: Stored
 
+    private static let defaults = Stored(bypass: true, stableCalls: true, autoSwitch: true)
+
     private init() {
         // Both default to on: that is the behaviour every existing install already has, and a
         // fresh install has nothing to migrate.
-        let loaded = Self.readKeychain() ?? Stored(bypass: true, stableCalls: true, autoSwitch: true)
-        self.cached = loaded
-        Self.writeMirror(loaded)
+        switch Self.readKeychain() {
+        case let .found(loaded):
+            self.cached = loaded
+            Self.writeMirror(loaded)
+        case .missing:
+            self.cached = Self.defaults
+            Self.writeMirror(Self.defaults)
+        case .unavailable:
+            // A launch before the device's first unlock cannot read the keychain. That is not a
+            // fresh install: the defaults would turn a bypass the user switched off back on.
+            // The mirror holds the last choice that was in force, so it stands until the
+            // keychain can be read, which happens as soon as the device is unlocked.
+            self.cached = Self.mirrorState() ?? Self.defaults
+            _ = NotificationCenter.default.addObserver(
+                forName: Notification.Name("UIApplicationProtectedDataDidBecomeAvailable"), object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.reloadFromStorage()
+            }
+        }
     }
 
     /// "Режим без VPN": the master switch for the built-in bypass. Off means the client never
@@ -86,7 +104,16 @@ public final class AorusConnectionPreferences {
     /// Reads the switches again from the keychain, which a settings load has just replaced, and
     /// puts them in force: the mirror is rewritten and the change announced as any other.
     func reloadFromStorage() {
-        let loaded = Self.readKeychain() ?? Stored(bypass: true, stableCalls: true, autoSwitch: true)
+        let loaded: Stored
+        switch Self.readKeychain() {
+        case let .found(value):
+            loaded = value
+        case .missing:
+            loaded = Self.defaults
+        case .unavailable:
+            // Still locked: what is in force stays.
+            return
+        }
         self.lock.lock()
         let changed = loaded != self.cached
         self.cached = loaded
@@ -123,17 +150,34 @@ public final class AorusConnectionPreferences {
         ]
     }
 
-    private static func readKeychain() -> Stored? {
+    private enum Read {
+        case found(Stored)
+        /// Nothing stored, or nothing this type can read: the defaults apply.
+        case missing
+        /// The keychain could not answer.
+        case unavailable
+    }
+
+    private static func readKeychain() -> Read {
         var query = keychainQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let decoded = try? JSONDecoder().decode(Stored.self, from: data) else {
-            return nil
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound { return .missing }
+        guard status == errSecSuccess else { return .unavailable }
+        guard let data = item as? Data, let decoded = try? JSONDecoder().decode(Stored.self, from: data) else {
+            return .missing
         }
-        return decoded
+        return .found(decoded)
+    }
+
+    /// The switches as the mirror last recorded them, when it has.
+    private static func mirrorState() -> Stored? {
+        guard let store = UserDefaults(suiteName: suiteName),
+              let bypass = store.object(forKey: bypassMirrorKey) as? Bool,
+              let stableCalls = store.object(forKey: stableCallsMirrorKey) as? Bool else { return nil }
+        return Stored(bypass: bypass, stableCalls: stableCalls, autoSwitch: nil)
     }
 
     private static func writeKeychain(_ value: Stored) {

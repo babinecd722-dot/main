@@ -270,9 +270,12 @@ def main() -> int:
     rejection_start = proxy.find("private func handleProvisioningRejection(")
     rejection_end = proxy.find("private func finish(", rejection_start)
     rejection_block = proxy[rejection_start:rejection_end]
+    # The clearing is tied to the refresh the rejection answers (`onlyIfGeneration:`), so a
+    # late rejection cannot tear down a newer tunnel; it still clears, still fails closed and
+    # still retries only under the licence.
     for marker in (
-        "clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)",
-        "if licenseAllowsReality",
+        "clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false, onlyIfGeneration: generation)",
+        "licenseAllowsReality",
         "scheduleProvisioningRetry()",
     ):
         if marker not in rejection_block:

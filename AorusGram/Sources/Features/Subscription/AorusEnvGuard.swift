@@ -32,6 +32,8 @@ enum AorusEnvGuard {
     private static var nextFeatureProbe: TimeInterval = 0
     private static var featurePermit = true
     private static var featureEvidenceRecorded = false
+    private static var scannedImageCount: UInt32 = 0
+    private static var imagesFlagged = false
         private static let runtimeData: [[UInt8]] = [
         [0xa4, 0x30, 0xd4, 0x15, 0xe2, 0x59, 0x0e, 0xb4, 0x7c, 0xa1, 0x78],
         [0xa4, 0x30, 0xd4, 0x15, 0xea, 0x40, 0x10, 0xb9, 0x74, 0xb6, 0x6f, 0x0c, 0xc5, 0x4f, 0xdd, 0x28, 0xa1, 0x13, 0xff, 0x39, 0xdd, 0x57, 0x0c, 0xb9, 0x7e, 0xb6],
@@ -145,7 +147,7 @@ enum AorusEnvGuard {
             return allowed
         }
         nextFeatureProbe = now + 1.0
-        featurePermit = featurePermit && !probeImages() && !probeRuntime()
+        featurePermit = featurePermit && !imagesFlaggedLocked() && !probeRuntime()
         let allowed = featurePermit
         featureLock.unlock()
         return recordIfCompromised(!allowed)
@@ -153,6 +155,19 @@ enum AorusEnvGuard {
 
     private static func probeRuntime() -> Bool {
         return runtimeNames.contains { NSClassFromString($0) != nil }
+    }
+
+    // The loaded images are scanned again only when their number changes, that is when a
+    // library has been loaded or unloaded. Re-reading every image name once a second, on
+    // whichever thread first asked about a feature, cost a burst of string work for a list
+    // that does not change. A hit stays a hit. Called with featureLock held.
+    private static func imagesFlaggedLocked() -> Bool {
+        let count = _dyld_image_count()
+        if count != scannedImageCount {
+            scannedImageCount = count
+            imagesFlagged = imagesFlagged || probeImages()
+        }
+        return imagesFlagged
     }
 
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {

@@ -242,7 +242,7 @@ private enum AorusFakeStarsStore {
 private struct Account { let peerId = 1 }
 private enum AorusFakeGiftsStore {
     static var sent: [(peerId: Int, count: Int64, currency: String, amount: Int64)] = []
-    static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: Int, count: Int64, currency: String, amount: Int64) -> Bool {
+    static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: Int, count: Int64, currency: String, amount: Int64, historyTitle: String) -> Bool {
         guard AorusFakeStarsStore.isEnabled, recipientPeerId != account.peerId else { return false }
         sent.append((recipientPeerId, count, currency, amount))
         return true
@@ -250,7 +250,11 @@ private enum AorusFakeGiftsStore {
 }
 private struct Pack { let currency: String; let amount: Int64 }
 private struct Product { let count: Int64; let localPack: Pack? }
-private struct Context { let account = Account() }
+private struct Strings { let Stars_Gift_Sent_Title = "Sent Gift" }
+private struct PresentationData { let strings = Strings() }
+private struct SharedContext { let currentPresentationData = Atomic(PresentationData()) }
+private final class Atomic<T> { private let value: T; init(_ value: T) { self.value = value }; func with<R>(_ f: (T) -> R) -> R { f(value) } }
+private struct Context { let account = Account(); let sharedContext = SharedContext() }
 private struct Transition { static func easeInOut(duration: Double) -> Transition { Transition() } }
 private final class HapticFeedback { func error() {} }
 ''' + enabled + r'''

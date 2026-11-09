@@ -3051,6 +3051,118 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
     print("InterfaceV2: patched avatar expansion")
 
 
+def _patch_header_glass_merge(tg: Path) -> None:
+    """Let the header's other glass merge with the buttons too: the music capsule, the wallet balance.
+
+    The buttons flow into each other because they share one glass container (see
+    `_patch_action_buttons_merge`). The music capsule under the row and the wallet balance above it
+    were panes of their own, laid straight in the header, so a button stretched towards either slid
+    under it instead. They now live in the same container, with every frame they are given still
+    worked out in the header's coordinates and put into the container's -- which sits at the buttons
+    row -- on the way in. A capsule that has to change hosts (the container is made with the first
+    button) takes its frame at once instead of animating from a place in the other host.
+
+    The music capsule now sits six points below the row at least, the container's spacing, so it
+    stands apart at rest and only a button pulled into it merges with it. The balance row is further
+    away than that already.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    text = _read(path, "PeerInfoHeaderNode.swift")
+    if "aorusHostHeaderGlass" in text:
+        print("InterfaceV2: header glass already merges with the buttons")
+        return
+    text = _replace_once(
+        text,
+        "    private func aorusButtonsGlassContainer() -> GlassBackgroundContainerView? {\n",
+        "    /// AorusGram: the header's other glass (the music capsule, the wallet balance) goes in the\n"
+        "    /// buttons' glass container too where there is one, so a button stretched into it merges\n"
+        "    /// with it. Returns whether the view changed hosts.\n"
+        "    @discardableResult\n"
+        "    private func aorusHostHeaderGlass(_ view: UIView) -> Bool {\n"
+        "        let host: UIView = self.aorusButtonsGlassContainerView?.contentView ?? self.regularContentNode.view\n"
+        "        guard view.superview !== host else {\n"
+        "            return false\n"
+        "        }\n"
+        "        host.addSubview(view)\n"
+        "        return true\n"
+        "    }\n"
+        "\n"
+        "    /// A frame worked out in the header's coordinates, in the coordinates of the view's host:\n"
+        "    /// the glass container sits at the buttons row, whose frame is set before the capsules'.\n"
+        "    private func aorusHeaderGlassFrame(_ frame: CGRect, of view: UIView) -> CGRect {\n"
+        "        guard let container = self.aorusButtonsGlassContainerView, view.superview === container.contentView else {\n"
+        "            return frame\n"
+        "        }\n"
+        "        let origin = self.buttonsContainerNode.frame.origin\n"
+        "        return frame.offsetBy(dx: -origin.x, dy: -origin.y)\n"
+        "    }\n"
+        "\n"
+        "    private func aorusButtonsGlassContainer() -> GlassBackgroundContainerView? {\n",
+        "header glass helpers",
+    )
+    text = _replace_once(
+        text,
+        "                        if self.aorusMusicCapsule.superview == nil {\n"
+        "                            self.aorusMusicCapsule.isUserInteractionEnabled = true\n"
+        "                            self.regularContentNode.view.addSubview(self.aorusMusicCapsule)\n"
+        "                        }\n",
+        "                        if self.aorusMusicCapsule.superview == nil {\n"
+        "                            self.aorusMusicCapsule.isUserInteractionEnabled = true\n"
+        "                        }\n"
+        "                        let aorusMusicMoved = self.aorusHostHeaderGlass(self.aorusMusicCapsule)\n",
+        "music capsule host",
+    )
+    text = _replace_once(
+        text,
+        "                        if additive {\n"
+        "                            musicTransition.updateFrameAdditiveToCenter(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                        } else {\n"
+        "                            musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                        }\n",
+        "                        let aorusMusicGlassFrame = self.aorusHeaderGlassFrame(aorusCapsuleFrame, of: self.aorusMusicCapsule)\n"
+        "                        if aorusMusicMoved {\n"
+        "                            ContainedViewLayoutTransition.immediate.updateFrame(view: self.aorusMusicCapsule, frame: aorusMusicGlassFrame)\n"
+        "                        } else if additive {\n"
+        "                            musicTransition.updateFrameAdditiveToCenter(view: self.aorusMusicCapsule, frame: aorusMusicGlassFrame)\n"
+        "                        } else {\n"
+        "                            musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusMusicGlassFrame)\n"
+        "                        }\n",
+        "music capsule frame",
+    )
+    text = _replace_once(
+        text,
+        "                    if aorusCapsule.superview == nil {\n"
+        "                        ContainedViewLayoutTransition.immediate.updateFrame(view: aorusCapsule, frame: balanceFrame)\n"
+        "                        self.regularContentNode.view.addSubview(aorusCapsule)\n"
+        "                        if transition.isAnimated {\n"
+        "                            aorusCapsule.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                        }\n"
+        "                    } else if additive {\n"
+        "                        transition.updateFrameAdditiveToCenter(view: aorusCapsule, frame: balanceFrame)\n"
+        "                    } else {\n"
+        "                        transition.updateFrame(view: aorusCapsule, frame: balanceFrame)\n"
+        "                    }\n",
+        "                    let aorusBalanceIsNew = aorusCapsule.superview == nil\n"
+        "                    let aorusBalanceMoved = self.aorusHostHeaderGlass(aorusCapsule)\n"
+        "                    let aorusBalanceGlassFrame = self.aorusHeaderGlassFrame(balanceFrame, of: aorusCapsule)\n"
+        "                    if aorusBalanceIsNew {\n"
+        "                        ContainedViewLayoutTransition.immediate.updateFrame(view: aorusCapsule, frame: aorusBalanceGlassFrame)\n"
+        "                        if transition.isAnimated {\n"
+        "                            aorusCapsule.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                        }\n"
+        "                    } else if aorusBalanceMoved {\n"
+        "                        ContainedViewLayoutTransition.immediate.updateFrame(view: aorusCapsule, frame: aorusBalanceGlassFrame)\n"
+        "                    } else if additive {\n"
+        "                        transition.updateFrameAdditiveToCenter(view: aorusCapsule, frame: aorusBalanceGlassFrame)\n"
+        "                    } else {\n"
+        "                        transition.updateFrame(view: aorusCapsule, frame: aorusBalanceGlassFrame)\n"
+        "                    }\n",
+        "balance capsule host and frame",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: music capsule and balance merge with the buttons' glass")
+
+
 def _patch_action_buttons_merge(tg: Path) -> None:
     """Let the profile's glass buttons flow into each other when one is pulled towards the next.
 
@@ -6902,7 +7014,10 @@ def _patch_compact_music(tg: Path) -> None:
         text,
         "                let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0) + 1.0 - UIScreenPixel), size: musicSize)\n",
         "                let aorusMusicPillHeight = musicSize.height + 6.0\n"
-        "                let aorusMusicPillTop = aorusButtonsBottom + max(4.0, floor((backgroundHeight - aorusButtonsBottom - aorusMusicPillHeight) / 2.0))\n"
+        # Six points at least below the buttons, the spacing at which their glass container
+        # starts drawing two shapes together: closer, and the capsule would lean into the row at
+        # rest once it shares their container (_patch_header_glass_merge).
+        "                let aorusMusicPillTop = aorusButtonsBottom + max(6.0, floor((backgroundHeight - aorusButtonsBottom - aorusMusicPillHeight) / 2.0))\n"
         "                let aorusMusicY: CGFloat = aorusCompactMusic ? (aorusMusicPillTop + 3.0) : (backgroundHeight - musicHeight - (hasBackground || self.isAvatarExpanded ? 0.0 : 4.0) + 1.0 - UIScreenPixel)\n"
         "                let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y: (apparentBackgroundHeight - backgroundHeight) + aorusMusicY), size: musicSize)\n",
         "compact music placement",
@@ -9270,4 +9385,6 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_action_buttons_merge(tg)
     # After the expansion pass, which anchors on the strip's stock entries this one rewrites.
     _patch_music_capsule_content(tg)
+    # After the capsules are made and filled, whose placement it rewrites.
+    _patch_header_glass_merge(tg)
     _patch_build(tg)

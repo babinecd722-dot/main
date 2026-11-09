@@ -185,12 +185,10 @@ final class ActivateConfirmController: SubscriptionBaseController {
                 self.setLoading(false)
                 switch result {
                 case .success(let response):
-                    if response.status.allowsAppAccess {
-                        // A new verdict supersedes any check still in the air; see
-                        // `beginLicenseGeneration`.
-                        _ = LicenseGate.beginLicenseGeneration()
-                        LicenseStore.shared.save(response: response, telegramUserId: uid)
+                    if LicenseGate.acceptActivation(response, telegramUserId: uid) {
                         self.transition { self.renderSuccess(response) }
+                    } else if response.status.allowsAppAccess {
+                        self.transition { self.renderError(SubL10n.errActivateRetry) }
                     } else {
                         self.transition { self.renderError(SubL10n.errKeyNotFound) }
                     }

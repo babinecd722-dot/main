@@ -386,12 +386,31 @@ public final class AorusProxyManager {
             }
         }
         lock.lock()
+        // A newer refresh may have begun while this request was being built; this one is then
+        // not the current task and never goes out.
+        guard generation == requestGeneration else {
+            lock.unlock()
+            return
+        }
         currentTask = task
         lock.unlock()
         task.resume()
     }
 
+    /// Whether a callback still belongs to the current refresh. Every side effect of a failure
+    /// is decided on this: an old refresh's late failure stopped the tunnel a newer one had just
+    /// brought up, and cancelled that newer request with it.
+    private func isCurrent(_ requestGeneration: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return generation == requestGeneration
+    }
+
     private func handleFetchFailure(generation: UInt64, completion: ((Bool) -> Void)?) {
+        guard isCurrent(generation) else {
+            finish(generation: generation, success: false, completion: completion)
+            return
+        }
         lock.lock()
         let usable = profile?.isValid(for: DeviceFingerprint.deviceHash()) == true
         let cachedProfile = profile
@@ -404,8 +423,7 @@ public final class AorusProxyManager {
         if usable, let cachedProfile {
             AorusRealityManager.shared.apply(profile: cachedProfile, rankedEndpoints: endpoints)
             scheduleRefresh()
-        } else {
-            clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)
+        } else if clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false, onlyIfGeneration: generation) {
             scheduleProvisioningRetry()
         }
         finish(generation: generation, success: usable, completion: completion)
@@ -415,8 +433,10 @@ public final class AorusProxyManager {
     /// Existing VLESS material is removed immediately; retries can only restore
     /// connectivity after a new authenticated request and signed profile succeed.
     private func handleProvisioningRejection(generation: UInt64, completion: ((Bool) -> Void)?) {
-        clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)
-        if licenseAllowsReality {
+        // Only the current refresh's rejection clears anything; the check and the clearing
+        // happen under one lock, so a refresh started in between is never torn down.
+        if clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false, onlyIfGeneration: generation),
+           licenseAllowsReality {
             scheduleProvisioningRetry()
         }
         finish(generation: generation, success: false, completion: completion)
@@ -432,8 +452,15 @@ public final class AorusProxyManager {
         DispatchQueue.main.async { completion?(success) }
     }
 
-    private func clearProvisioning(stopTunnel: Bool, cancelProvisioningRetry: Bool = true) {
+    /// Returns false, having done nothing, when `onlyIfGeneration` is given and is no longer
+    /// the current refresh.
+    @discardableResult
+    private func clearProvisioning(stopTunnel: Bool, cancelProvisioningRetry: Bool = true, onlyIfGeneration: UInt64? = nil) -> Bool {
         lock.lock()
+        if let onlyIfGeneration, generation != onlyIfGeneration {
+            lock.unlock()
+            return false
+        }
         generation &+= 1
         let task = currentTask
         currentTask = nil
@@ -464,6 +491,7 @@ public final class AorusProxyManager {
         UserDefaults.standard.removeObject(forKey: mtprotoConnectionStateKey)
         writeDiagnostics()
         if stopTunnel { AorusRealityManager.shared.licenseDidLock() }
+        return true
     }
 
     /// A clean install has no VLESS profile on disk by design. If the first signed

@@ -56,8 +56,11 @@ public enum AorusSettingsArchive {
         ]
         for file in capturedFiles() {
             pending.append({
-                guard let body = try? Data(contentsOf: file.url, options: .mappedIfSafe) else { return nil }
-                return AorusBackupArchive.Entry(path: file.entryPath, body: body)
+                // A file that went away since the list was made is simply not there; one that
+                // is there and cannot be read fails the save, rather than leaving a save that
+                // looks complete and is not -- loading it would then delete what it lacks.
+                guard FileManager.default.fileExists(atPath: file.url.path) else { return nil }
+                return AorusBackupArchive.Entry(path: file.entryPath, body: try Data(contentsOf: file.url, options: .mappedIfSafe))
             })
         }
         var index = 0
@@ -238,18 +241,24 @@ public enum AorusSettingsArchive {
     /// Puts a prepared save in force. Main thread. The stores let go of their files first and
     /// read everything again after; the core ones are read again here, the interface module
     /// and Telegram's own stores by the caller.
-    public static func apply(_ prepared: Prepared) {
+    ///
+    /// The saved files and keychain items go in before anything is taken away, and a part
+    /// that cannot be written in full is put back as it was. Returns false when that happened,
+    /// so the caller does not report a load that did not fully take place.
+    @discardableResult
+    public static func apply(_ prepared: Prepared) -> Bool {
         NotificationCenter.default.post(name: AorusSettingsLifecycle.willImport, object: nil)
 
+        var complete = replaceFiles(from: prepared.staging, saved: prepared.files)
+        complete = replaceKeychain(with: prepared.keychain) && complete
         replaceDefaults(UserDefaults.standard, with: prepared.standard, own: isOwnStandardKey)
         replaceDefaults(UserDefaults(suiteName: suiteName), with: prepared.suite, own: isOwnSuiteKey)
-        replaceKeychain(with: prepared.keychain)
-        replaceFiles(from: prepared.staging, saved: prepared.files)
         AorusPluginStore.shared.settingsDidLoad()
         AorusUserVPNStore.shared.importState(prepared.vpn)
         AorusConnectionPreferences.shared.reloadFromStorage()
 
         NotificationCenter.default.post(name: AorusSettingsLifecycle.didImport, object: nil)
+        return complete
     }
 
     // MARK: - What belongs to the save
@@ -423,18 +432,12 @@ public enum AorusSettingsArchive {
         return result
     }
 
-    /// The units on disk now.
-    private static func currentUnits() -> Set<Unit> {
-        var units = Set<Unit>()
-        for file in capturedFiles() {
-            if let entry = FileEntry(entryPath: file.entryPath), let unit = unit(scope: entry.scope, relativePath: entry.relativePath) {
-                units.insert(unit)
-            }
-        }
-        return units
-    }
-
-    private static func replaceFiles(from staging: URL, saved: Set<String>) {
+    /// The saved files in place of the current ones. Each saved file replaces its counterpart
+    /// in one step and the one it replaced is kept aside until all are in; if any cannot be put
+    /// in, every one already placed is put back and nothing is removed. Only then do the files
+    /// the save does not have go -- a whole unit the save lacks, or within a unit it has, what
+    /// is not in it. Returns whether all of it happened.
+    private static func replaceFiles(from staging: URL, saved: Set<String>) -> Bool {
         let fm = FileManager.default
         let savedEntries = saved.compactMap(FileEntry.init(entryPath:))
         var savedUnits = Set<Unit>()
@@ -443,32 +446,75 @@ public enum AorusSettingsArchive {
                 savedUnits.insert(unit)
             }
         }
-        for unit in currentUnits().union(savedUnits) {
-            if !savedUnits.contains(unit) && unit.keptWhenAbsent {
-                continue
-            }
-            guard let base = unit.scope.base else { continue }
-            removeUnit(unit, base: base)
-        }
+        let current = capturedFiles()
+
+        // What was there before each placed file: its backup, or nothing.
+        var placed: [(target: URL, backup: URL?)] = []
+        var allPlaced = true
         for entry in savedEntries {
-            guard let base = entry.scope.base else { continue }
+            guard let base = entry.scope.base else { allPlaced = false; break }
             let source = staging.appendingPathComponent(entry.scope.rawValue, isDirectory: true).appendingPathComponent(entry.relativePath)
             let target = base.appendingPathComponent(entry.relativePath)
-            try? fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? fm.removeItem(at: target)
-            try? fm.moveItem(at: source, to: target)
-        }
-    }
-
-    private static func removeUnit(_ unit: Unit, base: URL) {
-        let fm = FileManager.default
-        let url = base.appendingPathComponent(unit.path)
-        try? fm.removeItem(at: url)
-        if unit.path.hasSuffix(".sqlite") {
-            for suffix in ["-wal", "-shm", "-journal"] {
-                try? fm.removeItem(at: base.appendingPathComponent(unit.path + suffix))
+            do {
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                if fm.fileExists(atPath: target.path) {
+                    let backupName = target.lastPathComponent + ".aorus-load-backup"
+                    _ = try fm.replaceItemAt(target, withItemAt: source, backupItemName: backupName, options: [.withoutDeletingBackupItem])
+                    placed.append((target, target.deletingLastPathComponent().appendingPathComponent(backupName)))
+                } else {
+                    try fm.moveItem(at: source, to: target)
+                    placed.append((target, nil))
+                }
+            } catch {
+                allPlaced = false
+                break
             }
         }
+        guard allPlaced else {
+            for item in placed.reversed() {
+                if let backup = item.backup {
+                    _ = try? fm.replaceItemAt(item.target, withItemAt: backup)
+                } else {
+                    try? fm.removeItem(at: item.target)
+                }
+            }
+            return false
+        }
+        for item in placed {
+            if let backup = item.backup { try? fm.removeItem(at: backup) }
+        }
+
+        var complete = true
+        let savedPaths = Set(savedEntries.map { $0.entryPath })
+        for unit in Set(current.compactMap { file -> Unit? in
+            guard let entry = FileEntry(entryPath: file.entryPath) else { return nil }
+            return unit(scope: entry.scope, relativePath: entry.relativePath)
+        }) where !savedUnits.contains(unit) && !unit.keptWhenAbsent {
+            guard let base = unit.scope.base else { continue }
+            complete = removeUnit(unit, base: base) && complete
+        }
+        for file in current where !savedPaths.contains(file.entryPath) {
+            guard let entry = FileEntry(entryPath: file.entryPath),
+                  let unit = unit(scope: entry.scope, relativePath: entry.relativePath),
+                  savedUnits.contains(unit), fm.fileExists(atPath: file.url.path) else { continue }
+            do { try fm.removeItem(at: file.url) } catch { complete = false }
+        }
+        return complete
+    }
+
+    private static func removeUnit(_ unit: Unit, base: URL) -> Bool {
+        let fm = FileManager.default
+        var removed = true
+        var paths = [unit.path]
+        if unit.path.hasSuffix(".sqlite") {
+            paths += ["-wal", "-shm", "-journal"].map { unit.path + $0 }
+        }
+        for path in paths {
+            let url = base.appendingPathComponent(path)
+            guard fm.fileExists(atPath: url.path) else { continue }
+            do { try fm.removeItem(at: url) } catch { removed = false }
+        }
+        return removed
     }
 
     // MARK: - Defaults
@@ -492,82 +538,152 @@ public enum AorusSettingsArchive {
 
     // MARK: - Keychain
 
-    private static func keychainItems() -> [[String: Any]] {
+    private struct SaveIncomplete: Error {}
+
+    /// The items of one service, with their data and protection class. Nil when the keychain
+    /// could not be read -- not the same as a service with nothing in it.
+    private static func items(in service: String) -> [[String: Any]]? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+            kSecReturnAttributes as String: true,
+        ]
+        var found: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &found)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess, let rows = found as? [[String: Any]] else { return nil }
         var result: [[String: Any]] = []
-        for service in keychainServices {
-            let query: [String: Any] = [
+        for row in rows {
+            guard let account = row[kSecAttrAccount as String] as? String else { continue }
+            let dataQuery: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
-                kSecMatchLimit as String: kSecMatchLimitAll,
-                kSecReturnAttributes as String: true,
+                kSecAttrAccount as String: account,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
             ]
-            var found: AnyObject?
-            guard SecItemCopyMatching(query as CFDictionary, &found) == errSecSuccess, let rows = found as? [[String: Any]] else {
-                continue
+            var value: AnyObject?
+            guard SecItemCopyMatching(dataQuery as CFDictionary, &value) == errSecSuccess, let data = value as? Data else {
+                return nil
             }
-            for row in rows {
-                guard let account = row[kSecAttrAccount as String] as? String else { continue }
-                let dataQuery: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: service,
-                    kSecAttrAccount as String: account,
-                    kSecReturnData as String: true,
-                    kSecMatchLimit as String: kSecMatchLimitOne,
-                ]
-                var value: AnyObject?
-                guard SecItemCopyMatching(dataQuery as CFDictionary, &value) == errSecSuccess, let data = value as? Data else {
-                    continue
-                }
-                var item: [String: Any] = ["service": service, "account": account, "data": data]
-                if let accessible = row[kSecAttrAccessible as String] as? String {
-                    item["accessible"] = accessible
-                }
-                result.append(item)
+            var item: [String: Any] = ["service": service, "account": account, "data": data]
+            if let accessible = row[kSecAttrAccessible as String] as? String {
+                item["accessible"] = accessible
             }
+            result.append(item)
         }
         return result
     }
 
-    private static func replaceKeychain(with saved: [[String: Any]]) {
+    /// Every item of every service the save takes. An item the keychain refuses to give fails
+    /// the save instead of being left out of it.
+    private static func keychainItems() throws -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        for service in keychainServices {
+            guard let rows = items(in: service) else { throw SaveIncomplete() }
+            result += rows
+        }
+        return result
+    }
+
+    /// The saved items in place of the current ones, a service at a time. The saved items are
+    /// written first, over their counterparts; if one is refused, the service is put back as
+    /// it was. Only after all are in do the current items the save lacks go. Returns whether
+    /// every service was replaced.
+    private static func replaceKeychain(with saved: [[String: Any]]) -> Bool {
         var byService: [String: [[String: Any]]] = [:]
         for item in saved {
             guard let service = item["service"] as? String, keychainServices.contains(service),
                   item["account"] is String, item["data"] is Data else { continue }
             byService[service, default: []].append(item)
         }
+        var complete = true
         for service in keychainServices {
             let items = byService[service] ?? []
             if items.isEmpty && keptWhenAbsent.contains(service) {
                 continue
             }
-            SecItemDelete([
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-            ] as CFDictionary)
+            guard let previous = Self.items(in: service) else {
+                complete = false
+                continue
+            }
+            var written: [String] = []
+            var allWritten = true
             for item in items {
                 guard let account = item["account"] as? String, let data = item["data"] as? Data else { continue }
-                let accessible = (item["accessible"] as? String).flatMap(knownAccessibility) ?? (kSecAttrAccessibleAfterFirstUnlock as String)
-                SecItemAdd([
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: service,
-                    kSecAttrAccount as String: account,
-                    kSecValueData as String: data,
-                    kSecAttrAccessible as String: accessible,
-                ] as CFDictionary, nil)
+                guard writeItem(service: service, account: account, data: data, accessible: importedAccessibility(item["accessible"] as? String, service: service)) else {
+                    allWritten = false
+                    break
+                }
+                written.append(account)
+            }
+            guard allWritten else {
+                for account in written {
+                    if let old = previous.first(where: { $0["account"] as? String == account }), let data = old["data"] as? Data {
+                        _ = writeItem(service: service, account: account, data: data, accessible: importedAccessibility(old["accessible"] as? String, service: service))
+                    } else {
+                        deleteItem(service: service, account: account)
+                    }
+                }
+                complete = false
+                continue
+            }
+            let savedAccounts = Set(items.compactMap { $0["account"] as? String })
+            for old in previous {
+                guard let account = old["account"] as? String, !savedAccounts.contains(account) else { continue }
+                deleteItem(service: service, account: account)
             }
             if service == accountBackupService {
                 discardAccountBackupFile()
             }
         }
+        return complete
     }
 
-    private static func knownAccessibility(_ value: String) -> String? {
-        let known: [CFString] = [
-            kSecAttrAccessibleAfterFirstUnlock, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecAttrAccessibleWhenUnlocked, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+    private static func writeItem(service: String, account: String, data: Data, accessible: String) -> Bool {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
         ]
-        return known.map { $0 as String }.first(where: { $0 == value })
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: accessible,
+        ]
+        let updated = SecItemUpdate(base as CFDictionary, attributes as CFDictionary)
+        if updated == errSecSuccess { return true }
+        guard updated == errSecItemNotFound else { return false }
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = accessible
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    private static func deleteItem(service: String, account: String) {
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ] as CFDictionary)
+    }
+
+    /// Items that are deliberately allowed to move to a new device with a restore: a pair of
+    /// switches, not key material (see `AorusConnectionPreferences`).
+    private static let migratableServices: Set<String> = ["com.aorusgram.connection.preferences.v1"]
+
+    /// The protection a loaded item gets is this device's policy for its service, not the
+    /// file's: secrets never get a class that lets them travel to another device in a backup.
+    /// A stricter class in the save is kept.
+    private static func importedAccessibility(_ value: String?, service: String) -> String {
+        let stricter: [CFString] = [kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly]
+        if let value, stricter.map({ $0 as String }).contains(value) {
+            return value
+        }
+        if migratableServices.contains(service) {
+            return kSecAttrAccessibleAfterFirstUnlock as String
+        }
+        return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String
     }
 
     /// The account backup's file is a copy of what the keychain holds; with the keychain

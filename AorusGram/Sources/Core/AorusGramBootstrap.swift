@@ -26,6 +26,9 @@ public final class AorusGramBootstrap {
 
         // License-layer hardening. Refuse debugger attach and record a compromised
         // environment so protected services fail closed without an unexplained crash.
+        // Evidence left by a check that has since been removed goes first (once), so the
+        // checks below are the ones that decide.
+        AorusSessionCounter.shared.retireBundleIdEvidenceOnce()
         AorusEnvGuard.denyDebuggerAttach()
         AorusEnvGuard.enforceAtLaunch()
 

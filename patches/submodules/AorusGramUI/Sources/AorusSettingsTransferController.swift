@@ -33,7 +33,7 @@ enum AorusSettingsTransfer {
     /// restart notice says so only when that is what changed.
     private static func apply(_ prepared: AorusSettingsArchive.Prepared, context: AccountContext, controller: ViewController?) {
         let launch = LaunchState.current
-        AorusSettingsArchive.apply(prepared)
+        let complete = AorusSettingsArchive.apply(prepared)
 
         AorusFakeGramStore.reloadFromStorage()
         AorusFakeUsernamesStore.reloadFromStorage()
@@ -56,6 +56,13 @@ enum AorusSettingsTransfer {
             center.post(name: .aorusSettingsChanged, object: nil)
         }
 
+        guard complete else {
+            // Part of the save could not be written; that part is as it was before, so the
+            // load is not reported as done.
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            toast(aorusL("Не все настройки удалось загрузить. Попробуйте ещё раз.", "Some settings couldn't be loaded. Try again."), context: context, controller: controller)
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         if LaunchState.current != launch || LaunchState.interfaceDiffersFromRun {
             aorusPresentRestartNotice(

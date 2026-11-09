@@ -10679,10 +10679,26 @@ public enum AorusFakeGiftsStore {
         var gifts = all()
         gifts.removeAll(where: { $0.instanceId == target.instanceId })
         persist(gifts)
+        // The gift is the recipient's now: it stands in their profile as one sent from here,
+        // the way a gift bought for them does, and in their count of gifts.
+        addPurchasedGift(gift, accountPeerId: senderPeerId.toInt64(), ownerPeerId: recipientPeerId.toInt64(), date: message.timestamp, comment: "", hideName: false)
+        postLocalMessage(message, to: recipientPeerId, account: account)
+        return true
+    }
+
+    /// A local service message goes into its chat the way a sent message does: a chat that is
+    /// not in the list yet joins it, so the message shows in the chat list, not only inside.
+    static func postLocalMessage(_ message: StoreMessage, to peerId: PeerId, account: Account) {
         let _ = account.postbox.transaction { transaction -> Void in
+            includeInChatList(transaction: transaction, peerId: peerId)
             let _ = transaction.addMessages([message], location: .Random)
         }.startStandalone()
-        return true
+    }
+
+    static func includeInChatList(transaction: Transaction, peerId: PeerId) {
+        if case .notIncluded = transaction.getPeerChatListInclusion(peerId) {
+            transaction.updatePeerChatListInclusion(peerId, inclusion: .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: nil))
+        }
     }
 
     // True if a unique gift with this slug is one of our local fake gifts.
@@ -10813,9 +10829,7 @@ public enum AorusFakeGiftsStore {
             action = .starGift(gift: ownedGift, convertStars: (isOwnGift && AorusFakeStarsStore.isEnabled) ? genericGift.convertStars : nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: upgradeStars != nil, upgradeStars: upgradeStars, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: isOwnGift ? instanceId : nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
         }
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
-        let _ = account.postbox.transaction { transaction -> Void in
-            let _ = transaction.addMessages([message], location: .Random)
-        }.startStandalone()
+        postLocalMessage(message, to: recipientPeerId, account: account)
     }
 
     public static func recordLocalPremiumMessage(account: Account, recipientPeerId: PeerId, months: Int32, stars: Int64, text: String, entities: [MessageTextEntity]) {
@@ -10826,26 +10840,21 @@ public enum AorusFakeGiftsStore {
         AorusFakeStarsStore.recordPurchase(accountPeerId: account.peerId, recipientPeerId: recipientPeerId, amount: stars, gift: nil, premiumMonths: months, text: text)
         let action = TelegramMediaActionType.giftPremium(currency: "XTR", amount: stars, days: months * 30, cryptoCurrency: nil, cryptoAmount: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities)
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: account.peerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
-        let _ = account.postbox.transaction { transaction -> Void in
-            let _ = transaction.addMessages([message], location: .Random)
-        }.startStandalone()
+        postLocalMessage(message, to: recipientPeerId, account: account)
     }
 
     /// Stars bought for a friend. Telegram sells them like a top-up, for money, so one's own
-    /// balance stays as it is; what the friend's chat gets is the message Telegram posts for
+    /// balance stays as it is; the purchase is listed in the Stars history among outgoing
+    /// operations, under the friend, and the friend's chat gets the message Telegram posts for
     /// such a gift, with the lot and the price it was bought for, opening the same gift
     /// screen. A chat that was not in the list yet joins it, as when a first message is sent.
     @discardableResult
-    public static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: PeerId, count: Int64, currency: String, amount: Int64) -> Bool {
+    public static func recordLocalStarsGiftMessage(account: Account, recipientPeerId: PeerId, count: Int64, currency: String, amount: Int64, historyTitle: String) -> Bool {
         guard AorusFakeStarsStore.isEnabled, count > 0, amount > 0, recipientPeerId != account.peerId else { return false }
+        AorusFakeStarsStore.recordStarsGift(accountPeerId: account.peerId, recipientPeerId: recipientPeerId, count: count, title: historyTitle)
         let action = TelegramMediaActionType.giftStars(currency: currency, amount: amount, count: count, cryptoCurrency: nil, cryptoAmount: nil, transactionId: nil)
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: account.peerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
-        let _ = account.postbox.transaction { transaction -> Void in
-            if case .notIncluded = transaction.getPeerChatListInclusion(recipientPeerId) {
-                transaction.updatePeerChatListInclusion(recipientPeerId, inclusion: .ifHasMessagesOrOneOf(groupId: .root, pinningIndex: nil, minTimestamp: nil))
-            }
-            let _ = transaction.addMessages([message], location: .Random)
-        }.startStandalone()
+        postLocalMessage(message, to: recipientPeerId, account: account)
         return true
     }
 
@@ -11263,6 +11272,11 @@ public struct AorusStoredStarsTransaction: Codable, Equatable {
     public let isResale: Bool
     public let isUpgrade: Bool?
     public var isTopUp: Bool? = nil
+    /// Stars bought for a friend: the user's own purchase, listed among outgoing operations
+    /// under the friend, but paid for like a top-up, so it is neither spending nor rating.
+    public var isStarsGift: Bool? = nil
+    /// The row's title, in the language the purchase was made in.
+    public var title: String? = nil
 }
 
 // AorusGram local "fake stars" — a purely local override of the displayed Telegram Stars
@@ -11427,7 +11441,7 @@ public enum AorusFakeStarsStore {
         }
         // One-time migration for purchases created before the cumulative counter existed.
         var migrated: [String: Int64] = [:]
-        for item in storedTransactions() where item.isTopUp != true {
+        for item in storedTransactions() where item.isTopUp != true && item.isStarsGift != true {
             let key = String(item.accountPeerId)
             let (value, overflow) = (migrated[key] ?? 0).addingReportingOverflow(item.amount)
             migrated[key] = overflow ? Int64.max : value
@@ -11467,7 +11481,7 @@ public enum AorusFakeStarsStore {
         var migrated: [String: [String: Int64]] = [:]
         var migratedTotals: [String: Int64] = [:]
         var oldestDay: [String: Int64] = [:]
-        for item in storedTransactions() where item.isTopUp != true {
+        for item in storedTransactions() where item.isTopUp != true && item.isStarsGift != true {
             let accountKey = String(item.accountPeerId)
             let day = utcDay(item.date)
             let dayKey = String(day)
@@ -11586,6 +11600,30 @@ public enum AorusFakeStarsStore {
         return true
     }
 
+    /// A Stars gift bought for a friend, as a row of the history. Telegram sells such Stars for
+    /// money, like a top-up, so the balance, the spending totals and the rating stay as they
+    /// are; the row only records the purchase.
+    public static func recordStarsGift(accountPeerId: PeerId, recipientPeerId: PeerId, count: Int64, title: String) {
+        guard isEnabled, count > 0 else { return }
+        purchaseLock.lock()
+        // As for a top-up: legacy totals are migrated before a new row can trim the archive.
+        _ = storedSpentTotals()
+        _ = storedDailySpending()
+        _ = localRatingData
+        var row = AorusStoredStarsTransaction(
+            id: "stx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""),
+            amount: count, date: Int32(Date().timeIntervalSince1970), accountPeerId: accountPeerId.toInt64(),
+            peerId: recipientPeerId.toInt64(), giftData: nil, premiumMonths: nil, text: "", isResale: false, isUpgrade: false
+        )
+        row.isStarsGift = true
+        row.title = title
+        var rows = storedTransactions()
+        rows.insert(row, at: 0)
+        persistTransactions(rows)
+        purchaseLock.unlock()
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
     public static func statisticsBalances(accountPeerId: PeerId) -> StarsRevenueStats.Balances {
         let currentValue = amount
         let spentValue = storedSpentTotals()[String(accountPeerId.toInt64())] ?? 0
@@ -11642,7 +11680,7 @@ public enum AorusFakeStarsStore {
                 count: CurrencyAmount(amount: StarsAmount(value: stored.isTopUp == true ? stored.amount : -stored.amount, nanos: 0), currency: .stars),
                 date: stored.date,
                 peer: peer,
-                title: nil,
+                title: stored.isStarsGift == true ? stored.title : nil,
                 description: stored.text.isEmpty ? nil : stored.text,
                 photo: nil,
                 transactionDate: stored.date,
@@ -11812,6 +11850,7 @@ extension AorusFakeGiftsStore {
             let upgradeAction = TelegramMediaActionType.starGiftUnique(gift: .unique(unique), isUpgrade: true, isTransferred: false, savedToProfile: savedToProfile, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: accountPeerId, senderId: accountPeerId, savedId: instanceId, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false, text: originalGiftText, entities: originalGiftEntities, nameHidden: originalGiftNameHidden)
             let globallyUniqueId = Int64.random(in: Int64.min ... Int64.max)
             let upgradeMessage = StoreMessage(peerId: accountPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: globallyUniqueId, groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: upgradeAction)])
+            AorusFakeGiftsStore.includeInChatList(transaction: transaction, peerId: accountPeerId)
             guard let upgradeMessageId = transaction.addMessages([upgradeMessage], location: .Random)[globallyUniqueId] else { return }
             transaction.updateMessage(original.id, update: { current -> PostboxUpdateMessage in
                 let media = current.media.map { media -> Media in
@@ -11999,6 +12038,64 @@ extension AorusFakeGiftsStore {
 def _swift_uescape(s: str) -> str:
     """Encode a string as Swift \\u{XXXX} escapes (keeps non-ASCII out of patched source)."""
     return "".join("\\u{%04x}" % ord(ch) for ch in s)
+
+
+def _patch_gifts_list_count(gl: Path) -> None:
+    """The line under a profile's name on its Gifts tab counts the local gifts it shows.
+
+    Telegram writes "N gifts" from the server's own count before the list is merged, so a
+    profile showing two local gifts and no real ones read "0 gifts". The count is now set
+    again whenever the local gifts are merged in -- on every server state and on every
+    change to the local store -- as Telegram's count plus the local gifts listed, with a
+    gift Telegram already lists counted once.
+    """
+    t = gl.read_text(encoding="utf-8")
+    if "aorusServerGiftCount" in t:
+        return
+    edits = (
+        (
+            "    private var aorusServerProducts: [ProfileGiftsContext.State.StarGift]?\n",
+            "    private var aorusServerProducts: [ProfileGiftsContext.State.StarGift]?\n"
+            "    private var aorusServerGiftCount: Int32?\n",
+            "count property",
+        ),
+        (
+            "            self.aorusServerProducts = self.starsProducts\n"
+            "            self.aorusApplyFakeGifts()\n",
+            "            self.aorusServerProducts = self.starsProducts\n"
+            "            self.aorusServerGiftCount = state.count\n"
+            "            self.aorusApplyFakeGifts()\n",
+            "server count",
+        ),
+        (
+            "        if aorusFakeGifts.isEmpty {\n"
+            "            self.starsProducts = baseline\n"
+            "        } else {\n",
+            "        if let aorusServerGiftCount = self.aorusServerGiftCount {\n"
+            "            let aorusListed = aorusFakeGifts.filter { item in\n"
+            "                guard case .unique = item.gift else { return true }\n"
+            "                let key = AorusFakeGiftsStore.key(for: item.gift)\n"
+            "                return !baseline.contains(where: { base in\n"
+            "                    if case .unique = base.gift { return AorusFakeGiftsStore.key(for: base.gift) == key }\n"
+            "                    return false\n"
+            "                })\n"
+            "            }.count\n"
+            "            let aorusCount = Int32(clamping: Int(aorusServerGiftCount) + aorusListed)\n"
+            "            let aorusPresentationData = self.context.sharedContext.currentPresentationData.with { $0 }\n"
+            "            self.statusPromise.set(.single(PeerInfoStatusData(text: aorusPresentationData.strings.SharedMedia_GiftCount(aorusCount), isActivity: true, key: .gifts)))\n"
+            "        }\n"
+            "        if aorusFakeGifts.isEmpty {\n"
+            "            self.starsProducts = baseline\n"
+            "        } else {\n",
+            "status line",
+        ),
+    )
+    for old, new, label in edits:
+        if t.count(old) != 1:
+            raise RuntimeError(f"FakeGifts: GiftsListView {label} anchor found {t.count(old)} times")
+        t = t.replace(old, new, 1)
+    gl.write_text(t, encoding="utf-8")
+    print("FakeGifts: GiftsListView counts the local gifts it shows")
 
 
 def patch_fake_gifts(tg: Path) -> None:
@@ -12475,6 +12572,7 @@ def patch_fake_gifts(tg: Path) -> None:
             if ok:
                 gl.write_text(t, encoding="utf-8")
                 print("FakeGifts: patched GiftsListView (own-profile injection + live refresh)")
+        _patch_gifts_list_count(gl)
     else:
         print("FakeGifts: GiftsListView.swift not found — skip profile injection")
 
@@ -21016,13 +21114,16 @@ def patch_plugin_outgoing_messages(tg: Path) -> None:
         "\n"
         "        // AorusGram plugins: only human-authored plain text enters the plugin chain.\n"
         "        // Media captions, forwards, service messages and background sends bypass it.\n"
+        "        // One wait for the whole send, however many messages it holds.\n"
+        "        let aorusPluginDeadline = Date().addingTimeInterval(0.1)\n"
         "        let aorusPluginMessages: [EnqueueMessage] = messages.compactMap { message in\n"
         "            guard case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets) = message,\n"
         "                  mediaReference == nil, inlineStickers.isEmpty, !text.isEmpty else {\n"
         "                return message\n"
         "            }\n"
         "            let verdict = AorusPluginRuntimeManager.shared.processOutgoing(\n"
-        "                text: text, peerId: peerId.toInt64(), accountId: self.context.account.id.int64\n"
+        "                text: text, peerId: peerId.toInt64(), accountId: self.context.account.id.int64,\n"
+        "                deadline: aorusPluginDeadline\n"
         "            )\n"
         "            if verdict.consumed { return nil }\n"
         "            guard let replacement = verdict.replacement, replacement != text else { return message }\n"
@@ -21105,6 +21206,8 @@ def patch_plugin_outgoing_hook_composer(tg: Path) -> None:
         "                aorusPluginPeerId = strongSelf.chatLocation.peerId?.toInt64()\n"
         "            }\n"
         "            if let aorusPeerId = aorusPluginPeerId {\n"
+        "                // One wait for the whole send, however many messages it holds.\n"
+        "                let aorusPluginDeadline = Date().addingTimeInterval(0.1)\n"
         "                aorusPluginMessages = messages.flatMap { message -> [EnqueueMessage] in\n"
         "                    guard case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets) = message,\n"
         "                          mediaReference == nil, inlineStickers.isEmpty, !text.isEmpty else {\n"
@@ -21114,7 +21217,7 @@ def patch_plugin_outgoing_hook_composer(tg: Path) -> None:
         "                    // to answer in the same topic and to the same message.\n"
         "                    let verdict = AorusPluginRuntimeManager.shared.processOutgoing(\n"
         "                        text: text, peerId: aorusPeerId, accountId: strongSelf.context.account.id.int64,\n"
-        "                        threadId: threadId, replyTo: replyToMessageId\n"
+        "                        threadId: threadId, replyTo: replyToMessageId, deadline: aorusPluginDeadline\n"
         "                    )\n"
         "                    if verdict.consumed { return [] }\n"
         "                    guard let replacement = verdict.replacement, replacement != text else { return [message] }\n"

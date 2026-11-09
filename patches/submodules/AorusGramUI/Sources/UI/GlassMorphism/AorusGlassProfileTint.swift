@@ -315,15 +315,38 @@ public enum AorusGlassProfileTint {
     /// Keep what a photo samples to, within the cap that stops a session of profiles growing this
     /// without bound. A dropped entry only costs one reading.
     private static func record(_ sample: Sample, for key: PhotoKey) {
-        if AorusGlassProfileTint.sampledColors[key] == nil, AorusGlassProfileTint.sampledColors.count > 96 {
-            // Other profiles' photos go; this profile's stay. Its pages were read from the files
-            // once, as the photos arrived, and dropping them would leave the swipe through them
-            // with nothing to slide until each was read again off the screen.
-            let peerId = key.peerId
-            AorusGlassProfileTint.sampledColors = AorusGlassProfileTint.sampledColors.filter { $0.key.peerId == peerId }
-            AorusGlassProfileTint.contentSignatures = AorusGlassProfileTint.contentSignatures.filter { $0.key.peerId == peerId }
-            AorusGlassProfileTint.settledKeys = AorusGlassProfileTint.settledKeys.filter { $0.peerId == peerId }
-            AorusGlassProfileTint.finalKeys = AorusGlassProfileTint.finalKeys.filter { $0.peerId == peerId }
+        if AorusGlassProfileTint.sampledColors[key] == nil {
+            if AorusGlassProfileTint.sampledColors.count > 96 {
+                // Other profiles' photos go; this profile's stay. Its pages were read from the files
+                // once, as the photos arrived, and dropping them would leave the swipe through them
+                // with nothing to slide until each was read again off the screen.
+                let peerId = key.peerId
+                AorusGlassProfileTint.sampledColors = AorusGlassProfileTint.sampledColors.filter { $0.key.peerId == peerId }
+                AorusGlassProfileTint.contentSignatures = AorusGlassProfileTint.contentSignatures.filter { $0.key.peerId == peerId }
+                AorusGlassProfileTint.settledKeys = AorusGlassProfileTint.settledKeys.filter { $0.peerId == peerId }
+                AorusGlassProfileTint.finalKeys = AorusGlassProfileTint.finalKeys.filter { $0.peerId == peerId }
+                AorusGlassProfileTint.sampleOrder = AorusGlassProfileTint.sampleOrder.filter { $0.peerId == peerId }
+            }
+            if AorusGlassProfileTint.sampledColors.count > 96 {
+                // One profile's photos alone are past the cap (a hundred of them, swiped through):
+                // its oldest readings go as well, all but the photo on screen, so the cap holds.
+                let current = AorusGlassProfileTint.currentKeys[key.peerId]
+                var excess = AorusGlassProfileTint.sampledColors.count - 64
+                var kept: [PhotoKey] = []
+                for old in AorusGlassProfileTint.sampleOrder {
+                    if excess > 0, old != current {
+                        AorusGlassProfileTint.sampledColors.removeValue(forKey: old)
+                        AorusGlassProfileTint.contentSignatures.removeValue(forKey: old)
+                        AorusGlassProfileTint.settledKeys.remove(old)
+                        AorusGlassProfileTint.finalKeys.remove(old)
+                        excess -= 1
+                    } else {
+                        kept.append(old)
+                    }
+                }
+                AorusGlassProfileTint.sampleOrder = kept
+            }
+            AorusGlassProfileTint.sampleOrder.append(key)
         }
         AorusGlassProfileTint.sampledColors[key] = sample
     }
@@ -689,6 +712,8 @@ public enum AorusGlassProfileTint {
     /// What each individual photo has sampled to so far, so paging back and forth costs nothing once
     /// the photo has settled.
     private static var sampledColors: [PhotoKey: Sample] = [:]
+    /// The order photos were first sampled in, oldest first, so the cap can drop the oldest.
+    private static var sampleOrder: [PhotoKey] = []
     /// Cheap fingerprints of the layer tree used to avoid rendering the same avatar
     /// sixteen times while waiting for its full-resolution contents to arrive.
     private static var contentSignatures: [PhotoKey: Int] = [:]

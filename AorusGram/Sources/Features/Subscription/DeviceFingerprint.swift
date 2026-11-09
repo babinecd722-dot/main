@@ -46,21 +46,37 @@ enum DeviceFingerprint {
     }
 
     // Get-or-create the persistent install id, self-healing across all slots.
-    /// Resolved once per launch. Two calls in one run must never disagree about who this
-    /// device is, whatever the keychain does in between.
+    /// The identity, once it is known for certain: read from the keychain, or freshly made
+    /// AND stored there. Kept for the rest of the launch, so two calls never disagree.
     private static var resolvedInstallId: String?
+    /// What answers while the keychain cannot (a device not unlocked since it booted). It
+    /// is not this device's identity, so it is never kept as one: every call asks the
+    /// keychain again, and the licence gate does not send a request under it.
+    private static let standInInstallId = UUID().uuidString
     private static let installIdLock = NSLock()
 
     static func keychainInstallId() -> String {
         installIdLock.lock()
         defer { installIdLock.unlock() }
         if let resolved = resolvedInstallId { return resolved }
-        let resolved = resolveInstallIdLocked()
-        resolvedInstallId = resolved
-        return resolved
+        if let resolved = resolveInstallIdLocked() {
+            resolvedInstallId = resolved
+            return resolved
+        }
+        return standInInstallId
     }
 
-    private static func resolveInstallIdLocked() -> String {
+    /// Whether the device's real identity is known in this launch. False only while the
+    /// keychain cannot be read, which ends when the device is unlocked.
+    static var isIdentityAvailable: Bool {
+        installIdLock.lock()
+        defer { installIdLock.unlock() }
+        if resolvedInstallId != nil { return true }
+        resolvedInstallId = resolveInstallIdLocked()
+        return resolvedInstallId != nil
+    }
+
+    private static func resolveInstallIdLocked() -> String? {
         // Reject malformed slot contents before voting. One damaged or edited slot
         // must not become the identity merely because it happens to be first.
         let reads = slots.map { readInstallId(service: $0.service, account: $0.account) }
@@ -101,20 +117,21 @@ enum DeviceFingerprint {
         // a first run. It minted a fresh identity and wrote it over all three slots, so
         // the real one was gone and with it the binding of a paid licence to this device.
         let anythingUnreadable = reads.contains { if case .unreadable = $0 { return true } else { return false } }
-        let generated = UUID().uuidString
         guard !anythingUnreadable else {
-            // Leave the stored identity exactly where it is and answer consistently for
-            // the rest of this launch. The licence check will fail against a device hash
-            // that is not this device's, which is recoverable on the next launch — unlike
-            // overwriting the slots, which is not.
-            return generated
+            // Leave the stored identity exactly where it is. It used to be replaced by a
+            // fresh one kept for the whole launch, so a licence check went out as another
+            // device and a paid user met the trial screen until the next launch; now the
+            // keychain is simply asked again once it can answer.
+            return nil
         }
+        // A new identity is this device's only once it is stored: one the keychain refused
+        // would be a different device on the next read.
+        let generated = UUID().uuidString
         var stored = false
         for slot in slots {
             stored = writeInstallId(generated, service: slot.service, account: slot.account) || stored
         }
-        _ = stored
-        return generated
+        return stored ? generated : nil
     }
 
     // Obfuscated app salt (XOR rotating pad), reassembled at runtime. Embedded in

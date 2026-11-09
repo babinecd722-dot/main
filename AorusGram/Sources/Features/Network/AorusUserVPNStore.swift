@@ -185,7 +185,16 @@ public final class AorusUserVPNStore {
     }
 
     private let lock = NSLock()
+    /// Writes of the state and its mirrors, one at a time. Each writes the state as it stands
+    /// when its turn comes, so a slower write of an older state can never land after a newer
+    /// one and leave the stored servers and the mirrors behind what is in memory.
+    private let persistQueue = DispatchQueue(label: "com.aorusgram.uservpn.persist")
     private var cached: Stored
+    /// A stored state that could not be opened yet -- a launch before the device's first
+    /// unlock, when the key that seals it cannot be had. It is not an empty one: nothing is
+    /// written over it until it has been read, which is tried again on every change and as
+    /// soon as the device is unlocked.
+    private var storedStateUnreadable = false
     /// Measured round-trip times, kept out of the state blob so a probe cannot corrupt the
     /// configurations and so writing one does not rewrite everything.
     private var latencies: [String: Double]
@@ -194,16 +203,21 @@ public final class AorusUserVPNStore {
         let store = UserDefaults(suiteName: Self.suiteName)
         var loaded = Stored(enabled: false, configs: [], selectedServerId: nil)
         var needsMigration = false
-        if let persisted = store?.data(forKey: Self.stateKey),
-           let data = Self.openState(persisted),
-           let decoded = try? JSONDecoder().decode(Stored.self, from: data) {
-            loaded = decoded
-            // Anything that is not already v2 is rewritten as v2 at once — which is how a
-            // repaired v1 blob stops being fragile instead of being repaired again every
-            // launch.
-            needsMigration = !persisted.starts(with: Self.stateEnvelopePrefixV2)
+        var unreadable = false
+        if let persisted = store?.data(forKey: Self.stateKey) {
+            if let data = Self.openState(persisted),
+               let decoded = try? JSONDecoder().decode(Stored.self, from: data) {
+                loaded = decoded
+                // Anything that is not already v2 is rewritten as v2 at once — which is how a
+                // repaired v1 blob stops being fragile instead of being repaired again every
+                // launch.
+                needsMigration = !persisted.starts(with: Self.stateEnvelopePrefixV2)
+            } else {
+                unreadable = true
+            }
         }
         self.cached = loaded
+        self.storedStateUnreadable = unreadable
         self.latencies = (store?.dictionary(forKey: Self.latencyKey) as? [String: Double]) ?? [:]
         if needsMigration {
             Self.persistState(loaded, store: store)
@@ -211,6 +225,37 @@ public final class AorusUserVPNStore {
         // The mirrors are rewritten from the loaded state before anything can read them, so a
         // launch that follows a crash cannot leave a stale "on" behind.
         Self.writeMirrors(loaded, store: store)
+        if unreadable {
+            _ = NotificationCenter.default.addObserver(
+                forName: Notification.Name("UIApplicationProtectedDataDidBecomeAvailable"), object: nil, queue: nil
+            ) { [weak self] _ in
+                self?.reloadIfUnreadable()
+            }
+        }
+    }
+
+    /// Reads the stored state that could not be opened before. Once it opens, it is what is in
+    /// force -- the user's servers, not the empty stand-in the launch had to start with.
+    @discardableResult
+    private func reloadIfUnreadable() -> Bool {
+        self.lock.lock()
+        guard self.storedStateUnreadable else {
+            self.lock.unlock()
+            return true
+        }
+        let store = UserDefaults(suiteName: Self.suiteName)
+        guard let persisted = store?.data(forKey: Self.stateKey),
+              let data = Self.openState(persisted),
+              let decoded = try? JSONDecoder().decode(Stored.self, from: data) else {
+            self.lock.unlock()
+            return false
+        }
+        self.cached = decoded
+        self.storedStateUnreadable = false
+        self.lock.unlock()
+        self.persistLatest()
+        self.postChange()
+        return true
     }
 
     // MARK: - Reads
@@ -668,6 +713,10 @@ public final class AorusUserVPNStore {
     }
 
     private func update(_ transform: (inout Stored) -> Void) {
+        // A change made to the stand-in for a state that could not be read would be written
+        // over the user's servers. It waits until they are readable; while the device has
+        // never been unlocked, nothing but a background refresh can ask for one.
+        guard self.reloadIfUnreadable() else { return }
         self.lock.lock()
         var stored = self.cached
         transform(&stored)
@@ -678,12 +727,24 @@ public final class AorusUserVPNStore {
         self.cached = stored
         self.lock.unlock()
 
-        let store = UserDefaults(suiteName: Self.suiteName)
-        Self.persistState(stored, store: store)
-        // Written after the state, so a reader that sees the mirror on always finds a
-        // configuration behind it.
-        Self.writeMirrors(stored, store: store)
+        self.persistLatest()
         self.postChange()
+    }
+
+    /// Writes the state in memory now, and its mirrors after it, so a reader that sees the
+    /// mirror on always finds a configuration behind it.
+    private func persistLatest() {
+        self.persistQueue.sync {
+            self.lock.lock()
+            let latest = self.cached
+            let unreadable = self.storedStateUnreadable
+            self.lock.unlock()
+            let store = UserDefaults(suiteName: Self.suiteName)
+            if !unreadable {
+                Self.persistState(latest, store: store)
+            }
+            Self.writeMirrors(latest, store: store)
+        }
     }
 
     // MARK: - Saved settings
@@ -703,10 +764,10 @@ public final class AorusUserVPNStore {
         self.lock.lock()
         let changed = stored != self.cached
         self.cached = stored
+        // A load replaces the state outright, so what was stored before no longer matters.
+        self.storedStateUnreadable = false
         self.lock.unlock()
-        let store = UserDefaults(suiteName: Self.suiteName)
-        Self.persistState(stored, store: store)
-        Self.writeMirrors(stored, store: store)
+        self.persistLatest()
         if changed {
             self.postChange()
         }

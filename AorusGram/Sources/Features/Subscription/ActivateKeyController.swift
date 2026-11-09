@@ -205,13 +205,13 @@ final class ActivateKeyController: SubscriptionBaseController {
                 self.setLoading(false)
                 switch result {
                 case .success(let response):
-                    if response.status.allowsAppAccess {
-                        // A new verdict supersedes any check still in the air; see
-                        // `beginLicenseGeneration`.
-                        _ = LicenseGate.beginLicenseGeneration()
-                        LicenseStore.shared.save(response: response, telegramUserId: uid)
+                    if LicenseGate.acceptActivation(response, telegramUserId: uid) {
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                         self.onActivated?(response)
+                    } else if response.status.allowsAppAccess {
+                        // Granted, but not a verdict this client can open with: say so
+                        // instead of "done" over a lock that stays.
+                        self.showError(SubL10n.errActivateRetry)
                     } else {
                         self.showError(SubL10n.errKeyNotFound)
                     }

@@ -57,9 +57,30 @@ public enum AorusGifWallpaperStore {
 // MARK: - GIF → looping MP4 conversion
 
 public enum AorusGifWallpaperConverter {
+    /// One conversion at a time: two picks in a row must not write the same file at once.
+    private static let conversionQueue = DispatchQueue(label: "aorus.gifwallpaper.conversions", qos: .userInitiated)
+
     public static func convert(gifData: Data, to outputURL: URL, completion: @escaping (Bool) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let ok = self.convertSync(gifData: gifData, to: outputURL)
+        conversionQueue.async {
+            // Written beside the target and moved over it only once complete: a conversion
+            // that fails leaves the current wallpaper exactly as it was. It used to delete it
+            // first and write in its place.
+            let fm = FileManager.default
+            let temporary = outputURL.deletingLastPathComponent()
+                .appendingPathComponent(".aorus-gif-\(UUID().uuidString).mp4")
+            var ok = self.convertSync(gifData: gifData, to: temporary)
+            if ok {
+                do {
+                    if fm.fileExists(atPath: outputURL.path) {
+                        _ = try fm.replaceItemAt(outputURL, withItemAt: temporary)
+                    } else {
+                        try fm.moveItem(at: temporary, to: outputURL)
+                    }
+                } catch {
+                    ok = false
+                }
+            }
+            try? fm.removeItem(at: temporary)
             DispatchQueue.main.async { completion(ok) }
         }
     }
@@ -114,22 +135,26 @@ public enum AorusGifWallpaperConverter {
         return pb
     }
 
+    /// Frames beyond this are not a wallpaper; refused rather than encoded for minutes.
+    private static let frameLimit = 3000
+    /// The longest a conversion may take before it is given up.
+    private static let deadline: TimeInterval = 120
+    private static let maxDim = 1280
+
     private static func convertSync(gifData: Data, to outputURL: URL) -> Bool {
         guard let source = CGImageSourceCreateWithData(gifData as CFData, nil) else { return false }
         let count = CGImageSourceGetCount(source)
-        guard count > 0 else { return false }
+        guard count > 0, count <= frameLimit else { return false }
 
-        var frames: [(CGImage, Double)] = []
-        frames.reserveCapacity(count)
-        for i in 0 ..< count {
-            guard let image = CGImageSourceCreateImageAtIndex(source, i, nil) else { continue }
-            frames.append((image, frameDelay(source, i)))
-        }
-        guard let first = frames.first?.0 else { return false }
-
-        var width = first.width
-        var height = first.height
-        let maxDim = 1280
+        // The output size from the first frame's header, without decoding anything. Every
+        // frame is then decoded one at a time, already scaled down: holding every frame of a
+        // long GIF at full size at once ran into hundreds of megabytes.
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let sourceWidth = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let sourceHeight = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+              sourceWidth > 0, sourceHeight > 0 else { return false }
+        var width = sourceWidth
+        var height = sourceHeight
         if max(width, height) > maxDim {
             let scale = Double(maxDim) / Double(max(width, height))
             width = Int((Double(width) * scale).rounded())
@@ -163,32 +188,72 @@ public enum AorusGifWallpaperConverter {
         guard writer.startWriting() else { return false }
         writer.startSession(atSourceTime: .zero)
 
+        let decodeOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width, height),
+            kCGImageSourceShouldCacheImmediately: true
+        ]
         let timescale: CMTimeScale = 600
         var currentTime = CMTime.zero
         var index = 0
+        var written = 0
+        var finished = false
         let semaphore = DispatchSemaphore(value: 0)
         let queue = DispatchQueue(label: "aorus.gifwallpaper.convert")
 
-        input.requestMediaDataWhenReady(on: queue) {
-            while input.isReadyForMoreMediaData {
-                if index >= frames.count {
-                    input.markAsFinished()
-                    writer.finishWriting {
-                        semaphore.signal()
-                    }
-                    return
-                }
-                let (cg, delay) = frames[index]
-                if let pb = self.pixelBuffer(from: cg, width: width, height: height, pool: adaptor.pixelBufferPool) {
-                    adaptor.append(pb, withPresentationTime: currentTime)
-                    let frameDuration = CMTime(seconds: max(delay, 0.02), preferredTimescale: timescale)
-                    currentTime = CMTimeAdd(currentTime, frameDuration)
-                }
-                index += 1
+        // Every way out signals exactly once: the end of the frames, a writer that failed, or a
+        // frame the writer refused. Before, a writer that failed mid-way never finished, the
+        // wait below never ended, and the picker stayed frozen with its input switched off.
+        let finish: (_ complete: Bool) -> Void = { complete in
+            guard !finished else { return }
+            finished = true
+            if complete {
+                input.markAsFinished()
+                writer.finishWriting { semaphore.signal() }
+            } else {
+                writer.cancelWriting()
+                semaphore.signal()
             }
         }
 
-        semaphore.wait()
+        input.requestMediaDataWhenReady(on: queue) {
+            while input.isReadyForMoreMediaData && !finished {
+                guard writer.status == .writing else {
+                    finish(false)
+                    return
+                }
+                if index >= count {
+                    finish(written > 0)
+                    return
+                }
+                let delay = self.frameDelay(source, index)
+                let appended: Bool = autoreleasepool {
+                    guard let frame = CGImageSourceCreateThumbnailAtIndex(source, index, decodeOptions as CFDictionary),
+                          let pb = self.pixelBuffer(from: frame, width: width, height: height, pool: adaptor.pixelBufferPool) else {
+                        // A frame that cannot be decoded is skipped, as before.
+                        return true
+                    }
+                    guard adaptor.append(pb, withPresentationTime: currentTime) else { return false }
+                    written += 1
+                    let frameDuration = CMTime(seconds: max(delay, 0.02), preferredTimescale: timescale)
+                    currentTime = CMTimeAdd(currentTime, frameDuration)
+                    return true
+                }
+                index += 1
+                if !appended {
+                    finish(false)
+                    return
+                }
+            }
+        }
+
+        if semaphore.wait(timeout: .now() + deadline) == .timedOut {
+            queue.sync { finish(false) }
+            // The cancelled writer has signalled; take that signal so nothing is left waiting.
+            _ = semaphore.wait(timeout: .now() + 5)
+            return false
+        }
         return writer.status == .completed
     }
 }

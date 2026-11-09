@@ -161,6 +161,12 @@ final class DeletedMessagesCache {
                            nil) != SQLITE_OK {
             db = nil
         }
+        // Two copies of this class -- the core one that records messages and the interface's
+        // one that lists and clears them -- each hold a connection to this file, and WAL does
+        // not serialise writers across connections. Without a busy timeout a write that met
+        // the other's transaction failed at once with SQLITE_BUSY and the message was simply
+        // never recorded; now it waits for the other transaction to finish.
+        sqlite3_busy_timeout(db, 5000)
         sqlite3_exec(db, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", nil, nil, nil)
     }
 

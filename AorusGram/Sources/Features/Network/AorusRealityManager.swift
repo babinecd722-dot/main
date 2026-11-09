@@ -1577,13 +1577,23 @@ extension AorusRealityManager {
 
         // Already serving this exact server through a live inbound. A watchdog tick must not
         // interrupt a call to prove something it can check in a few milliseconds.
+        //
+        // A live inbound is not a live route, though: after sleep or a move from Wi-Fi to LTE the
+        // local SOCKS answers while the way out behind it is dead, and the foreground check used
+        // to take that answer and leave a client that loaded nothing. On the watchdog's check the
+        // route is also proved end to end, through the tunnel to Telegram -- a probe, not a
+        // restart, so a working call is untouched -- and only when it fails twice is the core
+        // brought up again.
         if self.userLaneServerId == server.id,
            self.userLaneServer == server,
            self.userLaneUdpEnabled == udpEnabled,
            self.userLaneMuxEnabled == muxEnabled,
            let port = self.userLanePort,
            self.isCoreRunning(),
-           self.localSocksIsReady(port: port, timeout: self.localSocksMaxProbeTimeout) {
+           self.localSocksIsReady(port: port, timeout: self.localSocksMaxProbeTimeout),
+           reason != "watchdog"
+            || self.realityPreflight(port: port, endpointPriority: nil, timeout: self.preflightFastTimeout) == .ready
+            || self.realityPreflight(port: port, endpointPriority: nil, timeout: self.preflightPatientTimeout) == .ready {
             self.cancelUserLaneRetryLocked(resetAttempt: true)
             self.setUserLaneConnecting(false)
             self.userLanePublishEndpointLocked(port: port)

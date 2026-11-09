@@ -33,6 +33,9 @@ enum SubscriptionConfig {
 
     // MARK: Networking
     static let requestTimeout: TimeInterval = 15
+    // The whole request, however its bytes trickle in. `requestTimeout` only bounds the wait
+    // for the next piece, so a slow answer could hold the gate on "checking" for minutes.
+    static let requestDeadline: TimeInterval = 25
 
     // Re-check throttle: on foreground only re-hit the API if the last successful
     // check is older than this. active_until still governs real validity.
@@ -53,7 +56,8 @@ enum SubscriptionConfig {
     // response, otherwise every user would be locked out.
     static let requireSignedResponse = true
 
-    // Max clock skew (seconds) tolerated for the signed response timestamp.
+    // How far the device clock may be from the server's before requests are timed by the
+    // server's clock instead (see LicenseClock).
     static let responseMaxSkew: TimeInterval = 300
 
     // TLS SPKI pins (base64 of SHA256 over DER SubjectPublicKeyInfo). Both protected

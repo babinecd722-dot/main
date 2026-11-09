@@ -47,4 +47,27 @@ final class AorusSessionCounter {
         return _count >= threshold
     }
 
+    // Opaque, integer-valued (the licence lock zeroes every boolean "aorusgram_" flag).
+    private let retiredEvidenceKey = "5e1d7c3a-9b24-4f86-a0d3-7c2e8b1f6a49"
+    private let retiredEvidenceVersion = 1
+
+    /// Clears, once per install, the evidence an earlier build recorded with its bundle id
+    /// check. That check counted every re-signed install with another bundle id as tampering
+    /// -- AorusGram is distributed that way -- and three launches switched every feature off
+    /// for good, under an active subscription, with nothing on screen to say why. The check
+    /// is gone; this runs before this launch's checks, so they decide afresh, and a device
+    /// that really is tampered with records its evidence again within the same launch. It
+    /// never runs a second time.
+    func retireBundleIdEvidenceOnce() {
+        let defaults = UserDefaults.standard
+        guard defaults.integer(forKey: retiredEvidenceKey) < retiredEvidenceVersion else { return }
+        lock.lock()
+        _count = 0
+        reactionScheduled = false
+        lock.unlock()
+        defaults.removeObject(forKey: udKey)
+        defaults.removeObject(forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")
+        defaults.removeObject(forKey: "e7b3f014-2a8d-4c61-9f05-3b6a1e8d4c02")
+        defaults.set(retiredEvidenceVersion, forKey: retiredEvidenceKey)
+    }
 }

@@ -98,17 +98,20 @@ final class AorusPluginHTTPTransport: NSObject, URLSessionDataDelegate, @uncheck
         completionHandler(.allow)
     }
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let id = dataTask.taskIdentifier
         lock.lock()
-        guard var item = pending[dataTask.taskIdentifier], item.failure == nil else { lock.unlock(); return }
-        if data.count > item.limit - item.data.count {
-            item.failure = AorusPluginRequestError("HTTP response is too large")
-            pending[dataTask.taskIdentifier] = item
+        // Only the numbers are read here: taking a copy of the pending item kept a second
+        // reference to its buffer, so each append copied everything received so far.
+        guard let state = pending[id].map({ (received: $0.data.count, limit: $0.limit, failed: $0.failure != nil) }),
+              !state.failed else { lock.unlock(); return }
+        if data.count > state.limit - state.received {
+            pending[id]?.failure = AorusPluginRequestError("HTTP response is too large")
             lock.unlock()
             dataTask.cancel()
             return
         }
-        item.data.append(data)
-        pending[dataTask.taskIdentifier] = item
+        // Appended in place, in the dictionary's own storage.
+        pending[id]?.data.append(data)
         lock.unlock()
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

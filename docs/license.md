@@ -67,3 +67,49 @@ that matters, proof of the account has to come from Telegram, not from the app: 
 can check.
 
 Keys issued to an account (`errKeyAnotherAccount`) already follow this model; the trial now does too.
+
+## One licence for the whole client
+
+A licence covers every Telegram account in the client. There is one snapshot; switching
+accounts keeps it and only records the account id the next requests carry. A check still on
+its way when the account changes is answered first, and the check with the new id is queued
+behind it rather than dropped.
+
+## Reliability of the gate
+
+* **A locked keychain is not a missing licence.** Before the device is first unlocked (a push
+  or a background fetch can launch the app then) the keychain cannot be read. The device
+  identity is then not invented for the launch: no licence request goes out under a stand-in
+  identity, the snapshot is not judged, and both are read the moment protected data becomes
+  available, without waiting for a restart. A new identity counts only once it is stored.
+* **Verdicts are written in order and confirmed.** The snapshot is written on a serial queue,
+  always as it stands when its turn comes, and never with the state lock held, so feature
+  checks never wait on the Secure Enclave or the keychain. A write the keychain refuses stays
+  pending and is retried on return and on unlock; the verdict holds in memory meanwhile.
+* **Activation reports success only when it took effect.** The response must be a verdict the
+  store keeps (an active status with usable dates) and must open the client; otherwise the
+  screen shows an error instead of "Done" over a lock that stays.
+* **Queued checks, bounded requests.** A check asked for while another, or a trial request, is
+  on its way runs after it. Each request has a 25-second deadline for the whole response, and a
+  check that never answers is given up on.
+* **The device clock.** A signed response is bound to the request's nonce, which already proves
+  it fresh; its timestamp is no longer compared with the device clock. The server time it
+  carries is remembered and requests are stamped with it, so a phone whose clock is off still
+  gets its checks accepted. A refusal from a server whose `Date` is far off is retried once on
+  the server's time.
+* **The subscription entry while locked.** Tapping AorusGram without access used to open the
+  management sheet ("Subscription active", with a close button). It now opens the lock screen
+  for the actual state -- expired, banned, outdated, connection, or "Device blocked" when the
+  licence is valid but this device is refused -- which only a key or a purchase closes.
+* **The lock's flag sweep** walks the defaults only after a defaults change, not every second.
+
+## Device checks and false positives
+
+The runtime checks record evidence that the gate reads (`AorusLicenseAccess.canUnlock`). One of
+them compared the bundle id with AorusGram's and counted every other id as tampering. AorusGram
+is installed by re-signing and the signer may choose any bundle id, so on such installs every
+launch added to the persistent counter, and after three launches every feature was off for good
+under an active subscription. That check is removed; the evidence it left is cleared once per
+install before the launch's checks run, so a device that really is tampered with records its
+evidence again in the same launch. The loaded-image check that feature access runs once a second
+now re-reads the image list only when the number of loaded images changes.

@@ -17,6 +17,7 @@ final class LicenseAPIClient {
     private init() {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = SubscriptionConfig.requestTimeout
+        cfg.timeoutIntervalForResource = SubscriptionConfig.requestDeadline
         cfg.waitsForConnectivity = false
         cfg.httpShouldSetCookies = false
         cfg.urlCache = nil
@@ -136,6 +137,7 @@ final class LicenseAPIClient {
     // serialized exactly once; its SHA-256 and the URLRequest both use those bytes.
     private func signedPost(path: String,
                             body: [String: Any],
+                            isRetry: Bool = false,
                             completion: @escaping (Result<SignedJSONResponse, LicenseError>) -> Void) {
         guard LicenseKeyProvider.isProvisioned, AorusBuildKeyProvider.isProvisioned else {
             completion(.failure(.notProvisioned)); return
@@ -157,7 +159,9 @@ final class LicenseAPIClient {
             completion(.failure(.decode)); return
         }
 
-        let ts = String(Int64(Date().timeIntervalSince1970))
+        // Timed by the server's clock once it is known: a device clock that is off is not a
+        // reason for a paid user's check to be refused.
+        let ts = String(Int64(LicenseClock.now()))
         let nonce = LicenseCrypto.randomHex(byteCount: 16)        // 32 hex
         let device = DeviceFingerprint.deviceHash()               // 64 hex
         let kv = SubscriptionConfig.keyVersion
@@ -187,12 +191,22 @@ final class LicenseAPIClient {
             completion(.failure(.notProvisioned)); return
         }
 
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
             if error != nil {
                 completion(.failure(.network)); return
             }
             guard let http = response as? HTTPURLResponse else {
                 completion(.failure(.network)); return
+            }
+            // A refusal from a server whose clock is far from this device's is most likely
+            // the request's timestamp being refused: send it once more on the server's time.
+            // A signed answer below corrects the clock exactly; the transport's `Date` is used
+            // only for this one retry, and can only ever change the timestamp sent.
+            if !(200..<300).contains(http.statusCode), !isRetry,
+               let date = (http.allHeaderFields["Date"] as? String).flatMap(Self.httpDate),
+               LicenseClock.observe(serverTime: date.timeIntervalSince1970), let self {
+                self.signedPost(path: path, body: body, isRetry: true, completion: completion)
+                return
             }
             guard let data = data, data.count <= 2 * 1024 * 1024,
                   let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -220,5 +234,13 @@ final class LicenseAPIClient {
             completion(.success(SignedJSONResponse(statusCode: http.statusCode, object: object)))
         }
         task.resume()
+    }
+
+    private static func httpDate(_ value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value)
     }
 }
