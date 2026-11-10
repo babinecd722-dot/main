@@ -133,6 +133,13 @@ def native_glass_source(tg):
     content = block(background, "private final class ContentContainer: UIView {")
     content = content.replace("private final class ContentContainer", "@MainActor final class AorusClassicContentProbe", 1)
     root_init = block(background, "public override init(frame: CGRect) {")
+    # 13.2 sets the native glass's luminance limits from this function (adaptive, either side of
+    # the point where UIKit would flip the glass), and the container's update calls it.
+    adaptive = "static func adaptiveLumaRange(isDark: Bool)" in background
+    luma_range = ("    " + block(background, "static func adaptiveLumaRange(isDark: Bool)").strip() + "\n") if adaptive else ""
+    expected_luma = ("let aorusExpectedRange = AorusClassicBackgroundProbe.adaptiveLumaRange(isDark: dark)\n"
+                     "                let (minimum, maximum) = (aorusExpectedRange.min, aorusExpectedRange.max)") if adaptive \
+        else "let (minimum, maximum) = dark ? (0.0, 0.15) : (0.8, 0.801)"
     root_content = block(background, "public var contentView: UIView {")
     root_hit = block(background, "override public func hitTest(_ point:")
     container_init = block(container, "public init(spacing: CGFloat = 7.0) {")
@@ -172,7 +179,7 @@ extension CALayer {
     let maskContentView: UIView
     let contentContainer: AorusClassicContentProbe
     var glassHighlightRecognizer: AorusClassicHighlightProbe?
-''' + root_init + root_content + root_hit + '''
+''' + luma_range + root_init + root_content + root_hit + '''
     required init?(coder: NSCoder) { fatalError() }
     @objc private func onHighlightGesture(_ gesture: AorusClassicHighlightProbe) {}
     func updatePlainContent(size: CGSize) {
@@ -241,7 +248,7 @@ extension CALayer {
             AorusClassicControlledLook.interfaceV2 = v2
             container.update(size: container.bounds.size, isDark: dark, transition: AorusClassicImmediateTransition())
             if let parameters = container.nativeParamsView {
-                let (minimum, maximum) = dark ? (0.0, 0.15) : (0.8, 0.801)
+                ''' + expected_luma + '''
                 expect(parameters.lumaMin == minimum && parameters.lumaMax == maximum, "live native glass receives the actual page luminance interval")
                 expect(container.nativeView?.overrideUserInterfaceStyle == (dark ? .dark : .light), "live native glass follows its page appearance")
             }

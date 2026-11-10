@@ -112,7 +112,7 @@ def native_menu_source(tg):
     effect = block(text, 'public final class LensTransitionContainer:')
     check_initializer_order(effect, 'LensTransitionContainer')
     effect = effect[:effect.index('    public func updateClassicTheme')] + '\n}\n'
-    effect = effect.replace('public final class LensTransitionContainer: UIView', 'final class AorusClassicEffectFixture: UIView').replace('GlassBackgroundView', 'AorusClassicFixtureGlassBackgroundView').replace('ContextMenuSourceLease', 'AorusClassicFixtureSourceLease').replace('LiquidMorphTransition', 'AorusClassicFixtureMorph').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
+    effect = effect.replace('public final class LensTransitionContainer: UIView', 'final class AorusClassicEffectFixture: UIView').replace('GlassBackgroundView', 'AorusClassicFixtureGlassBackgroundView').replace('ContextMenuSourceLease', 'AorusClassicFixtureSourceLease').replace('CrossWindowSourceTake', 'AorusClassicFixtureSourceTake').replace('LiquidMorphTransition', 'AorusClassicFixtureMorph').replace('AorusOldInterface.isEnabled', 'AorusClassicControlledLook.enabled')
     return '''
 protocol AorusClassicMenuFixtureProtocol { var contentsView: UIView { get } }
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
@@ -131,6 +131,8 @@ public struct AorusClassicMenuFixtureAnimator {
     func updateCornerRadius(layer: CALayer, cornerRadius: CGFloat, completion: (() -> Void)?) { layer.cornerRadius = cornerRadius; completion?() }
 }
 final class AorusClassicFixtureSourceLease {}
+// 13.2 also moves a menu's source into the menu's window while it is open.
+final class AorusClassicFixtureSourceTake { final class Claim {} }
 final class AorusClassicFixtureMorph { static let isSupported = true }
 final class AorusClassicFixtureGlassBackgroundView: UIView {
     // 13.1's container keeps the tint of a layout it defers and lends the glass's blur radius.
