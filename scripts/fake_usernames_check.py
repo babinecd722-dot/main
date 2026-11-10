@@ -170,7 +170,7 @@ def main():
             patch(fresh)
             assert all((fresh / p).read_bytes() == value for p, value in installed.items()), "Fresh injection must be replay-stable"
             checked([args.swiftc, "-frontend", "-parse"] + [str(fresh / p) for p in paths])
-            print("Fresh Telegram 13.1.1 source injection and replay passed")
+            print("Fresh Telegram source injection and replay passed")
         print("Native profile, collectible receipt, classic picker and replay contracts passed")
         from interaction_check import verify
         verify(tg, args.swiftc)

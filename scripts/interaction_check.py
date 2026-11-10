@@ -79,4 +79,4 @@ print("Native input suffix geometry: \(checks) checks passed")
         patch(fresh)
         assert all((fresh / p).read_bytes() == data for p, data in installed.items()), "Fresh interaction patch is not replay-stable"
         checked([swiftc, "-frontend", "-parse"] + [str(fresh / p) for p in PATHS])
-    print("Classic interaction repair: fresh 13.1.1 injection and replay passed")
+    print("Classic interaction repair: fresh injection and replay passed")

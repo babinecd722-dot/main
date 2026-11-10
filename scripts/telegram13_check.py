@@ -345,7 +345,9 @@ let installed: [DefaultAnimatedStickerNodeImpl] = [
 expect(installed.count == ''' + str(len(calls)) + r''', "installed local and classic animation renderers")
 _ = ClassicTabOwner().makeTab()
 expect(true, "classic tab matches the native tab bar")
-expect(ClassicProfileAnimation().size == CGSize(width: 30.0, height: 30.0), "classic profile animation keeps 12.0's size")
+let profileSize = ClassicProfileAnimation().size
+// CGSize is Equatable only through CoreGraphics' overlay; compare its fields on every platform.
+expect(profileSize.width == 30.0 && profileSize.height == 30.0, "classic profile animation keeps 12.0's size")
 print("Telegram 13 Lottie integration passed: \(checks) assertions")
 '''
 
