@@ -10,8 +10,10 @@ import AorusGramUI
 // AorusGram: the Edit History screen. A chat-like screen, built like the one that shows a
 // user's messages in a group, holding one bubble per version of a message: the original
 // first, then "Change #1", "Change #2" and on, each in the chat's own bubbles with the time
-// it was written. In a change, what it added is bold and what it took out
-// stays in place, struck through, so the difference reads at a glance.
+// it was written. What a version is says Telegram's own service line above its bubble, the
+// way a chat says that a message was pinned, so the bubble holds only what was written. In a
+// change, what it added is bold and what it took out stays in place, struck through, so the
+// difference reads at a glance.
 //
 // The versions come from AorusEditHistory (TelegramCore), which records an incoming
 // message's texts as the server edits it.
@@ -134,12 +136,12 @@ enum AorusEditDiff {
         return merged
     }
 
-    /// The text a version's bubble shows and its formatting: the label in bold on its own
-    /// line, then the version, its own formatting kept, with the changes marked.
-    static func display(label: String, previous: AorusEditVersion?, current: AorusEditVersion) -> (text: String, entities: [MessageTextEntity]) {
-        var text = label + "\n"
-        var entities: [MessageTextEntity] = [MessageTextEntity(range: 0 ..< (label as NSString).length, type: .Bold)]
-        let base = (text as NSString).length
+    /// The text a version's bubble shows and its formatting: the version, its own formatting
+    /// kept, with the changes marked. Which version it is says the service line above it.
+    static func display(previous: AorusEditVersion?, current: AorusEditVersion) -> (text: String, entities: [MessageTextEntity]) {
+        var text = ""
+        var entities: [MessageTextEntity] = []
+        let base = 0
 
         guard let previous = previous else {
             text += current.text
@@ -194,7 +196,7 @@ enum AorusEditDiff {
     }
 }
 
-public final class AorusEditHistoryChatContents: ChatCustomContentsProtocol {
+public final class AorusEditHistoryChatContents: ChatCustomContentsProtocol, AorusEdgeAlignedChatContents {
     public var kind: ChatCustomContentsKind
     public let title: String
     /// The real message the history belongs to.
@@ -224,20 +226,54 @@ public final class AorusEditHistoryChatContents: ChatCustomContentsProtocol {
         var plainTexts: [MessageId: String] = [:]
         for (index, version) in versions.enumerated() {
             let label = index == 0 ? aorusL("Оригинал", "Original") : aorusL("Изменение", "Change") + " #\(index)"
-            let shown = AorusEditDiff.display(label: label, previous: index == 0 ? nil : versions[index - 1], current: version)
-            // Ids of their own, so the list keeps each version apart; nothing reaches the
-            // server or the database with them.
-            let id = MessageId(peerId: message.id.peerId, namespace: Namespaces.Message.Local, id: Int32(index + 1))
+            let shown = AorusEditDiff.display(previous: index == 0 ? nil : versions[index - 1], current: version)
+            // Ids of their own, so the list keeps each version and its line apart; nothing
+            // reaches the server or the database with them. The line comes first: at the same
+            // time, the lower id is the earlier entry.
+            let labelId = MessageId(peerId: message.id.peerId, namespace: Namespaces.Message.Local, id: Int32(index * 2 + 1))
+            let id = MessageId(peerId: message.id.peerId, namespace: Namespaces.Message.Local, id: Int32(index * 2 + 2))
+
+            // Telegram's own service line, as the quick replies screen makes its header: a
+            // centred pill in the chat's service colours that reads as the app speaking, not as
+            // something written in the message.
+            let labelMessage = Message(
+                stableId: UInt32.max - 1 - UInt32(index * 2),
+                stableVersion: 0,
+                id: labelId,
+                globallyUniqueId: nil,
+                groupingKey: nil,
+                groupInfo: nil,
+                threadId: nil,
+                timestamp: version.date,
+                flags: [.Incoming],
+                tags: [],
+                globalTags: [],
+                localTags: [],
+                customTags: [],
+                forwardInfo: nil,
+                author: nil,
+                text: "",
+                attributes: [],
+                media: [TelegramMediaAction(action: .customText(text: label, entities: [], additionalAttributes: nil))],
+                peers: message.peers,
+                associatedMessages: SimpleDictionary<MessageId, Message>(),
+                associatedMessageIds: [],
+                associatedMedia: [:],
+                associatedThreadInfo: nil,
+                associatedStories: [:]
+            )
+            entries.append(EngineRawMessageHistoryEntry(message: labelMessage, isRead: true, location: nil, monthLocation: nil, attributes: EngineRawMutableMessageHistoryEntryAttributes(authorIsContact: false)))
+
             var attributes: [MessageAttribute] = []
             if !shown.entities.isEmpty {
                 attributes.append(TextEntitiesMessageAttribute(entities: shown.entities))
             }
-            // Without its author. Every bubble here is one version of one person's message, and
-            // in a group Telegram set aside a column for that person's avatar beside each of them
-            // -- a column the history never fills, so the bubbles stood away from the edge with
-            // nothing beside them. Without an author they sit at the edge, as in a private chat.
+            // Without its author: every bubble here is one version of one person's message, so
+            // no name or avatar is repeated beside each. The screen's contents are edge-aligned
+            // (AorusEdgeAlignedChatContents), so Telegram keeps no avatar column either, which
+            // it does for the hashtag search this screen is built on.
             let versionMessage = message
-                .withUpdatedStableId(stableId: UInt32.max - UInt32(index))
+                .withUpdatedStableId(stableId: UInt32.max - 2 - UInt32(index * 2))
                 .withUpdatedId(id: id)
                 .withUpdatedTimestamp(version.date)
                 .withUpdatedText(shown.text)

@@ -6,10 +6,17 @@ from aorus_attachment_drafts import edit
 def patch_paid_composer(tg: Path) -> None:
     path = tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift'
     source = path.read_text()
-    source = edit(source,
-        'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width : 0.0)',
-        'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0)',
-        'caption and accessory controls reserve the same paid capsule')
+    if '(sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width : 0.0))' in source or '(sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0))' in source:
+        # Telegram 13.2: the agent composer reserves its own width ahead of this choice.
+        source = edit(source,
+            '(sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width : 0.0))',
+            '(sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0))',
+            'caption and accessory controls reserve the same paid capsule')
+    else:
+        source = edit(source,
+            'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width : 0.0)',
+            'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0)',
+            'caption and accessory controls reserve the same paid capsule')
     source = edit(source,
         'sendActionControlsWidth: AorusOldInterface.isEnabled ? 0.0 : sendActionButtonsSize.width, maxHeight:',
         'sendActionControlsWidth: sendButtonIsLaidOut ? sendActionButtonsSize.width : 0.0, maxHeight:',

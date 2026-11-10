@@ -181,10 +181,13 @@ def attachment_test_source(tg):
     call_start = panel.index("AttachButtonComponent(", first)
     call = balanced(panel, call_start)
     call = call[:call.index("                    action:")] + "action: {}, longPressAction: {})"
+    # 13.2 also keeps the scrollable content the pan started on.
+    pan_content = "content: AttachmentScrollableContent?" in pan
+    pan_tuple = "(40.0, $0, nil, nil, nil, capturedFull)" if pan_content else "(40.0, $0, nil, nil, capturedFull)"
     return '''import Foundation
 class UIScrollView {}
 class ListView {}
-class AccountContext {}
+''' + ("class AttachmentScrollableContent {}\n" if pan_content else "") + '''class AccountContext {}
 enum AorusOldInterface { static let isEnabled = true }
 enum AttachmentButtonType { case gallery, file, contact }
 class PresentationStrings {}
@@ -207,7 +210,7 @@ final class PanOwner {
     var isFullSize = false
     func inset(_ full: Bool, _ expanded: Bool, _ offset: CGFloat?, _ capturedFull: Bool) -> CGFloat {
         self.isFullSize = full
-        self.panGestureArguments = offset.map { (40.0, $0, nil, nil, capturedFull) }
+        self.panGestureArguments = offset.map { ''' + pan_tuple + ''' }
         let effectiveExpanded = expanded
         let edgeTopInset: CGFloat = 100.0
 ''' + installed + '''
@@ -272,7 +275,82 @@ def check_gift_patterns(tg):
     print(f"Telegram 13 collectible patterns passed: {checks} installed native matches")
 
 
+def has_lottie_settings(tg):
+    # Telegram 13.1 let callers pick rlottie or tlottie; 13.2 removed rlottie and the module.
+    return (tg / "submodules/LottieSettings").is_dir()
+
+
+def _lottie_calls(tg):
+    source = (tg / "submodules/AnimatedStickerNode/Sources/AnimatedStickerNode.swift").read_text()
+    constructor = balanced(source, source.index("    public init(useMetalCache:"))
+    tab_source = (tg / "submodules/TabBarUI/Sources/TabBarNode.swift").read_text()
+    tab_constructor = balanced(tab_source, tab_source.index("    init(theme: PresentationTheme, itemSelected:"))
+    controller = (tg / "submodules/TabBarUI/Sources/TabBarContollerNode.swift").read_text()
+    tab_call = balanced(controller, controller.index("TabBarNode(theme: self.theme, itemSelected:"))
+    files = (
+        "submodules/AorusGram/Sources/Features/Subscription/SubscriptionDuckView.swift",
+        "submodules/AorusGramUI/Sources/ATunnelStatusViewController.swift",
+        "submodules/AorusGramUI/Sources/AorusBackupHeaderItem.swift",
+        "submodules/QrCodeUI/Sources/AorusClassicQrCodeScreen.swift",
+        "submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift",
+    )
+    calls = []
+    for relative in files:
+        text = (tg / relative).read_text()
+        calls.append(balanced(text, text.index("DefaultAnimatedStickerNodeImpl(")))
+    managed = (tg / "submodules/ManagedAnimationNode/Sources/ManagedAnimationNode.swift").read_text()
+    managed_constructor = balanced(managed, managed.index("    public init(size:"))
+    profile = (tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift").read_text()
+    managed_call = balanced(profile, profile.index("super.init(size:"))
+    return constructor, tab_constructor, tab_call, calls, managed_constructor, managed_call
+
+
 def lottie_test_source(tg):
+    if has_lottie_settings(tg):
+        return _lottie_settings_test_source(tg)
+    # Telegram 13.2: one renderer. The installed local and classic constructors must
+    # still match the native signatures, with nothing left that names the old settings.
+    constructor, tab_constructor, tab_call, calls, managed_constructor, managed_call = _lottie_calls(tg)
+    return r'''import Foundation
+struct PresentationTheme {}
+class ASDisplayNode {}
+class ContextExtractedContentContainingNode {}
+class ContextGesture {}
+enum TabBarItemSwipeDirection { case left, right }
+class DefaultAnimatedStickerNodeImpl {
+''' + constructor + r''' {}
+}
+class TabBarNode {
+''' + tab_constructor + r''' {}
+}
+class ClassicTabOwner {
+    let theme = PresentationTheme()
+    var aorusSwipeAction: ((Int, TabBarItemSwipeDirection) -> Void)?
+    func itemSelected(_ index: Int, _ longTap: Bool, _ nodes: [ASDisplayNode]) {}
+    func aorusClassicContextAction(index: Int, node: ContextExtractedContentContainingNode, gesture: ContextGesture) {}
+    func makeTab() -> TabBarNode { return ''' + tab_call + r''' }
+}
+class ManagedAnimationNode {
+    let size: CGSize
+''' + managed_constructor + r''' { self.size = size }
+}
+class ClassicProfileAnimation: ManagedAnimationNode {
+    init() { ''' + managed_call + r''' }
+}
+var checks = 0
+func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
+let installed: [DefaultAnimatedStickerNodeImpl] = [
+''' + ",\n".join("    " + call for call in calls) + r'''
+]
+expect(installed.count == ''' + str(len(calls)) + r''', "installed local and classic animation renderers")
+_ = ClassicTabOwner().makeTab()
+expect(true, "classic tab matches the native tab bar")
+expect(ClassicProfileAnimation().size == CGSize(width: 30.0, height: 30.0), "classic profile animation keeps 12.0's size")
+print("Telegram 13 Lottie integration passed: \(checks) assertions")
+'''
+
+
+def _lottie_settings_test_source(tg):
     source = (tg / "submodules/AnimatedStickerNode/Sources/AnimatedStickerNode.swift").read_text()
     constructor = balanced(source, source.index("    public init(useMetalCache:"))
     tab_source = (tg / "submodules/TabBarUI/Sources/TabBarNode.swift").read_text()
@@ -334,6 +412,7 @@ print("Telegram 13 Lottie integration passed: \(checks) assertions")
 
 def check_lottie_calls(tg):
     from uikit_required_init_check import strip
+    settings = has_lottie_settings(tg)
     checks = 0
     for path in (tg / "submodules").rglob("*.swift"):
         if "Tests" in path.parts:
@@ -344,9 +423,18 @@ def check_lottie_calls(tg):
         code = strip(source)
         for match in re.finditer(r"\bDefaultAnimatedStickerNodeImpl\s*\(", code):
             call = balanced(code, match.start())
-            if "lottieSettings:" not in call:
-                raise RuntimeError(f"{path}: animation constructor omits the native renderer settings")
+            if ("lottieSettings:" in call) != settings:
+                raise RuntimeError(f"{path}: animation constructor does not match the native renderer settings")
             checks += 1
+    if not settings:
+        for path in (tg / "submodules").rglob("*"):
+            if path.suffix != ".swift" and path.name not in ("BUILD", "BUILD.bazel"):
+                continue
+            if not path.is_file():
+                continue
+            source = path.read_text(errors="replace")
+            if "import LottieSettings" in source or "//submodules/LottieSettings" in source:
+                raise RuntimeError(f"{path}: refers to LottieSettings, which Telegram 13.2 removed")
     print(f"Telegram 13 Lottie calls passed: {checks} installed constructors")
 
 

@@ -1,5 +1,6 @@
 """Compile persisted circle state and its send gate against Telegram's real signal operators."""
 import argparse
+import re
 import os
 import platform
 from pathlib import Path
@@ -65,10 +66,24 @@ def native_transport_source(tg: Path) -> str:
     start = upload.index('                var flags: Int32 = 0', upload.index('case let .Video(duration, size, videoFlags'))
     end = upload.index('                attributes.append(.documentAttributeVideo', start)
     fetch = (tg / 'submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift').read_text()
-    library = fetch[fetch.index('if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
-    local = fetch[fetch.index('if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+    if 'public func videoMediaResourceEditorValues(' in fetch:
+        # Telegram 13.2 decides in one function for both fetches; the local one passes
+        # `alwaysUseModernPipeline && !isImage` as its pipeline choice. Run that decision as
+        # each call site makes it.
+        decision = fetch[fetch.index('public func videoMediaResourceEditorValues('):]
+        shared = decision[decision.index('if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+        arguments = re.findall(r'= videoMediaResourceEditorValues\(adjustments: \w+, alwaysUseModernPipeline: ([^,]+), defaultPreset:', fetch)
+        local_argument = next(argument for argument in arguments if '!isImage' in argument)
+        library_argument = next(argument for argument in arguments if '!isImage' not in argument)
+        library = shared.replace('alwaysUseModernPipeline', '(' + library_argument + ')', 1)
+        local = shared.replace('alwaysUseModernPipeline', '(' + local_argument + ')', 1)
+    else:
+        library = fetch[fetch.index('if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
+        local = fetch[fetch.index('if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'):].split(' {', 1)[0][3:]
     toolbar = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift').read_text()
-    label_start = toolbar.index('    let label: String', toolbar.index('private func generateQualityIcon('))
+    # 13.2 made the icon's drawing public (mediaPickerPhotoToolbarQualityIcon) for its new picker.
+    icon = 'private func generateQualityIcon(' if 'private func generateQualityIcon(' in toolbar else 'public func mediaPickerPhotoToolbarQualityIcon('
+    label_start = toolbar.index('    let label: String', toolbar.index(icon))
     label_end = toolbar.index('    let size = CGSize', label_start)
     return '''import Foundation
 struct TelegramMediaVideoFlags: OptionSet {

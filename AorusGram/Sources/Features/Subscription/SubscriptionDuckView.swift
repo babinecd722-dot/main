@@ -5,7 +5,6 @@ import SwiftSignalKit
 import Display
 import MediaResources
 import AnimatedStickerNode
-import LottieSettings
 
 // Embedded subscription animations: large duck illustrations for the full-screen
 // flows + small looping icons used inside the entry banner.
@@ -51,10 +50,10 @@ private final class LocalTgsSource: AnimatedStickerNodeSource {
     }
 }
 
-// UIView wrapper hosting a looping Telegram TGS animation via the real RLottie
+// UIView wrapper hosting a looping Telegram TGS animation via Telegram's own Lottie
 // pipeline (AnimatedStickerNode). Safe: if the asset is missing it shows nothing.
 final class SubscriptionDuckView: UIView {
-    private let stickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+    private let stickerNode = DefaultAnimatedStickerNodeImpl()
 
     init(duck: SubscriptionDuck, renderSizePx: Int = 320) {
         super.init(frame: .zero)

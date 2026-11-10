@@ -143,9 +143,10 @@ def patch_tab_settings(tg: Path) -> None:
 
     deinit {
         if let observer = self.aorusTabSettingsObserver { NotificationCenter.default.removeObserver(observer) }''', 'root tab ordering')
+        # Telegram 13.2 has no Contacts tab (Settings ▸ Contacts opens them).
+        contacts_identity = '        contactsController.tabBarItem.aorusTabIdentifier = "contacts"\n' if 'controllers.append(contactsController)' in s else ''
         s = edit(s, '        controllers.append(contentsOf: aorusPluginTabs.controllers())\n                ', '''        controllers.append(contentsOf: aorusPluginTabs.controllers())
-        contactsController.tabBarItem.aorusTabIdentifier = "contacts"
-        callListController.tabBarItem.aorusTabIdentifier = "calls"
+''' + contacts_identity + '''        callListController.tabBarItem.aorusTabIdentifier = "calls"
         chatListController.tabBarItem.aorusTabIdentifier = "chats"
         accountSettingsController.tabBarItem.aorusTabIdentifier = "settings"
         newsController.tabBarItem.aorusTabIdentifier = "news"
@@ -157,9 +158,13 @@ def patch_tab_settings(tg: Path) -> None:
             guard let self, self.aorusAppliedTabOrder != AorusTabBarSettings.current.order else { return }
             self.updateRootControllers(showCallsTab: self.aorusShowCallsTab, showNewsTab: self.aorusShowNewsTab)
         }''', 'root tab settings observer')
-        s = edit(s, '        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.', '''        self.aorusWallController?.tabBarItem.aorusTabIdentifier = "wall"
+        # 13.2 dropped "(Contacts)" from the comment, the Contacts tab being gone.
+        removed_tab_comment = '        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.'
+        if removed_tab_comment not in s:
+            removed_tab_comment = '        // A removed selected tab would otherwise fall back to index 0: select Chats instead.'
+        s = edit(s, removed_tab_comment, '''        self.aorusWallController?.tabBarItem.aorusTabIdentifier = "wall"
         controllers = self.aorusOrderTabs(controllers)
-        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.''', 'live stable tab ordering')
+''' + removed_tab_comment, 'live stable tab ordering')
     path.write_text(s)
     path = tg / 'submodules/TelegramUI/Sources/AppDelegate.swift'
     s = edit(path.read_text(), '        aorusInstallBubbleSettings()', '        aorusInstallBubbleSettings()\n        aorusInstallTabSettings()', 'tab settings registration')

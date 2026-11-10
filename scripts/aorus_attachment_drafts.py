@@ -314,7 +314,16 @@ def patch_picker(tg):
         self.controllerNode.updateIsCameraActive()
     }
 ''', 'picker camera controls')
-    s = edit(s, '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = true\n', '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = !controller.aorusRunsWithoutCamera\n', 'hidden picker has no camera')
+    if '            let cameraCellSubject = controller.subject.cameraCellSubject\n' in s:
+        # Telegram 13.2 picks the camera tile from the picker's subject (mediaPickerCameraCellBranch);
+        # .noCamera gives none, and asks for no camera access either.
+        s = edit(s, '            let cameraCellSubject = controller.subject.cameraCellSubject\n', '            let cameraCellSubject: MediaPickerCameraCellSubject = controller.aorusRunsWithoutCamera ? .noCamera : controller.subject.cameraCellSubject\n', 'hidden picker has no camera')
+        access = 'mediaPickerRequestsCameraAccess(subject: controller.subject.cameraCellSubject)'
+        if s.count(access) != 2:
+            raise RuntimeError(f'AttachmentDrafts: camera access request found {s.count(access)} times')
+        s = s.replace(access, 'mediaPickerRequestsCameraAccess(subject: controller.aorusRunsWithoutCamera ? .noCamera : controller.subject.cameraCellSubject)')
+    else:
+        s = edit(s, '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = true\n', '            if case .assets(nil, .default) = controller.subject {\n                useLegacyCamera = !controller.aorusRunsWithoutCamera\n', 'hidden picker has no camera')
     # A capture prepared in the background and never committed is discarded here directly: the
     # chat's discard closure holds this picker weakly, and a weak reference reads nil in deinit.
     s = edit(s, '    deinit {\n        self.presentationDataDisposable?.dispose()\n', '    deinit {\n        self.aorusPreviewImageDisposable?.dispose()\n        if let draft = self.aorusPreparedDraftCapture?.capture.draft {\n            AorusAttachmentDraftCleanup.discard(accountBasePath: self.context.account.basePath, draft: draft)\n        }\n        self.presentationDataDisposable?.dispose()\n', 'cancel pending draft preview image on teardown')
@@ -343,8 +352,18 @@ def patch_picker(tg):
     body = edit(body, old, '''                if let present = self?.controller?.aorusPresentDraftGallery { present(c, a) }
                 else { self?.controller?.present(c, in: .window(.root), with: a, blockInteraction: true) }
 ''', 'direct editor presentation')
-    body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionHost?() ?? self?.selectionNode?.view\n', 'composer transition host')
-    body = edit(body, '                return self?.transitionView(for: identifier)\n', '                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n', 'composer thumbnail transition source')
+    chat_gallery = '            if let uniqueId = item.uniqueIdentifier, self.openChatMediaGallery(source: .selection(focusUniqueId: uniqueId), immediateThumbnail: immediateThumbnail, transitionHostView: { [weak self] in\n'
+    if chat_gallery in body:
+        # Telegram 13.2 can open a selected item in its new in-chat media gallery. A draft is
+        # edited in the gallery the draft flow knows -- the legacy one, with its return transition
+        # to the composer's strip -- so a draft keeps to it.
+        body = edit(body, chat_gallery, '            if let uniqueId = item.uniqueIdentifier, controller.aorusDraftTransitionHost == nil, self.openChatMediaGallery(source: .selection(focusUniqueId: uniqueId), immediateThumbnail: immediateThumbnail, transitionHostView: { [weak self] in\n', 'drafts keep to the legacy gallery')
+        host_old = '            }, initialLayout: layout, transitionHostView: { [weak self] in\n                return self?.selectionNode?.view\n            }, transitionView: { [weak self] identifier in\n                return self?.transitionView(for: identifier)\n'
+        host_new = '            }, initialLayout: layout, transitionHostView: { [weak self] in\n                return self?.controller?.aorusDraftTransitionHost?() ?? self?.selectionNode?.view\n            }, transitionView: { [weak self] identifier in\n                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n'
+        body = edit(body, host_old, host_new, 'composer transition host')
+    else:
+        body = edit(body, '                return self?.selectionNode?.view\n', '                return self?.controller?.aorusDraftTransitionHost?() ?? self?.selectionNode?.view\n', 'composer transition host')
+        body = edit(body, '                return self?.transitionView(for: identifier)\n', '                return self?.controller?.aorusDraftTransitionView?(identifier) ?? self?.transitionView(for: identifier)\n', 'composer thumbnail transition source')
     body = edit(body, '            }, editCover: { _, _ in\n', '            }, finishedTransitionOut: { [weak self] in\n                self?.controller?.aorusDraftGalleryClosed?()\n            }, editCover: { _, _ in\n', 'persist editor after its return transition')
     body = edit(body, '            }, editCover: { _, _ in\n', '            }, aorusDraftTransition: controller.aorusDraftTransitionView != nil, editCover: { _, _ in\n', 'stable draft gallery transition geometry')
     end = start + len(block(s, '        fileprivate func openSelectedMedia('))
@@ -417,6 +436,9 @@ def patch_composer(tg):
     anchor = '        let menuButtonFrame = CGRect(x: leftInset + 8.0, y: menuButtonOriginY,'
     s = edit(s, anchor, '        menuButtonOriginY += aorusAttachmentHeight\n' + anchor, 'classic menu position')
     anchor = '        let textFieldTopContentOffset = contentHeight\n'
+    if anchor not in s and '        let textFieldTopContentOffset = contentHeight + (isAgentLayout ? self.agentTextTopOffset : 0.0)\n' in s:
+        # Telegram 13.2 lowers the text in the agent composer; the strip goes above it the same.
+        anchor = '        let textFieldTopContentOffset = contentHeight + (isAgentLayout ? self.agentTextTopOffset : 0.0)\n'
     new = '''        if let draft = aorusAttachmentDraft, !draft.items.isEmpty {
             let strip: AorusAttachmentDraftStrip
             if let current = self.aorusAttachmentStrip { strip = current }
@@ -534,6 +556,9 @@ def patch_controller(tg):
     anchor = '                var completionImpl: (() -> Void)? = completion\n'
     s = edit(s, anchor, '                let aorusPendingDraft = strongSelf.aorusSendingAttachmentDraft\n                let aorusPendingCaption = strongSelf.aorusAttachmentSendCaption\n                guard strongSelf.aorusAttachmentDraftPrepared(messages: items.map(\\.message)) else { strongSelf.aorusRestoreSendingAttachmentDraftInComposer(aorusPendingDraft, caption: aorusPendingCaption); return }\n' + anchor, 'no partial outgoing draft')
     anchor = '    func sendMessages(_ messages: [EnqueueMessage], media: Bool = false, postpone: Bool = false, commit: Bool = false) {\n'
+    if anchor not in s:
+        # 13.2 can show the schedule picker in an overlay from here.
+        anchor = '    func sendMessages(_ messages: [EnqueueMessage], media: Bool = false, postpone: Bool = false, commit: Bool = false, presentSchedulePickerInOverlay: Bool = false) {\n'
     s = edit(s, anchor, anchor + '        let aorusAttachmentSendRevision = media ? self.aorusSendingAttachmentDraft?.revision : nil\n', 'scope accepted-send callback to the media operation')
     anchor = '''                let _ = (enqueueMessages(account: self.context.account, peerId: peerId, messages: self.transformEnqueueMessages(messages, postpone: postpone))
                 |> deliverOnMainQueue).startStandalone(next: { [weak self] _ in
@@ -557,6 +582,10 @@ def patch_controller(tg):
     anchor = '                let messages = strongSelf.transformEnqueueMessages(mappedMessages, silentPosting: silentPosting, scheduleTime: scheduleTime, postpone: postpone)\n'
     s = edit(s, anchor, anchor.replace('mappedMessages, silentPosting:', 'strongSelf.aorusAttachmentDraftOutgoingMessages(mappedMessages), silentPosting:'), 'text and media share the native paid and scheduled enqueue')
     anchor = '        self.enqueueMediaMessageDisposable.set((legacyAssetPickerEnqueueMessages(context:'
+    if anchor not in s:
+        # Telegram 13.2 converts the picked media in commitEnqueueMediaMessages, which both
+        # enqueue paths (picked signals and prepared messages) end in.
+        anchor = '        self.enqueueMediaMessageDisposable.set((messages\n        |> deliverOnMainQueue).startStrict(next: { [weak self] items in\n'
     s = edit(s, anchor, '        if self.aorusSendingAttachmentDraft != nil { self.aorusAttachmentDraftConverting = true; self.aorusHideSendingAttachmentDraftInComposer() }\n' + anchor, 'conversion lifecycle')
     # The strip is hidden while its media converts, but the chat is saved as the draft still
     # stands until Postbox accepts the messages: a chat closed, or an app killed, during the

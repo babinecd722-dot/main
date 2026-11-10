@@ -335,7 +335,6 @@ private struct AorusState: Equatable {
     var amoledMode: Bool
     var profileReportButton: Bool
     var hideCallsTab: Bool
-    var hideContactsTab: Bool
     var hideSearchButton: Bool
     var hideTabTitles: Bool
     var compactTabBar: Bool
@@ -482,7 +481,6 @@ private enum AorusEntry: ItemListNodeEntry {
     case amoledMode(PresentationTheme, String, Bool)
     case profileReportButton(PresentationTheme, String, Bool)
     case hideCallsTab(PresentationTheme, String, Bool)
-    case hideContactsTab(PresentationTheme, String, Bool)
     case siriShortcuts(PresentationTheme, String, Bool)
     case appBadge(PresentationTheme, String, String)
     case squareAvatars(PresentationTheme, String, Bool)
@@ -556,7 +554,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .interfaceV2, .oldInterface, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
             return AorusSection.ui.rawValue
-        case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar, .tabSettings:
+        case .tabsHeader, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar, .tabSettings:
             return AorusSection.tabs.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled, .messageSeconds:
             return AorusSection.editLocal.rawValue
@@ -631,7 +629,6 @@ private enum AorusEntry: ItemListNodeEntry {
         case .amoledMode:           return 53
         case .profileReportButton:  return 54
         case .hideCallsTab:         return 63
-        case .hideContactsTab:      return 62
         case .siriShortcuts:        return 55
         case .appBadge:             return 56
         case .squareAvatars:        return 57
@@ -796,8 +793,6 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .profileReportButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .hideCallsTab(lt, ls, lv):
             if case let .hideCallsTab(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .hideContactsTab(lt, ls, lv):
-            if case let .hideContactsTab(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .siriShortcuts(lt, ls, lv):
             if case let .siriShortcuts(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .appBadge(lt, ls, lv):
@@ -1003,8 +998,6 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.profileReportButton, $0) })
         case let .hideCallsTab(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideCallsTab, !$0) })
-        case let .hideContactsTab(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideContactsTab, !$0) })
         case let .siriShortcuts(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.siriShortcuts, $0) })
         case let .appBadge(_, title, label):
@@ -1147,8 +1140,8 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .customFont(theme, l10n.customFont),
 
         .tabsHeader(theme, l10n.tabsHeader),
-        // These two switches reflect tab PRESENCE: on = tab shown.
-        .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
+        // This switch reflects tab PRESENCE: on = tab shown. Telegram 13.2 has no Contacts tab
+        // (Settings ▸ Contacts opens them), so there is no switch for one.
         .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
         // Search switch reflects PRESENCE: on = button shown (stored hide flag inverted).
         .hideSearchButton(theme, l10n.hideSearchButton, !state.hideSearchButton),
@@ -1373,7 +1366,6 @@ private func aorusStoredState() -> AorusState {
         amoledMode:         mgr.amoledMode,
         profileReportButton: mgr.profileReportButton,
         hideCallsTab:       mgr.hideCallsTab,
-        hideContactsTab:    mgr.hideContactsTab,
         hideSearchButton:    mgr.hideSearchButton,
         hideTabTitles:       mgr.hideTabTitles,
         compactTabBar:       mgr.compactTabBar,
@@ -1455,7 +1447,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         \.amoledMode: { mgr.amoledMode = $0 },
         \.profileReportButton: { mgr.profileReportButton = $0 },
         \.hideCallsTab: { mgr.hideCallsTab = $0 },
-        \.hideContactsTab: { mgr.hideContactsTab = $0 },
         \.hideSearchButton: { mgr.hideSearchButton = $0 },
         \.hideTabTitles: { mgr.hideTabTitles = $0 },
         \.compactTabBar: { mgr.compactTabBar = $0 },

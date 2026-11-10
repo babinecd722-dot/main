@@ -84,7 +84,12 @@ def main():
         # page palette carries the block marker.
         ordinary = require('TelegramPresentationData/Sources/PresentationTheme.swift', 'var aorusGlassListTheme: PresentationTheme {\n        return self\n    }')
         assert 'func deriveList(' not in ordinary
-        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift', 'nativeParamsView.lumaMin = isDark ? 0.0 : 0.8', 'nativeParamsView.lumaMax = isDark ? 0.15 : 0.801')
+        # The glass keeps Telegram's own luminance limits: fixed in 13.1, adaptive from 13.2
+        # (GlassBackgroundView.adaptiveLumaRange).
+        glass = require('TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift')
+        assert ('nativeParamsView.lumaMin = isDark ? 0.0 : 0.8' in glass and 'nativeParamsView.lumaMax = isDark ? 0.15 : 0.801' in glass) or \
+            (glass.count('nativeParamsView.lumaMin = lumaRange.min') == 2 and glass.count('nativeParamsView.lumaMax = lumaRange.max') == 2), \
+            'GlassBackgroundComponent: the glass does not keep Telegram\'s luminance limits'
         assert 'aorusGlassLuminance' not in glass and 'regularLight' not in glass
         pages = require('ItemListUI/Sources/ItemListControllerNode.swift')
         assert 'aorusUpdatePageBackground' not in pages

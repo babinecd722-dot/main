@@ -22,10 +22,15 @@ def patch_message_details(tg: Path) -> None:
     anchor = "    let drawTail: Bool\n"
     new = "    let aorusTails = AorusPluginAppearanceValues.flag(\"bubble.tails\", in: AorusPluginAppearanceValues.current()) ?? true\n    var drawTail: Bool\n"
     if new not in text:
-        if text.count(anchor) != 1 or text.count("    var drawTail: Bool\n") != 1:
+        # 13.1.1 declares the flag `let` in one helper and `var` in the other; 13.2 makes both
+        # `var` and ends the image helper on its own `tail: false` rule, where ours joins it.
+        ends = ["    if incoming {\n", "    let fixedMainDiameter: CGFloat = 33.0\n    let innerSize ="]
+        if text.count(anchor) == 0 and text.count("    var drawTail: Bool\n") == 2:
+            ends[1] = "    if !tail {\n        drawTail = false\n    }\n"
+        elif text.count(anchor) != 1 or text.count("    var drawTail: Bool\n") != 1:
             raise RuntimeError("MessageDetails: expected both bubble geometry helpers")
         text = text.replace("    var drawTail: Bool\n", new).replace(anchor, new)
-        for end in ["    if incoming {\n", "    let fixedMainDiameter: CGFloat = 33.0\n    let innerSize ="]:
+        for end in ends:
             if text.count(end) != 1:
                 raise RuntimeError("MessageDetails: bubble geometry endpoint moved")
             text = text.replace(end, "    drawTail = drawTail && aorusTails\n\n" + end, 1)

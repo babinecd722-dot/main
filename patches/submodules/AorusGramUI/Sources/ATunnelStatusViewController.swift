@@ -4,7 +4,6 @@ import TelegramPresentationData
 import AsyncDisplayKit
 import SwiftSignalKit
 import AnimatedStickerNode
-import LottieSettings
 import MediaResources
 import Display
 
@@ -53,7 +52,7 @@ private final class ATunnelLocalTgsSource: AnimatedStickerNodeSource {
 }
 
 private final class ATunnelDuckView: UIView {
-    private let node = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+    private let node = DefaultAnimatedStickerNodeImpl()
 
     init(renderSizePx: Int = 280) {
         super.init(frame: .zero)

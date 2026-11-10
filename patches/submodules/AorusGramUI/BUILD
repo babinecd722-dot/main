@@ -43,7 +43,6 @@ swift_library(
         "//submodules/AppBundle:AppBundle",
         "//submodules/MediaResources:MediaResources",
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AvatarNode:AvatarNode",
         "//submodules/LocalizedPeerData:LocalizedPeerData",
         # The navigation-bar capsule AorusAI's title sits in is Telegram's own, the same

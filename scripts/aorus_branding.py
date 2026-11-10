@@ -1133,18 +1133,27 @@ def patch_deleted_messages_interception(tg: Path) -> None:
     # the new version of an incoming message when the edit is real, and the willEditMessage
     # notification goes to the deleted-messages cache and the plugins. The message is stored
     # as the server sent it; its earlier texts are shown on the Edit History screen.
-    utils_path_edit = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    # Telegram 13.2 moved the replay of server updates out of AccountStateManagementUtils into
+    # StateReplay (State/Sync), one method per update; the transaction and the media box are
+    # its properties, so the hook reads the same in either.
+    utils_path_edit = tg / "submodules/TelegramCore/Sources/State/Sync/StateReplay+Messages.swift"
+    edit_case = "    func applyEditMessage(_ id: MessageId, _ message: StoreMessage) {\n"
+    if not utils_path_edit.is_file():
+        utils_path_edit = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+        edit_case = "            case let .EditMessage(id, message):\n"
     if utils_path_edit.is_file():
         t = utils_path_edit.read_text(encoding="utf-8")
         edit_sentinel = "// AorusGram: capture edit"
         if edit_sentinel not in t:
             # --- A. capture + notification ---
             edit_anchor = (
-                "            case let .EditMessage(id, message):\n"
+                edit_case +
                 "                var generatedEvent:"
             )
+            if edit_anchor not in t:
+                edit_anchor = edit_case + "        var generatedEvent:"
             edit_hook = (
-                "            case let .EditMessage(id, message):\n"
+                edit_case +
                 "                " + edit_sentinel + "\n"
                 # A message arrives through this case for reasons that are not edits. A
                 # reaction is delivered as an edited message, and so are a link preview the
@@ -1171,13 +1180,14 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                }\n"
                 "                var generatedEvent:"
             )
-            if edit_anchor in t:
-                t = t.replace(edit_anchor, edit_hook, 1)
-                print("AccountStateManagementUtils.swift: edit-capture hook injected")
-            else:
-                print("AccountStateManagementUtils.swift: EditMessage anchor not found — skipped")
+            if t.count(edit_anchor) != 1:
+                raise RuntimeError(f"EditCapture: EditMessage anchor found {t.count(edit_anchor)} times in {utils_path_edit.name}")
+            t = t.replace(edit_anchor, edit_hook, 1)
+            print(f"{utils_path_edit.name}: edit-capture hook injected")
 
             utils_path_edit.write_text(t, encoding="utf-8")
+    else:
+        raise RuntimeError("EditCapture: neither StateReplay+Messages.swift nor AccountStateManagementUtils.swift exists")
 
     # --- 2. Global-id deletes in AccountStateManagementUtils (REGULAR CHAT deletes-for-everyone) ---
     # This is the critical path for "other person deleted a message for everyone" — comes
@@ -1189,7 +1199,9 @@ def patch_deleted_messages_interception(tg: Path) -> None:
     # whole conversation our sent messages must survive too) and skip them from the delete
     # call. Global IDs only ever address already-sent cloud messages, so there is no risk of
     # catching send-pipeline temporaries.
-    utils_path = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    utils_path = tg / "submodules/TelegramCore/Sources/State/Sync/StateReplay+Messages.swift"
+    if not utils_path.is_file():
+        utils_path = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
     new_marker = "__aorusFilteredGlobalIds"
     if utils_path.is_file():
         t = utils_path.read_text(encoding="utf-8")
@@ -1271,11 +1283,11 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 if old_tail in t:
                     t = t.replace(old_tail, new_tail, 1)
                 utils_path.write_text(t, encoding="utf-8")
-                print("AccountStateManagementUtils.swift: global-id preserve hook injected (incoming + outgoing)")
+                print(f"{utils_path.name}: global-id preserve hook injected (incoming + outgoing)")
             else:
-                print("AccountStateManagementUtils.swift: deleteMessagesWithGlobalIds anchor not found — skipped")
+                raise RuntimeError(f"DeletedMessages: deleteMessagesWithGlobalIds anchor not found in {utils_path.name}")
     else:
-        print("AccountStateManagementUtils.swift: file not found — skipped")
+        raise RuntimeError("DeletedMessages: neither StateReplay+Messages.swift nor AccountStateManagementUtils.swift exists")
 
 
 def patch_app_delegate_import_aorusgram(tg: Path) -> None:
@@ -1385,7 +1397,7 @@ def patch_client_spoof_app_version(tg: Path) -> None:
         tg / "submodules/BuildConfig/Sources/BuildConfig.swift",
         tg / "Telegram/Telegram-iOS/BuildConfig.swift",
     ]
-    official_version = "13.1.1"
+    official_version = "13.2"
 
     for vpath in version_candidates:
         if not vpath.is_file():
@@ -2899,10 +2911,13 @@ def patch_incoming_message_hook(tg: Path) -> None:
       - AutoReplyManager.handleIncoming  (auto-reply trigger)
       - DeletedMessagesCache.handleIncomingNotification (pre-cache for delete recovery)
     """
-    path = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    # Telegram 13.2 replays server updates in ReplayContext (State/Sync), one method per update;
+    # applyAddMessages has the same `messages`, `location`, `transaction` and `mediaBox`.
+    path = tg / "submodules/TelegramCore/Sources/State/Sync/StateReplay+Messages.swift"
     if not path.is_file():
-        print("IncomingMessageHook: AccountStateManagementUtils.swift not found, skip")
-        return
+        path = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if not path.is_file():
+        raise RuntimeError("IncomingMessageHook: neither StateReplay+Messages.swift nor AccountStateManagementUtils.swift exists")
 
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: incoming message hook"
@@ -3252,9 +3267,8 @@ def patch_incoming_message_hook(tg: Path) -> None:
     # Anchor is intentionally precise — this line exists in current upstream and
     # gives us `messages: [StoreMessage]` in scope.
     anchor = visible_anchor
-    if anchor not in t:
-        print("IncomingMessageHook: addMessages(messages, location: location) anchor not found — skipped")
-        return
+    if t.count(anchor) != 1:
+        raise RuntimeError(f"IncomingMessageHook: addMessages anchor found {t.count(anchor)} times in {path.name}")
 
     # StoreMessage.id is StoreMessageId — `.Id(MessageId)` or `.Partial(...)`.
     # We only post for fully-resolved IDs (the .Id case) on the StoreMessage's
@@ -5955,15 +5969,17 @@ def patch_unlimited_recent_stickers(tg: Path) -> None:
             2,
         ),
         (
-            tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift",
+            # Telegram 13.2 replays the update in StateReplay (State/Sync).
+            tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+            if (tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift").is_file()
+            else tg / "submodules/TelegramCore/Sources/State/Sync/StateReplay+Finalize.swift",
             1,
         ),
     )
     marker = "// AorusGram: unlimited recent stickers — preserve the complete local history."
     for path, expected_count in insertion_files:
         if not path.is_file():
-            print(f"Unlimited recent stickers: {path.name} not found")
-            continue
+            raise RuntimeError(f"Unlimited recent stickers: {path.name} not found")
         t = path.read_text(encoding="utf-8")
         old = "removeTailIfCountExceeds: 20"
         relevant_old = [
@@ -8407,6 +8423,11 @@ def patch_aorus_accent_theme(tg: Path) -> None:
             ),
         ]
         changed = 0
+        # Telegram 13.2 already gives the idle search icon the tab items' own unselected colour
+        # (tabBarUnselectedItemColor), which is what this matched up.
+        if "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : tabBarUnselectedItemColor(theme: params.theme))" in t:
+            tabbar_replacements = [r for r in tabbar_replacements if r[2] != "inactive search icon -> tabBar.iconColor"]
+            print("AorusTabSearchTint: inactive search icon -> tabBar.iconColor (13.2 native: the items' colour)")
         for old, new, label in tabbar_replacements:
             if new in t:
                 print(f"AorusTabSearchTint: {label} already patched")
@@ -9649,7 +9670,71 @@ def patch_local_premium(tg: Path) -> None:
     #    override when a real/empty status is set instead), so the worn gift survives
     #    restarts. Hooks the two engine entry points that set the own emoji status.
     eng = tg / "submodules/TelegramCore/Sources/TelegramEngine/AccountData/TelegramEngineAccountData.swift"
-    if eng.is_file():
+    if eng.is_file() and "private func _internal_setAccountEmojiStatus(" in eng.read_text(encoding="utf-8") and "AorusGramPremium.persistEmojiStatus" not in eng.read_text(encoding="utf-8"):
+        # Telegram 13.2 stores the status only once the server has taken it. The server refuses a
+        # status to an account that is not really Premium, and knows nothing of a local gift, so
+        # neither would ever show. Under local Premium the status is the account's own, stored
+        # here at once and kept (persistEmojiStatus); the server is still told, and its answer
+        # cannot take the status back. A local gift is never sent: it exists only here.
+        t = eng.read_text(encoding="utf-8")
+        local_apply = (
+            "/// AorusGram: the account's status stored here, as Telegram stores it once the server has it.\n"
+            "private func aorusApplyLocalEmojiStatus(account: Account, emojiStatus: PeerEmojiStatus?, files: [TelegramMediaFile], recentFile: TelegramMediaFile?) -> Signal<Never, SetEmojiStatusError> {\n"
+            "    let peerId = account.peerId\n"
+            "    return account.postbox.transaction { transaction -> Void in\n"
+            "        for file in files {\n"
+            "            transaction.storeMediaIfNotPresent(media: file)\n"
+            "        }\n"
+            "        if let recentFile, let entry = CodableEntry(RecentMediaItem(recentFile)) {\n"
+            "            let itemEntry = OrderedItemListEntry(id: RecentMediaItemId(recentFile.fileId).rawValue, contents: entry)\n"
+            "            transaction.addOrMoveToFirstPositionOrderedItemListItem(collectionId: Namespaces.OrderedItemList.CloudRecentStatusEmoji, item: itemEntry, removeTailIfCountExceeds: 32)\n"
+            "        }\n"
+            "        if let peer = transaction.getPeer(peerId) as? TelegramUser {\n"
+            "            updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedEmojiStatus(emojiStatus)], update: { _, updated in updated })\n"
+            "        }\n"
+            "    }\n"
+            "    |> castError(SetEmojiStatusError.self)\n"
+            "    |> ignoreValues\n"
+            "}\n"
+            "\n"
+        )
+        set_anchor = "private func _internal_setAccountEmojiStatus(account: Account, apiEmojiStatus: Api.EmojiStatus, emojiStatus: PeerEmojiStatus?, files: [TelegramMediaFile], recentFile: TelegramMediaFile?) -> Signal<Never, SetEmojiStatusError> {\n    let peerId = account.peerId\n    let postbox = account.postbox\n"
+        if t.count(set_anchor) != 1:
+            raise RuntimeError("Premium: 13.2 emoji status setter anchor not found")
+        t = t.replace(set_anchor, local_apply + set_anchor + (
+            "    // AorusGram: under local Premium the status is stored at once and kept; the server is\n"
+            "    // told, and its refusal (an account that is not really Premium) takes nothing back.\n"
+            "    if AorusGramPremium.isOwnAccount(peerId.id._internalGetInt64Value()) {\n"
+            "        AorusGramPremium.persistEmojiStatus(emojiStatus, rawId: peerId.id._internalGetInt64Value())\n"
+            "        let remoteApply: Signal<Never, SetEmojiStatusError> = account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: apiEmojiStatus), tag: AccountEmojiStatusRequestDependencyTag())\n"
+            "        |> `catch` { _ -> Signal<Api.Bool, NoError> in .single(.boolFalse) }\n"
+            "        |> castError(SetEmojiStatusError.self)\n"
+            "        |> ignoreValues\n"
+            "        return aorusApplyLocalEmojiStatus(account: account, emojiStatus: emojiStatus, files: files, recentFile: recentFile)\n"
+            "        |> then(remoteApply)\n"
+            "    }\n"
+        ), 1)
+        gift_anchor = "            return _internal_setAccountEmojiStatus(account: self.account, apiEmojiStatus: apiEmojiStatus, emojiStatus: emojiStatus, files: [file, patternFile], recentFile: nil)\n"
+        if t.count(gift_anchor) != 1:
+            raise RuntimeError("Premium: 13.2 star gift status anchor not found")
+        t = t.replace(gift_anchor, (
+            "            // AorusGram: a worn local gift survives restarts and is never sent: the server\n"
+            "            // knows nothing of it. A real or cleared status drops the local override.\n"
+            "            if AorusFakeGiftsStore.contains(.unique(starGift)) {\n"
+            "                AorusGramPremium.persistEmojiStatus(emojiStatus, rawId: self.account.peerId.id._internalGetInt64Value())\n"
+            "                AorusFakeGiftsStore.setWorn(.unique(starGift), true)\n"
+            "                return aorusApplyLocalEmojiStatus(account: self.account, emojiStatus: emojiStatus, files: [file, patternFile], recentFile: nil)\n"
+            "            }\n"
+            "            AorusGramPremium.persistEmojiStatus(nil, rawId: self.account.peerId.id._internalGetInt64Value())\n"
+            "            AorusFakeGiftsStore.clearWorn()\n"
+        ) + gift_anchor, 1)
+        emoji_anchor = "            return _internal_setAccountEmojiStatus(account: self.account, apiEmojiStatus: apiEmojiStatus, emojiStatus: emojiStatus, files: file.map { [$0] } ?? [], recentFile: file)\n"
+        if t.count(emoji_anchor) != 1:
+            raise RuntimeError("Premium: 13.2 emoji status anchor not found")
+        t = t.replace(emoji_anchor, "            AorusFakeGiftsStore.clearWorn() // AorusGram: a plain status takes a worn local gift off\n" + emoji_anchor, 1)
+        eng.write_text(t, encoding="utf-8")
+        print("Premium: patched TelegramEngineAccountData (persist worn fake gift)")
+    elif eng.is_file():
         t = eng.read_text(encoding="utf-8")
         if "AorusGramPremium.persistEmojiStatus" in t:
             print("Premium: TelegramEngineAccountData already patched")
@@ -9703,6 +9788,9 @@ def patch_local_premium(tg: Path) -> None:
     # 5) Server-sync interception: keep the persisted worn fake gift instead of the
     #    value the server reports for the own account, on the incremental update path.
     state_utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if not state_utils.is_file():
+        # Telegram 13.2 interprets updates in UpdateInterpreter (State/Sync).
+        state_utils = tg / "submodules/TelegramCore/Sources/State/Sync/UpdateInterpreter+Peers.swift"
     if state_utils.is_file():
         t = state_utils.read_text(encoding="utf-8")
         if "AorusGramPremium.resolveEmojiStatus" in t:
@@ -9714,14 +9802,18 @@ def patch_local_premium(tg: Path) -> None:
             injection = (
                 "                        return user.withUpdatedEmojiStatus(AorusGramPremium.resolveEmojiStatus(forRawId: user.id.id._internalGetInt64Value(), server: PeerEmojiStatus(apiStatus: updateUserEmojiStatusData.emojiStatus)))\n"
             )
+            if anchor not in t:
+                # 13.2 interprets the update at another depth; the statement is the same.
+                anchor = anchor.lstrip(" ")
+                injection = injection.lstrip(" ")
             if anchor in t:
                 t = t.replace(anchor, injection, 1)
                 state_utils.write_text(t, encoding="utf-8")
                 print("Premium: patched AccountStateManagementUtils (updateUserEmojiStatus override)")
             else:
-                print("Premium: WARNING updateUserEmojiStatus anchor not found")
+                raise RuntimeError("Premium: updateUserEmojiStatus anchor not found")
     else:
-        print("Premium: AccountStateManagementUtils.swift not found — skipped")
+        raise RuntimeError("Premium: neither AccountStateManagementUtils.swift nor UpdateInterpreter+Peers.swift exists")
 
     # 6) Server-sync interception on the full-user merge paths (getDifference / full
     #    sync), which otherwise overwrite the own user's emoji status from the server.
@@ -9810,7 +9902,43 @@ def patch_local_premium(tg: Path) -> None:
     #    server error (account.updateColor is rejected on a fake-premium account, which
     #    otherwise shows "Произошла ошибка" and the colors revert on the next sync).
     color_upd = tg / "submodules/TelegramCore/Sources/TelegramEngine/AccountData/UpdateAccountPeerName.swift"
-    if color_upd.is_file():
+    if color_upd.is_file() and "private func _internal_applyAccountPeerColor(" in color_upd.read_text(encoding="utf-8") and "AorusGramPremium.persistAppearance" not in color_upd.read_text(encoding="utf-8"):
+        # Telegram 13.2 stores the colours only once the server has taken them, and reports its
+        # refusal. Under local Premium they are stored at once and kept (persistAppearance); the
+        # server is still told, and its refusal takes nothing back.
+        t = color_upd.read_text(encoding="utf-8")
+        anchor = "    let inputProfileColor = Api.PeerColor.peerColor(.init(flags: flagsProfile, color: profileColor?.rawValue, backgroundEmojiId: profileBackgroundEmojiId))\n"
+        if t.count(anchor) != 1:
+            raise RuntimeError("Premium: 13.2 peer colour anchor not found")
+        t = t.replace(anchor, anchor + (
+            "    // AorusGram: under local Premium the appearance is the account's own, stored here at once.\n"
+            "    if AorusGramPremium.isOwnAccount(peerId.id._internalGetInt64Value()) {\n"
+            "        AorusGramPremium.persistAppearance(nameColor: nameColorValue, backgroundEmojiId: backgroundEmojiIdValue, profileColor: profileColor, profileBackgroundEmojiId: profileBackgroundEmojiId, rawId: peerId.id._internalGetInt64Value())\n"
+            "        let localApply = postbox.transaction { transaction -> Void in\n"
+            "            if let peer = transaction.getPeer(peerId) as? TelegramUser {\n"
+            "                updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedNameColor(nameColorValue).withUpdatedBackgroundEmojiId(backgroundEmojiIdValue).withUpdatedProfileColor(profileColor).withUpdatedProfileBackgroundEmojiId(profileBackgroundEmojiId)], update: { _, updated in updated })\n"
+            "            }\n"
+            "        }\n"
+            "        let replies = _internal_applyAccountPeerColor(postbox: postbox, network: network, peerId: peerId, forProfile: false, color: inputRepliesColor, update: { peer in\n"
+            "            return peer.withUpdatedNameColor(nameColorValue).withUpdatedBackgroundEmojiId(backgroundEmojiIdValue)\n"
+            "        })\n"
+            "        let profile = _internal_applyAccountPeerColor(postbox: postbox, network: network, peerId: peerId, forProfile: true, color: inputProfileColor, update: { peer in\n"
+            "            return peer.withUpdatedProfileColor(profileColor).withUpdatedProfileBackgroundEmojiId(profileBackgroundEmojiId)\n"
+            "        })\n"
+            "        return localApply\n"
+            "        |> castError(UpdateNameColorAndEmojiError.self)\n"
+            "        |> mapToSignal { _ -> Signal<Void, UpdateNameColorAndEmojiError> in\n"
+            "            return combineLatest(replies, profile)\n"
+            "            |> castError(UpdateNameColorAndEmojiError.self)\n"
+            "            |> mapToSignal { _, _ -> Signal<Void, UpdateNameColorAndEmojiError> in\n"
+            "                return .complete()\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+        ), 1)
+        color_upd.write_text(t, encoding="utf-8")
+        print("Premium: patched UpdateAccountPeerName (persist colors + suppress server error)")
+    elif color_upd.is_file():
         t = color_upd.read_text(encoding="utf-8")
         if "AorusGramPremium.persistAppearance" in t:
             print("Premium: UpdateAccountPeerName already patched")
@@ -12098,6 +12226,54 @@ def _patch_gifts_list_count(gl: Path) -> None:
     print("FakeGifts: GiftsListView counts the local gifts it shows")
 
 
+def _patch_gifts_list_tap_identity(gl: Path) -> None:
+    """A tapped gift opens itself, found by what it is rather than by every field it has.
+
+    The grid opens Telegram's gift pager at the index of the tapped gift, found with `==` over
+    the whole entry. The entry is the one the cell's tap was given when the cell was last
+    updated -- and a cell is not updated while its component compares equal, which ignores the
+    tap. A local gift's sender is filled in once the account's own peer has loaded, so the
+    entries are rebuilt with it; a collectible's cell shows no sender and so compares equal
+    and keeps the entry from before, and `==` against the list found nothing. The index fell
+    back to 0, and a collectible opened as whatever gift stood first -- an ordinary one given
+    before it. The gift is now found by its reference, its kind and id and its date, which no
+    rebuild changes; `==` stays the fallback.
+    """
+    t = gl.read_text(encoding="utf-8")
+    if "aorusGiftListIdentity" in t:
+        return
+    old = "                                    let index = self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0\n"
+    if t.count(old) != 1:
+        raise RuntimeError(f"FakeGifts: GiftsListView tap index anchor found {t.count(old)} times")
+    t = t.replace(
+        old,
+        "                                    // AorusGram: by identity, see aorusGiftListIdentity.\n"
+        "                                    let aorusTappedIdentity = aorusGiftListIdentity(product)\n"
+        "                                    let index = self.starsProducts?.firstIndex(where: { aorusGiftListIdentity($0) == aorusTappedIdentity }) ?? self.starsProducts?.firstIndex(where: { $0 == product }) ?? 0\n",
+        1,
+    )
+    t = t.rstrip("\n") + (
+        "\n"
+        "\n"
+        "/// AorusGram: what a gift in the grid is, independent of fields filled in later (its sender,\n"
+        "/// resolved once the account's peer loads): its reference where it has one, its kind and id\n"
+        "/// and the date it was received. A cell's tap can hold an entry from before such a rebuild,\n"
+        "/// because a cell is not updated while its component compares equal.\n"
+        "private func aorusGiftListIdentity(_ item: ProfileGiftsContext.State.StarGift) -> String {\n"
+        "    let kind: String\n"
+        "    switch item.gift {\n"
+        "    case let .generic(gift):\n"
+        "        kind = \"g_\\(gift.id)\"\n"
+        "    case let .unique(gift):\n"
+        "        kind = \"u_\\(gift.id)\"\n"
+        "    }\n"
+        "    return \"\\(item.reference?.stringValue ?? \"-\")|\\(kind)|\\(item.date)\"\n"
+        "}\n"
+    )
+    gl.write_text(t, encoding="utf-8")
+    print("FakeGifts: GiftsListView opens a tapped gift by its identity")
+
+
 def patch_fake_gifts(tg: Path) -> None:
     """Local "fake gifts" pinned to the user's own profile.
 
@@ -12573,6 +12749,7 @@ def patch_fake_gifts(tg: Path) -> None:
                 gl.write_text(t, encoding="utf-8")
                 print("FakeGifts: patched GiftsListView (own-profile injection + live refresh)")
         _patch_gifts_list_count(gl)
+        _patch_gifts_list_tap_identity(gl)
     else:
         print("FakeGifts: GiftsListView.swift not found — skip profile injection")
 
@@ -17246,46 +17423,45 @@ def patch_navigation_bar_resizing_nodes(tg: Path) -> None:
     if marker in text:
         print("NavigationBarResizingNodes: already patched")
         return
+    # Anchored on lines of their own rather than on their neighbours: Telegram 13.2 added
+    # fields (glass corner radius, accessibility) around them.
     for old, new, what in (
         (
-            "        public let action: (UIView) -> Void\n"
-            "        public let contextAction: ((UIView, ContextGesture?) -> Void)?\n"
-            "\n"
-            "        public init(id: AnyHashable, content: Content,",
-            "        public let action: (UIView) -> Void\n"
+            "        public let contextAction: ((UIView, ContextGesture?) -> Void)?\n",
             "        public let contextAction: ((UIView, ContextGesture?) -> Void)?\n"
             "        /// AorusGram: the layout revision of a node that changes its width in place\n"
             "        /// (`AorusNavigationBarResizingNode`), read as the content is made.\n"
-            "        public var aorusNodeLayoutRevision: Int?\n"
-            "\n"
-            "        public init(id: AnyHashable, content: Content,",
+            "        public var aorusNodeLayoutRevision: Int?\n",
             "button revision",
-        ),
-        (
-            "            return Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction)\n",
-            "            var button = Button(id: self.id, content: self.content, isEnabled: self.isEnabled, tint: self.tint, overflow: overflow, requiresOwnSection: self.requiresOwnSection, staysInRow: self.staysInRow, action: self.action, contextAction: self.contextAction)\n"
-            "            button.aorusNodeLayoutRevision = self.aorusNodeLayoutRevision\n"
-            "            return button\n",
-            "overflow copy",
         ),
         (
             "            if lhs.staysInRow != rhs.staysInRow {\n"
             "                return false\n"
-            "            }\n"
-            "            return true\n",
+            "            }\n",
             "            if lhs.staysInRow != rhs.staysInRow {\n"
             "                return false\n"
             "            }\n"
             "            if lhs.aorusNodeLayoutRevision != rhs.aorusNodeLayoutRevision {\n"
             "                return false\n"
-            "            }\n"
-            "            return true\n",
+            "            }\n",
             "button equality",
         ),
     ):
         if text.count(old) != 1:
             raise RuntimeError(f"NavigationBarResizingNodes: {what} anchor found {text.count(old)} times")
         text = text.replace(old, new, 1)
+    # The copy withOverflow makes carries the revision too, whatever else it carries.
+    import re as _re_overflow
+    overflow_copy = _re_overflow.compile(r"^            return (Button\(id: self\.id, content: self\.content, isEnabled: self\.isEnabled, tint: self\.tint, overflow: overflow, .*\))\n", _re_overflow.M)
+    if len(overflow_copy.findall(text)) != 1:
+        raise RuntimeError(f"NavigationBarResizingNodes: overflow copy anchor found {len(overflow_copy.findall(text))} times")
+    text = overflow_copy.sub(
+        lambda m: "            var button = " + m.group(1) + "\n"
+        "            button.aorusNodeLayoutRevision = self.aorusNodeLayoutRevision\n"
+        "            return button\n",
+        text,
+        count=1,
+    )
     text = text.rstrip("\n") + "\n\n" + (
         "/// AorusGram: a screen's node that changes its width where it is (the chat's avatar with the ghost\n"
         "/// beside it, or without). The bar measures a node when its button changes; a new revision with\n"
@@ -17720,8 +17896,12 @@ def patch_mask_picker_call(tg: Path) -> None:
                       "    private(set) var aorusButtonRowTop: CGFloat = 0.0\n", 1)
 
         # 13.1 centres the row in the band between unequal side insets (iPhone Duo's strip).
+        # 13.2 works out where the row starts once, before the notices (whose tails point at
+        # a button), and starts the row from it.
         y_anchor = "        var buttonX: CGFloat = centeredX(width: buttonSize * CGFloat(buttons.count) + buttonSpacing * CGFloat(buttons.count - 1))\n"
         if y_anchor not in t:
+            y_anchor = "        var buttonX: CGFloat = buttonRowMinX\n"
+        if t.count(y_anchor) != 1:
             raise RuntimeError("MaskPicker: buttonX anchor not found")
         t = t.replace(y_anchor, "        self.aorusButtonRowTop = buttonY\n" + y_anchor, 1)
 
@@ -19601,9 +19781,15 @@ def patch_plugin_appearance(tg: Path) -> None:
             "theme: aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue)), autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: aorusPluginWallpaper(aorusAmoledWallpaper(effectiveChatWallpaper, dark: themeValue.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered), dark: themeValue.overallDarkAppearance),",
             "live presentation data",
         )
+        # Every place the app's presentation data is made: three in 13.1.1, four in 13.2, which
+        # builds the corners from the stored settings in one initializer.
         corners = "PresentationChatBubbleCorners(mainRadius: CGFloat(themeSettings.chatBubbleSettings.mainRadius), auxiliaryRadius: CGFloat(themeSettings.chatBubbleSettings.auxiliaryRadius), mergeBubbleCorners: themeSettings.chatBubbleSettings.mergeBubbleCorners)"
-        rep(corners, "aorusPluginBubbleCorners(" + corners + ")", "bubble corners", count=3)
-        rep("= resolveFontSize(settings: themeSettings)", "= aorusPluginFontSizes(resolveFontSize(settings: themeSettings))", "font sizes", count=3)
+        presentation_sites = 3
+        if t.count(corners) == 0:
+            corners = "PresentationChatBubbleCorners(settings: themeSettings.chatBubbleSettings)"
+            presentation_sites = 4
+        rep(corners, "aorusPluginBubbleCorners(" + corners + ")", "bubble corners", count=presentation_sites)
+        rep("= resolveFontSize(settings: themeSettings)", "= aorusPluginFontSizes(resolveFontSize(settings: themeSettings))", "font sizes", count=presentation_sites)
         path.write_text(t, encoding="utf-8")
         print("PluginAppearance: theme, wallpaper, bubble shape and text sizes follow plugins")
 
@@ -20727,8 +20913,12 @@ def patch_message_settings(tg: Path) -> None:
     shared = tg / "submodules/TelegramUI/Sources/SharedAccountContext.swift"
     s = shared.read_text(encoding="utf-8")
     if "aorusMessagePreviewShowsText(messages)" not in s:
+        # A line of its own in 13.1.1; 13.2 passes more after it (the feed's bubble and header).
         old = "                showTextAsPlaceholder: rank != nil\n"
         new = "                showTextAsPlaceholder: rank != nil && !aorusMessagePreviewShowsText(messages)\n"
+        if s.count(old) == 0:
+            old = "                showTextAsPlaceholder: rank != nil,\n"
+            new = "                showTextAsPlaceholder: rank != nil && !aorusMessagePreviewShowsText(messages),\n"
         if s.count(old) != 1:
             raise RuntimeError(f"MessageSettings: preview placeholder anchor found {s.count(old)} times")
         s = s.replace(old, new, 1)
@@ -21039,15 +21229,19 @@ def patch_hide_tabs(tg: Path) -> None:
          "        if showCallsTab && !UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\") { // AorusGram: hide calls tab\n"
          "            controllers.append(self.callListController!)\n        }"),
     ]
+    if "        let contactsController = ContactsController(context: self.context)\n        contactsController.switchToChatsController" not in t and "controllers.append(contactsController)" not in t:
+        # Telegram 13.2 has no Contacts tab: Settings ▸ Contacts pushes the screen. Calls is the
+        # one tab left to hide.
+        edits = [edit for edit in edits if "contacts" not in edit[1]]
     n = 0
     for old, new in edits:
         if old in t:
             t = t.replace(old, new, 1); n += 1
     if n == len(edits):
         f.write_text(t, encoding="utf-8")
-        print(f"HideTabs: gated Contacts/Calls appends ({n} sites)")
+        print(f"HideTabs: gated optional tab appends ({n} sites)")
     else:
-        print(f"HideTabs: WARNING — matched {n}/{len(edits)} anchors")
+        raise RuntimeError(f"HideTabs: matched {n}/{len(edits)} anchors")
 
 
 def patch_plugin_runtime(tg: Path) -> None:
@@ -22038,7 +22232,82 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
             raise RuntimeError(f"TabBarVisibility: {path.name} is missing")
 
     component = component_file.read_text(encoding="utf-8")
-    if "AorusGram: hide tab titles" not in component:
+    replacements = None
+    if "AorusGram: hide tab titles" not in component and "public let usesSystemLayout: Bool" in component:
+        # Telegram 13.2 lays a portrait iPhone's bar out as iOS 27 does (`usesSystemLayout`). The tab
+        # settings keep the layout they had: with titles hidden or a compact panel the bar takes
+        # Telegram's own non-system layout with the settings applied (aorusTabBarItemsLayout), and
+        # without either it is Telegram's bar exactly.
+        replacements = [
+            (
+                "    public let usesSystemLayout: Bool\n",
+                "    public let usesSystemLayout: Bool\n"
+                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
+                "    public let compactPanel: Bool // AorusGram: compact tab panel\n",
+            ),
+            (
+                "        isCompact: Bool,\n"
+                "        usesSystemLayout: Bool = true\n"
+                "    ) {\n",
+                "        isCompact: Bool,\n"
+                "        usesSystemLayout: Bool = true,\n"
+                "        hideTitles: Bool = false,\n"
+                "        compactPanel: Bool = false\n"
+                "    ) {\n",
+            ),
+            (
+                "        self.usesSystemLayout = usesSystemLayout\n"
+                "    }\n",
+                "        self.usesSystemLayout = usesSystemLayout\n"
+                "        self.hideTitles = hideTitles\n"
+                "        self.compactPanel = compactPanel\n"
+                "    }\n",
+            ),
+            (
+                "        if lhs.usesSystemLayout != rhs.usesSystemLayout {\n"
+                "            return false\n"
+                "        }\n"
+                "        return true\n",
+                "        if lhs.usesSystemLayout != rhs.usesSystemLayout {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.hideTitles != rhs.hideTitles {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.compactPanel != rhs.compactPanel {\n"
+                "            return false\n"
+                "        }\n"
+                "        return true\n",
+            ),
+            (
+                "            let isSystemLayout = component.axis == .horizontal && !component.isCompact && component.usesSystemLayout\n",
+                "            // AorusGram: the tab settings lay the bar out themselves (aorusTabBarItemsLayout).\n"
+                "            let isSystemLayout = component.axis == .horizontal && !component.isCompact && component.usesSystemLayout && !component.hideTitles && !component.compactPanel\n",
+            ),
+            (
+                "            let search = component.axis == .horizontal ? component.search : nil\n",
+                "            let search = component.axis == .horizontal ? component.search : nil\n"
+                "            // AorusGram: titles hidden on the horizontal bar make it Telegram's own\n"
+                "            // icon-only bar; the side column and iPad are icon-only already.\n"
+                "            let aorusShowsTitles = !component.isCompact && !(component.hideTitles && component.axis == .horizontal)\n",
+            ),
+            (
+                "                barHeight = 56.0 + innerInset * 2.0\n",
+                "                // The search button is as tall as the bar beside it.\n"
+                "                barHeight = (component.hideTitles && component.axis == .horizontal ? tabBarCompactItemThickness : 56.0) + innerInset * 2.0\n",
+            ),
+            (
+                "                itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, unboundItemWidths: titleWidths.map { $0 + 10.0 * 2.0 }, availableLength: availableLength)\n",
+                "                itemsLayout = aorusTabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, hideTitles: component.hideTitles, compactPanel: component.compactPanel, unboundItemWidths: titleWidths.map { $0 + 10.0 * 2.0 }, availableLength: availableLength)\n",
+            ),
+            # A bar that hugs its items is narrower than the space it was offered, and Search
+            # belongs at the bar's own end, not at the end of that space.
+            (
+                "isCompact: component.isCompact && component.axis == .horizontal), y: 0.0), size: searchSize)\n",
+                "isCompact: (component.isCompact || component.compactPanel) && component.axis == .horizontal), y: 0.0), size: searchSize) // AorusGram: compact search position\n",
+            ),
+        ]
+    elif "AorusGram: hide tab titles" not in component:
         replacements = [
             (
                 "    public let isCompact: Bool\n"
@@ -22109,6 +22378,7 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
                 "                    searchFrame = CGRect(origin: CGPoint(x: size.width - searchSize.width, y: 0.0), size: searchSize) // AorusGram: compact search position\n",
             ),
         ]
+    if replacements is not None:
         for old, new in replacements:
             if component.count(old) != 1:
                 raise RuntimeError(f"TabBarVisibility: component anchor missing: {old.splitlines()[0]!r}")
@@ -22139,6 +22409,18 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
                 "            )),\n",
             ),
         ]
+        if "                usesSystemLayout: !isWide\n            )),\n" in node:
+            # Telegram 13.2 passes the compact flag it worked out and the system layout after it.
+            edits[1] = (
+                "                isCompact: isCompact,\n"
+                "                usesSystemLayout: !isWide\n"
+                "            )),\n",
+                "                isCompact: isCompact,\n"
+                "                usesSystemLayout: !isWide,\n"
+                "                hideTitles: UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\"),\n"
+                "                compactPanel: UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+                "            )),\n",
+            )
         for old, new in edits:
             if node.count(old) != 1:
                 raise RuntimeError(f"TabBarVisibility: tab composition anchor missing: {old.splitlines()[0].strip()!r}")
@@ -22460,6 +22742,10 @@ def patch_plugin_tabs(tg: Path) -> None:
         print("PluginTabs: TelegramRootController.swift not found, skip")
         return
     source = root.read_text(encoding="utf-8")
+    # 13.2 dropped "(Contacts)" from this comment, the Contacts tab being gone.
+    removed_tab_comment = "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n"
+    if removed_tab_comment not in source:
+        removed_tab_comment = "        // A removed selected tab would otherwise fall back to index 0: select Chats instead.\n"
     sentinel = "private var aorusPluginTabs: AorusPluginTabHost? // AorusGram: plugin tabs"
     if sentinel in source:
         print("PluginTabs: already patched")
@@ -22525,16 +22811,14 @@ def patch_plugin_tabs(tg: Path) -> None:
             "        } else {\n"
             "            self.aorusWallController = nil\n"
             "        }\n"
-            "\n"
-            "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
+            "\n" + removed_tab_comment,
             "        } else {\n"
             "            self.aorusWallController = nil\n"
             "        }\n"
             "        if let aorusPluginTabs = self.aorusPluginTabs {\n"
             "            controllers.append(contentsOf: aorusPluginTabs.controllers())\n"
             "        }\n"
-            "\n"
-            "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
+            "\n" + removed_tab_comment,
         ),
     ]
     for old, new in edits:
@@ -22626,6 +22910,10 @@ def patch_wall_tab(tg: Path) -> None:
         print(f"Wall: migrated {migrated_checks} cached concrete-type check(s)")
 
     t = root.read_text(encoding="utf-8")
+    # 13.2 dropped "(Contacts)" from this comment, the Contacts tab being gone.
+    removed_tab_comment = "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n"
+    if removed_tab_comment not in t:
+        removed_tab_comment = "        // A removed selected tab would otherwise fall back to index 0: select Chats instead.\n"
     if "AorusGram: Wall tab" not in t:
         edits = [
             (
@@ -22662,8 +22950,7 @@ def patch_wall_tab(tg: Path) -> None:
             ),
             (
                 "        controllers.append(self.accountSettingsController!)\n"
-                "\n"
-                "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
+                "\n" + removed_tab_comment,
                 "        controllers.append(self.accountSettingsController!)\n"
                 "        let aorusWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "        if aorusWallEnabled {\n"
@@ -22676,8 +22963,7 @@ def patch_wall_tab(tg: Path) -> None:
                 "        } else {\n"
                 "            self.aorusWallController = nil\n"
                 "        }\n"
-                "\n"
-                "        // A removed selected tab would otherwise fall back to index 0 (Contacts): select Chats instead.\n",
+                "\n" + removed_tab_comment,
             ),
         ]
         matched = 0
@@ -22686,8 +22972,7 @@ def patch_wall_tab(tg: Path) -> None:
                 t = t.replace(old, new, 1)
                 matched += 1
         if matched != len(edits):
-            print(f"Wall: WARNING — root anchors matched {matched}/{len(edits)}")
-            return
+            raise RuntimeError(f"Wall: root anchors matched {matched}/{len(edits)}")
         root.write_text(t, encoding="utf-8")
         print("Wall: root tab integrated")
     else:
@@ -22840,11 +23125,27 @@ def patch_wall_tab(tg: Path) -> None:
                 "\n"
                 "        self.didAppear = true\n"
             )
+            thirteen_two_appear = (
+                "    override public func viewDidAppear(_ animated: Bool) {\n"
+                "        super.viewDidAppear(animated)\n"
+                "        self.forwardSideListAppearance(.didAppear, animated: animated)\n"
+                "        \n"
+                "        self.didAppear = true\n"
+            )
+            if old not in t and thirteen_two_appear in t:
+                # Telegram 13.2 tells the chat's side list it has appeared first.
+                old = thirteen_two_appear
+                new = new.replace(
+                    "        super.viewDidAppear(animated)\n",
+                    "        super.viewDidAppear(animated)\n"
+                    "        self.forwardSideListAppearance(.didAppear, animated: animated)\n",
+                    1,
+                )
             if old in t:
                 chat_controller.write_text(t.replace(old, new, 1), encoding="utf-8")
                 print("Wall: visible posts lifecycle integrated")
             else:
-                print("Wall: WARNING — viewDidAppear anchor not found")
+                raise RuntimeError("Wall: viewDidAppear anchor not found")
 
         # CI restores an already-branded Telegram checkout from cache. Migrate the old
         # single-set visibility provider too: readable posts keep the strict dwell threshold,
@@ -24184,7 +24485,10 @@ def patch_remove_appcenter(tg: Path) -> None:
                 "        #endif\n"
             )
             changed = False
-            if import_block in t:
+            if "AppCenter" not in t:
+                # Telegram 13.2 no longer ships AppCenter at all.
+                print("AppCenter: removed from AppDelegate.swift (13.2 has none)")
+            elif import_block in t:
                 t = t.replace(import_block, "\n" + sentinel + "\n", 1)
                 changed = True
             else:
@@ -24192,7 +24496,7 @@ def patch_remove_appcenter(tg: Path) -> None:
             if start_block in t:
                 t = t.replace(start_block, "\n", 1)
                 changed = True
-            else:
+            elif "AppCenter" in t:
                 print("AppCenter: start block not found in AppDelegate")
             if changed:
                 ad_path.write_text(t, encoding="utf-8")
@@ -24275,7 +24579,26 @@ def patch_disable_app_log_analytics(tg: Path) -> None:
         "}"
     )
     if old_fn not in t:
-        print("Analytics: full function body not found — skip")
+        # Telegram 13.2 collects log events in collections and adds them from a transaction as
+        # well: both entry points get an empty body, whatever their bodies now say.
+        import re as _re_log
+        emptied = 0
+        for match in list(_re_log.finditer(r"^func _internal_addAppLogEvent\((postbox: Postbox|transaction: Transaction)[^\n]*\{\n", t, _re_log.M))[::-1]:
+            start = match.end()
+            depth = 1
+            index = start
+            while depth and index < len(t):
+                if t[index] == "{":
+                    depth += 1
+                elif t[index] == "}":
+                    depth -= 1
+                index += 1
+            t = t[:start] + "    " + sentinel + " — behaviour telemetry (help.saveAppLog) suppressed\n}" + t[index:]
+            emptied += 1
+        if emptied != 2:
+            raise RuntimeError(f"Analytics: expected the two _internal_addAppLogEvent entry points, found {emptied}")
+        path.write_text(t, encoding="utf-8")
+        print("Analytics: _internal_addAppLogEvent replaced with empty body (no warning)")
         return
     t = t.replace(old_fn, new_fn, 1)
     path.write_text(t, encoding="utf-8")
@@ -26107,7 +26430,36 @@ private enum AorusRuntimeFont {
                 "        case .showNextMediaOnTapInfo:\n"
                 "            return 33\n"
             )
-            sub(stable_old, stable_new, "stable-id")
+            if stable_old not in t and "        case .autoNightTheme:\n" in t and "        case .bubbleMode:\n" in t:
+                # Telegram 13.2 numbers its rows from the bubble mode on one higher. The font row
+                # goes after the night theme row, and every row after it moves down one, so the
+                # order (stableId sorts the rows) is the order they are listed in.
+                start = t.index("    var stableId: Int32 {\n")
+                end = t.index("\n    }\n", start)
+                block = t[start:end]
+                lines = block.split("\n")
+                renumbered = []
+                shift = False
+                index = 0
+                while index < len(lines):
+                    line = lines[index]
+                    renumbered.append(line)
+                    if line.strip().startswith("case ") and index + 1 < len(lines) and lines[index + 1].strip().startswith("return "):
+                        value = int(lines[index + 1].strip()[len("return "):])
+                        prefix = lines[index + 1][: len(lines[index + 1]) - len(lines[index + 1].lstrip())]
+                        renumbered.append(prefix + "return " + str(value + 1 if shift else value))
+                        if line.strip() == "case .autoNightTheme:":
+                            renumbered.append(line.replace(".autoNightTheme:", ".aorusFont:"))
+                            renumbered.append(prefix + "return " + str(value + 1))
+                            shift = True
+                        index += 2
+                        continue
+                    index += 1
+                if not shift:
+                    raise RuntimeError("CustomFont: 13.2 stable ids have no night theme row")
+                t = t[:start] + "\n".join(renumbered) + t[end:]
+            else:
+                sub(stable_old, stable_new, "stable-id")
 
             sub("            case let .textSize(lhsTheme, lhsText, lhsValue):\n"
                 "                if case let .textSize(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n",
@@ -26825,19 +27177,18 @@ def patch_gif_wallpaper(tg: Path) -> None:
                  "            }\n",
                  "preview-showgif")
 
-            # subscribe in init
+            # subscribe in init, right after the container goes in (13.2 hides the sample from
+            # VoiceOver after it, before the end of init)
             psub("        self.clipsToBounds = true\n"
                  "        \n"
-                 "        self.addSubnode(self.containerNode)\n"
-                 "    }\n",
+                 "        self.addSubnode(self.containerNode)\n",
                  "        self.clipsToBounds = true\n"
                  "        \n"
                  "        self.addSubnode(self.containerNode)\n"
                  "        self.aorusGifObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil, queue: .main) { [weak self] _ in\n"
                  "            guard let self = self, let backgroundNode = self.backgroundNode else { return }\n"
                  "            backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: self.aorusLastDisplayMode, transition: .immediate)\n"
-                 "        }\n"
-                 "    }\n",
+                 "        }\n",
                  "preview-init")
 
             # unsubscribe in deinit
@@ -27624,22 +27975,26 @@ def patch_poll_results_preview(tg: Path) -> None:
     # Every poll update is applied here: the broadcasts, the refreshes and the answer to a vote.
     # The counts are kept before the stored poll is looked up, so they are kept for a poll whose
     # chat has not been loaded yet as well.
-    utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    # Telegram 13.2 replays the update in ReplayContext.applyUpdateMessagePoll (State/Sync).
+    utils = tg / "submodules/TelegramCore/Sources/State/Sync/StateReplay+Messages.swift"
+    poll_case = "    func applyUpdateMessagePoll(_ pollId: MediaId, _ apiPoll: Api.Poll?, _ results: Api.PollResults) {\n"
+    poll_body = "        if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
     if not utils.is_file():
-        raise RuntimeError("PollPreview: AccountStateManagementUtils.swift is missing")
+        utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+        poll_case = "            case let .UpdateMessagePoll(pollId, apiPoll, results):\n"
+        poll_body = "                if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
+    if not utils.is_file():
+        raise RuntimeError("PollPreview: neither StateReplay+Messages.swift nor AccountStateManagementUtils.swift exists")
     u = utils.read_text(encoding="utf-8")
     if "AorusPollResultsStore.shared.record(" not in u:
-        anchor = (
-            "            case let .UpdateMessagePoll(pollId, apiPoll, results):\n"
-            "                if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
-        )
+        anchor = poll_case + poll_body
         if u.count(anchor) != 1:
             raise RuntimeError(f"PollPreview: poll update anchor found {u.count(anchor)} times")
         u = u.replace(anchor, (
-            "            case let .UpdateMessagePoll(pollId, apiPoll, results):\n"
-            "                // AorusGram: the per-answer counts, kept as they come for polls not yet voted in.\n"
-            "                AorusPollResultsStore.shared.record(pollId: pollId, results: TelegramMediaPollResults(apiResults: results))\n"
-            "                if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
+            poll_case +
+            "        // AorusGram: the per-answer counts, kept as they come for polls not yet voted in.\n"
+            "        AorusPollResultsStore.shared.record(pollId: pollId, results: TelegramMediaPollResults(apiResults: results))\n"
+            + poll_body
         ), 1)
         utils.write_text(u, encoding="utf-8")
         print("PollPreview: poll updates keep their counts")
@@ -29952,10 +30307,28 @@ def patch_formatting_panel(tg: Path) -> None:
         "        let aorusToolbarOffset = self.aorusLayoutToolbar(transition: transition, panelHeight: contentHeight, width: width, leftInset: leftInset, rightInset: rightInset)\n"
         "        return contentHeight + aorusToolbarOffset\n"
     )
+    # Telegram 13.2 ends the layout on the agent composer's own height first; the toolbar is
+    # the regular composer's.
+    agent_layout_anchor = (
+        "        if isAgentLayout {\n"
+        "            return contentHeight + self.agentContainerExtraBottomInset\n"
+        "        }\n"
+        "        return contentHeight\n"
+        "    }\n"
+    )
     if layout_anchor in t:
         t = t.replace(layout_anchor, layout_new, 1)
+    elif t.count(agent_layout_anchor) == 1:
+        t = t.replace(agent_layout_anchor, (
+            "        if isAgentLayout {\n"
+            "            return contentHeight + self.agentContainerExtraBottomInset\n"
+            "        }\n"
+            "        let aorusToolbarOffset = self.aorusLayoutToolbar(transition: transition, panelHeight: contentHeight, width: width, leftInset: leftInset, rightInset: rightInset)\n"
+            "        return contentHeight + aorusToolbarOffset\n"
+            "    }\n"
+        ), 1)
     else:
-        print("FormattingPanel: WARNING layout return anchor not found — toolbar height not wired")
+        raise RuntimeError("FormattingPanel: layout return anchor not found — toolbar height not wired")
 
     path.write_text(t, encoding="utf-8")
     print("FormattingPanel: injected toolbar into ChatTextInputPanelNode")
@@ -30348,13 +30721,14 @@ def patch_device_microphone(tg: Path) -> None:
         return
     t = t.replace(route_anchor, route_replacement, 1)
 
+    # The end of applyVoiceChatOutputModeInCurrentAudioSession. Telegram 13.2 put a function
+    # of its own (preferWiredHeadsetInput) between it and setupOutputMode, so the anchor ends
+    # with the function rather than at what follows it; the log line names it.
     voice_output_anchor = (
         '        } catch let e {\n'
         '            managedAudioSessionLog("applyVoiceChatOutputModeInCurrentAudioSession error: \\(e)")\n'
         '        }\n'
         '    }\n'
-        '    \n'
-        '    private func setupOutputMode'
     )
     voice_output_replacement = (
         '        } catch let e {\n'
@@ -30362,8 +30736,6 @@ def patch_device_microphone(tg: Path) -> None:
         '        }\n'
         '        self.aorusApplyDeviceMicrophoneForCurrentSession()\n'
         '    }\n'
-        '    \n'
-        '    private func setupOutputMode'
     )
     if voice_output_anchor not in t:
         print("DeviceMicrophone: WARNING voice-chat output anchor not found — skipped")
@@ -30891,6 +31263,15 @@ def patch_document_picker_copy_mode(tg: Path) -> None:
     }
     let legacyController = LegacyICloudFileController(presentation: .modal(animateIn: true), theme: theme, relocatesPickedDocuments: relocatesPickedDocuments, completion: { urls in
 '''
+            # Telegram 13.2 imports TelegramCore itself and ends a pick through finish(urls:),
+            # which completes once even when the picker is lost behind a lock.
+            if "\nimport TelegramCore\n" in text:
+                import_anchor = import_replacement = "import TelegramPresentationData\n"
+            if "        self.finish(urls: urls)\n" in text:
+                multi_callback_anchor = multi_callback_anchor.replace("        self.completion(urls)\n", "        self.finish(urls: urls)\n")
+                multi_callback_replacement = multi_callback_replacement.replace("        self.completion(self.completionUrls(urls))\n", "        self.finish(urls: self.completionUrls(urls))\n")
+                single_callback_anchor = single_callback_anchor.replace("        self.completion([url])\n", "        self.finish(urls: [url])\n")
+                single_callback_replacement = single_callback_replacement.replace("        self.completion(self.completionUrls([url]))\n", "        self.finish(urls: self.completionUrls([url]))\n")
             anchors = (
                 (import_anchor, import_replacement, "TelegramCore import"),
                 (property_anchor, property_replacement, "controller property"),

@@ -68,7 +68,6 @@ public final class AorusGramManager {
     public var amoledMode: Bool        = false { didSet { save() } }
     public var profileReportButton: Bool = false { didSet { save() } }
     public var hideCallsTab: Bool      = false { didSet { save() } }
-    public var hideContactsTab: Bool   = false { didSet { save() } }
     public var hideSearchButton: Bool  = false { didSet { save() } }
     public var hideTabTitles: Bool     = false { didSet { save() } }
     public var compactTabBar: Bool     = false { didSet { save() } }
@@ -169,7 +168,6 @@ public final class AorusGramManager {
         ud.set(effective(amoledMode),          forKey: "aorusgram_amoled")
         ud.set(effective(profileReportButton), forKey: "aorusgram_profile_report_button")
         ud.set(effective(hideCallsTab),        forKey: "aorusgram_hide_calls_tab")
-        ud.set(effective(hideContactsTab),     forKey: "aorusgram_hide_contacts_tab")
         ud.set(effective(hideSearchButton),    forKey: "aorusgram_hide_search_button")
         ud.set(effective(hideTabTitles),       forKey: "aorusgram_hide_tab_titles")
         ud.set(effective(compactTabBar),        forKey: "aorusgram_compact_tab_bar")
@@ -215,7 +213,6 @@ public final class AorusGramManager {
         amoledMode          = d["amoledMode"]          as? Bool ?? false
         profileReportButton = d["profileReportButton"] as? Bool ?? false
         hideCallsTab        = d["hideCallsTab"]        as? Bool ?? false
-        hideContactsTab     = d["hideContactsTab"]     as? Bool ?? false
         hideSearchButton    = d["hideSearchButton"]    as? Bool ?? false
         hideTabTitles       = d["hideTabTitles"]       as? Bool ?? false
         compactTabBar       = d["compactTabBar"]       as? Bool ?? false
@@ -278,7 +275,6 @@ public final class AorusGramManager {
             "amoledMode":          amoledMode,
             "profileReportButton": profileReportButton,
             "hideCallsTab":        hideCallsTab,
-            "hideContactsTab":     hideContactsTab,
             "hideSearchButton":    hideSearchButton,
             "hideTabTitles":       hideTabTitles,
             "compactTabBar":       compactTabBar,

@@ -29,7 +29,20 @@ def native_source(tg: Path) -> str:
                (presence, "public enum RelativeTimestampFormatDay"),
                (presence, "public func stringForUserPresence("),
                (presence, "public func stringAndActivityForUserPresence(")]
-    return "import Foundation\n" + "\n".join(declaration(source, marker) for source, marker in markers)
+    source = "import Foundation\n" + "\n".join(declaration(source, marker) for source, marker in markers)
+    if "init(settings: PresentationChatBubbleSettings)" in source:
+        # Telegram 13.2 builds the corners from the stored bubble settings; only the fields
+        # that constructor reads are needed here.
+        source += '''
+public struct PresentationChatBubbleSettings {
+    public var mainRadius: Int32
+    public var auxiliaryRadius: Int32
+    public var mergeBubbleCorners: Bool
+    public var bubbleMode: Bool
+    public var serifMessageFont: Bool
+}
+'''
+    return source
 
 
 def native_bitmap_source(tg: Path) -> str:

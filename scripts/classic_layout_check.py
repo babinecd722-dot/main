@@ -18,6 +18,9 @@ def classic_reference_bytes(path: Path) -> bytes:
     if path.name == "AorusClassicChatThemeNodes.swift":
         data = data.replace(b"neighbors: ListViewItemNeighbors", b"previousItem: ListViewItem?, nextItem: ListViewItem?")
         data = data.replace(b"    var neighborDescriptor: AnyEquatable { return .noNeighborInfluence }\n", b"")
+    if path.name == "AorusClassicCaptureControlsComponent.swift":
+        # Telegram 13.2's shutter blob takes no test flag and cannot fail to initialise.
+        data = data.replace(b"self.blobView = ShutterBlobView()\n", b"self.blobView = ShutterBlobView(test: false)\n")
     if path.name == "AorusClassicPeerInfoNavigation.swift":
         data = data.replace(b", lottieSettings: .init(backend: .rlottie))", b")")
         data = data.replace(b"import LottieSettings\n", b"")
@@ -36,7 +39,13 @@ def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) ->
             checks += 1
     for binding in manifest["bindings"]:
         source = (tg / binding["path"]).read_text()
-        if source.count(binding["replacement"] + "\n") != binding.get("count", 1):
+        # The 13.2 form of a line Telegram reworded holds the same 12.0 value (`alternatives`);
+        # a line 13.2 no longer has at all is marked `absent_in`.
+        installed = [form for form in [binding] + binding.get("alternatives", []) if source.count(form["replacement"] + "\n") == form.get("count", 1)]
+        if not installed:
+            if binding.get("absent_in") and binding["new"].strip().split(" = ")[0] not in source:
+                checks += 1
+                continue
             raise RuntimeError(f"Classic geometry was not installed once: {binding['path']}: {binding['replacement']}")
         if reference is not None and binding["old"] + "\n" not in (reference / binding["path"]).read_text():
             raise RuntimeError(f"Geometry value does not come from 12.0: {binding['path']}")
@@ -92,6 +101,11 @@ def check_classic_layout(repo: Path, tg: Path, reference: Path | None = None) ->
     if "self.scrollNode.view.addSubview(buttonView)" not in classic or "self.itemsContainer.addSubview(buttonView)" in classic:
         raise RuntimeError("Classic attachment buttons are detached from the visible scroll view")
     editor = (tg / "submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift").read_text()
+    if "self.buttonsBackgroundView" not in editor:
+        # Telegram 13.2: the editor's bottom bar is MediaEditorBottomControls, not drawn in 12.0's form.
+        if "self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 30.0" not in editor:
+            raise RuntimeError("The classic editor preview lost 12.0's corners")
+        return checks + 1
     if "if !AorusOldInterface.isEnabled && self.buttonsBackgroundView.superview == nil" not in editor:
         raise RuntimeError("The classic editor still installs the modern tool background")
     for name in ("draw", "text", "sticker", "rotate", "flip", "tools"):

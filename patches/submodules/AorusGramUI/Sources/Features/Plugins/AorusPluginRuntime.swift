@@ -3508,7 +3508,7 @@ private enum AorusPluginFeatureBroker {
         Definition("callRecording", "calls"),
         Definition("glassUI", "interface"), Definition("amoledMode", "interface"),
         Definition("profileReportButton", "interface"), Definition("squareAvatars", "interface"),
-        Definition("hideCallsTab", "tabs"), Definition("hideContactsTab", "tabs"),
+        Definition("hideCallsTab", "tabs"),
         Definition("hideSearchButton", "tabs"), Definition("hideTabTitles", "tabs"),
         Definition("compactTabBar", "tabs"),
         Definition("streaks", "features"), Definition("siriShortcuts", "features"),
@@ -3581,7 +3581,6 @@ private enum AorusPluginFeatureBroker {
         case "profileReportButton": guard let bool else { return typeError() }; manager.profileReportButton = bool
         case "squareAvatars": guard let bool else { return typeError() }; manager.squareAvatars = bool
         case "hideCallsTab": guard let bool else { return typeError() }; manager.hideCallsTab = bool
-        case "hideContactsTab": guard let bool else { return typeError() }; manager.hideContactsTab = bool
         case "hideSearchButton": guard let bool else { return typeError() }; manager.hideSearchButton = bool
         case "hideTabTitles": guard let bool else { return typeError() }; manager.hideTabTitles = bool
         case "compactTabBar": guard let bool else { return typeError() }; manager.compactTabBar = bool
@@ -3661,7 +3660,6 @@ private enum AorusPluginFeatureBroker {
         case "profileReportButton": return manager.profileReportButton
         case "squareAvatars": return manager.squareAvatars
         case "hideCallsTab": return manager.hideCallsTab
-        case "hideContactsTab": return manager.hideContactsTab
         case "hideSearchButton": return manager.hideSearchButton
         case "hideTabTitles": return manager.hideTabTitles
         case "compactTabBar": return manager.compactTabBar

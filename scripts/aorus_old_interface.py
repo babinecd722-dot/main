@@ -65,6 +65,27 @@ def _replace(text: str, old: str, new: str, label: str, count: int = 1) -> str:
     return text.replace(old, new)
 
 
+def _line_edit(text: str, required: tuple, old: str, new: str, label: str, comment: str = "") -> str:
+    """Change `old` to `new` on the one line that holds every one of `required` and `old`.
+
+    For a call whose other arguments a Telegram update reworded: what this edit is about stays
+    the same, and the line is found by what it is rather than by every word on it.
+    """
+    lines = text.split("\n")
+    # A second run leaves it alone: the line already says `new`.
+    if sum(1 for line in lines if new in line and all(r in line for r in required)) == 1:
+        return text
+    hits = [i for i, line in enumerate(lines) if old in line and all(r in line for r in required)]
+    if len(hits) != 1:
+        raise RuntimeError(f"OldInterface: {label}: expected 1 line, got {len(hits)}")
+    i = hits[0]
+    indent = lines[i][: len(lines[i]) - len(lines[i].lstrip())]
+    lines[i] = lines[i].replace(old, new, 1)
+    if comment:
+        lines.insert(i, indent + comment)
+    return "\n".join(lines)
+
+
 def _imports_display(text: str) -> bool:
     return text.startswith("import Display\n") or "\nimport Display\n" in text
 
@@ -370,6 +391,11 @@ def _patch_classic_backdrop(tg: Path) -> None:
         text = _read(path)
         if not _imports_display(text):
             raise RuntimeError(f"OldInterface: {path.name} does not import Display")
+        # Telegram 13.2 makes the Premium limits list a component sheet with no navigation bar
+        # (navigationBarAppearance: .none); 13.1.1's had none either, so there is no bar panel to
+        # clear there.
+        if rel.endswith("PremiumLimitsListScreen.swift") and old not in text and "navigationBarAppearance: .none" in text:
+            continue
         text = _edit(text, old, new, f"{path.name} classic bar panel on scroll")
         path.write_text(text, encoding="utf-8")
 
@@ -500,11 +526,49 @@ def _patch_legacy_styles(tg: Path) -> None:
     for rel, edits in by_file.items():
         path = tg / rel
         text = _read(path)
+        if rel.endswith("ReactionContextNode.swift") and "        case legacy\n" not in text:
+            # Telegram 13.2 dropped the legacy case but its background node still draws the
+            # blurred bar for a picker without glass: the case comes back for the old interface.
+            edits = [(old, new) for old, new in edits if old != reaction_init] + _REACTION_LEGACY_13_2
         if not _imports_display(text):
             raise RuntimeError(f"OldInterface: {path.name} does not import Display")
         for index, (old, new) in enumerate(edits):
             text = _edit(text, old, new, f"{path.name} style {index}")
         path.write_text(text, encoding="utf-8")
+
+
+_REACTION_INIT_13_2 = (
+    "    public init(context: AccountContext, animationCache: AnimationCache, presentationData: PresentationData, style: Style = .glass(isTinted: false), glassHasTail: Bool = true, items: [ReactionContextItem], selectedItems: Set<AnyHashable>, title: String? = nil, reactionsLocked: Bool, alwaysAllowPremiumReactions: Bool, allPresetReactionsAreAvailable: Bool, getEmojiContent: ((AnimationCache, MultiAnimationRenderer) -> Signal<EmojiPagerContentComponent, NoError>)?, isExpandedUpdated: @escaping (ContainedViewLayoutTransition) -> Void, requestLayout: @escaping (ContainedViewLayoutTransition) -> Void, requestUpdateOverlayWantsToBeBelowKeyboard: @escaping (ContainedViewLayoutTransition) -> Void) {\n"
+)
+_REACTION_LEGACY_13_2 = [
+    (
+        "    public enum Style {\n        case glass(isTinted: Bool)\n    }\n",
+        "    public enum Style {\n"
+        "        case glass(isTinted: Bool)\n"
+        "        case legacy // " + MARK + ": 12.0's blurred bar, which the background node still draws\n"
+        "    }\n",
+    ),
+    (
+        _REACTION_INIT_13_2,
+        _REACTION_INIT_13_2 + "        let style: Style = AorusOldInterface.isEnabled ? .legacy : style // " + MARK + "\n",
+    ),
+    (
+        "        let backgroundGlassParams: ReactionContextBackgroundNode.GlassParams\n"
+        "        switch style {\n"
+        "        case let .glass(isTinted):\n"
+        "            backgroundGlassParams = ReactionContextBackgroundNode.GlassParams(isDark: presentationData.theme.overallDarkAppearance, isTinted: isTinted, hasTail: glassHasTail)\n"
+        "        }\n"
+        "        self.isGlassStyle = true\n",
+        "        let backgroundGlassParams: ReactionContextBackgroundNode.GlassParams?\n"
+        "        switch style {\n"
+        "        case let .glass(isTinted):\n"
+        "            backgroundGlassParams = ReactionContextBackgroundNode.GlassParams(isDark: presentationData.theme.overallDarkAppearance, isTinted: isTinted, hasTail: glassHasTail)\n"
+        "        case .legacy:\n"
+        "            backgroundGlassParams = nil // " + MARK + "\n"
+        "        }\n"
+        "        self.isGlassStyle = backgroundGlassParams != nil\n",
+    ),
+]
 
 
 def _patch_item_lists(tg: Path) -> None:
@@ -747,12 +811,24 @@ def _patch_bars(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
     path = comps / "ChatTitleView/Sources/ChatTitleComponent.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "tintColor: .init(kind: component.preferClearGlass ? .clear : .panel), isInteractive: isEnabled, transition: transition)\n",
-        "tintColor: .init(kind: component.preferClearGlass ? .clear : .panel), isInteractive: isEnabled, isVisible: !AorusOldInterface.isEnabled, transition: transition) // " + MARK + "\n",
-        "title component capsule",
-    )
+    if "tintColor: .init(kind: component.preferClearGlass ? .clear : .panel), isInteractive: isEnabled, transition: transition)\n" in text or "isInteractive: isEnabled, isVisible: !AorusOldInterface.isEnabled, transition: transition) // " + MARK in text:
+        text = _edit(
+            text,
+            "tintColor: .init(kind: component.preferClearGlass ? .clear : .panel), isInteractive: isEnabled, transition: transition)\n",
+            "tintColor: .init(kind: component.preferClearGlass ? .clear : .panel), isInteractive: isEnabled, isVisible: !AorusOldInterface.isEnabled, transition: transition) // " + MARK + "\n",
+            "title component capsule",
+        )
+    else:
+        # Telegram 13.2 words the call around the tint; the capsule is the one the title's glass
+        # background draws with the clear-or-panel tint.
+        text = _line_edit(
+            text,
+            ("tintColor: .init(kind: component.preferClearGlass ? .clear : .panel)", "isInteractive: isEnabled"),
+            "isVisible: !hidesGlass,",
+            "isVisible: !hidesGlass && !AorusOldInterface.isEnabled,",
+            "title component capsule",
+            "// " + MARK + ": no capsule round the title on the classic bar.",
+        )
     path.write_text(text, encoding="utf-8")
 
     # The chat list's header as 12.0 drew it, on 12.0's own row (AorusClassicChatListHeader.swift)
@@ -1542,6 +1618,28 @@ def _patch_alert_screens(tg: Path) -> None:
         ("            self.backgroundView.update(size: alertSize, cornerRadius: 35.0, isDark: environment.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, transition: transition)\n",
          "            self.backgroundView.update(size: alertSize, cornerRadius: AorusOldInterface.isEnabled ? 14.0 : 35.0, isDark: environment.theme.overallDarkAppearance, tintColor: AorusOldInterface.isEnabled ? .init(kind: .custom(style: .default, color: environment.theme.actionSheet.itemBackgroundColor)) : .init(kind: .panel), isInteractive: true, transition: transition) // " + MARK + "\n"),
     ):
+        accessibility_tail = (
+            "                    let actionId = AnyHashable(action.id)\n"
+            "                    itemView.accessibilityPerform = { [weak self] in\n"
+            "                        guard let self else {\n"
+            "                            return\n"
+            "                        }\n"
+            "                        self.highlightedAction = actionId\n"
+            "                        self.performHighlightedAction()\n"
+            "                        self.highlightedAction = nil\n"
+            "                    }\n"
+            "                }\n"
+        )
+        frame_lines = (
+            "                    itemView.applySize(size: itemFrame.size, transition: itemTransition)\n"
+            "                    itemTransition.setFrame(view: itemView, frame: itemFrame)\n"
+        )
+        if old == frame_lines + "                }\n" and old not in text:
+            # Telegram 13.2 lets VoiceOver perform an action after placing its button.
+            thirteen_two_old = frame_lines + accessibility_tail
+            thirteen_two_new = frame_lines + "                    aorusActionFrames.append(itemFrame)\n" + accessibility_tail + _ALERT_SEPARATORS
+            if thirteen_two_old in text or thirteen_two_new in text:
+                old, new = thirteen_two_old, thirteen_two_new
         text = _edit(text, old, new, "alert screen")
     path.write_text(text, encoding="utf-8")
 
@@ -2355,11 +2453,19 @@ def _patch_classic_message_panel(tg: Path) -> None:
     # an edit or a link above the whole panel, full width, as 12.0's own accessory panels.
     path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateAccessoryPanels.swift"
     text = _read(path)
+    # 13.1.1 returned one panel; 13.2 returns the candidates for the field's one slot, and nil
+    # hides the slot without unsetting anything.
+    accessory_signature = ") -> AnyComponentWithIdentity<ChatInputAccessoryPanelEnvironment>? {\n"
+    if accessory_signature not in text:
+        accessory_signature = (
+            ") -> [ChatTextInputAccessoryPanelCandidate]? {\n"
+            "    // nil hides the slot without unsetting anything, so the panels keep their order for when it shows again.\n"
+        )
     text = _edit(
         text,
-        ") -> AnyComponentWithIdentity<ChatInputAccessoryPanelEnvironment>? {\n"
+        accessory_signature +
         "    if case .standard(.previewing) = chatPresentationInterfaceState.mode {\n",
-        ") -> AnyComponentWithIdentity<ChatInputAccessoryPanelEnvironment>? {\n"
+        accessory_signature +
         "    if AorusOldInterface.isEnabled {\n"
         "        // " + MARK + ": the panel above the field is 12.0's own, below.\n"
         "        return nil\n"
@@ -2386,15 +2492,32 @@ def _patch_classic_message_panel(tg: Path) -> None:
 
     path = tg / "submodules/TelegramUI/Sources/ChatControllerNode.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "        let inputPanelsInset: CGFloat = 8.0\n"
-        "        let accessoryPanelsInset: CGFloat = 8.0\n",
-        "        // " + MARK + ": the classic panel sits on the bottom edge, its accessory panel on it.\n"
-        "        let inputPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n"
-        "        let accessoryPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n",
-        "message panel insets",
-    )
+    if "        let inputPanelsInset: CGFloat = 8.0\n        let accessoryPanelsInset: CGFloat = 8.0\n" in text or "AorusOldInterface.isEnabled ? 0.0 : 8.0\n        let accessoryPanelsInset" in text:
+        text = _edit(
+            text,
+            "        let inputPanelsInset: CGFloat = 8.0\n"
+            "        let accessoryPanelsInset: CGFloat = 8.0\n",
+            "        // " + MARK + ": the classic panel sits on the bottom edge, its accessory panel on it.\n"
+            "        let inputPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n"
+            "        let accessoryPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n",
+            "message panel insets",
+        )
+    else:
+        # 13.2 works the two out in separate places of the layout.
+        text = _edit(
+            text,
+            "        let inputPanelsInset: CGFloat = 8.0\n",
+            "        // " + MARK + ": the classic panel sits on the bottom edge.\n"
+            "        let inputPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n",
+            "message panel insets",
+        )
+        text = _edit(
+            text,
+            "        let accessoryPanelsInset: CGFloat = 8.0\n",
+            "        // " + MARK + ": the classic accessory panel sits on the classic panel.\n"
+            "        let accessoryPanelsInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 8.0\n",
+            "message accessory panel inset",
+        )
     path.write_text(text, encoding="utf-8")
 
     # The panels that stand in for the field — join, unblock, the selection's actions — are
@@ -2423,11 +2546,15 @@ def _patch_classic_message_panel(tg: Path) -> None:
 
     path = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift"
     text = _read(path)
+    # 13.2 sizes the send button from its own width (sendButtonWidth).
+    send_width = "        innerSize.width = 40.0 + 3.0 * 2.0\n"
+    if send_width not in text and "self.sendButtonWidth + 3.0 * 2.0\n" in text:
+        send_width = "        innerSize.width = self.sendButtonWidth + 3.0 * 2.0\n"
     text = _edit(
         text,
-        "        innerSize.width = 40.0 + 3.0 * 2.0\n",
+        send_width,
         "        // " + MARK + ": 12.0's round send button, as tall as it is wide.\n"
-        "        innerSize.width = AorusOldInterface.isEnabled ? size.height : 40.0 + 3.0 * 2.0\n",
+        "        innerSize.width = AorusOldInterface.isEnabled ? size.height : " + send_width.split(" = ", 1)[1],
         "send button size",
     )
     path.write_text(text, encoding="utf-8")
@@ -2564,7 +2691,59 @@ def _patch_classic_message_panel(tg: Path) -> None:
          "        let sendAsButtonFrame = CGRect(origin: CGPoint(x: 3.0, y: textInputContainerBackgroundFrame.height - 3.0 - aorusSendAsSize), size: CGSize(width: aorusSendAsSize, height: aorusSendAsSize))\n",
          "send as button"),
     )
+    # Telegram 13.2 added the agent composer to this panel and moved a few lines with it. Where
+    # an anchor above is gone, its 13.2 form takes its place; None means 13.2 needs no edit
+    # (the context placeholder is laid out inside the field's container, which already sits
+    # where the classic insets put it).
+    variants_13_2 = {
+        "field insets": (
+            "        var insets = UIEdgeInsets(top: 0.0, left: 8.0, bottom: 0.0, right: 8.0)\n"
+            "        if self.isAgentLayout {\n"
+            "            return insets\n"
+            "        }\n"
+            "        if let customLeftAction = self.customLeftAction, case let .toggleExpanded(isVisible, _, _) = customLeftAction, !isVisible {\n"
+            "        } else if let customLeftAction = self.customLeftAction, case .empty = customLeftAction {\n"
+            "        } else {\n"
+            "            insets.left += 40.0 + 6.0\n"
+            "        }\n",
+            "        var insets = UIEdgeInsets(top: 0.0, left: 8.0, bottom: 0.0, right: 8.0)\n"
+            "        if self.isAgentLayout {\n"
+            "            return insets\n"
+            "        }\n"
+            "        if AorusOldInterface.isEnabled {\n"
+            "            // " + MARK + ": 12.0's insets round the field.\n"
+            "            insets = UIEdgeInsets(top: 6.0, left: 8.0, bottom: 6.0, right: 42.0)\n"
+            "            if case .regular = metrics.widthClass, case .regular = metrics.heightClass {\n"
+            "                insets.top += 1.0\n"
+            "                insets.bottom += 1.0\n"
+            "            }\n"
+            "        }\n"
+            "        if let customLeftAction = self.customLeftAction, case let .toggleExpanded(isVisible, _, _) = customLeftAction, !isVisible {\n"
+            "        } else if let customLeftAction = self.customLeftAction, case .empty = customLeftAction {\n"
+            "        } else {\n"
+            "            insets.left += AorusOldInterface.isEnabled ? 34.0 : 40.0 + 6.0\n"
+            "        }\n",
+        ),
+        "context placeholder position": None,
+        "send button layout": (
+            "            sendActionButtonsSize = self.sendActionButtons.updateLayout(size: CGSize(width: 40.0, height: isAgentLayout ? 36.0 + 3.0 * 2.0 : minimalHeight),",
+            "            sendActionButtonsSize = self.sendActionButtons.updateLayout(size: CGSize(width: 40.0, height: isAgentLayout ? 36.0 + 3.0 * 2.0 : (AorusOldInterface.isEnabled ? 39.0 : minimalHeight)),",
+        ),
+        "field text inset": (
+            "(sendButtonShown ? effectiveActionButtonsSize.width : 0.0))",
+            "(sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width : 0.0))",
+        ),
+        "field text inset trim": (
+            "            if !sendButtonShown && !isAgentLayout {\n",
+            "            if !sendButtonShown && !isAgentLayout && !AorusOldInterface.isEnabled {\n",
+        ),
+    }
     for old, new, label in edits:
+        if old not in text and new not in text and label in variants_13_2:
+            variant = variants_13_2[label]
+            if variant is None:
+                continue
+            old, new = variant
         # The paid-composer pass runs after this one. Recognize its exact installed
         # forms on replay rather than putting the old fixed-width geometry back.
         paid_forms = {
@@ -2593,16 +2772,30 @@ def _patch_classic_message_panel(tg: Path) -> None:
         "    return result\n",
         "field minimal height",
     )
-    text = _edit(
-        text,
-        "        let minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n        return minimalHeight\n",
-        "        var minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n"
-        "        if AorusOldInterface.isEnabled, case .regular = metrics.widthClass, case .regular = metrics.heightClass {\n"
-        "            minimalHeight += 2.0 // " + MARK + "\n"
-        "        }\n"
-        "        return minimalHeight\n",
-        "panel minimal height",
-    )
+    if "        let minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n        return minimalHeight\n" in text:
+        text = _edit(
+            text,
+            "        let minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n        return minimalHeight\n",
+            "        var minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n"
+            "        if AorusOldInterface.isEnabled, case .regular = metrics.widthClass, case .regular = metrics.heightClass {\n"
+            "            minimalHeight += 2.0 // " + MARK + "\n"
+            "        }\n"
+            "        return minimalHeight\n",
+            "panel minimal height",
+        )
+    else:
+        # 13.2 makes it a var already, for the agent composer's extra height.
+        text = _edit(
+            text,
+            "        var minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n"
+            "        if self.resolveIsAgentLayout(interfaceState) {\n",
+            "        var minimalHeight: CGFloat = 14.0 + textFieldMinHeight\n"
+            "        if AorusOldInterface.isEnabled, case .regular = metrics.widthClass, case .regular = metrics.heightClass {\n"
+            "            minimalHeight += 2.0 // " + MARK + "\n"
+            "        }\n"
+            "        if self.resolveIsAgentLayout(interfaceState) {\n",
+            "panel minimal height",
+        )
     path.write_text(text, encoding="utf-8")
 
 _PROFILE_CLASSIC_BACKGROUND_FRAMES = """        if AorusOldInterface.isEnabled {
@@ -2927,7 +3120,20 @@ def _patch_classic_gallery(tg: Path) -> None:
          "            self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: component.theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, isVisible: !component.background.aorusIsPlain, transition: transition) // " + MARK + "\n",
          "plain controls capsule"),
     )
+    # Telegram 13.2 colours each item on its own and hides the glass with a flag of its own.
+    variants_13_2 = {
+        "plain controls font": (
+            "font: Font.medium(17.0), textColor: itemForegroundColor))\n",
+            "font: component.background.aorusIsPlain ? Font.regular(17.0) : Font.medium(17.0), textColor: itemForegroundColor))\n",
+        ),
+        "plain controls capsule": (
+            "tintColor: tintColor, isInteractive: true, isVisible: !self.isGlassHidden, transition: transition)\n",
+            "tintColor: tintColor, isInteractive: true, isVisible: !self.isGlassHidden && !component.background.aorusIsPlain, transition: transition) // " + MARK + "\n",
+        ),
+    }
     for old, new, label in edits:
+        if old not in text and new not in text and label in variants_13_2 and (variants_13_2[label][0] in text or variants_13_2[label][1] in text):
+            old, new = variants_13_2[label]
         text = _edit(text, old, new, label)
     if "var aorusIsPlain: Bool" not in text:
         text = text.rstrip("\n") + (
@@ -3446,7 +3652,9 @@ def _patch_tab_bar(tg: Path) -> None:
     text = _replace(
         text,
         "    func frameForControllerTab(at index: Int) -> CGRect? {\n",
-        _TAB_BAR_METHODS
+        (_TAB_BAR_METHODS if (tg / "submodules/LottieSettings").is_dir()
+         # Telegram 13.2 removed the renderer choice with rlottie: the native tab bar takes none.
+         else _TAB_BAR_METHODS.replace("            }, lottieSettings: .init(backend: .rlottie))\n", "            })\n"))
         + "    func frameForControllerTab(at index: Int) -> CGRect? {\n"
         "        if let tabBar = self.aorusClassicTabBar {\n"
         "            guard index >= 0 && index < tabBar.tabBarItems.count, let frame = tabBar.frameForControllerTab(at: index) else {\n"
@@ -3561,19 +3769,23 @@ def _patch_message_field(tg: Path) -> None:
     panel = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift"
     text = _read(panel)
     if MARK not in text:
-        text = _replace(
+        # By the line rather than its every argument: 13.2 rounds the agent composer's field
+        # differently and makes the field's glass interactive only where it can be pressed.
+        text = _line_edit(
             text,
-            "        self.textInputContainerBackgroundView.update(size: textInputContainerBackgroundFrame.size, cornerRadius: floor(minimalInputHeight * 0.5), isDark: interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, transition: textInputContainerBackgroundTransition)\n",
-            "        // " + MARK + ": the field in the theme's input colour on the classic panel.\n"
-            "        self.textInputContainerBackgroundView.update(size: textInputContainerBackgroundFrame.size, cornerRadius: floor(minimalInputHeight * 0.5), isDark: interfaceState.theme.overallDarkAppearance, tintColor: AorusOldInterface.isEnabled ? GlassBackgroundView.TintColor(kind: .custom(style: .default, color: interfaceState.theme.chat.inputPanel.inputBackgroundColor)) : defaultGlassTintColor, isInteractive: true, transition: textInputContainerBackgroundTransition)\n",
+            ("self.textInputContainerBackgroundView.update(size: textInputContainerBackgroundFrame.size,",),
+            "tintColor: defaultGlassTintColor,",
+            "tintColor: AorusOldInterface.isEnabled ? GlassBackgroundView.TintColor(kind: .custom(style: .default, color: interfaceState.theme.chat.inputPanel.inputBackgroundColor)) : defaultGlassTintColor,",
             "message field",
+            "// " + MARK + ": the field in the theme's input colour on the classic panel.",
         )
-        text = _replace(
+        text = _line_edit(
             text,
-            "        self.attachmentButtonBackground.update(size: attachmentButtonFrame.size, cornerRadius: 40.0 * 0.5, isDark: interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, transition: ComponentTransition(transition))\n",
-            "        // " + MARK + ": the attach button is a plain icon on the classic panel.\n"
-            "        self.attachmentButtonBackground.update(size: attachmentButtonFrame.size, cornerRadius: 40.0 * 0.5, isDark: interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))\n",
+            ("self.attachmentButtonBackground.update(size: attachmentButtonFrame.size,",),
+            "isInteractive: true, transition:",
+            "isInteractive: true, isVisible: !AorusOldInterface.isEnabled, transition:",
             "attach button",
+            "// " + MARK + ": the attach button is a plain icon on the classic panel.",
         )
     text = _edit(
         text,
@@ -3594,13 +3806,14 @@ def _patch_message_field(tg: Path) -> None:
     buttons = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift"
     text = _read(buttons)
     if MARK not in text:
-        text = _replace(
+        # 13.2 also hides the microphone's glass where the agent composer asks it to.
+        text = _line_edit(
             text,
-            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording, transition: ComponentTransition(transition))\n",
-            "        // " + MARK + ": the microphone is a plain icon on the classic panel; the send\n"
-            "        // button keeps its own filled circle.\n"
-            "        self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording && !AorusOldInterface.isEnabled, transition: ComponentTransition(transition))\n",
+            ("self.micButtonBackgroundView.update(size: size,", "isVisible: !isRecording"),
+            "isVisible: !isRecording",
+            "isVisible: !isRecording && !AorusOldInterface.isEnabled",
             "microphone button",
+            "// " + MARK + ": the microphone is a plain icon on the classic panel; the send button keeps its own filled circle.",
         )
         text = _replace(
             text,
@@ -3692,7 +3905,6 @@ def verify_old_interface(tg: Path) -> list[str]:
         "submodules/AttachmentUI/Sources/AttachmentController.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/AttachmentUI/Sources/AttachmentPanel.swift": ["self.panelStyle = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
-        "submodules/ReactionSelectionNode/Sources/ReactionContextNode.swift": ["let style: Style = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/TelegramUI/Components/ButtonComponent/Sources/ButtonComponent.swift": ["self.style = AorusOldInterface.isEnabled ? .legacy : style"],
         "submodules/TelegramUI/Components/ListSectionComponent/Sources/ListSectionComponent.swift": ["self.style = AorusOldInterface.isEnabled && style == .glass ? .legacy : style"],
         "submodules/PresentationDataUtils/Sources/AlertTheme.swift": ["return textAlertController(alertContext: AlertControllerContext("],
@@ -3796,7 +4008,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "guard let controller = self.controller, !AorusOldInterface.isEnabled else {",
             "self.navigationBar?.enableAutomaticBackButton = false",
         ],
-        "submodules/TelegramUI/Components/GlassControls/Sources/GlassControlGroup.swift": ["case aorusPlain(UIColor)", "isVisible: !component.background.aorusIsPlain"],
+        "submodules/TelegramUI/Components/GlassControls/Sources/GlassControlGroup.swift": ["case aorusPlain(UIColor)", "!component.background.aorusIsPlain, transition: transition)"],
         "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift": ["background: AorusOldInterface.isEnabled ? .aorusPlain(.white) : .panel"],
         "submodules/TelegramUI/Components/Chat/ChatChannelSubscriberInputPanelNode/Sources/ChatChannelSubscriberInputPanelNode.swift": [".aorusPlain(interfaceState.theme.chat.inputPanel.panelControlAccentColor) : (centerAction.isAccent"],
         "submodules/GalleryUI/Sources/GalleryFooterNode.swift": ["self.addSubnode(self.aorusClassicBackgroundNode)", "edgeEffectTransition.setFrame(view: self.aorusClassicBackgroundNode.view, frame: backgroundFrame)"],
@@ -3809,7 +4021,7 @@ def verify_old_interface(tg: Path) -> list[str]:
             "self.contentView.tintColor = component.isHighlighted ? component.theme.chat.inputMediaPanel.panelHighlightedIconColor",
         ],
         "submodules/TelegramUI/Components/Chat/ChatTextInputActionButtonsNode/Sources/ChatTextInputActionButtonsNode.swift": [
-            "innerSize.width = AorusOldInterface.isEnabled ? size.height : 40.0 + 3.0 * 2.0",
+            "innerSize.width = AorusOldInterface.isEnabled ? size.height : ",
             "self.micButtonBackgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark:  interfaceState.theme.overallDarkAppearance, tintColor: defaultGlassTintColor, isInteractive: true, isVisible: !isRecording && !AorusOldInterface.isEnabled",
         ],
     }
@@ -3822,6 +4034,14 @@ def verify_old_interface(tg: Path) -> list[str]:
         for marker in markers:
             if marker not in text:
                 errors.append(f"OldInterface: missing {marker!r} in {name}")
+    # The reaction bar over a menu takes 12.0's legacy style; on 13.2 the case is restored and
+    # draws without glass.
+    reaction = tg / "submodules/ReactionSelectionNode/Sources/ReactionContextNode.swift"
+    reaction_text = reaction.read_text(encoding="utf-8") if reaction.is_file() else ""
+    if "let style: Style = AorusOldInterface.isEnabled ? .legacy : style" not in reaction_text:
+        errors.append("OldInterface: the reaction bar does not take the legacy style")
+    if "glassHasTail: Bool" in reaction_text and "            backgroundGlassParams = nil // " + MARK not in reaction_text:
+        errors.append("OldInterface: the restored legacy reaction bar still draws glass")
     from aorus_classic_components import verify_classic_components
     from aorus_classic_values import verify_classic_values
     from aorus_classic_search import verify_classic_search

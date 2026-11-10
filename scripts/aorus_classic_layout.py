@@ -11,8 +11,20 @@ def patch_classic_layout(tg: Path) -> None:
     for binding in manifest["bindings"]:
         path = tg / binding["path"]
         text = path.read_text()
+        # Telegram 13.2 reworded some of these lines around the value 12.0 sets (a helper where
+        # a constant stood, an iPhone Duo term beside it): `alternatives` holds the 13.2 line with
+        # the same value put back, and `absent_in` marks a line 13.2 no longer has at all.
+        chosen = binding
+        if text.count(binding["new"] + "\n") != binding.get("count", 1) and binding["replacement"] + "\n" not in text:
+            for alternative in binding.get("alternatives", []):
+                if text.count(alternative["new"] + "\n") == alternative.get("count", 1) or alternative["replacement"] + "\n" in text:
+                    chosen = alternative
+                    break
+            else:
+                if binding.get("absent_in") and binding["new"].strip().split(" = ")[0] not in text:
+                    continue
         # A value 13.1.1 repeats (a loading skeleton laid out like the loaded panel) is bound everywhere.
-        text = edit(text, binding["new"] + "\n", binding["replacement"] + "\n", binding["path"] + " reference geometry", count=binding.get("count", 1))
+        text = edit(text, chosen["new"] + "\n", chosen["replacement"] + "\n", binding["path"] + " reference geometry", count=chosen.get("count", 1))
         path.write_text(text)
     from aorus_classic_values import patch_classic_values
     patch_classic_values(tg)
@@ -226,7 +238,16 @@ def _attachments(tg: Path) -> None:
     text = edit(text, old, new, "attachment 12.0 view hierarchy")
     signature = "    func update(layout: ContainerViewLayout, controllers: [AttachmentContainable], coveredByModalTransition: CGFloat, transition: ContainedViewLayoutTransition, completion: @escaping () -> Void = {}) {"
     body = ATTACHMENT_CONTAINER_LAYOUT.replace("inVoiceOver: layout.inVoiceOver)", "inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet)")
-    body = body.replace("let (panInitialTopInset, panOffset, _, _)", "let (panInitialTopInset, panOffset, _, _, _)")
+    # The pan arguments grew since 12.0 (13.0 added isFullSize, 13.2 the scrollable content):
+    # take the first two of however many the installed declaration has.
+    declaration = next(line for line in text.splitlines() if "private var panGestureArguments: (" in line)
+    tuple_type = declaration.split("panGestureArguments: (", 1)[1].rsplit(")?", 1)[0]
+    depth, fields = 0, 1
+    for character in tuple_type:
+        depth += character in "(["
+        depth -= character in ")]"
+        fields += character == "," and depth == 0
+    body = body.replace("let (panInitialTopInset, panOffset, _, _)", "let (panInitialTopInset, panOffset" + ", _" * (fields - 2) + ")")
     # 13.1's layout also carries the screen's reserved corners and the fold's division; the sheet
     # takes them as 13.1's own sheet does: corners moved down with it, no division.
     body = body.replace("safeInsets: UIEdgeInsets(top: 0.0, left: safeInsets.left, bottom: safeInsets.bottom, right: safeInsets.right), additionalInsets:", "safeInsets: UIEdgeInsets(top: 0.0, left: safeInsets.left, bottom: safeInsets.bottom, right: safeInsets.right), reservedCorners: layout.reservedCorners.offsettingTop(by: containerTopInset), division: nil, additionalInsets:")
@@ -271,7 +292,9 @@ def _attachments(tg: Path) -> None:
     body = body.replace("additionalSideInsets: UIEdgeInsets(), maxHeight: layout.size.height / 2.0,", "keyboardHeight: layout.inputHeight ?? 0.0, additionalSideInsets: UIEdgeInsets(), textFieldMaxHeight: layout.size.height / 2.0, availableHeight: layout.size.height,")
     # 13.1's panel no longer imports Postbox: the engine's names for its ids.
     body = body.replace("[MessageId]", "[EngineMessage.Id]").replace("append(MessageId(", "append(EngineMessage.Id(").replace("peerId: PeerId(0)", "peerId: EnginePeer.Id(0)")
-    body = body.replace("updateLayout(size: buttonSize, state:", "updateLayout(size: buttonSize, context: self.context, style: .legacy, state:")
+    # 13.2's main button also takes the theme's appearance (its glass is light or dark).
+    is_dark = " isDark: self.presentationData.theme.overallDarkAppearance," if "style: AttachmentPanel.Style, isDark: Bool, state: AttachmentMainButtonState" in text else ""
+    body = body.replace("updateLayout(size: buttonSize, state:", "updateLayout(size: buttonSize, context: self.context, style: .legacy," + is_dark + " state:")
     body = "\n        self.hideButtons = hideButtons\n" + body.replace("return containerFrame.height", "return (containerFrame.height, 0.0)")
     text = edit(text, signature, signature + "\n        if AorusOldInterface.isEnabled {\n" + body + "\n        }\n", "attachment 12.0 panel layout")
     path.write_text(text)
@@ -281,6 +304,16 @@ def _capture_controls(tg: Path) -> None:
     folder = tg / "submodules/TelegramUI/Components/CameraScreen/Sources"
     source = ROOT / "TelegramUI/Components/CameraScreen/Sources/AorusClassicCaptureControlsComponent.swift"
     shutil.copyfile(source, folder / source.name)
+    blob = (folder / "ShutterBlobView.swift").read_text()
+    if "init?(test: Bool)" not in blob:
+        # Telegram 13.2 draws the shutter blob through MetalEngine: its view no longer fails to
+        # initialise without a Metal device, and takes no test flag. The one adaptation of the
+        # 12.0 snapshot; classic_layout_check undoes it before comparing bytes.
+        installed = folder / source.name
+        snapshot = installed.read_text()
+        if snapshot.count("self.blobView = ShutterBlobView(test: false)\n") != 1:
+            raise RuntimeError("ClassicLayout: classic shutter blob construction is ambiguous")
+        installed.write_text(snapshot.replace("self.blobView = ShutterBlobView(test: false)\n", "self.blobView = ShutterBlobView()\n"))
     path = folder / "CaptureControlsComponent.swift"
     text = path.read_text()
     text = edit(text, "        private var component: CaptureControlsComponent?", "        private let aorusClassic = ComponentView<Empty>()\n        private var aorusModernVisibility: [UIView: Bool] = [:]\n        private var component: CaptureControlsComponent?", "camera capture cache")
@@ -429,6 +462,13 @@ def _media_editor(tg: Path) -> None:
     path = tg / 'submodules/TelegramUI/Components/MediaEditorScreen/Sources/MediaEditorScreen.swift'
     text = path.read_text()
     text = edit(text, 'controlsBottomInset = -62.0', 'controlsBottomInset = AorusOldInterface.isEnabled ? -50.0 : -62.0', "12.0 editor insets", count=1)
+    if 'self.buttonsBackgroundView' not in text:
+        # Telegram 13.2 moved the editor's bottom bar -- the tools, Cancel and Done -- into a
+        # component of its own (MediaEditorBottomControls), glass capsules that change with the
+        # tool in use. 12.0's bar is not drawn there; the preview keeps 12.0's corners.
+        text = edit(text, 'self.previewContainerView.layer.cornerRadius = 30.0 //12.0', 'self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 30.0', '12.0 editor preview corner')
+        path.write_text(text)
+        return
     # 13.1.1 keeps 16 points beside a status island or a folded screen's corners; 12.0 had 10.
     text = edit(text, 'buttonSideInset = (environment.navigationBarTrailingButtonsInset > 0.0 || environment.reservedCorners != .none) ? 16.0 : 9.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : ((environment.navigationBarTrailingButtonsInset > 0.0 || environment.reservedCorners != .none) ? 16.0 : 9.0)', "12.0 editor insets beside an island", count=1)
     text = edit(text, 'buttonSideInset = 9.0', 'buttonSideInset = AorusOldInterface.isEnabled ? 10.0 : 9.0', "12.0 editor insets", count=1)

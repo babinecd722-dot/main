@@ -298,8 +298,13 @@ def patch_round_editor(tg: Path) -> None:
     # The modern exporter translates legacy adjustments into a different model.
     # Video notes retain the native converter, square crop, paint and audio together.
     fetch = tg / 'submodules/TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift'
-    replace(fetch, '                                if alwaysUseModernPipeline {', '                                if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo {')
-    replace(fetch, '                    if alwaysUseModernPipeline && !isImage {', '                    if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo {')
+    if 'public func videoMediaResourceEditorValues(' in fetch.read_text():
+        # Telegram 13.2 decides between the legacy and the modern pipeline in one place for both
+        # fetches: a round video keeps to the legacy converter, which crops it to a circle.
+        replace(fetch, '        if alwaysUseModernPipeline {\n            return (MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: defaultPreset), nil)', '        if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo {\n            return (MediaEditorValues(legacyAdjustments: legacyAdjustments, defaultPreset: defaultPreset), nil)')
+    else:
+        replace(fetch, '                                if alwaysUseModernPipeline {', '                                if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo {')
+        replace(fetch, '                    if alwaysUseModernPipeline && !isImage {', '                    if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo {')
     converter = lc / 'Sources/TGMediaVideoConverter.m'
     replace(converter, '    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:preset];', '''    CGSize maxDimensions = [TGMediaVideoConversionPresetSettings maximumSizeForPreset:preset];
     if (adjustments.aorusRoundVideo) {
@@ -641,7 +646,7 @@ def verify_round_video(tg: Path) -> list[str]:
         'LegacyComponents/Sources/TGPhotoEditorPreviewView.m': ['self.layer.cornerRadius = self.aorusRoundVideo'],
         'LegacyComponents/Sources/TGPhotoDrawingController.m': ['if (_photoEditor.aorusRoundVideo)', '_scrollContainerView.layer.mask = circle'],
         'LegacyComponents/Sources/TGMediaVideoConverter.m': ['MIN(maxDimensions.width, 640.0)', 'if (adjustments.aorusRoundVideo || [adjustments trimApplied]'],
-        'TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift': ['if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo', 'if alwaysUseModernPipeline && !isImage && !legacyAdjustments.aorusRoundVideo'],
+        'TelegramUI/Components/Resources/FetchVideoMediaResource/Sources/FetchVideoMediaResource.swift': ['if alwaysUseModernPipeline && !legacyAdjustments.aorusRoundVideo'],
         'TelegramCore/Sources/PendingMessages/PendingMessageUploadedContent.swift': ['cachedFile.isInstantVideo == file.isInstantVideo'],
         'LegacyComponents/Sources/TGMediaPickerGalleryVideoItemView.m': ['- (void)aorusToggleRoundVideo', '_playerView.layer.cornerRadius', 'TGMediaVideoConversionPresetCompressedVeryHigh', 'static CGRect AorusRoundVideoZoomCrop(', 'aorusPinchRoundVideo:', '_aorusRoundPinch.delegate = self;', '_aorusZoomAdjustments = nil;'],
         'LegacyComponents/Sources/TGPhotoEditorTabController.m': ['bool aorusRound = !forAvatar', 'if (!aorusRound && [editorValues cropAppliedForAvatar:forAvatar])'],

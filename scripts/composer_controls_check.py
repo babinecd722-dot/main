@@ -12,13 +12,16 @@ def check_controls(tg: Path, swiftc: str) -> None:
     assert 'textFieldInsets.right += max(0.0, sendActionControlsWidth - 39.0)' in metrics
     assert 'actionControlsWidth: AorusOldInterface.isEnabled ? 0.0 : sendActionControlsWidth)' in metrics
     assert 'sendActionControlsWidth: sendButtonIsLaidOut ? sendActionButtonsSize.width : 0.0' in panel
-    assert 'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0' in panel
-    assert 'actionControlsWidth: sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width' not in panel
+    # 13.2 keeps this behind its agent composer's own reserve: `isAgentLayout ? … : (…)`.
+    assert 'sendButtonShown && !AorusOldInterface.isEnabled ? sendActionButtonsSize.width : 0.0' in panel
+    assert 'sendButtonShown && !AorusOldInterface.isEnabled ? effectiveActionButtonsSize.width' not in panel
     classic_reserve = block(panel, '        if AorusOldInterface.isEnabled && sendButtonIsLaidOut {')
     send_frame = re.search(r'sendActionButtonsFrame.origin = (CGPoint\(x: textInputContainerBackgroundFrame.maxX[^\n]+)', panel).group(1)
     picker = (tg / 'submodules/MediaPickerUI/Sources/MediaPickerScreen.swift').read_text()
     assert picker.count('self.aorusLayoutSelectionCounter(size:') == 2
-    assert 'isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons' in picker
+    # 13.2 works the bar's darkness out once (isDarkBar) for the title and the sheet's pill.
+    assert 'isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons' in picker \
+        or 'let isDarkBar = !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons' in picker
     counter = block(picker, '    private func aorusLayoutSelectionCounter(')
     counter_x = next(line.strip() for line in counter.splitlines() if 'let selectedButtonX:' in line)
     # 13.1 measures the counter's place from the bar's side strip (iPhone Duo); run the installed

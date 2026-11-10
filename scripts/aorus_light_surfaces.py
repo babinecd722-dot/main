@@ -34,10 +34,17 @@ def patch_light_surfaces(tg: Path) -> None:
     }
 
     public func dismissAnimated() {''', 'shared counter placement')
-    source = edit(source,
-        'self.titleView.updateIsDark(isDark: self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
-        'self.titleView.updateIsDark(isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
-        'classic title follows its navigation theme rather than the glass scroll state')
+    if 'let isDarkBar = self.controllerNode.currentDisplayMode == .all && useGlassButtons\n' in source:
+        # Telegram 13.2 works the bar's darkness out once, for the title and the sheet's pill.
+        source = edit(source,
+            'let isDarkBar = self.controllerNode.currentDisplayMode == .all && useGlassButtons\n',
+            'let isDarkBar = !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons\n',
+            'classic title follows its navigation theme rather than the glass scroll state')
+    else:
+        source = edit(source,
+            'self.titleView.updateIsDark(isDark: self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
+            'self.titleView.updateIsDark(isDark: !AorusOldInterface.isEnabled && self.controllerNode.currentDisplayMode == .all && useGlassButtons, animated: true)',
+            'classic title follows its navigation theme rather than the glass scroll state')
     path.write_text(source)
     path = tg / 'submodules/MediaPickerUI/Sources/MediaPickerTitleView.swift'
     source = path.read_text()
@@ -206,7 +213,19 @@ def patch_light_surfaces(tg: Path) -> None:
             .replace("else if let image = file.videoCover {", "else if let image = aorusPreviewFile.videoCover {")
             .replace("let videoReference: FileMediaReference = .message(message: MessageReference(message), media: file)", "let videoReference: FileMediaReference = .message(message: MessageReference(message), media: aorusPreviewFile)")
         )
-        media_node_source = edit(media_node_source, old_preview_section, new_preview_section, "use parent video file for cover, previewRepresentations and HLSQualitySet")
+        if old_preview_section not in media_node_source:
+            # Telegram 13.2 picks the HLS quality the chat preload will fetch between the two
+            # lines; the parent file is what the cover and the first frame come from either way,
+            # and each of the two reads stands once in the file.
+            for aorus_old, aorus_new in (
+                ("} else if let image = file.videoCover {", "} else if let image = aorusPreviewFile.videoCover {"),
+                ("let videoReference: FileMediaReference = .message(message: MessageReference(message), media: file)", "let videoReference: FileMediaReference = .message(message: MessageReference(message), media: aorusPreviewFile)"),
+            ):
+                if media_node_source.count(aorus_old) != 1:
+                    raise RuntimeError("Attachment drafts: missing or ambiguous use parent video file for cover, previewRepresentations and HLSQualitySet")
+                media_node_source = media_node_source.replace(aorus_old, aorus_new, 1)
+        else:
+            media_node_source = edit(media_node_source, old_preview_section, new_preview_section, "use parent video file for cover, previewRepresentations and HLSQualitySet")
         media_node_path.write_text(media_node_source)
 
     photo_res_path = tg / "submodules/PhotoResources/Sources/PhotoResources.swift"

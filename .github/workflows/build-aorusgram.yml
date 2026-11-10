@@ -21,8 +21,8 @@ jobs:
     env:
       # Quiets GitHub deprecation warnings for actions/cache, checkout, upload-artifact on Node 20.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      TELEGRAM_IOS_COMMIT: fb0e62ba8a147f0821da6aa63c09da7d79a10111
-      TELEGRAM_IOS_VERSION: "13.1.1"
+      TELEGRAM_IOS_COMMIT: 24638bc69bd083981b178dd1e7f921eebbf7fc46
+      TELEGRAM_IOS_VERSION: "13.2"
       PILLOW_VERSION: 11.3.0
       LIBXRAY_VERSION: v26.7.28
       LIBXRAY_APPLE_SHA256: 07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9
@@ -517,16 +517,17 @@ jobs:
           test "$(git -C telegram-ios rev-parse HEAD)" = "$TELEGRAM_IOS_COMMIT"
           test "$(python3 -c 'import json; print(json.load(open("telegram-ios/versions.json"))["app"])')" = "$TELEGRAM_IOS_VERSION"
 
-      - name: Ensure rlottie submodule
+      # Telegram 13.2 removed rlottie: tlottie renders every animation, so it is the
+      # submodule a half-populated checkout must not leave empty.
+      - name: Ensure tlottie submodule
         run: |
           cd telegram-ios
-          CPP_COUNT=$(find submodules/rlottie/rlottie/src -name "*.cpp" 2>/dev/null | wc -l)
-          echo "rlottie .cpp files found: $CPP_COUNT"
-          if [ "$CPP_COUNT" -eq 0 ]; then
-            echo "FATAL: pinned rlottie submodule is incomplete"
+          RS_COUNT=$(find submodules/tlottie/tlottie/src -name "*.rs" 2>/dev/null | wc -l)
+          echo "tlottie .rs files found: $RS_COUNT"
+          if [ "$RS_COUNT" -eq 0 ] || [ ! -f submodules/tlottie/tlottie/Cargo.toml ]; then
+            echo "FATAL: pinned tlottie submodule is incomplete"
             exit 1
           fi
-          echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
       - name: Verify current MTProxy Fake-TLS fingerprint
         run: |

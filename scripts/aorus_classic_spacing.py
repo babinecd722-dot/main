@@ -265,6 +265,7 @@ def _bars(tg: Path) -> None:
     ))
 
 
+_BUTTON_PANEL_EDGE_UPDATE = ""
 _BUTTON_PANEL = """            self.edgeEffectView.isHidden = AorusOldInterface.isEnabled
             if AorusOldInterface.isEnabled {
                 // AorusGram: old interface: 12.0's panel, the bar's blurred colour with its line
@@ -293,6 +294,12 @@ _BUTTON_PANEL = """            self.edgeEffectView.isHidden = AorusOldInterface.
 
 
 def _bottom_button_panel(tg: Path) -> None:
+    global _BUTTON_PANEL_EDGE_UPDATE
+    source = (tg / "submodules/TelegramUI/Components/BottomButtonPanelComponent/Sources/BottomButtonPanelComponent.swift").read_text(encoding="utf-8")
+    # Telegram 13.2 lets a screen give the panel a background colour of its own.
+    _BUTTON_PANEL_EDGE_UPDATE = "            self.edgeEffectView.update(content: component.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: edgeEffectFrame, edge: .bottom, edgeSize: edgeEffectFrame.height, transition: transition)\n"
+    if _BUTTON_PANEL_EDGE_UPDATE not in source:
+        _BUTTON_PANEL_EDGE_UPDATE = "            self.edgeEffectView.update(content: component.backgroundColor ?? component.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: edgeEffectFrame, edge: .bottom, edgeSize: edgeEffectFrame.height, transition: transition)\n"
     _patch(tg, "submodules/TelegramUI/Components/BottomButtonPanelComponent/Sources/BottomButtonPanelComponent.swift", (
         (
             "        private let edgeEffectView: EdgeEffectView\n",
@@ -307,9 +314,8 @@ def _bottom_button_panel(tg: Path) -> None:
             "button height",
         ),
         (
-            "            self.edgeEffectView.update(content: component.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: edgeEffectFrame, edge: .bottom, edgeSize: edgeEffectFrame.height, transition: transition)\n",
-            "            self.edgeEffectView.update(content: component.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: edgeEffectFrame, edge: .bottom, edgeSize: edgeEffectFrame.height, transition: transition)\n"
-            + _BUTTON_PANEL,
+            _BUTTON_PANEL_EDGE_UPDATE,
+            _BUTTON_PANEL_EDGE_UPDATE + _BUTTON_PANEL,
             "classic panel",
         ),
         (

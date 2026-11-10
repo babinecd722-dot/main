@@ -11,6 +11,16 @@ from pathlib import Path
 from aorus_l10n_check import verify_language_tables
 
 
+def _update_replay_text(tg: Path) -> str:
+    # Telegram 13.1 replayed server updates in AccountStateManagementUtils.swift; 13.2 split
+    # that replay into State/Sync (StateReplay+*, UpdateInterpreter+*).
+    legacy = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if legacy.is_file():
+        return legacy.read_text(encoding="utf-8")
+    sync = tg / "submodules/TelegramCore/Sources/State/Sync"
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(sync.glob("*.swift")))
+
+
 def drawn_own_icon_names(tg: Path) -> set[str]:
     """Resolve direct icon calls and the SwiftUI toolbar's named-symbol route."""
     root = tg / "submodules"
@@ -359,15 +369,14 @@ def main() -> None:
     else:
         err.append("FormattingPanel: AorusInputToolbar.swift is missing")
 
-    account_state = tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift"
-    if account_state.is_file():
-        account_text = account_state.read_text(encoding="utf-8")
+    account_text = _update_replay_text(tg)
+    if account_text:
         if "let aorusIsBotPeer = (transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo != nil" not in account_text:
             err.append("AntiSpam: prefilter does not exclude bot chats")
         if "((transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo == nil)" not in account_text:
             err.append("AntiSpam: incoming eligibility does not exclude bot chats")
     else:
-        err.append("AntiSpam: AccountStateManagementUtils.swift is missing")
+        err.append("AntiSpam: the update replay is missing")
 
     quick_replies = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusQuickRepliesController.swift"
     if quick_replies.is_file():
@@ -1865,7 +1874,9 @@ def main() -> None:
     recent_sticker_paths = (
         tg / "submodules" / "TelegramCore" / "Sources" / "State" / "SynchronizeRecentlyUsedMediaOperations.swift",
         tg / "submodules" / "TelegramCore" / "Sources" / "State" / "ApplyUpdateMessage.swift",
-        tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift",
+        tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift"
+        if (tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift").is_file()
+        else tg / "submodules" / "TelegramCore" / "Sources" / "State" / "Sync" / "StateReplay+Finalize.swift",
     )
     for recent_path in recent_sticker_paths:
         recent_text = recent_path.read_text(encoding="utf-8") if recent_path.is_file() else ""
@@ -2721,8 +2732,7 @@ def main() -> None:
         stop_text = stop_path.read_text(encoding="utf-8") if stop_path.is_file() else ""
         if marker not in stop_text:
             err.append(f"StopWords: {relative_path} is missing {marker}")
-    state_utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
-    state_utils_text = state_utils.read_text(encoding="utf-8") if state_utils.is_file() else ""
+    state_utils_text = _update_replay_text(tg)
     if "aorusUserKeywords" in state_utils_text:
         err.append("StopWords: the TelegramCore prefilter still drops stop-word messages from storage")
     title_view = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
@@ -3056,7 +3066,6 @@ def main() -> None:
     for marker in (
         "case tabs",
         ".tabsHeader(theme, l10n.tabsHeader)",
-        ".hideContactsTab(theme, l10n.hideContactsTab",
         ".hideCallsTab(theme, l10n.hideCallsTab",
         ".hideSearchButton(theme, l10n.hideSearchButton",
         ".hideTabTitles(theme, l10n.hideTabTitles",
@@ -3089,9 +3098,9 @@ def main() -> None:
         "public let compactPanel: Bool",
         "let aorusShowsTitles = !component.isCompact && !(component.hideTitles && component.axis == .horizontal)",
         "component.hideTitles && component.axis == .horizontal ? tabBarCompactItemThickness : 56.0",
-        "let itemsLayout = aorusTabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, hideTitles: component.hideTitles, compactPanel: component.compactPanel,",
+        "itemsLayout = aorusTabBarItemsLayout(axis: component.axis, isCompact: component.isCompact, hideTitles: component.hideTitles, compactPanel: component.compactPanel,",
         "private func aorusTabBarItemsLayout(",
-        "CGPoint(x: size.width - searchSize.width",
+        "// AorusGram: compact search position",
     ):
         if marker not in tab_component_text:
             err.append(f"TabBarVisibility: native compact layout is missing {marker}")
@@ -4030,8 +4039,10 @@ def main() -> None:
             (
                 # Whatever collapsed it, the photo is full width again on the next layout, and a
                 # wide layout no longer collapses it: landscape keeps the photo open.
-                "} else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {",
-                "layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {",
+                # (13.2 asks peerInfoAvatarExpansionFits instead of comparing the sides.)
+                "self.headerNode.updateIsAvatarExpanded(true, transition: transition)",
+                "!self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {",
+                "aorusKeepsAvatarExpandedNow",
                 # Back from the background the profile is laid out at the size it has.
                 "self.aorusForegroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification",
                 # On a wide screen a profile menu slides over its button to stay on screen.
@@ -4586,9 +4597,8 @@ def main() -> None:
     # Edit History: versions are kept apart from the message and shown on their own screen;
     # nothing writes a history into a message's text any more. One-time round videos show
     # their picture while they play in the chat and can be saved from their menu.
-    edit_state = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
-    if edit_state.is_file():
-        edit_state_text = edit_state.read_text(encoding="utf-8")
+    edit_state_text = _update_replay_text(tg)
+    if edit_state_text:
         if "AorusEditHistory.capture(transaction: transaction, basePath: mediaBox.basePath" not in edit_state_text:
             err.append("EditHistory: edits are not captured into the store")
         if "rebuild the FULL edit history" in edit_state_text or "aorusHistPattern" in edit_state_text:
@@ -4664,8 +4674,7 @@ def main() -> None:
     poll_store = tg / "submodules/TelegramCore/Sources/AorusPollResultsStore.swift"
     if not poll_store.is_file() or "public func preview(for poll: TelegramMediaPoll)" not in poll_store.read_text(encoding="utf-8"):
         err.append("PollPreview: TelegramCore is missing AorusPollResultsStore")
-    poll_updates = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
-    if "AorusPollResultsStore.shared.record(pollId: pollId" not in poll_updates.read_text(encoding="utf-8"):
+    if "AorusPollResultsStore.shared.record(pollId: pollId" not in _update_replay_text(tg):
         err.append("PollPreview: poll updates are applied without keeping their counts")
 
     # Fake gifts: a gift bought for oneself upgrades from its Saved Messages card, and an

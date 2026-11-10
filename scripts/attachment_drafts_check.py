@@ -280,6 +280,14 @@ def geometry_fixture_source(tg):
         segments.append((position, composer[position:composer.index('\n', position)]))
     body = '\n'.join(text for _, text in sorted(segments))
     height = block(strip, '    public static func height(width: CGFloat)')
+    # Telegram 13.2's agent composer sets its own text insets; the strip measures after them.
+    agent = 'isAgentLayout' in body
+    agent_member = '    let agentContainerExtraSideInset: CGFloat = 8.0\n' if agent else ''
+    agent_parameter = ', agent: Bool' if agent else ''
+    agent_local = '        let isAgentLayout = agent\n' if agent else ''
+    agent_argument = ', agent: agent' if agent else ''
+    agent_loop = ' for agent in [false, true] {' if agent else ''
+    agent_close = ' }' if agent else ''
     entitlement = (tg / 'submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift').read_text()
     return entitlement + '''
 import Foundation
@@ -297,12 +305,12 @@ final class Composer {
     var customRightAction: RightAction?
     var customLeftAction: LeftAction?
     var customSecondaryLeftAction: SecondaryLeftAction?
-    func textFieldInsets(metrics: Int, bottomInset: CGFloat) -> UIEdgeInsets {
+''' + agent_member + '''    func textFieldInsets(metrics: Int, bottomInset: CGFloat) -> UIEdgeInsets {
         UIEdgeInsets(top: 6, left: 42, bottom: bottomInset, right: AorusOldInterface.isEnabled ? 42 : 52)
     }
-    func measure(width: CGFloat, sideInset: CGFloat, draft: Draft?, controls: Int, sendWidth: CGFloat) -> (CGFloat, CGFloat) {
+    func measure(width: CGFloat, sideInset: CGFloat, draft: Draft?, controls: Int, sendWidth: CGFloat''' + agent_parameter + ''') -> (CGFloat, CGFloat) {
         let metrics = 0, bottomInset: CGFloat = 0
-        let leftInset: CGFloat = 0, leftMenuInset: CGFloat = 0, rightInset: CGFloat = 0, rightSlowModeInset: CGFloat = 0
+''' + agent_local + '''        let leftInset: CGFloat = 0, leftMenuInset: CGFloat = 0, rightInset: CGFloat = 0, rightSlowModeInset: CGFloat = 0
         let additionalSideInsets = UIEdgeInsets(right: sideInset)
         let inputHasText = false, hasMediaDraft = draft?.items.isEmpty == false
         let sendButtonIsLaidOut = hasMediaDraft
@@ -327,15 +335,15 @@ defer { if let previous { defaults.set(previous, forKey: key) } else { defaults.
 let composer = Composer()
 var geometryLicensed = false
 AorusProtectedAccess.installAuthority { geometryLicensed }
-for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] { for sendWidth: CGFloat in [39, 88, 120] {
+for old in [false, true] { for glass in [false, true] { for width: CGFloat in [230, 300, 640] { for sideInset: CGFloat in [0, 30] { for controls in 0..<5 { for count in [0, 1, 4] { for sendWidth: CGFloat in [39, 88, 120] {''' + agent_loop + '''
     AorusOldInterface.isEnabled = old
     defaults.set(!glass, forKey: key)
     geometryLicensed = glass
     let draft: Draft? = count == 0 ? nil : Draft(items: Array(0..<count))
-    let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls, sendWidth: sendWidth)
+    let (inputWidth, height) = composer.measure(width: width, sideInset: sideInset, draft: draft, controls: controls, sendWidth: sendWidth''' + agent_argument + ''')
     expect(inputWidth > 0 && inputWidth < width, "native controls leave a usable input field")
     expect(height == (count == 0 ? 0 : AorusAttachmentDraftStrip.height(width: inputWidth)), "draft and composer use the same final width and height")
-} } } } } } }
+} } } } } } }''' + agent_close + '''
 print("Media draft native composer geometry passed: \\(checks) assertions")
 '''
 
@@ -399,7 +407,13 @@ def check_bindings(tg):
         raise RuntimeError('A media draft still enters the discard flow')
     # The camera tile: none in a picker the composer never shows, and the sheet's own picker
     # stops its camera when the sheet closes, not when something finally releases the picker.
-    if picker.count('useLegacyCamera = !controller.aorusRunsWithoutCamera') != 1:
+    # 13.1 decides with useLegacyCamera; 13.2 picks the tile from cameraCellSubject, where
+    # .noCamera has no tile and asks for no camera access.
+    legacy_camera = picker.count('useLegacyCamera = !controller.aorusRunsWithoutCamera') == 1
+    cell_subject = picker.count('let cameraCellSubject: MediaPickerCameraCellSubject = controller.aorusRunsWithoutCamera ? .noCamera : controller.subject.cameraCellSubject') == 1 \
+        and picker.count('mediaPickerRequestsCameraAccess(subject: controller.aorusRunsWithoutCamera ? .noCamera : controller.subject.cameraCellSubject)') == 2 \
+        and 'mediaPickerRequestsCameraAccess(subject: controller.subject.cameraCellSubject)' not in picker
+    if not (legacy_camera or cell_subject):
         raise RuntimeError('A picker that is never shown still starts the camera')
     suspend = block(picker, '    public func aorusSuspendCamera() {')
     if 'self.controllerNode.isSuspended = true' not in suspend or 'self.controllerNode.updateIsCameraActive()' not in suspend:

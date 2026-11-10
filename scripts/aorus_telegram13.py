@@ -134,7 +134,11 @@ def patch_camera_selection(tg: Path) -> None:
     text = build.read_text()
     dependency = '        "//submodules/AorusGram:AorusGram",\n'
     if dependency not in text:
-        text = replace(text, "    deps = [\n", "    deps = [\n" + dependency, "camera core dependency")
+        # Telegram 13.2 adds test targets with deps of their own: the dependency goes into the
+        # library's, the first target in the file.
+        library = text.index('    name = "VideoMessageCameraScreen",\n')
+        deps = text.index("    deps = [\n", library)
+        text = text[:deps] + "    deps = [\n" + dependency + text[deps + len("    deps = [\n"):]
         build.write_text(text)
 
 
@@ -158,6 +162,11 @@ def patch_bazel9_imports(tg: Path) -> None:
 
 def patch_classic_lottie(tg: Path) -> None:
     # Keep the verified 12.0 snapshots intact; adapt their renderer API on install.
+    if not (tg / "submodules/LottieSettings").is_dir():
+        # Telegram 13.2 removed rlottie and the settings that chose it: tlottie draws every
+        # animation and the snapshots' own constructors are the native ones again.
+        print("Telegram13: one Lottie renderer; classic animations keep their 12.0 constructors")
+        return
     for relative in (
         "submodules/QrCodeUI/Sources/AorusClassicQrCodeScreen.swift",
         "submodules/TelegramUI/Components/ChatThemeScreen/Sources/AorusClassicChatThemeNodes.swift",

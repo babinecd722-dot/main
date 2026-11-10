@@ -323,6 +323,20 @@ _FILTER_LINE = """            if AorusOldInterface.isEnabled {
 
 def _search_filters(tg: Path) -> None:
     folder = "submodules/TelegramUI/Components/ChatList/ChatListSearchFiltersContainerNode/Sources/"
+    if not (tg / folder / "ItemNode.swift").is_file():
+        # Telegram 13.2 draws the search filters with the folder bar's own tabs
+        # (HorizontalTabsComponent) on a glass panel. The old interface already gives those tabs
+        # 12.0's look -- grey titles, the chosen one in the accent colour with its line under it
+        # (aorus_old_interface._patch_tabs) -- so what is left is 12.0's strip with no capsule.
+        _patch(tg, folder + "ChatListSearchFiltersContainerNode.swift", (
+            (
+                "        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, transition: componentTransition)\n",
+                "        // " + MARK + ": 12.0's strip has no capsule round it; its tabs draw 12.0's accent line under the chosen filter.\n"
+                "        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, isVisible: !AorusOldInterface.isEnabled, transition: componentTransition)\n",
+                "no capsule",
+            ),
+        ))
+        return
     _patch(tg, folder + "ChatListSearchFiltersContainerNode.swift", (
         (
             "    private var previousSelectedFrame: CGRect?\n",
@@ -637,6 +651,9 @@ def verify_classic_search(tg: Path) -> list[str]:
     errors = []
     for rel, markers in _MARKERS.items():
         path = tg / rel
+        if rel.endswith("ChatListSearchFiltersContainerNode/Sources/ItemNode.swift") and not path.is_file():
+            # 13.2: the filters are HorizontalTabsComponent tabs, with no item node of their own.
+            continue
         text = path.read_text(encoding="utf-8") if path.is_file() else ""
         for marker in markers:
             if marker not in text:

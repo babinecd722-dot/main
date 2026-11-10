@@ -2132,7 +2132,7 @@ public enum AorusPluginPrelude {
         });
 
         var tabFeatureIds = freeze([
-            'hideCallsTab', 'hideContactsTab', 'hideSearchButton',
+            'hideCallsTab', 'hideSearchButton',
             'hideTabTitles', 'compactTabBar', 'wallEnabled'
         ]);
         var tabsApi = freeze({
@@ -2144,7 +2144,12 @@ public enum AorusPluginPrelude {
             setVisible: function (tab, visible) {
                 requireString(tab, 'tab');
                 if (typeof visible !== 'boolean') { throw typeError('visible must be a boolean'); }
-                var keys = { calls: 'hideCallsTab', contacts: 'hideContactsTab', wall: 'wallEnabled', search: 'hideSearchButton' };
+                if (tab === 'contacts') {
+                    // Telegram 13.2 moved Contacts from the bottom bar into Settings: it is never a tab.
+                    if (visible) { return Promise.reject(new Error('Contacts is not a tab: it opens from Settings')); }
+                    return Promise.resolve();
+                }
+                var keys = { calls: 'hideCallsTab', wall: 'wallEnabled', search: 'hideSearchButton' };
                 if (!keys.hasOwnProperty(tab)) { throw new Error('Unknown tab: ' + tab); }
                 return featureApi.set(keys[tab], tab === 'wall' ? visible : !visible);
             },

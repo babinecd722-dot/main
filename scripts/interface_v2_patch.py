@@ -24,6 +24,27 @@ def _replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def _replace_once_reindented(text: str, old: str, new: str, label: str) -> str:
+    """`_replace_once` for code Telegram moved to another depth (out of a class into a function).
+
+    `old` and `new` are written at the depth they had; when `old` is not found as written, it is
+    looked for at any depth, and `new` is moved to the depth it was found at.
+    """
+    if old in text:
+        return text.replace(old, new, 1)
+    first = old.split("\n", 1)[0]
+    written = len(first) - len(first.lstrip(" "))
+    stripped_old = "\n".join(line[written:] if line.startswith(" " * written) else line for line in old.split("\n"))
+    import re as _re
+    for match in _re.finditer(r"^( *)" + _re.escape(stripped_old.split("\n", 1)[0]) + r"$", text, _re.M):
+        indent = match.group(1)
+        candidate = "\n".join((indent + line) if line else line for line in stripped_old.split("\n"))
+        if candidate in text:
+            moved = "\n".join((indent + line[written:]) if line.startswith(" " * written) else line for line in new.split("\n"))
+            return text.replace(candidate, moved, 1)
+    raise RuntimeError(f"InterfaceV2: missing {label} anchor")
+
+
 def _replace_span(text: str, start: str, end: str, new: str, label: str) -> str:
     """Swap out everything from `start` through `end`, both ends included.
 
@@ -2081,7 +2102,9 @@ def _patch_avatar_placeholder(tg: Path) -> None:
     if "aorusPlaceholderColors" in text:
         print("InterfaceV2: avatar placeholders already frosted")
         return
-    text = _replace_once(
+    # Telegram 13.2 draws the avatar in a free function (drawAvatarNodeContent), shared with
+    # AvatarComponent, at a shallower depth than 13.1.1's class method.
+    text = _replace_once_reindented(
         text,
         "            let colorsArray: NSArray = colors.map(\\.cgColor) as NSArray\n",
         "            // AorusGram: initials on frosted glass instead of on a colour. Translucent\n"
@@ -2125,7 +2148,7 @@ def _patch_avatar_placeholder(tg: Path) -> None:
         "            let colorsArray: NSArray = aorusPlaceholderColors.map(\\.cgColor) as NSArray\n",
         "avatar placeholder colours",
     )
-    text = _replace_once(
+    text = _replace_once_reindented(
         text,
         "                    let attributedString = NSAttributedString(string: string, attributes: [NSAttributedString.Key.font: parameters.font, NSAttributedString.Key.foregroundColor: UIColor.white])\n",
         "                    let attributedString = NSAttributedString(string: string, attributes: [NSAttributedString.Key.font: parameters.font, NSAttributedString.Key.foregroundColor: aorusLetterColor])\n",
@@ -2220,13 +2243,10 @@ def _patch_glass_placeholder_avatar(tg: Path) -> None:
             "import Display\n" + _GLASS_IMPORT,
             "placeholder avatar glass import",
         )
+    # On the placeholder font's line alone: 13.2 lays out an accessibility area beside the avatar.
     text = _replace_once(
         text,
-        "            self.containerNode.frame = CGRect(origin: CGPoint(x: -avatarSize / 2.0, y: -avatarSize / 2.0), size: CGSize(width: avatarSize, height: avatarSize))\n"
-        "            self.avatarNode.frame = self.containerNode.bounds\n"
         "            self.avatarNode.font = avatarPlaceholderFont(size: floor(avatarSize * 16.0 / 37.0))\n",
-        "            self.containerNode.frame = CGRect(origin: CGPoint(x: -avatarSize / 2.0, y: -avatarSize / 2.0), size: CGSize(width: avatarSize, height: avatarSize))\n"
-        "            self.avatarNode.frame = self.containerNode.bounds\n"
         "            self.avatarNode.font = avatarPlaceholderFont(size: floor(avatarSize * 16.0 / 37.0))\n"
         "            // AorusGram: initials on a real blur when there is no photo to show. A thread's\n"
         "            // avatar is its emoji and a deleted account's is an icon -- neither draws\n"
@@ -2775,14 +2795,18 @@ def _patch_avatar_expansion(tg: Path) -> None:
     the letter placeholder cannot be expanded into anything, so those profiles open in Telegram's
     collapsed arrangement: the round avatar above a centred name.
 
-    In that arrangement stock shrinks the avatar to 0.55 and locks the name under the status bar
-    the moment the list moves, which turns the header from content into chrome. Holding the
-    collapse fraction at zero leaves every size alone and lets the whole header travel with the
-    list: `avatarScale` becomes 1, `avatarOffset` and `apparentTitleLockOffset` become 0, and
-    the offset applied to the three labels becomes the scroll offset itself. The avatar then
-    slides up behind the dynamic island through the clipping node that is already there, and
-    the labels, which have no such node, fade over the last stretch before they would be drawn
-    across the status bar.
+    In that arrangement stock shrinks the avatar to 0.55 from the first point the list moves,
+    which turns the header from content into chrome. Here the avatar keeps its size and offset --
+    `avatarScale` stays 1 and `avatarOffset` 0 -- and slides up behind the dynamic island through
+    the clipping node that is already there, with the page.
+
+    The labels travel with it at full size and then do what they do on a profile with a photo:
+    they stop in the bar. The name and the line under it are what a profile's bar shows once its
+    page has scrolled, and the line is where Telegram puts the open tab's count ("12 gifts") once
+    the tabs reach the top. They used to fade out under the status bar instead, so a profile with
+    no photo scrolled to its gifts showed an empty bar, the name and the count both gone. They
+    shrink to the bar's size over the last stretch before they stop, not from the first point of
+    movement, so the header still reads as content while it scrolls.
 
     Only the collapsed branch is touched. The expanded one keeps stock's fraction on purpose: it
     is what hands the name to the navigation bar as the photo scrolls past it, and the photo
@@ -2814,13 +2838,14 @@ def _patch_avatar_expansion(tg: Path) -> None:
         "                titleCollapseOffset -= 7.0\n"
         "            }\n"
         "            if aorusScrollingHeader {\n"
-        "                // AorusGram: the header scrolls, and that is all it does. Every size in it\n"
-        "                // is derived from this fraction -- the photo to 0.55, the name to 0.6, the\n"
-        "                // lock offset under the status bar -- so holding it at zero is what keeps\n"
-        "                // the photo the size it was drawn at and moves the whole header with the\n"
-        "                // list instead of folding it into the navigation bar.\n"
-        "                titleOffset = -contentOffset\n"
-        "                titleCollapseFraction = 0.0\n"
+        "                // AorusGram: the labels travel with the page at full size and stop in the\n"
+        "                // bar, as they do over a photo; this fraction now sizes the labels alone\n"
+        "                // (the photo keeps its size, see avatarScale). It runs over the last\n"
+        "                // stretch before they stop, so the name shrinks into the bar as it\n"
+        "                // arrives rather than from the first point the list moves.\n"
+        "                titleOffset = -min(titleCollapseOffset, contentOffset)\n"
+        "                let aorusDockStretch = max(1.0, min(titleCollapseOffset, 64.0))\n"
+        "                titleCollapseFraction = max(0.0, min(1.0, (contentOffset - (titleCollapseOffset - aorusDockStretch)) / aorusDockStretch))\n"
         "            } else {\n"
         "                titleOffset = -min(titleCollapseOffset, contentOffset)\n"
         "                titleCollapseFraction = max(0.0, min(1.0, contentOffset / titleCollapseOffset))\n"
@@ -2839,35 +2864,34 @@ def _patch_avatar_expansion(tg: Path) -> None:
         "            && !isSettings\n",
         "scrolling header flag",
     )
-    # updateFrameAdditiveToCenter, not updateFrameAdditive: that is the collapsed branch, and the
-    # expanded one has a clipping node of its own to take the labels off screen.
+    # The photo keeps the size it was drawn at and scrolls away with the page: the collapse
+    # fraction above sizes the labels alone now. Only on the collapsed header -- over a photo
+    # the photo is not sized from these two.
     text = _replace_once(
         text,
-        "                var usernameCenter = rawUsernameFrame.center\n"
-        "                usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
-        "                transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
-        "            }\n",
-        "                var usernameCenter = rawUsernameFrame.center\n"
-        "                usernameCenter.x = rawTitleFrame.center.x + (usernameCenter.x - rawTitleFrame.center.x) * subtitleScale\n"
-        "                transition.updateFrameAdditiveToCenter(node: self.usernameNodeContainer, frame: CGRect(origin: usernameCenter, size: CGSize()).offsetBy(dx: 0.0, dy: titleOffset))\n"
-        "                if aorusScrollingHeader {\n"
-        "                    // AorusGram: each label fades out as it reaches the status bar. The\n"
-        "                    // photo has the clipping node above to take it behind the dynamic\n"
-        "                    // island; these three are siblings of it and would otherwise carry on\n"
-        "                    // over the clock. Recomputed every pass, so scrolling back brings\n"
-        "                    // them all the way back.\n"
-        "                    let aorusLabelAlpha: (CGRect) -> CGFloat = { frame in\n"
-        "                        return max(0.0, min(1.0, (frame.minY + titleOffset - statusBarHeight) / 20.0))\n"
-        "                    }\n"
-        "                    transition.updateAlpha(node: self.titleNodeContainer, alpha: aorusLabelAlpha(rawTitleFrame))\n"
-        "                    transition.updateAlpha(node: self.subtitleNodeContainer, alpha: aorusLabelAlpha(rawSubtitleFrame))\n"
-        "                    transition.updateAlpha(node: self.usernameNodeContainer, alpha: aorusLabelAlpha(rawUsernameFrame))\n"
-        "                }\n"
-        "            }\n",
-        "scrolling header label fade",
+        "        avatarScale = 1.0 * (1.0 - titleCollapseFraction) + avatarMinScale * titleCollapseFraction\n"
+        "        avatarOffset = apparentTitleLockOffset + 0.0 * (1.0 - titleCollapseFraction) + 10.0 * titleCollapseFraction\n",
+        "        if aorusScrollingHeader && !self.isAvatarExpanded {\n"
+        "            // AorusGram: the photo is never shrunk into the corner; it slides up behind the\n"
+        "            // dynamic island through its clipping node while the labels stop in the bar.\n"
+        "            avatarScale = 1.0\n"
+        "            avatarOffset = 0.0\n"
+        "        } else {\n"
+        "            avatarScale = 1.0 * (1.0 - titleCollapseFraction) + avatarMinScale * titleCollapseFraction\n"
+        "            avatarOffset = apparentTitleLockOffset + 0.0 * (1.0 - titleCollapseFraction) + 10.0 * titleCollapseFraction\n"
+        "        }\n",
+        "scrolling header keeps the photo's size",
+    )
+    # The cover and the gifts around the avatar follow the avatar, which does not shrink.
+    old_cover = "avatarTransitionFraction: max(0.0, min(1.0, titleCollapseFraction)),\n"
+    if text.count(old_cover) != 2:
+        raise RuntimeError(f"InterfaceV2: cover avatar fraction anchor found {text.count(old_cover)} times")
+    text = text.replace(
+        old_cover,
+        "avatarTransitionFraction: (aorusScrollingHeader && !self.isAvatarExpanded) ? 0.0 : max(0.0, min(1.0, titleCollapseFraction)),\n",
     )
     path.write_text(text, encoding="utf-8")
-    print("InterfaceV2: header scrolls at full size")
+    print("InterfaceV2: header scrolls at full size; its labels stop in the bar")
 
 
 def _patch_keep_avatar_expanded(tg: Path) -> None:
@@ -3024,29 +3048,64 @@ def _patch_keep_avatar_expanded(tg: Path) -> None:
         "                    if let (layout, navigationHeight) = strongSelf.validLayout {\n",
         "re-expand avatar after editing",
     )
-    text = _replace_once(
-        text,
-        "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height {\n"
+    thirteen_two_collapse = (
+        "        if self.headerNode.isAvatarExpanded && !peerInfoAvatarExpansionFits(containerSize: layout.size, bottomHeight: self.headerNode.expandedAvatarBottomHeight) {\n"
         "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
-        "        }\n",
-        "        // AorusGram: Interface 2.0 keeps the photo open on a wide screen too, at the\n"
-        "        // height the header gives it there. Telegram's collapse for landscape turned the\n"
-        "        // profile into its small round photo, and turning back expanded it again in the\n"
-        "        // middle of the rotation; and iOS lays a backgrounded app out in the other\n"
-        "        // orientation for its snapshots, so leaving the app in landscape collapsed and\n"
-        "        // expanded the header behind the reader's back, leaving it in pieces on return.\n"
-        "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {\n"
-        "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
-        "        } else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
-        "            // AorusGram: Interface 2.0 has no small-photo profile. Asked on every layout,\n"
-        "            // which makes it the rule rather than one more exception: whatever collapsed\n"
-        "            // the photo, it does not stay collapsed while nothing on the profile needs the\n"
-        "            // small header. A photo deleted from the gallery leaves the list empty until\n"
-        "            // the peer catches up, and an empty list has nothing to hold open.\n"
-        "            self.headerNode.updateIsAvatarExpanded(true, transition: transition)\n"
-        "        }\n",
-        "restore avatar expansion on layout",
+        "        }\n"
     )
+    if thirteen_two_collapse in text:
+        # Telegram 13.2 collapses the photo wherever the list would not stay on screen below it
+        # (peerInfoAvatarExpansionFits): landscape, as before, and a portrait container hardly
+        # taller than wide (iPhone Duo unfolded, an iPad's split pane), where the photo took every
+        # drag and the profile could not scroll. Interface 2.0 keeps it open on a wide screen at
+        # the height its landscape layout gives, and lets the short portrait one collapse.
+        text = _replace_once(
+            text,
+            thirteen_two_collapse,
+            "        // AorusGram: Interface 2.0 keeps the photo open on a wide screen too, at the\n"
+            "        // height the header gives it there. Telegram's collapse for landscape turned the\n"
+            "        // profile into its small round photo, and turning back expanded it again in the\n"
+            "        // middle of the rotation; and iOS lays a backgrounded app out in the other\n"
+            "        // orientation for its snapshots, so leaving the app in landscape collapsed and\n"
+            "        // expanded the header behind the reader's back, leaving it in pieces on return.\n"
+            "        let aorusExpansionFits = peerInfoAvatarExpansionFits(containerSize: layout.size, bottomHeight: self.headerNode.expandedAvatarBottomHeight)\n"
+            "        let aorusHoldsPhotoOpen = self.aorusKeepsAvatarExpandedNow && (aorusExpansionFits || layout.size.width > layout.size.height)\n"
+            "        if self.headerNode.isAvatarExpanded && !aorusExpansionFits && !aorusHoldsPhotoOpen {\n"
+            "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
+            "        } else if !self.headerNode.isAvatarExpanded, aorusHoldsPhotoOpen, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
+            "            // AorusGram: Interface 2.0 has no small-photo profile. Asked on every layout,\n"
+            "            // which makes it the rule rather than one more exception: whatever collapsed\n"
+            "            // the photo, it does not stay collapsed while nothing on the profile needs the\n"
+            "            // small header. A photo deleted from the gallery leaves the list empty until\n"
+            "            // the peer catches up, and an empty list has nothing to hold open.\n"
+            "            self.headerNode.updateIsAvatarExpanded(true, transition: transition)\n"
+            "        }\n",
+            "restore avatar expansion on layout",
+        )
+    else:
+        text = _replace_once(
+            text,
+            "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height {\n"
+            "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
+            "        }\n",
+            "        // AorusGram: Interface 2.0 keeps the photo open on a wide screen too, at the\n"
+            "        // height the header gives it there. Telegram's collapse for landscape turned the\n"
+            "        // profile into its small round photo, and turning back expanded it again in the\n"
+            "        // middle of the rotation; and iOS lays a backgrounded app out in the other\n"
+            "        // orientation for its snapshots, so leaving the app in landscape collapsed and\n"
+            "        // expanded the header behind the reader's back, leaving it in pieces on return.\n"
+            "        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height && !self.aorusKeepsAvatarExpandedNow {\n"
+            "            self.headerNode.updateIsAvatarExpanded(false, transition: transition)\n"
+            "        } else if !self.headerNode.isAvatarExpanded, self.aorusKeepsAvatarExpandedNow, !self.headerNode.avatarListNode.listContainerNode.galleryEntries.isEmpty {\n"
+            "            // AorusGram: Interface 2.0 has no small-photo profile. Asked on every layout,\n"
+            "            // which makes it the rule rather than one more exception: whatever collapsed\n"
+            "            // the photo, it does not stay collapsed while nothing on the profile needs the\n"
+            "            // small header. A photo deleted from the gallery leaves the list empty until\n"
+            "            // the peer catches up, and an empty list has nothing to hold open.\n"
+            "            self.headerNode.updateIsAvatarExpanded(true, transition: transition)\n"
+            "        }\n",
+            "restore avatar expansion on layout",
+        )
     path.write_text(text, encoding="utf-8")
     print("InterfaceV2: patched avatar expansion")
 
@@ -3270,6 +3329,21 @@ def _patch_landscape_profile(tg: Path) -> None:
     header_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
     header = _read(header_path, "PeerInfoHeaderNode.swift")
     if "aorusWideHeaderControls" not in header:
+        # Telegram 13.2 works the expanded photo's height out in one formula with the title and
+        # buttons' part added (peerInfoExpandedAvatarHeight). Interface 2.0 sizes the photo's
+        # own part, so it takes the formula without that part and adds it after, as 13.1.1 did.
+        thirteen_two_height = "        let expandedAvatarListHeight = peerInfoExpandedAvatarHeight(containerSize: CGSize(width: width, height: containerHeight), bottomHeight: self.expandedAvatarBottomHeight)\n"
+        if thirteen_two_height in header:
+            header = header.replace(
+                thirteen_two_height,
+                "        // AorusGram: the photo's own part; the title and buttons' part is added below.\n"
+                "        let expandedAvatarControlsHeight: CGFloat = 61.0\n"
+                "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n",
+                1,
+            )
+            aorus_height_tail = "        expandedAvatarListHeight += self.expandedAvatarBottomHeight\n"
+        else:
+            aorus_height_tail = ""
         header = _replace_once(
             header,
             "        var expandedAvatarListHeight = min(width, containerHeight - expandedAvatarControlsHeight)\n",
@@ -3287,7 +3361,7 @@ def _patch_landscape_profile(tg: Path) -> None:
             "        } else if aorusWideHeader {\n"
             "            let aorusWideHeaderControls: CGFloat = self.isMyProfile ? 60.0 : 98.0\n"
             "            expandedAvatarListHeight = min(expandedAvatarListHeight, max(160.0, containerHeight - expandedAvatarControlsHeight - aorusWideHeaderControls))\n"
-            "        }\n",
+            "        }\n" + aorus_height_tail,
             "wide header photo height",
         )
         header = _replace_once(
@@ -6102,11 +6176,13 @@ def _patch_recommended_pane_glass(tg: Path) -> None:
         "            }, hasTopStripe: false, noInsets: true, noCorners: true, style: AorusGlassPane.isEnabled ? .blocks : .plain, disableInteractiveTransitionIfNecessary: true)\n",
         "recommended pane item background",
     )
+    # Telegram 13.2 keeps no theme of its own in this pane; ours goes after the promise either way.
+    recommended_head = "    private var theme: PresentationTheme?\n" if "    private var theme: PresentationTheme?\n    private let presentationDataPromise = Promise<PresentationData>()\n" in text else ""
     text = _replace_once(
         text,
-        "    private var theme: PresentationTheme?\n"
+        recommended_head +
         "    private let presentationDataPromise = Promise<PresentationData>()\n",
-        "    private var theme: PresentationTheme?\n"
+        recommended_head +
         "    private let presentationDataPromise = Promise<PresentationData>()\n"
         "    // AorusGram: the theme as it arrived, before the page was taken into account. Kept\n"
         "    // because the derivation depends on the page: the ink is whatever reads over it, and a\n"
@@ -8063,12 +8139,12 @@ def _patch_switch_item_leading_icon(tg: Path) -> None:
         "                        strongSelf.aorusReconcileIcon()\n",
         "switch item icon rotation",
     )
+    # After didLoad, on the gesture's line and the end of the method: 13.2 hides the switch from
+    # VoiceOver between the two lines this used to span.
     text = _replace_once(
         text,
-        "        (self.switchNode.view as? UISwitch)?.addTarget(self, action: #selector(self.switchValueChanged(_:)), for: .valueChanged)\n"
         "        self.switchGestureNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapGesture(_:))))\n"
         "    }\n",
-        "        (self.switchNode.view as? UISwitch)?.addTarget(self, action: #selector(self.switchValueChanged(_:)), for: .valueChanged)\n"
         "        self.switchGestureNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapGesture(_:))))\n"
         "    }\n"
         + _SWITCH_ITEM_ICON_SWIFT,
@@ -8648,15 +8724,17 @@ def _patch_profile_expansion(tg: Path) -> None:
     if "aorusExpansionOriginFrame" in text:
         print("InterfaceV2: profile expansion already patched")
         return
+    # Telegram 13.2 makes the accessor public; ours sits beside it either way.
+    pill_access = "        public var glassPillFrame: CGRect? {\n" if "        public var glassPillFrame: CGRect? {\n            guard let backgroundView" in text else "        var glassPillFrame: CGRect? {\n"
     text = _replace_once(
         text,
-        "        var glassPillFrame: CGRect? {\n"
+        pill_access +
         "            guard let backgroundView = self.backgroundView, !backgroundView.frame.isEmpty else {\n"
         "                return nil\n"
         "            }\n"
         "            return backgroundView.frame\n"
         "        }\n",
-        "        var glassPillFrame: CGRect? {\n"
+        pill_access +
         "            guard let backgroundView = self.backgroundView, !backgroundView.frame.isEmpty else {\n"
         "                return nil\n"
         "            }\n"

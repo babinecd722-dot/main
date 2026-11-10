@@ -26,6 +26,51 @@ def _edit(text: str, old: str, new: str, label: str) -> str:
 def patch_edit_history(tg: Path) -> None:
     ui = tg / "submodules/TelegramUI/Sources"
 
+    # The history screen is built on Telegram's hashtag search, which sets aside an avatar
+    # column beside every incoming bubble and puts a "go to message" button after it, even
+    # where a message has no author. Its bubbles are versions of one message, of no one else,
+    # and the button would lead to an id that exists only on the screen. Contents that mark
+    # themselves edge-aligned keep neither.
+    account_chat = tg / "submodules/AccountContext/Sources/ChatController.swift"
+    t = account_chat.read_text(encoding="utf-8")
+    if "AorusEdgeAlignedChatContents" not in t:
+        t = _edit(
+            t,
+            "public protocol ChatCustomContentsProtocol: AnyObject {\n",
+            "/// AorusGram: custom chat contents whose incoming bubbles stand at the edge -- no avatar\n"
+            "/// column and no share button beside them -- where the hashtag search they are built on\n"
+            "/// keeps both.\n"
+            "public protocol AorusEdgeAlignedChatContents: AnyObject {\n"
+            "}\n"
+            "\n"
+            "public protocol ChatCustomContentsProtocol: AnyObject {\n",
+            "edge-aligned contents protocol",
+        )
+        account_chat.write_text(t, encoding="utf-8")
+
+    bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    t = bubble.read_text(encoding="utf-8")
+    if "AorusEdgeAlignedChatContents" not in t:
+        t = _edit(
+            t,
+            "            if let subject = item.associatedData.subject, case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind {\n"
+            "                hasAvatar = true\n"
+            "            }\n",
+            "            if let subject = item.associatedData.subject, case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind, !(contents is AorusEdgeAlignedChatContents) {\n"
+            "                hasAvatar = true\n"
+            "            }\n",
+            "edge-aligned bubbles keep no avatar column",
+        )
+        t = _edit(
+            t,
+            "        if incoming, case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind {\n"
+            "            needsShareButton = true\n",
+            "        if incoming, case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind, !(contents is AorusEdgeAlignedChatContents) {\n"
+            "            needsShareButton = true\n",
+            "edge-aligned bubbles keep no share button",
+        )
+        bubble.write_text(t, encoding="utf-8")
+
     content_data = ui / "ChatControllerContentData.swift"
     t = content_data.read_text(encoding="utf-8")
     if "AorusEditHistoryChatContents" not in t:

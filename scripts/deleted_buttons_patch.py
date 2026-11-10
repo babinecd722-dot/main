@@ -82,6 +82,10 @@ def patch_deleted_side_buttons(tg: Path) -> None:
     bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     t = bubble.read_text(encoding="utf-8")
     if "aorusSideButtonAlpha" not in t:
+        # 13.2 works the selection offset out for the bubble mode (chatMessageSelectionContentOffset).
+        global _BUBBLE_AFTER_ANCHOR
+        if t.count(_BUBBLE_AFTER_ANCHOR) == 0:
+            _BUBBLE_AFTER_ANCHOR = "        let offset: CGFloat = params.leftInset + chatMessageSelectionContentOffset(incoming: incoming, bubbleMode: item.presentationData.chatBubbleCorners.bubbleMode)\n"
         for anchor in (_BUBBLE_BEFORE_ANCHOR, _BUBBLE_AFTER_ANCHOR, _TRANSLATE_TEXT_OLD):
             if t.count(anchor) != 1:
                 raise SystemExit(f"DeletedButtons: bubble anchor found {t.count(anchor)} times: {anchor.strip()[:70]!r}")

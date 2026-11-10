@@ -587,10 +587,11 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
     )
     # The lens tints what it sits on by its darkness: lighter for a dark theme, darker for a
     # light one. Under the page's ink it has to take the page's side as well.
+    # Only the darkness argument: 13.2 also hides the selection while no tab is chosen.
     text = _replace_once(
         text,
-        "inset: 0.0, liftedInset: 6.0, isDark: component.theme.overallDarkAppearance, isLifted: isLifted, transition: transition)\n",
-        "inset: 0.0, liftedInset: 6.0, isDark: component.aorusPageIsDark ?? component.theme.overallDarkAppearance, isLifted: isLifted, transition: transition)\n",
+        "inset: 0.0, liftedInset: 6.0, isDark: component.theme.overallDarkAppearance, isLifted: isLifted,",
+        "inset: 0.0, liftedInset: 6.0, isDark: component.aorusPageIsDark ?? component.theme.overallDarkAppearance, isLifted: isLifted,",
         "tabs lens darkness",
     )
     # Passed in rather than read at draw time, so that the component compares unequal when the

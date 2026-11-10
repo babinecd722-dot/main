@@ -548,7 +548,13 @@
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "            self.previewContainerView.layer.cornerRadius = 12.0",
       "new": "            self.previewContainerView.layer.cornerRadius = 30.0",
-      "replacement": "            self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 30.0"
+      "replacement": "            self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : 30.0",
+      "alternatives": [
+        {
+          "new": "            self.previewContainerView.layer.cornerRadius = cameraScreenPreviewCornerRadius(mode: controller.mode.kind)",
+          "replacement": "            self.previewContainerView.layer.cornerRadius = AorusOldInterface.isEnabled ? 12.0 : cameraScreenPreviewCornerRadius(mode: controller.mode.kind)"
+        }
+      ]
     },
     {
       "path": "submodules/TelegramUI/Components/AvatarEditorScreen/Sources/BackgroundColorComponent.swift",
@@ -698,7 +704,8 @@
       "path": "submodules/PremiumUI/Sources/PremiumLimitsListScreen.swift",
       "old": "        let buttonInset: CGFloat = 16.0",
       "new": "        let buttonInset: CGFloat = 30.0",
-      "replacement": "        let buttonInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0"
+      "replacement": "        let buttonInset: CGFloat = AorusOldInterface.isEnabled ? 16.0 : 30.0",
+      "absent_in": "13.2: the limits list is a component sheet with its own button layout"
     },
     {
       "path": "submodules/PremiumUI/Sources/PremiumLimitScreen.swift",
@@ -1173,13 +1180,25 @@
       "path": "submodules/ChatListUI/Sources/Node/ChatListItem.swift",
       "old": "            let rawContentWidth = params.width - leftInset - params.rightInset - 10.0 - editingOffset",
       "new": "            let rawContentWidth = params.width - leftInset - params.rightInset - 18.0 - editingOffset",
-      "replacement": "            let rawContentWidth = AorusOldInterface.isEnabled ? params.width - leftInset - params.rightInset - 10.0 - editingOffset : params.width - leftInset - params.rightInset - 18.0 - editingOffset"
+      "replacement": "            let rawContentWidth = AorusOldInterface.isEnabled ? params.width - leftInset - params.rightInset - 10.0 - editingOffset : params.width - leftInset - params.rightInset - 18.0 - editingOffset",
+      "alternatives": [
+        {
+          "new": "            let rawContentWidth = params.width - leftInset - params.rightInset - 18.0 - editingOffset - (item.interaction.isSideListMode ? ChatListItem.sideListContentInset - 12.0 : 0.0)",
+          "replacement": "            let rawContentWidth = AorusOldInterface.isEnabled ? params.width - leftInset - params.rightInset - 10.0 - editingOffset - (item.interaction.isSideListMode ? ChatListItem.sideListContentInset - 12.0 : 0.0) : params.width - leftInset - params.rightInset - 18.0 - editingOffset - (item.interaction.isSideListMode ? ChatListItem.sideListContentInset - 12.0 : 0.0)"
+        }
+      ]
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                    controlsBottomInset = -48.0",
       "new": "                    controlsBottomInset = -70.0",
-      "replacement": "                    controlsBottomInset = AorusOldInterface.isEnabled ? -48.0 : -70.0"
+      "replacement": "                    controlsBottomInset = AorusOldInterface.isEnabled ? -48.0 : -70.0",
+      "alternatives": [
+        {
+          "new": "                controlsBottomInset = storyCameraControlsBottomInset(containerHeight: availableSize.height, viewfinderHeight: previewHeight)",
+          "replacement": "                controlsBottomInset = AorusOldInterface.isEnabled ? (availableSize.height < previewHeight + 30.0 ? -48.0 : 0.0) : storyCameraControlsBottomInset(containerHeight: availableSize.height, viewfinderHeight: previewHeight)"
+        }
+      ]
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
@@ -1209,7 +1228,13 @@
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset)",
       "new": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)",
-      "replacement": "                    modeControlPosition = AorusOldInterface.isEnabled ? CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset) : CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)"
+      "replacement": "                    modeControlPosition = AorusOldInterface.isEnabled ? CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset) : CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)",
+      "alternatives": [
+        {
+          "new": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: component.chatScreenLayout?.modeRowCenterY ?? (availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0))",
+          "replacement": "                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: component.chatScreenLayout?.modeRowCenterY ?? (availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + (AorusOldInterface.isEnabled ? 0.0 : 16.0)))"
+        }
+      ]
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
@@ -1221,7 +1246,13 @@
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",
       "old": "                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlInset - flashButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlInset) + flashButton.size.height / 2.0)",
       "new": "                        let position = CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 50.0, y: topRowTop + flashButton.size.height / 2.0)",
-      "replacement": "                        let position = AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 5.0, y: topRowTop + flashButton.size.height / 2.0) : CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 50.0, y: topRowTop + flashButton.size.height / 2.0)"
+      "replacement": "                        let position = AorusOldInterface.isEnabled ? CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 5.0, y: topRowTop + flashButton.size.height / 2.0) : CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - 50.0, y: topRowTop + flashButton.size.height / 2.0)",
+      "alternatives": [
+        {
+          "new": "                        var position = CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - cameraScreenTopFlashTrailingOffset(mode: modeKind, isTablet: isTablet), y: topRowTop + flashButton.size.height / 2.0)",
+          "replacement": "                        var position = CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - (AorusOldInterface.isEnabled ? 5.0 : cameraScreenTopFlashTrailingOffset(mode: modeKind, isTablet: isTablet)), y: topRowTop + flashButton.size.height / 2.0)"
+        }
+      ]
     },
     {
       "path": "submodules/TelegramUI/Components/CameraScreen/Sources/CameraScreen.swift",

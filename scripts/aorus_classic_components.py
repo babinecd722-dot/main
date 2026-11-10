@@ -126,6 +126,17 @@ def _auxiliary_panels(tg: Path) -> None:
     ):
         path = tg / "submodules" / rel
         text = path.read_text()
+        thirteen_two = "    private func update(availableWidth: CGFloat, containerSize: CGSize?, transition: ComponentTransition) -> CGSize {"
+        if "SegmentedTitleView" in rel and signature not in text and thirteen_two in text:
+            # Telegram 13.2 sizes the title to its tabs (NavigationBarTitleView): the bar offers a
+            # width and places what comes back. 12.0's renderer lays out in the same space and
+            # answers with the selector's size.
+            signature = thirteen_two
+            body = body.replace(
+                "        guard let size = self.validLayout else {\n            return\n        }\n",
+                "        let size = containerSize ?? CGSize(width: availableWidth, height: 44.0)\n",
+            )
+            finish = "            return tabSelectorSize\n"
         if "import TabSelectorComponent\n" not in text:
             text = edit(text, "import HorizontalTabsComponent\n", "import HorizontalTabsComponent\nimport TabSelectorComponent\n", rel + " classic selector import")
         # Only the original renderer is reused, so current model types, search
@@ -391,8 +402,13 @@ def _suggestions(tg: Path) -> None:
     for name in ("MentionChatInputContextPanelNode", "HashtagChatInputContextPanelNode", "CommandChatInputContextPanelNode", "VerticalListContextResultsChatInputContextPanelNode"):
         path = tg / ("submodules/TelegramUI/Sources/" + name + ".swift")
         text = path.read_text()
-        text = edit(text, "            cornerRadius: 20.0,", "            cornerRadius: AorusOldInterface.isEnabled ? 0.0 : 20.0,", name + " edge")
-        text = edit(text, "            tintColor: .init(kind: .panel),", "            tintColor: AorusOldInterface.isEnabled ? .init(kind: .custom(style: .default, color: interfaceState.theme.list.plainBackgroundColor)) : .init(kind: .panel),", name + " theme")
+        # Telegram 13.2 lays the results list's glass out in two places, one of them where the
+        # list places it under its rows and no interface state is at hand: the panel's own theme
+        # is the same theme there.
+        sites = text.count("            cornerRadius: 20.0,") + text.count("            cornerRadius: AorusOldInterface.isEnabled ? 0.0 : 20.0,")
+        theme = "interfaceState.theme" if sites == 1 else "self.theme"
+        text = edit(text, "            cornerRadius: 20.0,", "            cornerRadius: AorusOldInterface.isEnabled ? 0.0 : 20.0,", name + " edge", count=max(1, sites))
+        text = edit(text, "            tintColor: .init(kind: .panel),", "            tintColor: AorusOldInterface.isEnabled ? .init(kind: .custom(style: .default, color: " + theme + ".list.plainBackgroundColor)) : .init(kind: .panel),", name + " theme", count=max(1, sites))
         path.write_text(text)
 
 
