@@ -43,7 +43,9 @@ extension AorusGlassStyle {
         switch tintColor.kind {
         case let .custom(_, color):
             return [color]
-        case .panel:
+        case .panel, .untinted:
+            // Telegram 13.2's untinted glass (UIKit's own regular glass, as the iOS 27 tab bar
+            // uses) is a panel to its custom implementation, and so to a solid or pixel pane.
             return self.plate(clear: false, isDark: isDark)
         case .clear:
             return self.plate(clear: true, isDark: isDark)
