@@ -2176,6 +2176,19 @@ def _patch_classic_chat_list_header_view(tg: Path) -> None:
     comps = tg / "submodules/TelegramUI/Components"
     if not (comps / "ChatListHeaderComponent/Sources/AorusClassicChatListHeader.swift").is_file():
         raise RuntimeError("OldInterface: AorusClassicChatListHeader.swift was not copied into ChatListHeaderComponent")
+    stories = _read(comps / "Stories/StoryPeerListComponent/Sources/StoryPeerListComponent.swift")
+    if "contextPeerAction: @escaping (ContextExtractedContentContainingNode, ContextGesture?, EnginePeer) -> Void" in stories:
+        # Telegram 13.2's story list opens a peer's menu from VoiceOver too, with no gesture to
+        # hand on: the 12.0 header's action takes the gesture as optional, as the native one does.
+        # classic_layout_check compares the snapshot with this one type put back.
+        header = comps / "ChatListHeaderComponent/Sources/AorusClassicChatListHeader.swift"
+        text = _read(header)
+        old_action = "    var storyContextPeerAction: ((ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void)?\n"
+        new_action = "    var storyContextPeerAction: ((ContextExtractedContentContainingNode, ContextGesture?, EnginePeer) -> Void)?\n"
+        if text.count(old_action) == 1:
+            header.write_text(text.replace(old_action, new_action), encoding="utf-8")
+        elif text.count(new_action) != 1:
+            raise RuntimeError("OldInterface: the classic header's story menu action is missing")
 
     path = comps / "ChatListHeaderComponent/BUILD"
     text = _read(path)

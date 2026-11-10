@@ -19,8 +19,15 @@ def classic_reference_bytes(path: Path) -> bytes:
         data = data.replace(b"neighbors: ListViewItemNeighbors", b"previousItem: ListViewItem?, nextItem: ListViewItem?")
         data = data.replace(b"    var neighborDescriptor: AnyEquatable { return .noNeighborInfluence }\n", b"")
     if path.name == "AorusClassicCaptureControlsComponent.swift":
-        # Telegram 13.2's shutter blob takes no test flag and cannot fail to initialise.
+        # Telegram 13.2's shutter blob takes no test flag and cannot fail to initialise, and the
+        # camera module declares the shutter's 96-point size itself.
         data = data.replace(b"self.blobView = ShutterBlobView()\n", b"self.blobView = ShutterBlobView(test: false)\n")
+        data = data.replace(b"// maximumShutterSize: the camera module's own, 96 x 96 as in 12.0\n",
+                            b"private let maximumShutterSize = CGSize(width: 96.0, height: 96.0)\n")
+    if path.name == "AorusClassicChatListHeader.swift":
+        # Telegram 13.2's story list hands the peer menu an optional gesture.
+        data = data.replace(b"    var storyContextPeerAction: ((ContextExtractedContentContainingNode, ContextGesture?, EnginePeer) -> Void)?\n",
+                            b"    var storyContextPeerAction: ((ContextExtractedContentContainingNode, ContextGesture, EnginePeer) -> Void)?\n")
     if path.name == "AorusClassicPeerInfoNavigation.swift":
         data = data.replace(b", lottieSettings: .init(backend: .rlottie))", b")")
         data = data.replace(b"import LottieSettings\n", b"")

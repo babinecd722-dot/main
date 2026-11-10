@@ -304,6 +304,21 @@ def _capture_controls(tg: Path) -> None:
     folder = tg / "submodules/TelegramUI/Components/CameraScreen/Sources"
     source = ROOT / "TelegramUI/Components/CameraScreen/Sources/AorusClassicCaptureControlsComponent.swift"
     shutil.copyfile(source, folder / source.name)
+    controls = (folder / "CaptureControlsComponent.swift").read_text()
+    if "\nlet maximumShutterSize = " in controls:
+        # Telegram 13.2 declares the shutter's maximum size for the whole module, where 12.0
+        # kept it private to each file: the snapshot's own declaration would redeclare it. The
+        # module's is the same 96 points; classic_layout_check puts the line back to compare.
+        if "\nlet maximumShutterSize = CGSize(width: 96.0, height: 96.0)\n" not in controls:
+            raise RuntimeError("ClassicLayout: the camera module's shutter size is no longer 12.0's")
+        installed = folder / source.name
+        snapshot = installed.read_text()
+        if snapshot.count("private let maximumShutterSize = CGSize(width: 96.0, height: 96.0)\n") != 1:
+            raise RuntimeError("ClassicLayout: classic shutter size declaration is ambiguous")
+        installed.write_text(snapshot.replace(
+            "private let maximumShutterSize = CGSize(width: 96.0, height: 96.0)\n",
+            "// maximumShutterSize: the camera module's own, 96 x 96 as in 12.0\n",
+        ))
     blob = (folder / "ShutterBlobView.swift").read_text()
     if "init?(test: Bool)" not in blob:
         # Telegram 13.2 draws the shutter blob through MetalEngine: its view no longer fails to
