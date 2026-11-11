@@ -6,6 +6,7 @@ import SwiftSignalKit
 import TelegramPresentationData
 import ItemListUI
 import AnimatedStickerNode
+import MediaResources
 import AppBundle
 
 // The rows the AorusGram settings are built from: the animated logo with the version under it,
