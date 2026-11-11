@@ -1927,15 +1927,17 @@ def patch_block_ads(tg: Path) -> None:
         print("BlockAds: activate() anchor not found (upstream drift) — skipped gracefully")
 
 
-# Whether Ghost Mode holds this peer's typing, read receipts and story views back. The same rule
-# as `aorusGhostIsActive` beside the chat's avatar, which cannot be called from TelegramCore:
-# Ghost Mode, less the chats the ghost beside a chat's avatar turned it off for while that ghost
-# is in use. With the ghost's switch off the chats it turned off are kept but not in force, and
-# with Ghost Mode off nothing is held back anywhere.
-_AORUS_GHOST_ACTIVE_SWIFT = (
-    "    let aorusGhostExcluded = ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_chat_button\") as? Bool) ?? true) && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber)?.intValue ?? 0) < 0\n"
-    "    let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && !aorusGhostExcluded\n"
-)
+# Whether Ghost Mode holds this peer's typing, read receipts, story views or listening back. The
+# same rule as `aorusGhostIsActive` beside the chat's avatar, which cannot be called from
+# TelegramCore: Ghost Mode with this item chosen on its screen (aorusgram_ghost_conceal_*, all
+# chosen unless turned off), less the chats the ghost beside a chat's avatar turned it off for
+# while that ghost is in use. With the ghost's switch off the chats it turned off are kept but not
+# in force, and with Ghost Mode off nothing is held back anywhere.
+def _aorus_ghost_active_swift(item: str) -> str:
+    return (
+        "    let aorusGhostExcluded = ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_chat_button\") as? Bool) ?? true) && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber)?.intValue ?? 0) < 0\n"
+        "    let aorusGhostActive = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_" + item + "\") as? Bool) ?? true) && !aorusGhostExcluded\n"
+    )
 
 
 def patch_ghost_mode_hide_typing(tg: Path) -> None:
@@ -1972,7 +1974,7 @@ def patch_ghost_mode_hide_typing(tg: Path) -> None:
 
     guard = (
         sentinel + "\n"
-        + _AORUS_GHOST_ACTIVE_SWIFT +
+        + _aorus_ghost_active_swift("typing") +
         "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }\n"
@@ -2040,7 +2042,7 @@ def patch_ghost_mode_hide_online(tg: Path) -> None:
     override = (
         anchor + "\n"
         "        " + sentinel + "\n"
-        "        if isOnline && UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") {\n"
+        "        if isOnline && UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true) {\n"
         "            self.onlineTimer?.invalidate()\n"
         "            let aorusTimer = SignalKitTimer(timeout: 30.0, repeat: false, completion: { [weak self] in\n"
         "                guard let s = self else { return }\n"
@@ -2121,6 +2123,8 @@ def patch_ghost_mode_proactive_offline(tg: Path) -> None:
         "            object: nil, queue: nil\n"
         "        ) { [weak self] _ in\n"
         "            guard UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") else { return }\n"
+        "            // Online shown again or hidden again: either way the next status the server\n"
+        "            // hears is decided anew, by the override in updatePresence.\n"
         "            aorusQueue.async {\n"
         "                self?.updatePresence(true)\n"
         "            }\n"
@@ -2198,7 +2202,7 @@ def patch_ghost_mode_block_read(tg: Path) -> None:
     guard = (
         anchor + "\n"
         "    " + sentinel + "\n"
-        + _AORUS_GHOST_ACTIVE_SWIFT +
+        + _aorus_ghost_active_swift("read") +
         "    if aorusGhostActive {\n"
         "        return Signal { _ in ActionDisposable {} }\n"
         "    }"
@@ -16739,7 +16743,7 @@ def patch_ghost_mode_stealth_stories(tg: Path) -> None:
         return
     inject = anchor + "\n" + (
         "    " + sentinel + "\n"
-        + _AORUS_GHOST_ACTIVE_SWIFT +
+        + _aorus_ghost_active_swift("stories") +
         "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }"
@@ -16747,6 +16751,42 @@ def patch_ghost_mode_stealth_stories(tg: Path) -> None:
     t = t.replace(anchor, inject, 1)
     path.write_text(t, encoding="utf-8")
     print("StealthStories: injected ghost-mode stealth story view")
+
+
+def patch_ghost_mode_hide_listened(tg: Path) -> None:
+    """Under Ghost Mode, playing a voice or video message does not tell its sender.
+
+    Playing one marks it consumed: Telegram queues a SynchronizeConsumeMessageContents operation
+    and `synchronizeConsumeMessageContents` sends messages.readMessageContents (or the channel's
+    one), which is what clears the dot beside the message on the sender's side. While Ghost Mode
+    hides listening in this chat, the operation completes without a request: the manager then
+    removes it from the log as it does after a sent one, so nothing is retried and nothing piles
+    up. On this device the message is played as usual. Secret chats report it through their own
+    service messages, which drive their self-destruct timers, and are left as they are.
+    """
+    path = tg / "submodules/TelegramCore/Sources/State/ManagedSynchronizeConsumeMessageContentsOperations.swift"
+    if not path.is_file():
+        raise RuntimeError("HideListened: ManagedSynchronizeConsumeMessageContentsOperations.swift not found")
+    t = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: ghost mode hides listening"
+    if sentinel in t:
+        print("HideListened: already injected")
+        return
+    anchor = ("private func synchronizeConsumeMessageContents(transaction: Transaction, network: Network, "
+              "stateManager: AccountStateManager, peerId: PeerId, operation: SynchronizeConsumeMessageContentsOperation) "
+              "-> Signal<Void, NoError> {")
+    if t.count(anchor) != 1:
+        raise RuntimeError("HideListened: synchronizeConsumeMessageContents anchor not found")
+    inject = anchor + "\n" + (
+        "    " + sentinel + "\n"
+        + _aorus_ghost_active_swift("listened") +
+        "    if aorusGhostActive {\n"
+        "        return .complete()\n"
+        "    }"
+    )
+    t = t.replace(anchor, inject, 1)
+    path.write_text(t, encoding="utf-8")
+    print("HideListened: playing a voice or video message is not reported under Ghost Mode")
 
 
 def patch_per_chat_ghost_mode(tg: Path) -> None:
@@ -16870,9 +16910,18 @@ private func aorusGhostPeerOverrideKey(_ peerId: PeerId) -> String {
 }
 
 // The ghost beside a chat's avatar is in the chats only while Ghost Mode is on and its switch
-// under Ghost Mode is, which it is unless it has been turned off.
+// on the Ghost Mode screen is, which it is unless it has been turned off. It turns off for one
+// chat what Ghost Mode hides there, so it is shown only while something a chat can turn off is
+// chosen: online status is the whole account's and no chat changes it.
 func aorusGhostChatButtonIsShown() -> Bool {
     guard UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") else {
+        return false
+    }
+    let aorusHidesInChats = ((UserDefaults.standard.object(forKey: "aorusgram_ghost_conceal_read") as? Bool) ?? true)
+        || ((UserDefaults.standard.object(forKey: "aorusgram_ghost_conceal_typing") as? Bool) ?? true)
+        || ((UserDefaults.standard.object(forKey: "aorusgram_ghost_conceal_stories") as? Bool) ?? true)
+        || ((UserDefaults.standard.object(forKey: "aorusgram_ghost_conceal_listened") as? Bool) ?? true)
+    guard aorusHidesInChats else {
         return false
     }
     return (UserDefaults.standard.object(forKey: "aorusgram_ghost_chat_button") as? Bool) ?? true
@@ -19994,6 +20043,8 @@ private func aorusTabBarStillImage(animationName: String) -> UIImage? {
         name = "Chat List/Tabs/IconCalls"
     case "TabSettings":
         name = "Chat List/Tabs/IconSettings"
+    case "AorusWallTab":
+        name = "AorusGram/Tabs/Wall"
     default:
         return nil
     }
@@ -24692,6 +24743,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
     # The AorusGram settings logo sits in the same bundle folder as the badge font.
     from aorus_logo_tgs import install_settings_logo
     install_settings_logo(tg)
+    # The Wall tab's animated icon, which the tab bar finds by `animationName` in the main bundle.
+    from aorus_wall_tab_animation import install_wall_tab_animation
+    install_wall_tab_animation(tg)
 
     # --- 1. Alternative imagesets ---------------------------------------------
     for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):
@@ -31498,6 +31552,7 @@ def main() -> None:
     patch_ghost_mode_proactive_offline(tg)
     patch_ghost_mode_block_read(tg)
     patch_ghost_mode_stealth_stories(tg)
+    patch_ghost_mode_hide_listened(tg)
     patch_per_chat_ghost_mode(tg)
     patch_navigation_bar_resizing_nodes(tg)
     patch_voice_twin_recorder(tg)

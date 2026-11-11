@@ -127,8 +127,9 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
         addSubnode(maskNode)
     }
 
-    // Symmetric fade: the row appears AND disappears with the same animation
-    // when Auto-Clean Cache is toggled (previously the removal was instant).
+    // The row fades in and out as the settings rows and Telegram's own rows do when its
+    // Auto-Clean is toggled: in over 0.3 s, out over 0.15 s so the rows below, closing the gap,
+    // never slide over a row still on screen.
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
         self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
     }
@@ -138,7 +139,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
     }
 
     override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
-        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false)
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
     }
 
     override func didLoad() {
@@ -283,6 +284,9 @@ private enum AorusPage: String, CaseIterable, Equatable {
     case extras
     case performance
     case data
+    /// Ghost Mode's own screen, opened from Privacy: the switch, what it hides and the ghost in
+    /// chats. Last, so the other pages keep their section numbers.
+    case ghost
 
     /// The sections, in the order the main screen lists them, in its three blocks.
     static let blocks: [[AorusPage]] = [
@@ -306,6 +310,7 @@ private enum AorusPage: String, CaseIterable, Equatable {
         case .extras: return AorusSettingsIcon("gift.fill")
         case .performance: return AorusSettingsIcon("speedometer")
         case .data: return AorusSettingsIcon("externaldrive.fill")
+        case .ghost: return .ghost
         }
     }
 
@@ -324,6 +329,7 @@ private enum AorusPage: String, CaseIterable, Equatable {
         case .extras: return aorusL("Premium и подарки", "Premium & Gifts")
         case .performance: return aorusL("Производительность", "Performance")
         case .data: return aorusL("Аккаунты и данные", "Accounts & Data")
+        case .ghost: return AorusL10n.current.ghostMode
         }
     }
 
@@ -342,6 +348,7 @@ private enum AorusPage: String, CaseIterable, Equatable {
         case .extras: return aorusL("Premium, подарки, звёзды и юзернеймы только для тебя", "Premium, gifts, Stars and usernames just for you")
         case .performance: return aorusL("Скорость, память и статистика устройства", "Speed, memory and device statistics")
         case .data: return aorusL("Резервные копии, перенос настроек и Siri", "Backups, settings transfer and Siri")
+        case .ghost: return aorusL("Скрывает то, что ты выберешь: онлайн, прочтение, набор, истории", "Hides what you choose: online, reading, typing, stories")
         }
     }
 
@@ -363,6 +370,7 @@ private enum AorusPage: String, CaseIterable, Equatable {
         case "extras", "premium", "gifts": return .extras
         case "performance": return .performance
         case "data", "backup": return .data
+        case "ghost": return .ghost
         default: return .root
         }
     }
@@ -387,8 +395,11 @@ private enum AorusPage: String, CaseIterable, Equatable {
 private struct AorusState: Equatable {
     var ghostMode: Bool
     var ghostChatButton: Bool
+    var ghostHideOnline: Bool
     var blockReadReceipts: Bool
     var hideTyping: Bool
+    var ghostHideStories: Bool
+    var ghostHideListened: Bool
     var saveDeletedMessages: Bool
     var saveEditedMessages: Bool
     var antiScreenshot: Bool
@@ -540,8 +551,10 @@ private struct AorusEntry: ItemListNodeEntry {
         return self.id
     }
 
+    /// The position is left out: a row that only moves because another appeared above it is the
+    /// same row, and the list moves it without laying it out again.
     static func ==(lhs: AorusEntry, rhs: AorusEntry) -> Bool {
-        return lhs.id == rhs.id && lhs.section == rhs.section && lhs.order == rhs.order && lhs.kind == rhs.kind
+        return lhs.id == rhs.id && lhs.section == rhs.section && lhs.kind == rhs.kind
     }
 
     static func <(lhs: AorusEntry, rhs: AorusEntry) -> Bool {
@@ -731,13 +744,9 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
 
     case .privacy:
         b.block()
-        b.toggle("ghostMode", .ghost, l10n.ghostMode, aorusL("Скрывает твой онлайн, набор текста и отметки о прочтении", "Hides your online status, typing and read receipts"), \.ghostMode, state)
-        // The ghost beside a chat's avatar exists only while Ghost Mode is on, so its switch does
-        // too: it slides in under Ghost Mode as that is turned on and out as it is turned off,
-        // with its value kept for the next time.
-        if state.ghostMode {
-            b.toggle("ghostChatButton", icon("hand.tap.fill"), l10n.ghostChatButton, aorusL("Включай и выключай режим прямо из чата", "Turn the mode on and off right from a chat"), \.ghostChatButton, state)
-        }
+        // Ghost Mode has a screen of its own: what it hides is chosen there, item by item, and
+        // the ghost in chats with it (`.ghost` below).
+        b.screen("ghostMode", .ghost, l10n.ghostMode, AorusPage.ghost.subtitle, .page(.ghost), isOn: state.ghostMode)
         b.toggle("antiSpoofOnline", icon("eye.fill"), aorusL("Настоящий онлайн собеседника", "Contact's Real Activity"), aorusL("Показывает, когда человек был активен, даже если он скрыл время захода", "Shows when someone was active even if they hide their last seen"), \.antiSpoofOnline, state)
         b.block()
         b.screen("deviceSpoof", icon("iphone"), aorusL("Подмена устройства", "Device Spoofing"), aorusL("Какое устройство видят Telegram и твои сеансы", "Which device Telegram and your sessions see"), .deviceSpoof, isOn: state.spoofedDeviceName != nil, value: state.spoofedDeviceName)
@@ -904,6 +913,25 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
             b.slider("cacheInterval", l10n.cacheInterval, state.cacheCleanInterval, isRAM: false)
         }
 
+    case .ghost:
+        b.block()
+        b.toggle("ghostMode", .ghost, l10n.ghostMode, aorusL("Скрывает от других всё, что выбрано ниже", "Hides everything chosen below from others"), \.ghostMode, state)
+        b.block(aorusL("ЧТО СКРЫВАТЬ", "WHAT TO HIDE"))
+        b.toggle("hideOnline", icon("dot.radiowaves.left.and.right"), aorusL("Статус «в сети»", "Online Status"), aorusL("Никто не видит, что ты в сети и когда заходил", "No one sees that you're online or when you were last seen"), \.ghostHideOnline, state)
+        b.toggle("hideRead", icon("envelope.open.fill"), aorusL("Отметки о прочтении", "Read Receipts"), aorusL("Собеседник не видит, что ты прочитал его сообщения", "Others don't see that you've read their messages"), \.blockReadReceipts, state)
+        b.toggle("hideTyping", icon("ellipsis.bubble.fill"), aorusL("Набор текста", "Typing"), aorusL("Не видно, что ты печатаешь, записываешь голосовое или кружок", "No one sees you typing or recording a voice or video message"), \.hideTyping, state)
+        b.toggle("hideStories", icon("circle.dashed"), aorusL("Просмотр историй", "Story Views"), aorusL("Автор не узнает, что ты смотрел его историю", "Authors don't find out you watched their story"), \.ghostHideStories, state)
+        b.toggle("hideListened", icon("headphones"), aorusL("Прослушивание голосовых", "Listening to Voice Messages"), aorusL("Голосовые и кружки остаются непрослушанными у отправителя", "Voice and video messages stay unplayed for the sender"), \.ghostHideListened, state)
+        let hidesInChats = state.blockReadReceipts || state.hideTyping || state.ghostHideStories || state.ghostHideListened
+        if !hidesInChats && !state.ghostHideOnline {
+            b.footer(aorusL("Ничего не выбрано — режим призрака ничего не скрывает.", "Nothing is chosen, so Ghost Mode hides nothing."))
+        }
+        b.block(aorusL("В ЧАТАХ", "IN CHATS"))
+        // The ghost beside a chat's avatar turns off, for that chat, what is chosen above. Online
+        // status is the whole account's, so with nothing else chosen it has nothing to turn off.
+        b.toggle("ghostChatButton", icon("hand.tap.fill"), l10n.ghostChatButton, aorusL("Призрак у аватарки включает и выключает выбранное в одном чате", "The ghost by a chat's avatar turns your choice on and off for that chat"), \.ghostChatButton, state, enabled: hidesInChats)
+        b.footer(aorusL("Статус «в сети» общий для всего аккаунта, поэтому кнопка в чате его не меняет.", "Online status is shared by the whole account, so the button in a chat doesn't change it."))
+
     case .data:
         b.block()
         b.screen("accountBackup", icon("person.2.badge.key.fill"), aorusL("Резервные копии аккаунтов", "Account Backup"), aorusL("Сохрани вход в аккаунты и восстанови его в любой момент", "Save your account logins and restore them any time"), .accountBackup)
@@ -1022,8 +1050,11 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
     return AorusState(
         ghostMode:          mgr.ghostMode,
         ghostChatButton:    mgr.ghostChatButton,
+        ghostHideOnline:    mgr.ghostHideOnline,
         blockReadReceipts:  mgr.blockReadReceipts,
         hideTyping:         mgr.hideTyping,
+        ghostHideStories:   mgr.ghostHideStories,
+        ghostHideListened:  mgr.ghostHideListened,
         saveDeletedMessages: mgr.saveDeletedMessages,
         saveEditedMessages:  mgr.saveEditedMessages,
         antiScreenshot:     mgr.antiScreenshot,
@@ -1142,8 +1173,11 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
     let aorusPersisters: [WritableKeyPath<AorusState, Bool>: (Bool) -> Void] = [
         \.ghostMode: { mgr.ghostMode = $0 },
         \.ghostChatButton: { mgr.ghostChatButton = $0 },
+        \.ghostHideOnline: { mgr.ghostHideOnline = $0 },
         \.blockReadReceipts: { mgr.blockReadReceipts = $0 },
         \.hideTyping: { mgr.hideTyping = $0 },
+        \.ghostHideStories: { mgr.ghostHideStories = $0 },
+        \.ghostHideListened: { mgr.ghostHideListened = $0 },
         \.saveDeletedMessages: { mgr.saveDeletedMessages = $0 },
         \.saveEditedMessages: { mgr.saveEditedMessages = $0 },
         \.antiScreenshot: { mgr.antiScreenshot = $0 },
@@ -1617,10 +1651,25 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
     // toggled, aorusAmoledTrigger re-emits presentationData and this screen goes true-black
     // immediately, with no need to leave and re-enter.
     let searchSignal = combineLatest(queryPromise.get(), searchingPromise.get())
+    // What the list showed last: a change of what is searched replaces the whole list, and is
+    // crossfaded rather than animated row by row (see below).
+    final class ShownSearch {
+        var value: (query: String, searching: Bool)?
+    }
+    let shownSearch = ShownSearch()
     let signal = combineLatest(statePromise.get(), searchSignal, aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
         |> deliverOnMainQueue
         |> map { state, search, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let (query, searching) = search
+            // Opening or closing the search, or a new letter in it, swaps one set of rows for
+            // another: dozens of rows sliding past each other at once read as the list jumping.
+            // Those changes crossfade, as Telegram's own search results do. A switch turned on
+            // or off still slides its dependent rows in and out, row by row.
+            var crossfade = false
+            if let shown = shownSearch.value, shown.query != query || shown.searching != searching {
+                crossfade = true
+            }
+            shownSearch.value = (query, searching)
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
             let entries = aorusEntries(page: page, query: query, searching: searching, state: state, l10n: l10n, strings: presentationData.strings)
             // The main screen's search: Telegram's glass search button on the right of the bar,
@@ -1652,7 +1701,9 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                 presentationData: ItemListPresentationData(presentationData),
                 entries: entries,
                 style: .blocks,
-                searchItem: searchItem
+                searchItem: searchItem,
+                crossfadeState: crossfade,
+                animateChanges: !crossfade
             )
             return (controllerState, (listState, arguments))
         }

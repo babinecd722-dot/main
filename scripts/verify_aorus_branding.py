@@ -4215,9 +4215,21 @@ def main() -> None:
             "add(follower.layer, \"opacity\", frames.map { number($0.companionContent) })",
             "for follower in self.sourceLoan?.aorusCompanionFollowers ?? [] {",
         )),
-        ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
-        ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
-        ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && !aorusGhostExcluded",)),
+        # Each guard holds back only what is chosen on the Ghost Mode screen (docs/ghost-mode.md).
+        ("submodules/TelegramCore/Sources/State/ManagedLocalInputActivities.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_typing\", default: true)) && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/State/SynchronizePeerReadState.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_read\", default: true)) && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/TelegramEngine/Messages/Stories.swift", ("let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_stories\", default: true)) && !aorusGhostExcluded",)),
+        ("submodules/TelegramCore/Sources/State/ManagedSynchronizeConsumeMessageContentsOperations.swift", (
+            "// AorusGram: ghost mode hides listening",
+            "let aorusGhostActive = AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_listened\", default: true)) && !aorusGhostExcluded",
+        )),
+        ("submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift", ("if isOnline && AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_online\", default: true)) {",)),
+        ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("guard aorusHidesInChats else {",)),
+        # The Wall tab plays its house when tapped, as Telegram's tabs play theirs, and shows a
+        # plugin's replacement still (scripts/aorus_wall_tab_animation.py, docs/tab-bar.md).
+        ("submodules/TelegramUI/Sources/AorusWall.swift", ('item.animationName = "AorusWallTab"',)),
+        ("submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift", ('case "AorusWallTab":',)),
+        ("Telegram/Telegram-iOS/Resources/AorusWallTab.json", ('"nm":"AorusWallTab"',)),
         # AorusGram's own screens follow the app's theme as it changes, from the shared context the
         # app hands AorusLiveTheme as its first account context is made (docs/appearance.md).
         ("submodules/TelegramUI/Sources/AccountContext.swift", ("AorusLiveTheme.attach(sharedContext)",)),

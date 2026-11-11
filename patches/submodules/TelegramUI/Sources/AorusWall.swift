@@ -5,6 +5,8 @@ import Postbox
 import TelegramCore
 import AccountContext
 import Display
+// UITabBarItem.animationName, the animated tab icon Telegram's own tabs set.
+import UIKitRuntimeUtils
 import AorusGramUI
 import UndoUI
 
@@ -2081,6 +2083,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             let tabBarTheme = presentationData.theme.rootController.tabBar
             controller.tabBarItem.image = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.iconColor), named: "AorusGram/Tabs/Wall")
             controller.tabBarItem.selectedImage = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor), named: "AorusGram/Tabs/Wall")
+            aorusSetWallTabAnimation(controller.tabBarItem)
         })
     }
 
@@ -2211,5 +2214,16 @@ public func makeAorusWallController(context: AccountContext, isTabRoot: Bool = t
     let tabBarTheme = context.sharedContext.currentPresentationData.with { $0 }.theme.rootController.tabBar
     controller.tabBarItem.image = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.iconColor), named: "AorusGram/Tabs/Wall")
     controller.tabBarItem.selectedImage = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor), named: "AorusGram/Tabs/Wall")
+    aorusSetWallTabAnimation(controller.tabBarItem)
     return controller
+}
+
+/// The house plays when the tab is tapped, as Telegram's Chats, Calls and Settings icons do
+/// (scripts/aorus_wall_tab_animation.py), and rests on its last frame, the house. The tab bar
+/// tints it in the tab's colour. The still images above stay for the classic bar's unselected
+/// tab and for a plugin that replaces the icon: the glass bar shows a replaced icon still.
+private func aorusSetWallTabAnimation(_ item: UITabBarItem) {
+    if item.animationName != "AorusWallTab" {
+        item.animationName = "AorusWallTab"
+    }
 }

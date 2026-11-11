@@ -15,8 +15,9 @@ import SwiftSignalKit
         let legacyKey = "aorusgram_ghost_peer_42"
         let globalKey = "aorusgram_ghost_mode"
         let buttonKey = "aorusgram_ghost_chat_button"
+        let typingKey = "aorusgram_ghost_conceal_typing"
         defer {
-            for key in [overrideKey, legacyKey, globalKey, buttonKey] { UserDefaults.standard.removeObject(forKey: key) }
+            for key in [overrideKey, legacyKey, globalKey, buttonKey, typingKey] { UserDefaults.standard.removeObject(forKey: key) }
         }
         let timestamp = Int32(Date().timeIntervalSince1970)
         let presences: [TelegramUserPresence?] = [nil, .init(status: .none), .init(status: .lastWeek), .init(status: .lastMonth), .init(status: .recently), .init(status: .present(timestamp - 3600)), .init(status: .present(timestamp + 600))]
@@ -61,6 +62,18 @@ import SwiftSignalKit
         let disposable = requestActivity(postbox: Postbox(peer: TelegramUser()), network: saved, accountPeerId: peerId, peerId: peerId, threadId: nil, activity: .recordingInstantVideo, aorusRoundVideoRecording: true).start()
         expect(saved.requests.isEmpty, "Saved Messages does not publish recording activity")
         disposable.dispose()
+        // Ghost Mode hides only what is chosen on its screen: typing left out is shown, in every
+        // chat, and chosen again it is hidden again.
+        UserDefaults.standard.set(true, forKey: globalKey)
+        UserDefaults.standard.removeObject(forKey: overrideKey)
+        for chosen in [false, true] {
+            UserDefaults.standard.set(chosen, forKey: typingKey)
+            let network = Network()
+            let typing = requestActivity(postbox: Postbox(peer: TelegramUser(), presence: .init(status: .present(timestamp + 600))), network: network, accountPeerId: PeerId(1), peerId: peerId, threadId: nil, activity: .typingText, aorusRoundVideoRecording: false).start()
+            expect(network.requests.count == (chosen ? 0 : 1), "Ghost Mode hides typing only while typing is chosen on its screen")
+            typing.dispose()
+        }
+        UserDefaults.standard.removeObject(forKey: typingKey)
         licensed = false
         UserDefaults.standard.set(true, forKey: globalKey)
         let unlicensed = Network()

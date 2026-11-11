@@ -286,10 +286,12 @@ final class AorusSettingsRowItem: ListViewItem, ItemListItem {
         self.toggled = toggled
     }
 
+    /// A row with a switch is changed by its switch alone, as Telegram's own switch rows are:
+    /// a tap on the text does nothing, so scrolling or reading cannot flip a feature.
     var selectable: Bool {
         switch self.accessory {
-        case let .toggle(_, enabled):
-            return enabled && self.toggled != nil
+        case .toggle:
+            return false
         default:
             return self.action != nil
         }
@@ -297,15 +299,10 @@ final class AorusSettingsRowItem: ListViewItem, ItemListItem {
 
     func selected(listView: ListView) {
         listView.clearHighlightAnimated(true)
-        switch self.accessory {
-        case let .toggle(value, enabled):
-            // The whole row is the switch's target, as a tap on its label flips it.
-            if enabled {
-                self.toggled?(!value)
-            }
-        default:
-            self.action?()
+        if case .toggle = self.accessory {
+            return
         }
+        self.action?()
     }
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -397,6 +394,16 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
         self.addSubnode(self.valueNode)
         self.addSubnode(self.arrowNode)
         self.addSubnode(self.activateArea)
+
+        // VoiceOver's double tap stands for the tap on the switch, as on Telegram's switch rows.
+        self.activateArea.activate = { [weak self] in
+            guard let self, let item = self.item, case let .toggle(value, enabled) = item.accessory, enabled else {
+                return false
+            }
+            self.switchView?.setOn(!value, animated: true)
+            item.toggled?(!value)
+            return true
+        }
     }
 
     @objc private func switchChanged(_ sender: UISwitch) {
@@ -438,8 +445,19 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                 subtitleFont = Font.regular(13.0)
                 verticalInset = 11.0
             }
+            // The title's colour. A row that does something when tapped is black or white like
+            // every other row when it has a sign of its own (save the settings, load them), red
+            // when it deletes, and in the accent only as a bare text button under a field.
+            var titleColor = theme.list.itemPrimaryTextColor
+            if case let .action(destructive) = item.accessory {
+                if destructive {
+                    titleColor = theme.list.itemDestructiveColor
+                } else if item.icon == nil {
+                    titleColor = theme.list.itemAccentColor
+                }
+            }
             // A plain silhouette in the title's ink: no tile and no colour of its own.
-            let iconImage = item.icon.flatMap { aorusSettingsIconImage($0, side: iconSide, ink: theme.list.itemPrimaryTextColor) }
+            let iconImage = item.icon.flatMap { aorusSettingsIconImage($0, side: iconSide, ink: titleColor) }
 
             let leftInset = params.leftInset + 16.0
             // Every row's text starts in one column, whether or not it has a sign: a switch under
@@ -476,10 +494,6 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
             }
 
             let textWidth = max(60.0, rightEdge - trailingWidth - textLeft)
-            var titleColor = theme.list.itemPrimaryTextColor
-            if case let .action(destructive) = item.accessory {
-                titleColor = destructive ? theme.list.itemDestructiveColor : theme.list.itemAccentColor
-            }
             var isEnabled = true
             if case let .toggle(_, enabled) = item.accessory {
                 isEnabled = enabled
@@ -506,7 +520,10 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                     return
                 }
                 strongSelf.item = item
-                let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.3, curve: .easeInOut) : .immediate
+                // The spring Telegram's own switch rows move with, for the background, its corners
+                // and separators as much as for the text: a row whose neighbours change moves as
+                // one piece with the list instead of its parts arriving at different times.
+                let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.4, curve: .spring) : .immediate
 
                 if themeUpdated {
                     strongSelf.topStripeNode.backgroundColor = theme.list.itemBlocksSeparatorColor
@@ -555,11 +572,12 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                 }
                 strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
 
-                strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
-                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight))
-                strongSelf.highlightedBackgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -separatorHeight), size: CGSize(width: params.width, height: contentHeight + separatorHeight * 2.0))
+                let backgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
+                transition.updateFrame(node: strongSelf.backgroundNode, frame: backgroundFrame)
+                transition.updateFrame(node: strongSelf.maskNode, frame: backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0))
+                transition.updateFrame(node: strongSelf.topStripeNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight)))
+                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight)))
+                transition.updateFrame(node: strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -separatorHeight), size: CGSize(width: params.width, height: contentHeight + separatorHeight * 2.0)))
 
                 strongSelf.iconNode.image = iconImage
                 strongSelf.iconNode.isHidden = iconImage == nil
@@ -616,13 +634,16 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                 strongSelf.activateArea.accessibilityLabel = accessibilityLabel
                 switch item.accessory {
                 case let .toggle(value, enabled):
-                    strongSelf.activateArea.accessibilityValue = value ? "1" : "0"
+                    strongSelf.activateArea.accessibilityValue = value ? item.presentationData.strings.VoiceOver_Common_On : item.presentationData.strings.VoiceOver_Common_Off
+                    strongSelf.activateArea.accessibilityHint = item.presentationData.strings.VoiceOver_Common_SwitchHint
                     strongSelf.activateArea.accessibilityTraits = enabled ? [.button] : [.button, .notEnabled]
                 case let .disclosure(value, _):
                     strongSelf.activateArea.accessibilityValue = value
+                    strongSelf.activateArea.accessibilityHint = nil
                     strongSelf.activateArea.accessibilityTraits = [.button]
                 case .action:
                     strongSelf.activateArea.accessibilityValue = nil
+                    strongSelf.activateArea.accessibilityHint = nil
                     strongSelf.activateArea.accessibilityTraits = [.button]
                 }
             })
@@ -663,7 +684,7 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
     }
 
     override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
-        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
     }
 }
 
@@ -833,7 +854,7 @@ final class AorusSettingsInputItemNode: ListViewItemNode, ItemListItemNode, UITe
             let separatorHeight = UIScreenPixel
             let textLeft = params.leftInset + aorusSettingsTextColumn
 
-            return (layout, { [weak self] _ in
+            return (layout, { [weak self] animated in
                 guard let strongSelf = self else {
                     return
                 }
@@ -877,10 +898,12 @@ final class AorusSettingsInputItemNode: ListViewItemNode, ItemListItemNode, UITe
                     strongSelf.bottomStripeNode.isHidden = hasCorners
                 }
                 strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
-                strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
-                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight))
+                let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.4, curve: .spring) : .immediate
+                let backgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
+                transition.updateFrame(node: strongSelf.backgroundNode, frame: backgroundFrame)
+                transition.updateFrame(node: strongSelf.maskNode, frame: backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0))
+                transition.updateFrame(node: strongSelf.topStripeNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight)))
+                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight)))
 
                 strongSelf.fieldFrame = CGRect(x: textLeft, y: 0.0, width: max(40.0, params.width - params.rightInset - 16.0 - textLeft), height: contentHeight)
                 strongSelf.applyItem(item)
@@ -897,7 +920,7 @@ final class AorusSettingsInputItemNode: ListViewItemNode, ItemListItemNode, UITe
     }
 
     override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
-        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
     }
 }
 

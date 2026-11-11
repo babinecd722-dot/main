@@ -314,8 +314,10 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
         dimView.backgroundColor = UIColor(white: 0.0, alpha: palette.isDark ? 0.55 : 0.32)
         card.backgroundColor = palette.elevated
         card.layer.shadowOpacity = palette.isDark ? 0.0 : 0.14
-        iconBackground.backgroundColor = palette.accentSoft
-        iconView.tintColor = palette.accent
+        // Black and white, as the settings page the sheet opens from: the theme's accent
+        // stays with the cursor alone.
+        iconBackground.backgroundColor = palette.fill
+        iconView.tintColor = palette.label
         titleLabel.textColor = palette.label
         captionLabel.textColor = palette.secondary
         fieldPanel.backgroundColor = palette.fill
@@ -329,10 +331,12 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
         listPanel.backgroundColor = palette.fill
         emptyLabel.textColor = palette.secondary
         listSpinner.color = palette.secondary
-        primaryButton.setTitleColor(palette.onAccent, for: .normal)
+        // The main button in the ink of the text, its title in the card's colour.
+        primaryButton.setTitleColor(palette.elevated, for: .normal)
         // Disabled while it works: the spinner stands where the title was.
-        primaryButton.setTitleColor(isBusy ? .clear : palette.onAccent, for: .disabled)
-        primaryButton.configure(fill: palette.accent, highlighted: palette.accent.withAlphaComponent(0.82))
+        primaryButton.setTitleColor(isBusy ? .clear : palette.elevated, for: .disabled)
+        primaryButton.configure(fill: palette.label, highlighted: palette.label.withAlphaComponent(0.82))
+        primarySpinner.color = palette.elevated
         cancelButton.setTitleColor(palette.label, for: .normal)
         cancelButton.configure(fill: palette.controlFill, highlighted: palette.controlFillHighlighted)
         for row in rows {
@@ -606,7 +610,7 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
         cancelButton.isEnabled = !busy
         nameField.isEnabled = !busy
         listScroll.isUserInteractionEnabled = !busy
-        primaryButton.setTitleColor(busy ? .clear : palette.onAccent, for: .disabled)
+        primaryButton.setTitleColor(busy ? .clear : palette.elevated, for: .disabled)
         if busy {
             primarySpinner.startAnimating()
         } else {
@@ -874,7 +878,7 @@ final class AorusSettingsSaveRow: UIControl {
         highlight.backgroundColor = palette.fill
         nameLabel.textColor = palette.label
         dateLabel.textColor = palette.secondary
-        checkView.tintColor = palette.accent
+        checkView.tintColor = palette.label
         separator.backgroundColor = palette.separator
     }
 

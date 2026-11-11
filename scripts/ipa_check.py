@@ -35,6 +35,11 @@ def main():
             expected_logo = Path(__file__).resolve().parent.parent / "AorusGram/Animations" / (logo + ".tgs")
             if bundled not in archive.namelist() or archive.read(bundled) != expected_logo.read_bytes():
                 raise RuntimeError("IPA must embed the settings logo " + logo + ".tgs in the main bundle")
+        # The Wall tab's animated icon: missing, the tab bar would show no icon at all for it.
+        wall_icon = app_root + "/AorusWallTab.json"
+        expected_wall_icon = Path(__file__).resolve().parent.parent / "AorusGram/Animations/AorusWallTab.json"
+        if wall_icon not in archive.namelist() or archive.read(wall_icon) != expected_wall_icon.read_bytes():
+            raise RuntimeError("IPA must embed the Wall tab icon AorusWallTab.json in the main bundle")
         executable = app_root + "/" + info["CFBundleExecutable"]
         with archive.open(executable) as file:
             header = file.read(8)

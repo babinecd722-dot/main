@@ -57,8 +57,13 @@ public final class AorusGramManager {
     // offered while Ghost Mode is on. Off, every chat follows Ghost Mode and the chats turned
     // off from the button are kept, so turning it back on finds them as they were left.
     public var ghostChatButton: Bool  = true  { didSet { save() } }
+    // What Ghost Mode hides, each on its own (docs/ghost-mode.md). All of it by default, as
+    // Ghost Mode always did; listening to voice and video messages is new and hidden too.
+    public var ghostHideOnline: Bool   = true  { didSet { save() } }
     public var blockReadReceipts: Bool = true  { didSet { save() } }
     public var hideTyping: Bool        = true  { didSet { save() } }
+    public var ghostHideStories: Bool  = true  { didSet { save() } }
+    public var ghostHideListened: Bool = true  { didSet { save() } }
     public var saveDeletedMessages: Bool = true { didSet { save() } }
     public var saveEditedMessages: Bool = true { didSet { save() } }
     public var maxMediaQuality: Bool   = true  { didSet { save() } }
@@ -151,6 +156,12 @@ public final class AorusGramManager {
         let ud = UserDefaults.standard
         ud.set(effective(ghostMode),           forKey: "aorusgram_ghost_mode")
         ud.set(ghostChatButton,                forKey: "aorusgram_ghost_chat_button")
+        // Read by the guards in TelegramCore, next to the master key above (aorus_branding.py).
+        ud.set(ghostHideOnline,                forKey: "aorusgram_ghost_conceal_online")
+        ud.set(blockReadReceipts,              forKey: "aorusgram_ghost_conceal_read")
+        ud.set(hideTyping,                     forKey: "aorusgram_ghost_conceal_typing")
+        ud.set(ghostHideStories,               forKey: "aorusgram_ghost_conceal_stories")
+        ud.set(ghostHideListened,              forKey: "aorusgram_ghost_conceal_listened")
         ud.set(effective(saveDeletedMessages), forKey: "aorusgram_feature_deleted_messages")
         ud.set(effective(saveEditedMessages),  forKey: "aorusgram_feature_edited_messages")
         ud.set(effective(antiScreenshot),      forKey: "aorusgram_feature_anti_screenshot")
@@ -202,8 +213,11 @@ public final class AorusGramManager {
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
         ghostChatButton     = d["ghostChatButton"]     as? Bool ?? true
+        ghostHideOnline     = d["ghostHideOnline"]     as? Bool ?? true
         blockReadReceipts   = d["blockReadReceipts"]   as? Bool ?? true
         hideTyping          = d["hideTyping"]          as? Bool ?? true
+        ghostHideStories    = d["ghostHideStories"]    as? Bool ?? true
+        ghostHideListened   = d["ghostHideListened"]   as? Bool ?? true
         saveDeletedMessages = d["saveDeletedMessages"] as? Bool ?? true
         saveEditedMessages  = d["saveEditedMessages"]  as? Bool ?? true
         maxMediaQuality     = d["maxMediaQuality"]     as? Bool ?? true
@@ -264,8 +278,11 @@ public final class AorusGramManager {
         UserDefaults.standard.set([
             "ghostMode":           ghostMode,
             "ghostChatButton":     ghostChatButton,
+            "ghostHideOnline":     ghostHideOnline,
             "blockReadReceipts":   blockReadReceipts,
             "hideTyping":          hideTyping,
+            "ghostHideStories":    ghostHideStories,
+            "ghostHideListened":   ghostHideListened,
             "saveDeletedMessages": saveDeletedMessages,
             "saveEditedMessages":  saveEditedMessages,
             "maxMediaQuality":     maxMediaQuality,
@@ -327,7 +344,7 @@ public final class AorusGramManager {
 
     // MARK: - Ghost Mode
 
-    public func shouldSendOnlinePresence() -> Bool  { licenseLocked ? true : !ghostMode }
+    public func shouldSendOnlinePresence() -> Bool  { licenseLocked ? true : (!ghostMode || !ghostHideOnline) }
     public func shouldSendReadReceipt() -> Bool     { licenseLocked ? true : (!ghostMode || !blockReadReceipts) }
     public func shouldSendTypingIndicator() -> Bool { licenseLocked ? true : (!ghostMode || !hideTyping) }
 
