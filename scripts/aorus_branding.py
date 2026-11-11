@@ -6992,9 +6992,9 @@ def patch_intro_brand_logo(tg: Path) -> None:
 
     Now the scene is never set up and never drawn. The GLKView stays, transparent, purely as
     the frame the controller already positions, scales and fades through the entry animation
-    and every layout pass; our logo is its only content, cut out of the app icon with no
-    background at all, in the version made for the page it is on -- the white letter on a dark
-    page, the ink letter on a light one (scripts/intro_logo_generate.py).
+    and every layout pass; our logo is its only content, with no background at all, in the
+    version made for the page it is on -- cut out of the app icon, white letter, on a dark
+    page, the light artwork, black letter, on a light one (scripts/intro_logo_generate.py).
     """
     path = tg / "submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m"
     if not path.is_file():

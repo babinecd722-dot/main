@@ -94,39 +94,25 @@ public func aorusSettingsPresentationData(_ context: AccountContext) -> Signal<P
     return context.sharedContext.presentationData |> map { $0.aorusSettings }
 }
 
-/// "V13.2": the version the app was built as, the one Telegram reports when the bundle has none.
-public func aorusSettingsVersionText() -> String {
-    let bundled = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return "V" + (bundled.isEmpty ? ClientSpoofManager.officialAppVersion : bundled)
-}
-
-/// A settings row's sign: a glyph on a coloured tile.
+/// A settings row's sign: a glyph drawn as a plain silhouette in the row's own ink -- no tile and
+/// no colour of its own, so a page of rows reads as one quiet column.
 struct AorusSettingsIcon: Equatable, Hashable {
     enum Glyph: Equatable, Hashable {
         case symbol(String)
         case ghost
     }
 
-    /// A section's tile is filled with its colour and carries a white glyph; a feature's is a
-    /// wash of the colour with the glyph in it, so a page of features stays quieter than the
-    /// list of sections that leads to it.
-    enum Style: Equatable, Hashable {
-        case filled
-        case soft
-    }
-
     let glyph: Glyph
-    let color: UInt32
 
-    init(_ symbol: String, _ color: UInt32) {
+    init(_ symbol: String) {
         self.glyph = .symbol(symbol)
-        self.color = color
     }
 
-    init(glyph: Glyph, color: UInt32) {
+    init(glyph: Glyph) {
         self.glyph = glyph
-        self.color = color
     }
+
+    static let ghost = AorusSettingsIcon(glyph: .ghost)
 }
 
 private final class AorusSettingsIconCache {
@@ -134,23 +120,22 @@ private final class AorusSettingsIconCache {
 
     private struct Key: Hashable {
         let icon: AorusSettingsIcon
-        let style: AorusSettingsIcon.Style
         let side: CGFloat
-        let dark: Bool
+        let ink: UInt32
     }
 
     private let lock = NSLock()
     private var images: [Key: UIImage] = [:]
 
-    func image(_ icon: AorusSettingsIcon, style: AorusSettingsIcon.Style, side: CGFloat, dark: Bool) -> UIImage? {
-        let key = Key(icon: icon, style: style, side: side, dark: dark)
+    func image(_ icon: AorusSettingsIcon, side: CGFloat, ink: UIColor) -> UIImage? {
+        let key = Key(icon: icon, side: side, ink: ink.argb)
         self.lock.lock()
         if let image = self.images[key] {
             self.lock.unlock()
             return image
         }
         self.lock.unlock()
-        guard let image = aorusDrawSettingsIcon(icon, style: style, side: side, dark: dark) else {
+        guard let image = aorusDrawSettingsIcon(icon, side: side, ink: ink) else {
             return nil
         }
         self.lock.lock()
@@ -166,43 +151,23 @@ private final class AorusSettingsIconCache {
 private func aorusSettingsGlyph(_ glyph: AorusSettingsIcon.Glyph, pointSize: CGFloat) -> UIImage? {
     switch glyph {
     case let .symbol(name):
-        let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
-        return UIImage(systemName: name, withConfiguration: configuration) ?? UIImage(systemName: "circle.fill", withConfiguration: configuration)
+        let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
+        return UIImage(systemName: name, withConfiguration: configuration) ?? UIImage(systemName: "circle", withConfiguration: configuration)
     case .ghost:
-        return AorusGlyphs.ghost(size: pointSize * 1.25)
+        return AorusGlyphs.ghost(size: pointSize * 1.3)
     }
 }
 
-private func aorusDrawSettingsIcon(_ icon: AorusSettingsIcon, style: AorusSettingsIcon.Style, side: CGFloat, dark: Bool) -> UIImage? {
-    let color = UIColor(rgb: icon.color)
-    let glyphSize: CGFloat = style == .filled ? side * 0.5 : side * 0.47
-    guard let glyph = aorusSettingsGlyph(icon.glyph, pointSize: glyphSize) else {
+private func aorusDrawSettingsIcon(_ icon: AorusSettingsIcon, side: CGFloat, ink: UIColor) -> UIImage? {
+    guard let glyph = aorusSettingsGlyph(icon.glyph, pointSize: side * 0.74) else {
         return nil
     }
     let format = UIGraphicsImageRendererFormat()
     format.opaque = false
     let size = CGSize(width: side, height: side)
-    return UIGraphicsImageRenderer(size: size, format: format).image { context in
-        let rect = CGRect(origin: .zero, size: size)
-        let tile = UIBezierPath(roundedRect: rect, cornerRadius: side * 0.27)
-        switch style {
-        case .filled:
-            // A soft top-to-bottom light on the tile, as the system's own settings tiles have.
-            context.cgContext.saveGState()
-            tile.addClip()
-            let top = color.withMultipliedBrightnessBy(1.08)
-            let bottom = color.withMultipliedBrightnessBy(0.9)
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [top.cgColor, bottom.cgColor] as CFArray, locations: [0.0, 1.0]) {
-                context.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: 0.0, y: side), options: [])
-            }
-            context.cgContext.restoreGState()
-        case .soft:
-            color.withAlphaComponent(dark ? 0.2 : 0.14).setFill()
-            tile.fill()
-        }
-        let ink: UIColor = style == .filled ? .white : color
+    return UIGraphicsImageRenderer(size: size, format: format).image { _ in
         let tinted = glyph.withTintColor(ink, renderingMode: .alwaysOriginal)
-        let fitted = aorusFit(tinted.size, in: CGSize(width: side * 0.66, height: side * 0.66))
+        let fitted = aorusFit(tinted.size, in: size)
         tinted.draw(in: CGRect(origin: CGPoint(x: floor((side - fitted.width) / 2.0 * 2.0) / 2.0, y: floor((side - fitted.height) / 2.0 * 2.0) / 2.0), size: fitted))
     }
 }
@@ -215,6 +180,6 @@ private func aorusFit(_ size: CGSize, in bounds: CGSize) -> CGSize {
     return CGSize(width: size.width * scale, height: size.height * scale)
 }
 
-func aorusSettingsIconImage(_ icon: AorusSettingsIcon, style: AorusSettingsIcon.Style, side: CGFloat, dark: Bool) -> UIImage? {
-    return AorusSettingsIconCache.shared.image(icon, style: style, side: side, dark: dark)
+func aorusSettingsIconImage(_ icon: AorusSettingsIcon, side: CGFloat, ink: UIColor) -> UIImage? {
+    return AorusSettingsIconCache.shared.image(icon, side: side, ink: ink)
 }

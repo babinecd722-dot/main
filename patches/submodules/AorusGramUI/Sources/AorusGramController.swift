@@ -183,7 +183,8 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
 
     private func layoutSubviews() {
         guard let p = layoutParams else { return }
-        let li = p.leftInset + 16
+        // In the rows' text column: the slider belongs to the switch above it.
+        let li = p.leftInset + aorusSettingsTextColumn
         let ri = p.rightInset + 16
         let w  = p.width
         titleLabel?.frame = CGRect(x: li,          y: 12, width: w - li - ri - 68, height: 22)
@@ -235,7 +236,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
                 let bOff: CGFloat
                 switch neighbors.bottom {
                 case .sameSection(false):
-                    bInset = params.leftInset + 16; bOff = -sep
+                    bInset = params.leftInset + aorusSettingsTextColumn; bOff = -sep
                     self.bottomStripeNode.isHidden = false
                 default:
                     bInset = 0; bOff = 0; bottomCorners = true
@@ -292,19 +293,19 @@ private enum AorusPage: String, CaseIterable, Equatable {
 
     var icon: AorusSettingsIcon {
         switch self {
-        case .root: return AorusSettingsIcon("gearshape.fill", 0x8e8e93)
-        case .privacy: return AorusSettingsIcon(glyph: .ghost, color: 0x8e5cf7)
-        case .security: return AorusSettingsIcon("lock.shield.fill", 0x30c75e)
-        case .history: return AorusSettingsIcon("clock.arrow.circlepath", 0xff453a)
-        case .bypass: return AorusSettingsIcon("lock.open.fill", 0xff9f0a)
-        case .messages: return AorusSettingsIcon("bubble.left.and.bubble.right.fill", 0x0a84ff)
-        case .media: return AorusSettingsIcon("phone.fill", 0x30b0c7)
-        case .appearance: return AorusSettingsIcon("paintbrush.fill", 0xff375f)
-        case .tabs: return AorusSettingsIcon("dock.rectangle", 0x5e5ce6)
-        case .wall: return AorusSettingsIcon("newspaper.fill", 0x32ade6)
-        case .extras: return AorusSettingsIcon("gift.fill", 0xffb800)
-        case .performance: return AorusSettingsIcon("speedometer", 0xff6b35)
-        case .data: return AorusSettingsIcon("externaldrive.fill", 0x64a0ff)
+        case .root: return AorusSettingsIcon("gearshape.fill")
+        case .privacy: return .ghost
+        case .security: return AorusSettingsIcon("lock.shield.fill")
+        case .history: return AorusSettingsIcon("clock.arrow.circlepath")
+        case .bypass: return AorusSettingsIcon("lock.open.fill")
+        case .messages: return AorusSettingsIcon("bubble.left.and.bubble.right.fill")
+        case .media: return AorusSettingsIcon("phone.fill")
+        case .appearance: return AorusSettingsIcon("paintbrush.fill")
+        case .tabs: return AorusSettingsIcon("dock.rectangle")
+        case .wall: return AorusSettingsIcon("newspaper.fill")
+        case .extras: return AorusSettingsIcon("gift.fill")
+        case .performance: return AorusSettingsIcon("speedometer")
+        case .data: return AorusSettingsIcon("externaldrive.fill")
         }
     }
 
@@ -521,9 +522,7 @@ private enum AorusField: Equatable {
 
 private struct AorusEntry: ItemListNodeEntry {
     enum Kind: Equatable {
-        case logo(version: String)
-        case search(query: String, placeholder: String, cancel: String)
-        case pageHeader(icon: AorusSettingsIcon, text: String)
+        case logo
         case header(String)
         case footer(String)
         case row(icon: AorusSettingsIcon?, title: String, subtitle: String?, accessory: AorusSettingsRowAccessory, style: AorusSettingsRowStyle, target: AorusTarget, highlight: String?)
@@ -552,12 +551,8 @@ private struct AorusEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let args = arguments as! AorusArguments
         switch self.kind {
-        case let .logo(version):
-            return AorusSettingsLogoItem(presentationData: presentationData, version: version, sectionId: self.section)
-        case let .search(query, placeholder, cancel):
-            return AorusSettingsSearchItem(presentationData: presentationData, query: query, placeholder: placeholder, cancelTitle: cancel, sectionId: self.section, updated: args.updateQuery)
-        case let .pageHeader(icon, text):
-            return AorusSettingsPageHeaderItem(presentationData: presentationData, icon: icon, text: text, sectionId: self.section)
+        case .logo:
+            return AorusSettingsLogoItem(presentationData: presentationData, sectionId: self.section)
         case let .header(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .footer(text):
@@ -587,19 +582,19 @@ private struct AorusEntry: ItemListNodeEntry {
             }
             switch field {
             case .fakeStarsAmount:
-                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                return AorusSettingsInputItem(presentationData: presentationData, text: value, placeholder: placeholder, returnKeyType: .done, sectionId: self.section, textUpdated: { text in
                     args.setField(.fakeStarsAmount, text)
                 }, shouldUpdateText: { text in
                     return text.allSatisfy { $0.isNumber }
                 }, action: resign)
             case .fakeGramAmount:
-                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                return AorusSettingsInputItem(presentationData: presentationData, text: value, placeholder: placeholder, returnKeyType: .done, sectionId: self.section, textUpdated: { text in
                     args.setField(.fakeGramAmount, text)
                 }, shouldUpdateText: { text in
                     return text.isEmpty || AorusLocalGramAmount.parse(text) != nil
                 }, action: resign)
             case .phoneNumber:
-                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                return AorusSettingsInputItem(presentationData: presentationData, text: value, placeholder: placeholder, returnKeyType: .done, sectionId: self.section, textUpdated: { text in
                     args.setField(.phoneNumber, text)
                 }, action: resign)
             }
@@ -706,7 +701,7 @@ private struct AorusPageBuilder {
     }
 
     mutating func pluginShortcut(_ title: String, _ subtitle: String, pluginId: String, id: String) {
-        self.append("plugin.\(pluginId).\(id)", .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: title, subtitle: subtitle.isEmpty ? nil : subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: pluginId, id: id)), highlight: nil))
+        self.append("plugin.\(pluginId).\(id)", .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill"), title: title, subtitle: subtitle.isEmpty ? nil : subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: pluginId, id: id)), highlight: nil))
     }
 }
 
@@ -726,9 +721,8 @@ private func aorusPluginShortcuts(for page: AorusPage) -> [(title: String, subti
 /// The rows of a section's page.
 private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
     var b = AorusPageBuilder(page: page)
-    let tint = page.icon.color
     func icon(_ symbol: String) -> AorusSettingsIcon {
-        return AorusSettingsIcon(symbol, tint)
+        return AorusSettingsIcon(symbol)
     }
 
     switch page {
@@ -737,7 +731,7 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
 
     case .privacy:
         b.block()
-        b.toggle("ghostMode", AorusSettingsIcon(glyph: .ghost, color: tint), l10n.ghostMode, aorusL("Скрывает твой онлайн, набор текста и отметки о прочтении", "Hides your online status, typing and read receipts"), \.ghostMode, state)
+        b.toggle("ghostMode", .ghost, l10n.ghostMode, aorusL("Скрывает твой онлайн, набор текста и отметки о прочтении", "Hides your online status, typing and read receipts"), \.ghostMode, state)
         // The ghost beside a chat's avatar exists only while Ghost Mode is on, so its switch does
         // too: it slides in under Ghost Mode as that is turned on and out as it is turned off,
         // with its value kept for the next time.
@@ -776,7 +770,7 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         b.toggle("saveEdited", icon("pencil"), aorusL("История изменений", "Edit History"), aorusL("Хранит прежние версии изменённых сообщений", "Keeps earlier versions of edited messages"), \.saveEditedMessages, state)
         b.toggle("antiSpoofDeleted", icon("eye.trianglebadge.exclamationmark.fill"), aorusL("Чистое удаление", "Clean Deletion"), aorusL("Когда ты удаляешь сообщение, чужие «антиудалёнки» сохранят только заглушку", "When you delete a message, other people's anti-delete tools only keep a placeholder"), \.antiSpoofDeleted, state)
         b.block()
-        b.action("clearDeletedCache", AorusSettingsIcon("trash.slash.fill", tint), aorusL("Очистить сохранённые", "Clear Saved Messages"), aorusL("Удаляет сохранённые удалённые сообщения и историю изменений", "Removes kept deleted messages and edit history"), .clearDeletedCache, destructive: true)
+        b.action("clearDeletedCache", AorusSettingsIcon("trash.slash.fill"), aorusL("Очистить сохранённые", "Clear Saved Messages"), aorusL("Удаляет сохранённые удалённые сообщения и историю изменений", "Removes kept deleted messages and edit history"), .clearDeletedCache, destructive: true)
 
     case .bypass:
         b.block()
@@ -940,15 +934,15 @@ private func aorusRootEntries(state: AorusState, l10n: AorusL10n) -> [AorusEntry
         }
         section += 1
     }
-    entries.append(AorusEntry(id: "root.plugins", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: aorusPluginsTitle(), subtitle: aorusL("Расширения от сообщества", "Extensions from the community"), accessory: .disclosure(value: nil, isOn: nil), style: .section, target: .open(.plugins), highlight: nil)))
+    entries.append(AorusEntry(id: "root.plugins", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill"), title: aorusPluginsTitle(), subtitle: aorusL("Расширения от сообщества", "Extensions from the community"), accessory: .disclosure(value: nil, isOn: nil), style: .section, target: .open(.plugins), highlight: nil)))
     // A plugin's shortcut placed in "Other", which no longer exists, sits with the plugins.
     for shortcut in aorusPluginShortcuts(for: .root) {
-        entries.append(AorusEntry(id: "root.plugin.\(shortcut.pluginId).\(shortcut.id)", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: shortcut.title, subtitle: shortcut.subtitle.isEmpty ? nil : shortcut.subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: shortcut.pluginId, id: shortcut.id)), highlight: nil)))
+        entries.append(AorusEntry(id: "root.plugin.\(shortcut.pluginId).\(shortcut.id)", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill"), title: shortcut.title, subtitle: shortcut.subtitle.isEmpty ? nil : shortcut.subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: shortcut.pluginId, id: shortcut.id)), highlight: nil)))
     }
     section += 1
-    entries.append(AorusEntry(id: "root.link.channel", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("paperplane.fill", 0x2aabee), title: aorusL("Канал", "Channel"), subtitle: nil, accessory: .disclosure(value: "@aorusgram", isOn: nil), style: .link, target: .open(.channel), highlight: nil)))
-    entries.append(AorusEntry(id: "root.link.subscription", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("crown.fill", 0xffb800), title: l10n.subscription, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.subscription), highlight: nil)))
-    entries.append(AorusEntry(id: "root.link.connection", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("network", 0x30c75e), title: l10n.connectionSettings, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.connectionSettings), highlight: nil)))
+    entries.append(AorusEntry(id: "root.link.channel", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("paperplane.fill"), title: aorusL("Канал", "Channel"), subtitle: nil, accessory: .disclosure(value: "@aorusgram", isOn: nil), style: .link, target: .open(.channel), highlight: nil)))
+    entries.append(AorusEntry(id: "root.link.subscription", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("crown.fill"), title: l10n.subscription, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.subscription), highlight: nil)))
+    entries.append(AorusEntry(id: "root.link.connection", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("network"), title: l10n.connectionSettings, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.connectionSettings), highlight: nil)))
     return entries
 }
 
@@ -996,19 +990,20 @@ private func aorusSearchEntries(query: String, state: AorusState, l10n: AorusL10
     return entries
 }
 
-/// Everything a page shows, in order.
-private func aorusEntries(page: AorusPage, query: String, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
+/// Everything a page shows, in order. While the search is open the main screen shows the
+/// sections until something is typed, and what matches from then on.
+private func aorusEntries(page: AorusPage, query: String, searching: Bool, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
     var entries: [AorusEntry] = []
     if page == .root {
-        entries.append(AorusEntry(id: "logo", section: 0, order: 0, kind: .logo(version: aorusSettingsVersionText())))
-        entries.append(AorusEntry(id: "search", section: 1, order: 0, kind: .search(query: query, placeholder: aorusL("Поиск по AorusGram", "Search AorusGram"), cancel: strings.Common_Cancel)))
-        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            entries += aorusRootEntries(state: state, l10n: l10n)
-        } else {
+        if searching && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             entries += aorusSearchEntries(query: query, state: state, l10n: l10n, strings: strings)
+        } else {
+            if !searching {
+                entries.append(AorusEntry(id: "logo", section: 0, order: 0, kind: .logo))
+            }
+            entries += aorusRootEntries(state: state, l10n: l10n)
         }
     } else {
-        entries.append(AorusEntry(id: "pageHeader", section: Int32(AorusPage.allCases.firstIndex(of: page) ?? 0) * 100 - 1, order: 0, kind: .pageHeader(icon: page.icon, text: page.subtitle)))
         entries += aorusPageEntries(page, state: state, l10n: l10n, strings: strings)
     }
     return entries.enumerated().map { index, entry in
@@ -1136,6 +1131,8 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
         statePromise.set(stateValue.modify { f($0) })
     }
     let queryPromise = ValuePromise("", ignoreRepeated: true)
+    // The search opened from the navigation bar's search button, on the main screen.
+    let searchingPromise = ValuePromise(false, ignoreRepeated: true)
 
     // Weak reference so the rows can navigate using the controller's nav stack
     weak var weakController: ItemListController?
@@ -1619,22 +1616,43 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
     // snapshot) so the screen re-themes the instant the theme changes — e.g. when AMOLED is
     // toggled, aorusAmoledTrigger re-emits presentationData and this screen goes true-black
     // immediately, with no need to leave and re-enter.
-    let signal = combineLatest(statePromise.get(), queryPromise.get(), aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
+    let searchSignal = combineLatest(queryPromise.get(), searchingPromise.get())
+    let signal = combineLatest(statePromise.get(), searchSignal, aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
         |> deliverOnMainQueue
-        |> map { state, query, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        |> map { state, search, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+            let (query, searching) = search
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            let entries = aorusEntries(page: page, query: query, state: state, l10n: l10n, strings: presentationData.strings)
+            let entries = aorusEntries(page: page, query: query, searching: searching, state: state, l10n: l10n, strings: presentationData.strings)
+            // The main screen's search: Telegram's glass search button on the right of the bar,
+            // across from Back. It opens Telegram's own list search over this list.
+            var rightNavigationButton: ItemListNavigationButton?
+            var searchItem: ItemListControllerSearch?
+            if page == .root {
+                if searching {
+                    searchItem = AorusSettingsSearchItem(theme: presentationData.theme, strings: presentationData.strings, placeholder: aorusL("Поиск по AorusGram", "Search AorusGram"), cancel: {
+                        queryPromise.set("")
+                        searchingPromise.set(false)
+                    }, queryUpdated: { query in
+                        arguments.updateQuery(query)
+                    })
+                } else {
+                    rightNavigationButton = ItemListNavigationButton(content: .icon(.search), style: .regular, enabled: true, action: {
+                        searchingPromise.set(true)
+                    })
+                }
+            }
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(page.title),
                 leftNavigationButton: nil,
-                rightNavigationButton: nil,
+                rightNavigationButton: rightNavigationButton,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
             )
             let listState = ItemListNodeState(
                 presentationData: ItemListPresentationData(presentationData),
                 entries: entries,
-                style: .blocks
+                style: .blocks,
+                searchItem: searchItem
             )
             return (controllerState, (listState, arguments))
         }

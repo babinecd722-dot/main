@@ -49,6 +49,9 @@ swift_library(
         # one the back button and a chat title use. It is a leaf component over Display and
         # ComponentFlow, so it reaches nothing that could close a cycle back into here.
         "//submodules/TelegramUI/Components/GlassBackgroundComponent",
+        # The AorusGram screen's search field in the navigation bar is Telegram's own. SearchBarNode
+        # sits over Display, the presentation data and the glass; nothing it reaches depends on us.
+        "//submodules/SearchBarNode:SearchBarNode",
         # The badge roster, for the author of a Market plugin. A leaf over Display.
         "//submodules/AorusBadge:AorusBadge",
         "//submodules/TelegramUI/Components/EdgeEffect",

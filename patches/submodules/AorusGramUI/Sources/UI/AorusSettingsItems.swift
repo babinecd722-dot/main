@@ -9,10 +9,14 @@ import AnimatedStickerNode
 import MediaResources
 import AppBundle
 
-// The rows the AorusGram settings are built from: the animated logo with the version under it,
-// the search field, a row for a section, a feature or a link, a page's own header and what the
-// search shows when it finds nothing. Each is an ordinary ItemList row, so the list lays them
-// out, rounds the blocks and animates their changes as it does Telegram's own.
+// The rows the AorusGram settings are built from: the animated logo, a row for a section, a
+// feature or a link, a text field in the same column as those rows, and what the search shows
+// when it finds nothing. Each is an ordinary ItemList row, so the list lays them out, rounds the
+// blocks and animates their changes as it does Telegram's own.
+
+/// Where a row's title starts: past the icon column, so that a row with an icon, a switch under
+/// it without one and a text field all line up.
+let aorusSettingsTextColumn: CGFloat = 16.0 + 28.0 + 12.0
 
 private func aorusRowNodeLayout<Item: ListViewItem & ItemListItem, Node: ListViewItemNode>(
     item: Item,
@@ -87,19 +91,18 @@ private final class AorusSettingsLogoSource: AnimatedStickerNodeSource {
     }
 }
 
-/// The animated AorusGram logo and the version under it. The light-theme logo is black, the
-/// dark-theme one white. It plays when the screen opens, rests on the wordmark it ends on and
-/// plays again when tapped.
+/// The animated AorusGram logo: white for the dark theme, black for the light one. It plays when
+/// the screen opens, rests on the wordmark it starts and ends on and plays again when tapped.
+/// When the theme changes the other logo takes its place at once, without playing: it fades in
+/// over the old one as soon as its wordmark is drawn, so the space is never empty.
 final class AorusSettingsLogoItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
-    let version: String
     let sectionId: ItemListSectionId
     let tag: ItemListItemTag? = nil
     let selectable: Bool = false
 
-    init(presentationData: ItemListPresentationData, version: String, sectionId: ItemListSectionId) {
+    init(presentationData: ItemListPresentationData, sectionId: ItemListSectionId) {
         self.presentationData = presentationData
-        self.version = version
         self.sectionId = sectionId
     }
 
@@ -115,62 +118,82 @@ final class AorusSettingsLogoItem: ListViewItem, ItemListItem {
 }
 
 final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
-    private let animationNode: AnimatedStickerNode
-    private let versionNode: ASImageNode
-    private var item: AorusSettingsLogoItem?
+    /// The logo on screen.
+    private var shownNode: AnimatedStickerNode?
+    /// The other theme's logo while it loads; it replaces `shownNode` once it has a frame.
+    private var pendingNode: AnimatedStickerNode?
     private var loadedName: String?
+    private var logoFrame = CGRect()
 
     var tag: ItemListItemTag? {
         return nil
     }
 
     init() {
-        self.animationNode = DefaultAnimatedStickerNodeImpl()
-        self.versionNode = ASImageNode()
-        self.versionNode.isLayerBacked = true
-        self.versionNode.displaysAsynchronously = false
-
         super.init(layerBacked: false)
-
-        self.addSubnode(self.animationNode)
-        self.addSubnode(self.versionNode)
     }
 
     override func didLoad() {
         super.didLoad()
-        self.animationNode.view.isUserInteractionEnabled = true
-        self.animationNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.logoTapped)))
-        self.animationNode.view.accessibilityLabel = "AorusGram"
-        self.animationNode.view.accessibilityTraits = .image
+        self.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.logoTapped)))
+        self.view.isAccessibilityElement = true
+        self.view.accessibilityLabel = "AorusGram"
+        self.view.accessibilityTraits = .image
     }
 
     @objc private func logoTapped() {
+        guard let shownNode = self.shownNode else {
+            return
+        }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        self.animationNode.play(firstFrame: false, fromIndex: 0)
+        shownNode.play(firstFrame: false, fromIndex: 0)
     }
 
-    private static func versionImage(text: String, theme: PresentationTheme) -> UIImage? {
-        let font = Font.semibold(13.0)
-        let attributed = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: theme.list.itemSecondaryTextColor, .kern: 0.6])
-        let textSize = attributed.boundingRect(with: CGSize(width: 200.0, height: 40.0), options: [.usesLineFragmentOrigin], context: nil).size
-        let size = CGSize(width: ceil(textSize.width) + 24.0, height: 24.0)
-        let format = UIGraphicsImageRendererFormat()
-        format.opaque = false
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            let rect = CGRect(origin: .zero, size: size)
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2.0)
-            theme.list.itemBlocksBackgroundColor.setFill()
-            path.fill()
-            theme.list.itemBlocksSeparatorColor.withAlphaComponent(0.6).setStroke()
-            let outline = UIBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: size.height / 2.0 - 0.5)
-            outline.lineWidth = 1.0
-            outline.stroke()
-            attributed.draw(at: CGPoint(x: floor((size.width - ceil(textSize.width)) / 2.0), y: floor((size.height - ceil(textSize.height)) / 2.0)))
+    private func installLogo(name: String, size: CGSize, replacing: Bool) {
+        if let pendingNode = self.pendingNode {
+            self.pendingNode = nil
+            pendingNode.removeFromSupernode()
+        }
+        let node = DefaultAnimatedStickerNodeImpl()
+        node.isUserInteractionEnabled = false
+        node.frame = self.logoFrame
+        if replacing, let previous = self.shownNode {
+            // A theme change only recolours the logo. The old one stops where it is; the new one
+            // shows the wordmark the animation starts and ends on, without playing, and plays
+            // when tapped. Set before the node is added: it is read when the node first appears.
+            previous.visibility = false
+            node.automaticallyLoadFirstFrame = true
+            node.alpha = 0.0
+            self.pendingNode = node
+            node.started = { [weak self, weak node] in
+                guard let self, let node, self.pendingNode === node else {
+                    return
+                }
+                let previous = self.shownNode
+                self.shownNode = node
+                self.pendingNode = nil
+                node.alpha = 1.0
+                node.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25)
+                if let previous {
+                    previous.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.25, removeOnCompletion: false, completion: { [weak previous] _ in
+                        previous?.removeFromSupernode()
+                    })
+                }
+            }
+            self.addSubnode(node)
+        } else {
+            self.shownNode?.removeFromSupernode()
+            self.shownNode = node
+            self.addSubnode(node)
+        }
+        node.setup(source: AorusSettingsLogoSource(name: name), width: Int(size.width * UIScreenScale), height: Int(size.height * UIScreenScale), playbackMode: .once, mode: .direct(cachePathPrefix: nil))
+        node.updateLayout(size: size)
+        if self.shownNode === node {
+            node.visibility = true
         }
     }
 
     func asyncLayout() -> (_ item: AorusSettingsLogoItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, (Bool) -> Void) {
-        let currentItem = self.item
         return { [weak self] item, params, neighbors in
             let dark = item.presentationData.theme.overallDarkAppearance
             // The two builds of the drawing differ by two rows of height.
@@ -179,41 +202,30 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
             let logoWidth = min(560.0, available)
             let logoHeight = floor(logoWidth * aspect)
 
-            var versionImage: UIImage?
-            if currentItem?.presentationData.theme !== item.presentationData.theme || currentItem?.version != item.version {
-                versionImage = AorusSettingsLogoItemNode.versionImage(text: item.version, theme: item.presentationData.theme)
-            }
-
             let topInset: CGFloat = 6.0
-            let gap: CGFloat = 6.0
-            let versionHeight: CGFloat = 24.0
-            let contentSize = CGSize(width: params.width, height: topInset + logoHeight + gap + versionHeight + 4.0)
+            let bottomInset: CGFloat = 10.0
+            let contentSize = CGSize(width: params.width, height: topInset + logoHeight + bottomInset)
             let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: UIEdgeInsets())
 
             return (layout, { [weak self] _ in
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.item = item
-
+                let logoSize = CGSize(width: logoWidth, height: logoHeight)
+                strongSelf.logoFrame = CGRect(origin: CGPoint(x: floor((params.width - logoWidth) / 2.0), y: topInset), size: logoSize)
                 let name = dark ? "aorusgram_logo_dark" : "aorusgram_logo_light"
-                let scale = UIScreenScale
                 if strongSelf.loadedName != name {
+                    let replacing = strongSelf.loadedName != nil
                     strongSelf.loadedName = name
-                    strongSelf.animationNode.setup(source: AorusSettingsLogoSource(name: name), width: Int(logoWidth * scale), height: Int(logoHeight * scale), playbackMode: .once, mode: .direct(cachePathPrefix: nil))
-                    strongSelf.animationNode.visibility = true
+                    strongSelf.installLogo(name: name, size: logoSize, replacing: replacing)
                 }
-                let logoFrame = CGRect(origin: CGPoint(x: floor((params.width - logoWidth) / 2.0), y: topInset), size: CGSize(width: logoWidth, height: logoHeight))
-                strongSelf.animationNode.frame = logoFrame
-                strongSelf.animationNode.updateLayout(size: logoFrame.size)
-
-                if let versionImage {
-                    strongSelf.versionNode.image = versionImage
+                for node in [strongSelf.shownNode, strongSelf.pendingNode] {
+                    guard let node else {
+                        continue
+                    }
+                    node.frame = strongSelf.logoFrame
+                    node.updateLayout(size: logoSize)
                 }
-                if let image = strongSelf.versionNode.image {
-                    strongSelf.versionNode.frame = CGRect(origin: CGPoint(x: floor((params.width - image.size.width) / 2.0), y: logoFrame.maxY + gap), size: image.size)
-                }
-                strongSelf.versionNode.view.accessibilityLabel = item.version
             })
         }
     }
@@ -224,227 +236,6 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
 
     override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
         self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
-    }
-}
-
-// MARK: - Search
-
-/// The field that searches every AorusGram setting. Typing filters as it goes; the cancel button
-/// slides in beside the field while it is in use and clears it.
-final class AorusSettingsSearchItem: ListViewItem, ItemListItem {
-    let presentationData: ItemListPresentationData
-    let query: String
-    let placeholder: String
-    let cancelTitle: String
-    let sectionId: ItemListSectionId
-    let tag: ItemListItemTag? = nil
-    let selectable: Bool = false
-    let updated: (String) -> Void
-
-    init(presentationData: ItemListPresentationData, query: String, placeholder: String, cancelTitle: String, sectionId: ItemListSectionId, updated: @escaping (String) -> Void) {
-        self.presentationData = presentationData
-        self.query = query
-        self.placeholder = placeholder
-        self.cancelTitle = cancelTitle
-        self.sectionId = sectionId
-        self.updated = updated
-    }
-
-    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        let itemNeighbors = itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self))
-        aorusRowNodeLayout(item: self, async: async, params: params, neighbors: itemNeighbors, make: { AorusSettingsSearchItemNode() }, layout: { $0.asyncLayout() }, completion: completion)
-    }
-
-    func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        let itemNeighbors = itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self))
-        aorusRowNodeUpdate(item: self, async: async, node: node, params: params, neighbors: itemNeighbors, animation: animation, layout: { (node: AorusSettingsSearchItemNode) in node.asyncLayout() }, completion: completion)
-    }
-}
-
-final class AorusSettingsSearchItemNode: ListViewItemNode, ItemListItemNode, UITextFieldDelegate {
-    private let fieldNode: ASDisplayNode
-    private let iconNode: ASImageNode
-    private var textField: UITextField?
-    private var clearButton: UIButton?
-    private var cancelButton: UIButton?
-
-    private var item: AorusSettingsSearchItem?
-    private var params: ListViewItemLayoutParams?
-    private var isActive = false
-
-    var tag: ItemListItemTag? {
-        return nil
-    }
-
-    init() {
-        self.fieldNode = ASDisplayNode()
-        self.fieldNode.cornerRadius = 12.0
-        self.iconNode = ASImageNode()
-        self.iconNode.isLayerBacked = true
-        self.iconNode.displaysAsynchronously = false
-
-        super.init(layerBacked: false)
-
-        self.addSubnode(self.fieldNode)
-        self.addSubnode(self.iconNode)
-    }
-
-    override func didLoad() {
-        super.didLoad()
-        self.fieldNode.layer.cornerCurve = .continuous
-
-        let textField = UITextField()
-        textField.font = Font.regular(17.0)
-        textField.returnKeyType = .search
-        textField.autocorrectionType = .no
-        textField.spellCheckingType = .no
-        textField.clearButtonMode = .never
-        textField.delegate = self
-        textField.addTarget(self, action: #selector(self.textChanged), for: .editingChanged)
-        textField.accessibilityTraits = .searchField
-        self.view.addSubview(textField)
-        self.textField = textField
-
-        let clearButton = UIButton(type: .system)
-        clearButton.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .regular)), for: .normal)
-        clearButton.addTarget(self, action: #selector(self.clearPressed), for: .touchUpInside)
-        clearButton.alpha = 0.0
-        clearButton.accessibilityLabel = "Clear"
-        self.view.addSubview(clearButton)
-        self.clearButton = clearButton
-
-        let cancelButton = UIButton(type: .system)
-        cancelButton.titleLabel?.font = Font.regular(17.0)
-        cancelButton.addTarget(self, action: #selector(self.cancelPressed), for: .touchUpInside)
-        cancelButton.alpha = 0.0
-        cancelButton.contentHorizontalAlignment = .right
-        self.view.addSubview(cancelButton)
-        self.cancelButton = cancelButton
-
-        if let item = self.item {
-            self.applyItem(item)
-        }
-        self.updateLayout(animated: false)
-    }
-
-    private func applyItem(_ item: AorusSettingsSearchItem) {
-        let theme = item.presentationData.theme
-        self.fieldNode.backgroundColor = theme.list.itemBlocksBackgroundColor
-        if let textField = self.textField {
-            textField.textColor = theme.list.itemPrimaryTextColor
-            textField.tintColor = theme.list.itemAccentColor
-            textField.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
-            textField.attributedPlaceholder = NSAttributedString(string: item.placeholder, attributes: [.font: Font.regular(17.0), .foregroundColor: theme.list.itemSecondaryTextColor])
-            // A query cleared from outside (a section opened from the results) empties the field.
-            if (textField.text ?? "") != item.query && !textField.isFirstResponder {
-                textField.text = item.query
-            }
-        }
-        self.clearButton?.tintColor = theme.list.itemSecondaryTextColor
-        self.cancelButton?.setTitle(item.cancelTitle, for: .normal)
-        self.cancelButton?.setTitleColor(theme.list.itemAccentColor, for: .normal)
-        self.updateIcon()
-    }
-
-    private func updateIcon() {
-        guard let item = self.item else {
-            return
-        }
-        let theme = item.presentationData.theme
-        let color = self.isActive ? theme.list.itemAccentColor : theme.list.itemSecondaryTextColor
-        self.iconNode.image = UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16.0, weight: .medium))?.withTintColor(color, renderingMode: .alwaysOriginal)
-    }
-
-    private var cancelWidth: CGFloat {
-        guard let cancelButton = self.cancelButton else {
-            return 0.0
-        }
-        return ceil(cancelButton.sizeThatFits(CGSize(width: 200.0, height: 36.0)).width)
-    }
-
-    private func updateLayout(animated: Bool) {
-        guard let params = self.params else {
-            return
-        }
-        let text = self.textField?.text ?? ""
-        let showsCancel = self.isActive || !text.isEmpty
-        let left = params.leftInset
-        let right = params.width - params.rightInset
-        let cancelSpace = showsCancel ? self.cancelWidth + 12.0 : 0.0
-        let fieldFrame = CGRect(x: left, y: 4.0, width: max(80.0, right - left - cancelSpace), height: 40.0)
-
-        let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.3, curve: .spring) : .immediate
-        transition.updateFrame(node: self.fieldNode, frame: fieldFrame)
-        let iconSize = self.iconNode.image?.size ?? CGSize(width: 16.0, height: 16.0)
-        transition.updateFrame(node: self.iconNode, frame: CGRect(origin: CGPoint(x: fieldFrame.minX + 12.0, y: fieldFrame.midY - iconSize.height / 2.0), size: iconSize))
-        let clearSide: CGFloat = 32.0
-        if let textField = self.textField {
-            transition.updateFrame(view: textField, frame: CGRect(x: fieldFrame.minX + 36.0, y: fieldFrame.minY, width: fieldFrame.width - 36.0 - clearSide, height: fieldFrame.height))
-        }
-        if let clearButton = self.clearButton {
-            transition.updateFrame(view: clearButton, frame: CGRect(x: fieldFrame.maxX - clearSide - 2.0, y: fieldFrame.midY - clearSide / 2.0, width: clearSide, height: clearSide))
-            transition.updateAlpha(layer: clearButton.layer, alpha: text.isEmpty ? 0.0 : 1.0)
-        }
-        if let cancelButton = self.cancelButton {
-            let width = self.cancelWidth
-            transition.updateFrame(view: cancelButton, frame: CGRect(x: showsCancel ? right - width : right + 8.0, y: fieldFrame.minY, width: width, height: fieldFrame.height))
-            transition.updateAlpha(layer: cancelButton.layer, alpha: showsCancel ? 1.0 : 0.0)
-        }
-    }
-
-    @objc private func textChanged() {
-        let text = self.textField?.text ?? ""
-        self.updateLayout(animated: true)
-        self.item?.updated(text)
-    }
-
-    @objc private func clearPressed() {
-        self.textField?.text = ""
-        self.textChanged()
-        if self.textField?.isFirstResponder == false {
-            self.textField?.becomeFirstResponder()
-        }
-    }
-
-    @objc private func cancelPressed() {
-        self.textField?.text = ""
-        self.textField?.resignFirstResponder()
-        self.textChanged()
-    }
-
-    func textFieldDidBeginEditing(_ textField: UITextField) {
-        self.isActive = true
-        self.updateIcon()
-        self.updateLayout(animated: true)
-    }
-
-    func textFieldDidEndEditing(_ textField: UITextField) {
-        self.isActive = false
-        self.updateIcon()
-        self.updateLayout(animated: true)
-    }
-
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        textField.resignFirstResponder()
-        return false
-    }
-
-    func asyncLayout() -> (_ item: AorusSettingsSearchItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, (Bool) -> Void) {
-        return { [weak self] item, params, neighbors in
-            let contentSize = CGSize(width: params.width, height: 48.0)
-            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: UIEdgeInsets(top: 4.0, left: 0.0, bottom: 0.0, right: 0.0))
-            return (layout, { [weak self] _ in
-                guard let strongSelf = self else {
-                    return
-                }
-                strongSelf.item = item
-                strongSelf.params = params
-                if strongSelf.isNodeLoaded {
-                    strongSelf.applyItem(item)
-                    strongSelf.updateLayout(animated: false)
-                }
-            })
-        }
     }
 }
 
@@ -461,11 +252,11 @@ enum AorusSettingsRowAccessory: Equatable {
 }
 
 enum AorusSettingsRowStyle: Equatable {
-    /// A section on the main screen: a filled tile, a bold title and what the section holds.
+    /// A section on the main screen: its sign, a bold title and what the section holds.
     case section
-    /// A feature: a washed tile, its name and what it does.
+    /// A feature: its sign, its name and what it does.
     case feature
-    /// A link under the sections: a filled tile and a name, with a value at the end.
+    /// A link under the sections: its sign and a name, with a value at the end.
     case link
 }
 
@@ -629,30 +420,31 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
             let verticalInset: CGFloat
             switch item.style {
             case .section:
-                iconSide = 36.0
+                iconSide = 28.0
                 titleFont = Font.semibold(17.0)
                 titleBoldFont = Font.bold(17.0)
                 subtitleFont = Font.regular(14.0)
                 verticalInset = 12.0
             case .feature:
-                iconSide = 32.0
+                iconSide = 24.0
                 titleFont = Font.regular(17.0)
                 titleBoldFont = Font.semibold(17.0)
                 subtitleFont = Font.regular(13.0)
                 verticalInset = 11.0
             case .link:
-                iconSide = 30.0
+                iconSide = 24.0
                 titleFont = Font.regular(17.0)
                 titleBoldFont = Font.semibold(17.0)
                 subtitleFont = Font.regular(13.0)
                 verticalInset = 11.0
             }
-            let iconImage = item.icon.flatMap { aorusSettingsIconImage($0, style: item.style == .feature ? .soft : .filled, side: iconSide, dark: theme.overallDarkAppearance) }
+            // A plain silhouette in the title's ink: no tile and no colour of its own.
+            let iconImage = item.icon.flatMap { aorusSettingsIconImage($0, side: iconSide, ink: theme.list.itemPrimaryTextColor) }
 
             let leftInset = params.leftInset + 16.0
-            // A feature without a tile of its own (a switch under the one it belongs to) keeps the
-            // text column, so it reads as part of the row above.
-            let textLeft = (iconImage != nil || item.style == .feature) ? leftInset + iconSide + 14.0 : leftInset
+            // Every row's text starts in one column, whether or not it has a sign: a switch under
+            // the one it belongs to reads as part of that row.
+            let textLeft = params.leftInset + aorusSettingsTextColumn
             let rightEdge = params.width - params.rightInset - 16.0
 
             // The trailing edge first: the text takes what is left.
@@ -702,7 +494,7 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
 
             let subtitleSpacing: CGFloat = subtitleString != nil ? 2.0 : 0.0
             let textHeight = titleLayout.size.height + subtitleSpacing + (subtitleString != nil ? subtitleLayout.size.height : 0.0)
-            let minHeight: CGFloat = item.style == .section ? 64.0 : (iconImage != nil ? 52.0 : 44.0)
+            let minHeight: CGFloat = item.style == .section ? 60.0 : 44.0
             let contentHeight = max(minHeight, textHeight + verticalInset * 2.0)
             let contentSize = CGSize(width: params.width, height: contentHeight)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -771,7 +563,8 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
 
                 strongSelf.iconNode.image = iconImage
                 strongSelf.iconNode.isHidden = iconImage == nil
-                strongSelf.iconNode.frame = CGRect(origin: CGPoint(x: leftInset, y: floor((contentHeight - iconSide) / 2.0)), size: CGSize(width: iconSide, height: iconSide))
+                // Centred in the icon column, whatever the sign's size.
+                strongSelf.iconNode.frame = CGRect(origin: CGPoint(x: leftInset + floor((28.0 - iconSide) / 2.0), y: floor((contentHeight - iconSide) / 2.0)), size: CGSize(width: iconSide, height: iconSide))
 
                 let textTop = floor((contentHeight - textHeight) / 2.0)
                 transition.updateFrame(node: strongSelf.titleNode, frame: CGRect(origin: CGPoint(x: textLeft, y: textTop), size: titleLayout.size))
@@ -874,79 +667,237 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
     }
 }
 
-// MARK: - Page header
+// MARK: - Text field
 
-/// The top of a section's page: its tile, large, and what the section is for.
-final class AorusSettingsPageHeaderItem: ListViewItem, ItemListItem {
+/// A one-line text field in the rows' own column and type, for the values a switch above it
+/// asks for (a protected number, a balance). The text stays where it starts as it is typed.
+final class AorusSettingsInputItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
-    let icon: AorusSettingsIcon
     let text: String
+    let placeholder: String
+    let returnKeyType: UIReturnKeyType
     let sectionId: ItemListSectionId
     let tag: ItemListItemTag? = nil
     let selectable: Bool = false
+    let textUpdated: (String) -> Void
+    let shouldUpdateText: (String) -> Bool
+    let action: () -> Void
 
-    init(presentationData: ItemListPresentationData, icon: AorusSettingsIcon, text: String, sectionId: ItemListSectionId) {
+    init(presentationData: ItemListPresentationData, text: String, placeholder: String, returnKeyType: UIReturnKeyType = .done, sectionId: ItemListSectionId, textUpdated: @escaping (String) -> Void, shouldUpdateText: @escaping (String) -> Bool = { _ in true }, action: @escaping () -> Void) {
         self.presentationData = presentationData
-        self.icon = icon
         self.text = text
+        self.placeholder = placeholder
+        self.returnKeyType = returnKeyType
         self.sectionId = sectionId
+        self.textUpdated = textUpdated
+        self.shouldUpdateText = shouldUpdateText
+        self.action = action
     }
 
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         let itemNeighbors = itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self))
-        aorusRowNodeLayout(item: self, async: async, params: params, neighbors: itemNeighbors, make: { AorusSettingsPageHeaderItemNode() }, layout: { $0.asyncLayout() }, completion: completion)
+        aorusRowNodeLayout(item: self, async: async, params: params, neighbors: itemNeighbors, make: { AorusSettingsInputItemNode() }, layout: { $0.asyncLayout() }, completion: completion)
     }
 
     func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
         let itemNeighbors = itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self))
-        aorusRowNodeUpdate(item: self, async: async, node: node, params: params, neighbors: itemNeighbors, animation: animation, layout: { (node: AorusSettingsPageHeaderItemNode) in node.asyncLayout() }, completion: completion)
+        aorusRowNodeUpdate(item: self, async: async, node: node, params: params, neighbors: itemNeighbors, animation: animation, layout: { (node: AorusSettingsInputItemNode) in node.asyncLayout() }, completion: completion)
     }
 }
 
-final class AorusSettingsPageHeaderItemNode: ListViewItemNode, ItemListItemNode {
-    private let iconNode: ASImageNode
-    private let textNode: TextNode
-    private var item: AorusSettingsPageHeaderItem?
+final class AorusSettingsInputItemNode: ListViewItemNode, ItemListItemNode, UITextFieldDelegate {
+    private let backgroundNode: ASDisplayNode
+    private let topStripeNode: ASDisplayNode
+    private let bottomStripeNode: ASDisplayNode
+    private let maskNode: ASImageNode
+    private var textField: UITextField?
+    private var clearButton: UIButton?
+
+    private var item: AorusSettingsInputItem?
+    private var fieldFrame = CGRect()
 
     var tag: ItemListItemTag? {
         return nil
     }
 
     init() {
-        self.iconNode = ASImageNode()
-        self.iconNode.isLayerBacked = true
-        self.iconNode.displaysAsynchronously = false
-        self.textNode = TextNode()
-        self.textNode.isUserInteractionEnabled = false
+        self.backgroundNode = ASDisplayNode()
+        self.backgroundNode.isLayerBacked = true
+        self.topStripeNode = ASDisplayNode()
+        self.topStripeNode.isLayerBacked = true
+        self.bottomStripeNode = ASDisplayNode()
+        self.bottomStripeNode.isLayerBacked = true
+        self.maskNode = ASImageNode()
         super.init(layerBacked: false)
-        self.addSubnode(self.iconNode)
-        self.addSubnode(self.textNode)
     }
 
-    func asyncLayout() -> (_ item: AorusSettingsPageHeaderItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, (Bool) -> Void) {
-        let makeTextLayout = TextNode.asyncLayout(self.textNode)
+    override func didLoad() {
+        super.didLoad()
+        let textField = UITextField()
+        textField.font = Font.regular(17.0)
+        textField.autocorrectionType = .no
+        textField.spellCheckingType = .no
+        textField.autocapitalizationType = .none
+        textField.clearButtonMode = .never
+        textField.textAlignment = .natural
+        textField.delegate = self
+        textField.addTarget(self, action: #selector(self.textChanged), for: .editingChanged)
+        self.view.addSubview(textField)
+        self.textField = textField
+
+        let clearButton = UIButton(type: .system)
+        clearButton.setImage(UIImage(systemName: "xmark.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 16.0, weight: .regular)), for: .normal)
+        clearButton.addTarget(self, action: #selector(self.clearPressed), for: .touchUpInside)
+        clearButton.isHidden = true
+        self.view.addSubview(clearButton)
+        self.clearButton = clearButton
+
+        if let item = self.item {
+            self.applyItem(item)
+        }
+    }
+
+    private func applyItem(_ item: AorusSettingsInputItem) {
+        guard let textField = self.textField else {
+            return
+        }
+        let theme = item.presentationData.theme
+        textField.textColor = theme.list.itemPrimaryTextColor
+        textField.tintColor = theme.list.itemAccentColor
+        textField.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
+        textField.returnKeyType = item.returnKeyType
+        textField.attributedPlaceholder = NSAttributedString(string: item.placeholder, attributes: [.font: Font.regular(17.0), .foregroundColor: theme.list.itemPlaceholderTextColor])
+        // A value changed from outside (a new random number) reaches the field; one being typed
+        // is left alone.
+        if !textField.isFirstResponder && (textField.text ?? "") != item.text {
+            textField.text = item.text
+        }
+        self.clearButton?.tintColor = theme.list.itemSecondaryTextColor
+        self.layoutField()
+    }
+
+    private func layoutField() {
+        guard let textField = self.textField, let clearButton = self.clearButton else {
+            return
+        }
+        let showsClear = textField.isFirstResponder && !(textField.text ?? "").isEmpty
+        clearButton.isHidden = !showsClear
+        let clearSide: CGFloat = 36.0
+        var fieldFrame = self.fieldFrame
+        if showsClear {
+            fieldFrame.size.width -= clearSide - 8.0
+        }
+        textField.frame = fieldFrame
+        clearButton.frame = CGRect(x: self.fieldFrame.maxX - clearSide + 10.0, y: self.fieldFrame.midY - clearSide / 2.0, width: clearSide, height: clearSide)
+    }
+
+    @objc private func textChanged() {
+        self.layoutField()
+        self.item?.textUpdated(self.textField?.text ?? "")
+    }
+
+    @objc private func clearPressed() {
+        self.textField?.text = ""
+        self.textChanged()
+    }
+
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+        guard let item = self.item else {
+            return true
+        }
+        let current = (textField.text ?? "") as NSString
+        return item.shouldUpdateText(current.replacingCharacters(in: range, with: string))
+    }
+
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        self.layoutField()
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        self.layoutField()
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        self.item?.action()
+        return false
+    }
+
+    func asyncLayout() -> (_ item: AorusSettingsInputItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, (Bool) -> Void) {
+        let currentItem = self.item
         return { [weak self] item, params, neighbors in
             let theme = item.presentationData.theme
-            let iconSide: CGFloat = 64.0
-            let textWidth = params.width - params.leftInset - params.rightInset - 48.0
-            let (textLayout, textApply) = makeTextLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.text, font: Font.regular(15.0), textColor: theme.list.itemSecondaryTextColor), backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: textWidth, height: 400.0), alignment: .center, cutout: nil, insets: UIEdgeInsets()))
-            let contentHeight = 8.0 + iconSide + 12.0 + textLayout.size.height + 4.0
-            let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: contentHeight), insets: UIEdgeInsets())
+            let themeUpdated = currentItem?.presentationData.theme !== theme
+            let contentHeight: CGFloat = 44.0
+            let insets = itemListNeighborsGroupedInsets(neighbors, params)
+            let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: contentHeight), insets: insets)
+            let separatorHeight = UIScreenPixel
+            let textLeft = params.leftInset + aorusSettingsTextColumn
+
             return (layout, { [weak self] _ in
                 guard let strongSelf = self else {
                     return
                 }
                 strongSelf.item = item
-                let _ = textApply()
-                strongSelf.iconNode.image = aorusSettingsIconImage(item.icon, style: .filled, side: iconSide, dark: theme.overallDarkAppearance)
-                strongSelf.iconNode.frame = CGRect(origin: CGPoint(x: floor((params.width - iconSide) / 2.0), y: 8.0), size: CGSize(width: iconSide, height: iconSide))
-                strongSelf.textNode.frame = CGRect(origin: CGPoint(x: floor((params.width - textLayout.size.width) / 2.0), y: 8.0 + iconSide + 12.0), size: textLayout.size)
+                if themeUpdated {
+                    strongSelf.topStripeNode.backgroundColor = theme.list.itemBlocksSeparatorColor
+                    strongSelf.bottomStripeNode.backgroundColor = theme.list.itemBlocksSeparatorColor
+                    strongSelf.backgroundNode.backgroundColor = theme.list.itemBlocksBackgroundColor
+                }
+                if strongSelf.backgroundNode.supernode == nil {
+                    strongSelf.insertSubnode(strongSelf.backgroundNode, at: 0)
+                }
+                if strongSelf.topStripeNode.supernode == nil {
+                    strongSelf.insertSubnode(strongSelf.topStripeNode, at: 1)
+                }
+                if strongSelf.bottomStripeNode.supernode == nil {
+                    strongSelf.insertSubnode(strongSelf.bottomStripeNode, at: 2)
+                }
+                if strongSelf.maskNode.supernode == nil {
+                    strongSelf.insertSubnode(strongSelf.maskNode, at: 3)
+                }
+
+                let hasCorners = itemListHasRoundedBlockLayout(params)
+                var hasTopCorners = false
+                var hasBottomCorners = false
+                switch neighbors.top {
+                case .sameSection(false):
+                    strongSelf.topStripeNode.isHidden = true
+                default:
+                    hasTopCorners = true
+                    strongSelf.topStripeNode.isHidden = hasCorners
+                }
+                let bottomStripeInset: CGFloat
+                switch neighbors.bottom {
+                case .sameSection(false):
+                    bottomStripeInset = textLeft
+                    strongSelf.bottomStripeNode.isHidden = false
+                default:
+                    bottomStripeInset = 0.0
+                    hasBottomCorners = true
+                    strongSelf.bottomStripeNode.isHidden = hasCorners
+                }
+                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+                strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
+                strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
+                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight))
+
+                strongSelf.fieldFrame = CGRect(x: textLeft, y: 0.0, width: max(40.0, params.width - params.rightInset - 16.0 - textLeft), height: contentHeight)
+                strongSelf.applyItem(item)
             })
         }
     }
 
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
         self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
+    }
+
+    override func animateAdded(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
+    }
+
+    override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
     }
 }
 
