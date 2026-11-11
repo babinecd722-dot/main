@@ -273,7 +273,7 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
     }
 
     let signal = combineLatest(
-        context.sharedContext.presentationData,
+        aorusSettingsPresentationData(context),
         statePromise.get(),
         peersSignal
     )

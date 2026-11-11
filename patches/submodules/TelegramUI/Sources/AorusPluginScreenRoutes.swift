@@ -40,7 +40,8 @@ func aorusInstallPluginScreenRoutes() {
     AorusPluginScreenRoutes.register { context, screen, isTabRoot in
         if screen == .aorus || screen.rawValue.hasPrefix("aorus.") {
             let section = screen == .aorus ? nil : String(screen.rawValue.dropFirst(6))
-            if screen == .other { return aorusMiscController(context: context, shortcutRoutes: aorusPluginSettingsRoutes(context)) }
+            // "aorus.other" named the old Other page; its features are on the sections now, so it
+            // opens the AorusGram screen itself, where the search finds any of them.
             return aorusGramController(context: context, shortcutRoutes: aorusPluginSettingsRoutes(context), section: section)
         }
         switch screen {

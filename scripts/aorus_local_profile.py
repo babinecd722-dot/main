@@ -24,7 +24,8 @@ def verify_local_profile(tg: Path) -> list[str]:
         "submodules/Display/Source/AorusSystemSymbol.swift": ["AorusPluginIconValues.symbol", "didChangeNotification", "DispatchQueue.main"],
         "submodules/RadialStatusNode/Sources/RadialCloudProgressContentNode.swift": ['named: "Telegram/Drawn/MediaCancel"', "self.cancelNode.color = self.color"],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift": ["aorusRatingIconRevision", "lhs.aorusIconRevision != rhs.aorusIconRevision", "styledBackgroundImage!.cgImage", "styledBorderImage!.cgImage"],
-        "submodules/AorusGramUI/Sources/AorusMiscController.swift": ["case anonymousNumber", "strings.UserInfo_AnonymousNumberLabel", "setAnonymousNumber: { value in", "AorusPhoneSpoofStore.setAnonymous(value)"],
+        # Phone spoofing sits on the Privacy section of the AorusGram screen.
+        "submodules/AorusGramUI/Sources/AorusGramController.swift": ['b.toggle("anonymousNumber"', "strings.UserInfo_AnonymousNumberLabel", "\\.anonymousNumber: { value in AorusPhoneSpoofStore.setAnonymous(value) }", "AorusPhoneSpoofStore.setAnonymous(value)"],
     }
     for relative, markers in expected.items():
         path = tg / relative

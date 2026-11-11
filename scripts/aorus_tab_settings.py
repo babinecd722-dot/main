@@ -42,6 +42,29 @@ _GUTTER_MASKS = '''    private func aorusUpdateGutterMasks() {
 '''
 
 
+def patch_theme_tab_colours(s: str) -> str:
+    """Telegram 13.2 paints an unselected tab in UIKit's label colour (white on the dark side,
+    black on the light) and a tab's badge in system red, whatever the theme says. AorusGram's
+    themes, the tab colours chosen in its settings and a plugin's appearance all set them through
+    the theme, so the tabs keep the theme's colours, as they did on 13.1.1: a tab drawn from the
+    theme's precoloured images (the wall, a plugin's tab) would otherwise sit grey beside white
+    ones. The search button keeps Telegram's colour; on 13.1.1 it was the input panel's, the same
+    white or black."""
+    if 'tabBarUnselectedItemColor(theme: component.theme)' not in s:
+        return s
+    s = edit(s, '            let unselectedColor = tabBarUnselectedItemColor(theme: component.theme)\n',
+             '            // AorusGram: the theme\'s colour for a tab not chosen (aorus_tab_settings.patch_theme_tab_colours).\n'
+             '            let unselectedColor = component.theme.rootController.tabBar.textColor\n', 'unselected tab in the theme colour')
+    s = edit(s, '    func update(text: String, isDark: Bool) -> CGSize {\n        self.label.text = text\n',
+             '    func update(text: String, isDark: Bool, aorusBackground: UIColor? = nil, aorusForeground: UIColor? = nil) -> CGSize {\n'
+             '        self.label.text = text\n        self.label.textColor = aorusForeground ?? .white\n', 'badge in the theme colours')
+    s = edit(s, '        self.backgroundColor = isDark ? UIColor(red: 1.0, green: 66.0 / 255.0, blue: 69.0 / 255.0, alpha: 1.0) : UIColor(red: 1.0, green: 56.0 / 255.0, blue: 60.0 / 255.0, alpha: 1.0)\n',
+             '        self.backgroundColor = aorusBackground ?? (isDark ? UIColor(red: 1.0, green: 66.0 / 255.0, blue: 69.0 / 255.0, alpha: 1.0) : UIColor(red: 1.0, green: 56.0 / 255.0, blue: 60.0 / 255.0, alpha: 1.0))\n', 'badge fill in the theme colour')
+    s = edit(s, 'let badgeSize = badge.update(text: badgeText, isDark: component.theme.overallDarkAppearance)',
+             'let badgeSize = badge.update(text: badgeText, isDark: component.theme.overallDarkAppearance, aorusBackground: component.theme.rootController.tabBar.badgeBackgroundColor, aorusForeground: component.theme.rootController.tabBar.badgeTextColor)', 'badge takes the theme')
+    return s
+
+
 def patch_tab_settings(tg: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in ('Display/Source/AorusTabBarLayout.swift', 'Display/Source/AorusTabBarIdentity.swift', 'TelegramPresentationData/Sources/AorusTabBarTheme.swift', 'TabBarUI/Sources/AorusTabBarPreviewView.swift', 'TelegramUI/Sources/AorusTabSettings.swift'):
@@ -90,6 +113,7 @@ def patch_tab_settings(tg: Path) -> None:
     s = edit(s, '            let iconTintColor = (component.isSelected', '            let aorusAppearance = AorusTabBarSettings.current.appearance(dark: component.theme.overallDarkAppearance)\n            let aorusHasCustomInk = (component.isSelected ? aorusAppearance.active : aorusAppearance.inactive) != nil\n            let iconTintColor = (component.isSelected', 'chosen tab icon colour')
     # A template is tinted by the item itself (13.1.1), so a chosen colour only has to make one.
     s = edit(s, 'let iconImage = aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image)\n', 'let iconImage = aorusTabBarImage(aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image), customInk: aorusHasCustomInk)\n', 'static tab icon template')
+    s = patch_theme_tab_colours(s)
     path.write_text(s)
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'

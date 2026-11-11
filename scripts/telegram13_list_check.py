@@ -97,8 +97,10 @@ public typealias ItemListSectionId = Int32
             names.append((name, grouped))
     # Stop words, exceptions and quick replies now share AorusRevealTextItem;
     # the duplicate ASRevealTextItem was deliberately removed.
-    if len(names) != 19:
-        raise RuntimeError(f"Expected all 19 custom and classic list items, found {len(names)}")
+    # The AorusGram settings add five: the logo, the search field, the section, feature and link
+    # row, a section's header and the empty search.
+    if len(names) != 24:
+        raise RuntimeError(f"Expected all 24 custom and classic list items, found {len(names)}")
     if ("AorusRevealTextItem", True) not in names or any(name == "ASRevealTextItem" for name, _ in names):
         raise RuntimeError("Editable lists must share the native swipe item")
     if ("AorusTabPreviewItem", True) not in names:
@@ -152,7 +154,7 @@ expect(messageNeighbors.previous == (index == 0 ? nil : chatItems[index - 1].nei
 expect(messageNeighbors.next == (index == chatItems.count - 1 ? nil : chatItems[index + 1].neighborDescriptor), "preview preserves the complete next descriptor")
 }
 '''
-    source += 'print("Telegram 13 list integration passed: 19 protocol conformances; \\(checks) neighbor assertions")\n'
+    source += 'print("Telegram 13 list integration passed: 24 protocol conformances; \\(checks) neighbor assertions")\n'
     return source
 
 

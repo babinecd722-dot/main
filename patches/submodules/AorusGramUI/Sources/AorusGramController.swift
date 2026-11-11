@@ -10,6 +10,7 @@ import ItemListUI
 import PresentationDataUtils
 import AccountContext
 import AorusGram
+import ComponentFlow
 
 // MARK: - Interval slider
 
@@ -265,27 +266,119 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
 
 // MARK: - Sections
 
-private enum AorusSection: Int32 {
+/// The pages of the AorusGram settings: the main screen, and a page for each section on it.
+/// Everything AorusGram can do has its place on one of them; there is no catch-all page.
+private enum AorusPage: String, CaseIterable, Equatable {
+    case root
     case privacy
-    case ai
-    case performance
-    case ui
-    case tabs
-    case deviceSpoof
+    case security
+    case history
     case bypass
-    case antiSpoof
-    case accountBackup
-    case aorusCode
-    case channel
-    case editLocal
-    case quickButtons
-    case voiceMessages
-    case videoMessages
-    case calls
+    case messages
+    case media
+    case appearance
+    case tabs
     case wall
-    case plugins
-    case misc
-    case settingsTransfer
+    case extras
+    case performance
+    case data
+
+    /// The sections, in the order the main screen lists them, in its three blocks.
+    static let blocks: [[AorusPage]] = [
+        [.privacy, .security, .history, .bypass],
+        [.messages, .media, .appearance, .tabs, .wall],
+        [.extras, .performance, .data],
+    ]
+
+    var icon: AorusSettingsIcon {
+        switch self {
+        case .root: return AorusSettingsIcon("gearshape.fill", 0x8e8e93)
+        case .privacy: return AorusSettingsIcon(glyph: .ghost, color: 0x8e5cf7)
+        case .security: return AorusSettingsIcon("lock.shield.fill", 0x30c75e)
+        case .history: return AorusSettingsIcon("clock.arrow.circlepath", 0xff453a)
+        case .bypass: return AorusSettingsIcon("lock.open.fill", 0xff9f0a)
+        case .messages: return AorusSettingsIcon("bubble.left.and.bubble.right.fill", 0x0a84ff)
+        case .media: return AorusSettingsIcon("phone.fill", 0x30b0c7)
+        case .appearance: return AorusSettingsIcon("paintbrush.fill", 0xff375f)
+        case .tabs: return AorusSettingsIcon("dock.rectangle", 0x5e5ce6)
+        case .wall: return AorusSettingsIcon("newspaper.fill", 0x32ade6)
+        case .extras: return AorusSettingsIcon("gift.fill", 0xffb800)
+        case .performance: return AorusSettingsIcon("speedometer", 0xff6b35)
+        case .data: return AorusSettingsIcon("externaldrive.fill", 0x64a0ff)
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .root: return "AorusGram"
+        case .privacy: return aorusL("Приватность", "Privacy")
+        case .security: return aorusL("Безопасность", "Security")
+        case .history: return aorusL("Удалённые и изменённые", "Deleted & Edited")
+        case .bypass: return aorusL("Обход ограничений", "Bypass Restrictions")
+        case .messages: return aorusL("Сообщения", "Messages")
+        case .media: return aorusL("Медиа и звонки", "Media & Calls")
+        case .appearance: return aorusL("Оформление", "Appearance")
+        case .tabs: return aorusL("Панель вкладок", "Tab Bar")
+        case .wall: return aorusL("Стена", "Wall")
+        case .extras: return aorusL("Premium и подарки", "Premium & Gifts")
+        case .performance: return aorusL("Производительность", "Performance")
+        case .data: return aorusL("Аккаунты и данные", "Accounts & Data")
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .root: return ""
+        case .privacy: return aorusL("Что о тебе видят другие", "What others can see about you")
+        case .security: return aorusL("Пароли на чаты, проверка ссылок и подтверждения", "Chat passcodes, link checks and confirmations")
+        case .history: return aorusL("Сообщения, которые стёрли или поменяли", "Messages that were deleted or changed")
+        case .bypass: return aorusL("Сохраняй то, что обычно запрещено", "Save what is normally restricted")
+        case .messages: return aorusL("Жесты, форматирование и быстрые кнопки", "Gestures, formatting and quick buttons")
+        case .media: return aorusL("Голосовые, кружки, звонки и загрузки", "Voice, video messages, calls and downloads")
+        case .appearance: return aorusL("Интерфейс, шрифт, сообщения и значок", "Interface, font, messages and badge")
+        case .tabs: return aorusL("Какие вкладки видны и как они выглядят", "Which tabs are shown and how they look")
+        case .wall: return aorusL("Лента непрочитанных постов из каналов", "A feed of unread posts from your channels")
+        case .extras: return aorusL("Premium, подарки, звёзды и юзернеймы только для тебя", "Premium, gifts, Stars and usernames just for you")
+        case .performance: return aorusL("Скорость, память и статистика устройства", "Speed, memory and device statistics")
+        case .data: return aorusL("Резервные копии, перенос настроек и Siri", "Backups, settings transfer and Siri")
+        }
+    }
+
+    /// The page a settings route names: the keys plugins have always used, and the new pages'.
+    static func from(section: String?) -> AorusPage {
+        guard let section, !section.isEmpty else {
+            return .root
+        }
+        switch section {
+        case "privacy", "device": return .privacy
+        case "security": return .security
+        case "history", "antiSpoof": return .history
+        case "bypass": return .bypass
+        case "messages", "code": return .messages
+        case "media", "voice", "video", "calls": return .media
+        case "appearance", "interface", "ui": return .appearance
+        case "tabs": return .tabs
+        case "wall": return .wall
+        case "extras", "premium", "gifts": return .extras
+        case "performance": return .performance
+        case "data", "backup": return .data
+        default: return .root
+        }
+    }
+
+    /// Where a plugin's settings shortcut placed in this screen's old sections is shown now.
+    static func from(placement: String) -> AorusPage? {
+        switch placement {
+        case "privacy": return .privacy
+        case "interface": return .appearance
+        case "tabs": return .tabs
+        case "messages", "aorusCode": return .messages
+        case "calls": return .media
+        case "wall": return .wall
+        case "other": return .root
+        default: return nil
+        }
+    }
 }
 
 // MARK: - State
@@ -349,742 +442,194 @@ private struct AorusState: Equatable {
     var bypassSavePaid: Bool
     var bypassSaveViewOnce: Bool
     var bypassStoryDownload: Bool
+    // The screens a row opens, for the "On" or "Off" the row shows.
+    var masksEnabled: Bool
+    var voiceTwinEnabled: Bool
+    var chatLockEnabled: Bool
+    var fontTitle: String
+    // What the "Other" page used to hold, each on the page it belongs to now.
+    var localPremium: Bool
+    var fakeStars: Bool
+    var fakeStarsAmount: String
+    var fakeGram: Bool
+    var fakeGramAmount: String
+    var antiSearch: Bool
+    var anonymousStickers: Bool
+    var profileLink: Bool
+    var profileLinkTargetPeerId: Int64
+    var profileLinkTargetName: String
+    var formattingPanel: Bool
+    var autoFormatStyle: String
+    var phoneSpoof: Bool
+    var anonymousNumber: Bool
+    var phoneSpoofNumber: String
+    var mediaMetadata: Bool
+    var linkProtection: Bool
+    var linkProtectionRedirects: Bool
+    var linkProtectionBlockFiles: Bool
+    var actionConfirmation: Bool
+}
+
+// MARK: - Rows
+
+/// What a row leads to.
+private enum AorusDestination: Equatable {
+    case page(AorusPage)
+    case plugins
+    case pluginShortcut(pluginId: String, id: String)
+    case channel
+    case subscription
+    case connectionSettings
+    case deviceSpoof
+    case chatLock
+    case autoFormat
+    case quickReplies
+    case antiSpamWords
+    case masks
+    case voiceTwin
+    case font
+    case bubbleSettings
+    case messageSettings
+    case appBadge
+    case animatedWallpapers
+    case animatedBanner
+    case tabSettings
+    case wallSettings
+    case fakeGifts
+    case fakeUsernames
+    case accountBackup
+    case clearDeletedCache
+    case saveSettings
+    case loadSettings
+    case randomizePhoneNumber
+    case profileLinkSelf
+    case profileLinkPeer
+}
+
+/// What a row does when tapped: flip a switch, or open something.
+private enum AorusTarget: Equatable {
+    case toggle(WritableKeyPath<AorusState, Bool>, inverted: Bool)
+    case open(AorusDestination)
+}
+
+/// A text field's setting.
+private enum AorusField: Equatable {
+    case fakeStarsAmount
+    case fakeGramAmount
+    case phoneNumber
+}
+
+private struct AorusEntry: ItemListNodeEntry {
+    enum Kind: Equatable {
+        case logo(version: String)
+        case search(query: String, placeholder: String, cancel: String)
+        case pageHeader(icon: AorusSettingsIcon, text: String)
+        case header(String)
+        case footer(String)
+        case row(icon: AorusSettingsIcon?, title: String, subtitle: String?, accessory: AorusSettingsRowAccessory, style: AorusSettingsRowStyle, target: AorusTarget, highlight: String?)
+        case slider(title: String, value: Int, isRAM: Bool)
+        case input(field: AorusField, placeholder: String, value: String)
+        case placeholder(title: String, text: String)
+    }
+
+    let id: String
+    let section: ItemListSectionId
+    let order: Int
+    let kind: Kind
+
+    var stableId: String {
+        return self.id
+    }
+
+    static func ==(lhs: AorusEntry, rhs: AorusEntry) -> Bool {
+        return lhs.id == rhs.id && lhs.section == rhs.section && lhs.order == rhs.order && lhs.kind == rhs.kind
+    }
+
+    static func <(lhs: AorusEntry, rhs: AorusEntry) -> Bool {
+        return lhs.order < rhs.order
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let args = arguments as! AorusArguments
+        switch self.kind {
+        case let .logo(version):
+            return AorusSettingsLogoItem(presentationData: presentationData, version: version, sectionId: self.section)
+        case let .search(query, placeholder, cancel):
+            return AorusSettingsSearchItem(presentationData: presentationData, query: query, placeholder: placeholder, cancelTitle: cancel, sectionId: self.section, updated: args.updateQuery)
+        case let .pageHeader(icon, text):
+            return AorusSettingsPageHeaderItem(presentationData: presentationData, icon: icon, text: text, sectionId: self.section)
+        case let .header(text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
+        case let .footer(text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case let .row(icon, title, subtitle, accessory, style, target, highlight):
+            switch target {
+            case let .toggle(keyPath, inverted):
+                return AorusSettingsRowItem(presentationData: presentationData, icon: icon, title: title, subtitle: subtitle, accessory: accessory, style: style, highlightQuery: highlight, sectionId: self.section, toggled: { value in
+                    args.set(keyPath, inverted ? !value : value)
+                })
+            case let .open(destination):
+                return AorusSettingsRowItem(presentationData: presentationData, icon: icon, title: title, subtitle: subtitle, accessory: accessory, style: style, highlightQuery: highlight, sectionId: self.section, action: {
+                    args.open(destination)
+                })
+            }
+        case let .slider(title, value, isRAM):
+            // The derived list theme, as every row of ours that takes a theme directly asks for.
+            if isRAM {
+                return AorusIntervalSliderItem(theme: presentationData.theme.aorusGlassListTheme, title: title, value: value, presets: _aorusRAMIntervalPresets, valueText: _aorusRAMIntervalText, sectionId: self.section, updated: args.setRAMCleanInterval)
+            } else {
+                return AorusIntervalSliderItem(theme: presentationData.theme.aorusGlassListTheme, title: title, value: value, sectionId: self.section, updated: args.setCacheInterval)
+            }
+        case let .input(field, placeholder, value):
+            let resign: () -> Void = {
+                // Return applies the value and puts the keyboard away.
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+            switch field {
+            case .fakeStarsAmount:
+                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                    args.setField(.fakeStarsAmount, text)
+                }, shouldUpdateText: { text in
+                    return text.allSatisfy { $0.isNumber }
+                }, action: resign)
+            case .fakeGramAmount:
+                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                    args.setField(.fakeGramAmount, text)
+                }, shouldUpdateText: { text in
+                    return text.isEmpty || AorusLocalGramAmount.parse(text) != nil
+                }, action: resign)
+            case .phoneNumber:
+                return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, returnKeyType: .done, sectionId: self.section, textUpdated: { text in
+                    args.setField(.phoneNumber, text)
+                }, action: resign)
+            }
+        case let .placeholder(title, text):
+            return AorusSettingsPlaceholderItem(presentationData: presentationData, title: title, text: text, sectionId: self.section)
+        }
+    }
 }
 
 // MARK: - Arguments
 
 private final class AorusArguments {
     let set: (WritableKeyPath<AorusState, Bool>, Bool) -> Void
-    let openChannel: () -> Void
-    let openSubscription: () -> Void
-    let clearCache: () -> Void
-    let openAccountBackup: () -> Void
-    let openPlugins: () -> Void
-    let openPluginShortcut: (String, String) -> Void
-    let openMisc: () -> Void
-    let openAntiSpamManage: () -> Void
-    let openDeviceSpoof: () -> Void
-    let openMasks: () -> Void
-    let openVoiceTwin: () -> Void
-    let openWallSettings: () -> Void
+    let open: (AorusDestination) -> Void
+    let setField: (AorusField, String) -> Void
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
-    let openProxyDiagnostics: () -> Void // AORUS-DIAG
-    let openConnectionSettings: () -> Void // AORUS-CONN
-    let openAppBadgePicker: () -> Void
-    let openFont: () -> Void
-    let openBubbleSettings: () -> Void
-    let openTabSettings: () -> Void
-    let openMessageSettings: () -> Void
-    let saveSettings: () -> Void
-    let loadSettings: () -> Void
+    let updateQuery: (String) -> Void
 
-    init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
-         openChannel: @escaping () -> Void,
-         openSubscription: @escaping () -> Void,
-         clearCache: @escaping () -> Void,
-         openAccountBackup: @escaping () -> Void,
-         openPlugins: @escaping () -> Void,
-         openPluginShortcut: @escaping (String, String) -> Void,
-         openMisc: @escaping () -> Void,
-         openAntiSpamManage: @escaping () -> Void,
-         openDeviceSpoof: @escaping () -> Void,
-         openMasks: @escaping () -> Void,
-         openVoiceTwin: @escaping () -> Void,
-         openWallSettings: @escaping () -> Void,
-         setRAMCleanInterval: @escaping (Int) -> Void,
-         setCacheInterval: @escaping (Int) -> Void,
-         openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
-         openConnectionSettings: @escaping () -> Void, // AORUS-CONN
-         openAppBadgePicker: @escaping () -> Void,
-         openFont: @escaping () -> Void,
-         openBubbleSettings: @escaping () -> Void,
-         openTabSettings: @escaping () -> Void,
-         openMessageSettings: @escaping () -> Void,
-         saveSettings: @escaping () -> Void,
-         loadSettings: @escaping () -> Void) {
+    init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void, open: @escaping (AorusDestination) -> Void, setField: @escaping (AorusField, String) -> Void, setRAMCleanInterval: @escaping (Int) -> Void, setCacheInterval: @escaping (Int) -> Void, updateQuery: @escaping (String) -> Void) {
         self.set = set
-        self.openChannel = openChannel
-        self.openSubscription = openSubscription
-        self.clearCache = clearCache
-        self.openAccountBackup = openAccountBackup
-        self.openPlugins = openPlugins
-        self.openPluginShortcut = openPluginShortcut
-        self.openMisc = openMisc
-        self.openAntiSpamManage = openAntiSpamManage
-        self.openDeviceSpoof = openDeviceSpoof
-        self.openMasks = openMasks
-        self.openVoiceTwin = openVoiceTwin
-        self.openWallSettings = openWallSettings
+        self.open = open
+        self.setField = setField
         self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
-        self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
-        self.openConnectionSettings = openConnectionSettings // AORUS-CONN
-        self.openAppBadgePicker = openAppBadgePicker
-        self.openFont = openFont
-        self.openBubbleSettings = openBubbleSettings
-        self.openTabSettings = openTabSettings
-        self.openMessageSettings = openMessageSettings
-        self.saveSettings = saveSettings
-        self.loadSettings = loadSettings
+        self.updateQuery = updateQuery
     }
 }
 
-// MARK: - Entries
-
-private enum AorusEntry: ItemListNodeEntry {
-    case privacyHeader(PresentationTheme, String)
-    case ghostMode(PresentationTheme, String, Bool)
-    case ghostChatButton(PresentationTheme, String, Bool)
-    case saveDeletedMessages(PresentationTheme, String, Bool)
-    case saveEditedMessages(PresentationTheme, String, Bool)
-    case clearDeletedCache(PresentationTheme, String)
-    case antiScreenshot(PresentationTheme, String, Bool)
-    case callRecording(PresentationTheme, String, Bool)
-
-    case aiHeader(PresentationTheme, String)
-    case voiceTranscription(PresentationTheme, String, Bool)
-    case translator(PresentationTheme, String, Bool)
-    case autoReply(PresentationTheme, String, Bool)
-
-    case callsHeader(PresentationTheme, String)
-    case masks(PresentationTheme, String)
-    case voiceTwin(PresentationTheme, String)
-    case wallHeader(PresentationTheme, String)
-    case wallEnabled(PresentationTheme, String, Bool)
-    case wallSettings(PresentationTheme, String)
-
-    case perfHeader(PresentationTheme, String)
-    case downloadAccel(PresentationTheme, String, Bool)
-    case maxMediaQuality(PresentationTheme, String, Bool)
-    case antiSpam(PresentationTheme, String, Bool)
-    case antiSpamManage(PresentationTheme, String)
-    case performanceStats(PresentationTheme, String, Bool)
-    case performanceUptime(PresentationTheme, String, Bool)
-    case performanceRAM(PresentationTheme, String, Bool)
-    case performanceCPU(PresentationTheme, String, Bool)
-    case performanceFPS(PresentationTheme, String, Bool)
-    case performanceBattery(PresentationTheme, String, Bool)
-    case performanceNetwork(PresentationTheme, String, Bool)
-    case performanceDisk(PresentationTheme, String, Bool)
-    case performanceThermal(PresentationTheme, String, Bool)
-    case performanceGraph(PresentationTheme, String, Bool)
-    case ramAutoClean(PresentationTheme, String, Bool)
-    case ramInterval(PresentationTheme, String, Int)
-    case cacheAutoClean(PresentationTheme, String, Bool)
-    case cacheInterval(PresentationTheme, String, Int)
-
-    case uiHeader(PresentationTheme, String)
-    case interfaceV2(PresentationTheme, String, Bool)
-    case oldInterface(PresentationTheme, String, Bool)
-    case glassUI(PresentationTheme, String, Bool)
-    case amoledMode(PresentationTheme, String, Bool)
-    case profileReportButton(PresentationTheme, String, Bool)
-    case hideCallsTab(PresentationTheme, String, Bool)
-    case siriShortcuts(PresentationTheme, String, Bool)
-    case appBadge(PresentationTheme, String, String)
-    case squareAvatars(PresentationTheme, String, Bool)
-    case customFont(PresentationTheme, String)
-    case subscriptionBanner(PresentationTheme, String, Bool)
-    case showStories(PresentationTheme, String, Bool)
-    case bubbleSettings(PresentationTheme, String)
-    case tabSettings(PresentationTheme, String)
-    case messageSettings(PresentationTheme, String)
-
-    case tabsHeader(PresentationTheme, String)
-    case hideSearchButton(PresentationTheme, String, Bool)
-    case hideTabTitles(PresentationTheme, String, Bool)
-    case compactTabBar(PresentationTheme, String, Bool)
-
-    case editLocalHeader(PresentationTheme, String)
-    case shareButton(PresentationTheme, String, Bool)
-    case videoMessagesHeader(PresentationTheme, String)
-    case videoMessagesRearCamera(PresentationTheme, String, Bool)
-    case voiceMessagesHeader(PresentationTheme, String)
-    case deviceMicrophone(PresentationTheme, String, Bool)
-    case messagesDoubleCopy(PresentationTheme, String, Bool)
-    case messagesTripleDelete(PresentationTheme, String, Bool)
-    case editLocalEnabled(PresentationTheme, String, Bool)
-    case userMessagesEnabled(PresentationTheme, String, Bool)
-    case messageSeconds(PresentationTheme, String, Bool)
-
-    case antiSpoofHeader(PresentationTheme, String)
-    case antiSpoofDeleted(PresentationTheme, String, Bool)
-    case antiSpoofOnline(PresentationTheme, String, Bool)
-
-    case accountBackupHeader(PresentationTheme, String)
-    case accountBackup(PresentationTheme, String)
-    case plugins(PresentationTheme, String)
-    case pluginShortcut(PresentationTheme, String, String, String, String, Int32, ItemListSectionId, Int32)
-    case misc(PresentationTheme, String)
-
-    case aorusCodeHeader(PresentationTheme, String)
-    case aorusCodeEnabled(PresentationTheme, String, Bool)
-
-    case deviceSpoofHeader(PresentationTheme, String)
-    case deviceSpoof(PresentationTheme, String, String)
-
-    case bypassHeader(PresentationTheme, String)
-    case bypassSavePaid(PresentationTheme, String, Bool)
-    case bypassSaveViewOnce(PresentationTheme, String, Bool)
-    case bypassStoryDownload(PresentationTheme, String, Bool)
-
-    case saveSettings(PresentationTheme, String)
-    case loadSettings(PresentationTheme, String)
-
-    case subscription(PresentationTheme, String)
-    case officialChannel(PresentationTheme, String)
-    case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
-    case connectionSettings(PresentationTheme, String) // AORUS-CONN
-
-    var section: ItemListSectionId {
-        switch self {
-        case .privacyHeader, .ghostMode, .ghostChatButton, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
-            return AorusSection.privacy.rawValue
-        case .aiHeader, .autoReply:
-            return AorusSection.ai.rawValue
-        case .callsHeader, .masks, .voiceTwin:
-            return AorusSection.calls.rawValue
-        case .wallHeader, .wallEnabled, .wallSettings:
-            return AorusSection.wall.rawValue
-        case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
-             .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
-             .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
-             .ramInterval, .cacheAutoClean, .cacheInterval:
-            return AorusSection.performance.rawValue
-        case .uiHeader, .interfaceV2, .oldInterface, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
-            return AorusSection.ui.rawValue
-        case .tabsHeader, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar, .tabSettings:
-            return AorusSection.tabs.rawValue
-        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled, .messageSeconds:
-            return AorusSection.editLocal.rawValue
-        case .translator, .voiceTranscription, .shareButton:
-            return AorusSection.quickButtons.rawValue
-        case .videoMessagesHeader, .videoMessagesRearCamera:
-            return AorusSection.videoMessages.rawValue
-        case .voiceMessagesHeader, .deviceMicrophone:
-            return AorusSection.voiceMessages.rawValue
-        case .deviceSpoofHeader, .deviceSpoof:
-            return AorusSection.deviceSpoof.rawValue
-        case .bypassHeader, .bypassSavePaid, .bypassSaveViewOnce, .bypassStoryDownload:
-            return AorusSection.bypass.rawValue
-        case .antiSpoofHeader, .antiSpoofDeleted, .antiSpoofOnline:
-            return AorusSection.antiSpoof.rawValue
-        case .accountBackupHeader, .accountBackup:
-            return AorusSection.accountBackup.rawValue
-        case .plugins:
-            return AorusSection.plugins.rawValue
-        case let .pluginShortcut(_, _, _, _, _, _, section, _):
-            return section
-        case .misc:
-            return AorusSection.misc.rawValue
-        case .saveSettings, .loadSettings:
-            return AorusSection.settingsTransfer.rawValue
-        case .aorusCodeHeader, .aorusCodeEnabled:
-            return AorusSection.aorusCode.rawValue
-        case .subscription, .officialChannel, .proxyDiagnostics, .connectionSettings: // AORUS-DIAG
-            return AorusSection.channel.rawValue
-        }
-    }
-
-    var stableId: Int32 {
-        switch self {
-        case .privacyHeader:        return 0
-        case .ghostMode:            return 1
-        case .ghostChatButton:      return 2
-        case .saveDeletedMessages:  return 4
-        case .saveEditedMessages:   return 5
-        case .clearDeletedCache:    return 6
-        case .antiScreenshot:       return 7
-        case .callRecording:        return 8
-        case .aiHeader:             return 10
-        case .autoReply:            return 16
-        case .perfHeader:           return 20
-        case .downloadAccel:        return 21
-        case .maxMediaQuality:      return 22
-        case .antiSpam:             return 23
-        case .antiSpamManage:       return 24
-        case .performanceStats:     return 25
-        case .performanceUptime:    return 26
-        case .performanceRAM:       return 27
-        case .performanceCPU:       return 28
-        case .performanceFPS:       return 29
-        case .performanceBattery:   return 30
-        case .performanceNetwork:   return 31
-        case .performanceDisk:      return 32
-        case .performanceThermal:   return 33
-        case .performanceGraph:     return 34
-        case .ramAutoClean:         return 35
-        case .ramInterval:          return 36
-        case .cacheAutoClean:       return 37
-        case .cacheInterval:        return 38
-        case .uiHeader:             return 50
-        // Interface 2.0 heads the block, so it takes 51 and the three rows that stood on 51,
-        // 52 and 53 each move up one. These numbers order the list and nothing else reads
-        // them, so the shift costs nothing; 54 was free, which is what makes the chain fit.
-        case .interfaceV2:          return 51
-        // Its own number, beyond those of the plugin shortcuts; `<` stands it under Interface 2.0.
-        case .oldInterface:         return 200
-        case .glassUI:              return 52
-        case .amoledMode:           return 53
-        case .profileReportButton:  return 54
-        case .hideCallsTab:         return 63
-        case .siriShortcuts:        return 55
-        case .appBadge:             return 56
-        case .squareAvatars:        return 57
-        case .subscriptionBanner:   return 58
-        case .showStories:          return 59
-        // Directly under Show Stories. The number only has to be one no other row uses; where
-        // the row stands is set in `<` below.
-        case .bubbleSettings:       return 1001
-        case .tabSettings:          return 1002
-        case .messageSettings:      return 1000
-        case .customFont:           return 60
-        case .tabsHeader:           return 61
-        case .hideSearchButton:     return 64
-        case .hideTabTitles:        return 65
-        case .compactTabBar:        return 66
-        case .editLocalHeader:      return 67
-        case .messagesDoubleCopy:   return 68
-        case .messagesTripleDelete: return 69
-        case .editLocalEnabled:     return 70
-        case .userMessagesEnabled:  return 71
-        case .messageSeconds:       return 72
-        case .translator:           return 73
-        case .voiceTranscription:   return 74
-        case .shareButton:          return 75
-        case .voiceMessagesHeader:  return 76
-        case .deviceMicrophone:     return 77
-        case .videoMessagesHeader:  return 78
-        case .videoMessagesRearCamera: return 79
-        case .callsHeader:          return 80
-        case .masks:                return 81
-        case .voiceTwin:            return 82
-        case .wallHeader:           return 83
-        case .wallEnabled:          return 84
-        case .wallSettings:         return 85
-        case .deviceSpoofHeader:    return 86
-        case .deviceSpoof:          return 87
-        case .bypassHeader:         return 88
-        case .bypassSavePaid:       return 89
-        case .bypassSaveViewOnce:   return 90
-        case .bypassStoryDownload:  return 91
-        case .antiSpoofHeader:      return 92
-        case .antiSpoofDeleted:     return 93
-        case .antiSpoofOnline:      return 94
-        case .accountBackupHeader:  return 95
-        case .accountBackup:        return 96
-        case .aorusCodeHeader:      return 97
-        case .aorusCodeEnabled:     return 98
-        case .plugins:              return 99
-        case let .pluginShortcut(_, _, _, _, _, stableId, _, _): return stableId
-        case .misc:                 return 130
-        // Their own block, above the subscription's.
-        case .saveSettings:         return 132
-        case .loadSettings:         return 133
-        case .subscription:         return 136
-        case .officialChannel:      return 137
-        case .connectionSettings:   return 146 // AORUS-CONN — above the diagnostics row
-        case .proxyDiagnostics:     return 147 // AORUS-DIAG
-        }
-    }
-
-    static func < (lhs: AorusEntry, rhs: AorusEntry) -> Bool {
-        func order(_ entry: AorusEntry) -> Int32 {
-            if case let .pluginShortcut(_, _, _, _, _, _, _, placementOrder) = entry { return placementOrder }
-            // Bubble Settings just above Message Settings, both under Show Stories.
-            if case .bubbleSettings = entry { return 59 * 1000 + 400 }
-            if case .tabSettings = entry { return 66 * 1000 + 500 }
-            if case .messageSettings = entry { return 59 * 1000 + 500 }
-            // Directly under Interface 2.0, the other way to change the whole interface.
-            if case .oldInterface = entry { return 51 * 1000 + 500 }
-            return entry.stableId * 1000
-        }
-        return order(lhs) < order(rhs)
-    }
-
-    static func == (lhs: AorusEntry, rhs: AorusEntry) -> Bool {
-        switch lhs {
-        case let .privacyHeader(lt, ls):
-            if case let .privacyHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .ghostMode(lt, ls, lv):
-            if case let .ghostMode(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .ghostChatButton(lt, ls, lv):
-            if case let .ghostChatButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .saveDeletedMessages(lt, ls, lv):
-            if case let .saveDeletedMessages(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .saveEditedMessages(lt, ls, lv):
-            if case let .saveEditedMessages(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .clearDeletedCache(lt, ls):
-            if case let .clearDeletedCache(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .antiScreenshot(lt, ls, lv):
-            if case let .antiScreenshot(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .callRecording(lt, ls, lv):
-            if case let .callRecording(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .aiHeader(lt, ls):
-            if case let .aiHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .voiceTranscription(lt, ls, lv):
-            if case let .voiceTranscription(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .translator(lt, ls, lv):
-            if case let .translator(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .autoReply(lt, ls, lv):
-            if case let .autoReply(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .callsHeader(lt, ls):
-            if case let .callsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .masks(lt, ls):
-            if case let .masks(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .voiceTwin(lt, ls):
-            if case let .voiceTwin(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .wallHeader(lt, ls):
-            if case let .wallHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .wallEnabled(lt, ls, lv):
-            if case let .wallEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .wallSettings(lt, ls):
-            if case let .wallSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .perfHeader(lt, ls):
-            if case let .perfHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .downloadAccel(lt, ls, lv):
-            if case let .downloadAccel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .maxMediaQuality(lt, ls, lv):
-            if case let .maxMediaQuality(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .antiSpam(lt, ls, lv):
-            if case let .antiSpam(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .antiSpamManage(lt, ls):
-            if case let .antiSpamManage(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .performanceStats(lt, ls, lv):
-            if case let .performanceStats(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceUptime(lt, ls, lv):
-            if case let .performanceUptime(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceRAM(lt, ls, lv):
-            if case let .performanceRAM(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceCPU(lt, ls, lv):
-            if case let .performanceCPU(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceFPS(lt, ls, lv):
-            if case let .performanceFPS(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceBattery(lt, ls, lv):
-            if case let .performanceBattery(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceNetwork(lt, ls, lv):
-            if case let .performanceNetwork(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceDisk(lt, ls, lv):
-            if case let .performanceDisk(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceThermal(lt, ls, lv):
-            if case let .performanceThermal(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .performanceGraph(lt, ls, lv):
-            if case let .performanceGraph(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .ramAutoClean(lt, ls, lv):
-            if case let .ramAutoClean(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .ramInterval(lt, ls, lv):
-            if case let .ramInterval(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .cacheAutoClean(lt, ls, lv):
-            if case let .cacheAutoClean(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .cacheInterval(lt, ls, lv):
-            if case let .cacheInterval(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }  // Int ==
-        case let .uiHeader(lt, ls):
-            if case let .uiHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .interfaceV2(lt, ls, lv):
-            if case let .interfaceV2(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .oldInterface(lt, ls, lv):
-            if case let .oldInterface(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .glassUI(lt, ls, lv):
-            if case let .glassUI(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .amoledMode(lt, ls, lv):
-            if case let .amoledMode(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .profileReportButton(lt, ls, lv):
-            if case let .profileReportButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .hideCallsTab(lt, ls, lv):
-            if case let .hideCallsTab(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .siriShortcuts(lt, ls, lv):
-            if case let .siriShortcuts(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .appBadge(lt, ls, lv):
-            if case let .appBadge(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .squareAvatars(lt, ls, lv):
-            if case let .squareAvatars(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .customFont(lt, ls):
-            if case let .customFont(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .subscriptionBanner(lt, ls, lv):
-            if case let .subscriptionBanner(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .showStories(lt, ls, lv):
-            if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .bubbleSettings(lt, ls):
-            if case let .bubbleSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .tabSettings(lt, ls):
-            if case let .tabSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .messageSettings(lt, ls):
-            if case let .messageSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .tabsHeader(lt, ls):
-            if case let .tabsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .hideSearchButton(lt, ls, lv):
-            if case let .hideSearchButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .hideTabTitles(lt, ls, lv):
-            if case let .hideTabTitles(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .compactTabBar(lt, ls, lv):
-            if case let .compactTabBar(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .editLocalHeader(lt, ls):
-            if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .shareButton(lt, ls, lv):
-            if case let .shareButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .videoMessagesHeader(lt, ls):
-            if case let .videoMessagesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .videoMessagesRearCamera(lt, ls, lv):
-            if case let .videoMessagesRearCamera(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .voiceMessagesHeader(lt, ls):
-            if case let .voiceMessagesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .deviceMicrophone(lt, ls, lv):
-            if case let .deviceMicrophone(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .messagesDoubleCopy(lt, ls, lv):
-            if case let .messagesDoubleCopy(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .messagesTripleDelete(lt, ls, lv):
-            if case let .messagesTripleDelete(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .editLocalEnabled(lt, ls, lv):
-            if case let .editLocalEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .userMessagesEnabled(lt, ls, lv):
-            if case let .userMessagesEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .messageSeconds(lt, ls, lv):
-            if case let .messageSeconds(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .antiSpoofHeader(lt, ls):
-            if case let .antiSpoofHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .antiSpoofDeleted(lt, ls, lv):
-            if case let .antiSpoofDeleted(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .antiSpoofOnline(lt, ls, lv):
-            if case let .antiSpoofOnline(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .accountBackupHeader(lt, ls):
-            if case let .accountBackupHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .accountBackup(lt, ls):
-            if case let .accountBackup(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .plugins(lt, ls):
-            if case let .plugins(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .pluginShortcut(lt, ltitle, lsubtitle, lplugin, lid, lstable, lsection, lorder):
-            if case let .pluginShortcut(rt, rtitle, rsubtitle, rplugin, rid, rstable, rsection, rorder) = rhs {
-                return lt === rt && ltitle == rtitle && lsubtitle == rsubtitle && lplugin == rplugin && lid == rid && lstable == rstable && lsection == rsection && lorder == rorder
-            }
-        case let .misc(lt, ls):
-            if case let .misc(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .aorusCodeHeader(lt, ls):
-            if case let .aorusCodeHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .aorusCodeEnabled(lt, ls, lv):
-            if case let .aorusCodeEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .deviceSpoofHeader(lt, ls):
-            if case let .deviceSpoofHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .deviceSpoof(lt, ls, lv):
-            if case let .deviceSpoof(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .bypassHeader(lt, ls):
-            if case let .bypassHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .bypassSavePaid(lt, ls, lv):
-            if case let .bypassSavePaid(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .bypassSaveViewOnce(lt, ls, lv):
-            if case let .bypassSaveViewOnce(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .bypassStoryDownload(lt, ls, lv):
-            if case let .bypassStoryDownload(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .saveSettings(lt, ls):
-            if case let .saveSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .loadSettings(lt, ls):
-            if case let .loadSettings(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .subscription(lt, ls):
-            if case let .subscription(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .officialChannel(lt, ls):
-            if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .proxyDiagnostics(lt, ls): // AORUS-DIAG
-            if case let .proxyDiagnostics(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-DIAG
-        case let .connectionSettings(lt, ls): // AORUS-CONN
-            if case let .connectionSettings(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-CONN
-        }
-        return false
-    }
-
-    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
-        let args = arguments as! AorusArguments
-        switch self {
-        case let .privacyHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .ghostMode(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ghostMode, $0) })
-        case let .ghostChatButton(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ghostChatButton, $0) })
-        case let .saveDeletedMessages(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.saveDeletedMessages, $0) })
-        case let .saveEditedMessages(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.saveEditedMessages, $0) })
-        case let .clearDeletedCache(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: args.clearCache)
-        case let .antiScreenshot(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiScreenshot, $0) })
-        case let .callRecording(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.callRecording, $0) })
-        case let .aiHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .voiceTranscription(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.voiceTranscription, $0) })
-        case let .translator(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.translator, $0) })
-        case let .shareButton(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.shareButton, $0) })
-        case let .videoMessagesHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .videoMessagesRearCamera(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.videoMessagesRearCamera, $0) })
-        case let .voiceMessagesHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .deviceMicrophone(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.deviceMicrophone, $0) })
-        case let .autoReply(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
-        case let .callsHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .masks(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMasks)
-        case let .voiceTwin(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
-        case let .wallHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .wallEnabled(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.wallEnabled, $0) })
-        case let .wallSettings(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openWallSettings)
-        case let .perfHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .downloadAccel(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.downloadAccel, $0) })
-        case let .maxMediaQuality(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.maxMediaQuality, $0) })
-        case let .antiSpam(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpamEnabled, $0) })
-        case let .antiSpamManage(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAntiSpamManage)
-        case let .performanceStats(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceStatsEnabled, $0) })
-        case let .performanceUptime(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowUptime, $0) })
-        case let .performanceRAM(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowRAM, $0) })
-        case let .performanceCPU(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowCPU, $0) })
-        case let .performanceFPS(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowFPS, $0) })
-        case let .performanceBattery(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowBattery, $0) })
-        case let .performanceNetwork(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowNetwork, $0) })
-        case let .performanceDisk(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowDisk, $0) })
-        case let .performanceThermal(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowThermal, $0) })
-        case let .performanceGraph(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowGraph, $0) })
-        case let .ramAutoClean(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ramAutoClean, $0) })
-        case let .ramInterval(theme, title, value):
-            return AorusIntervalSliderItem(theme: theme, title: title, value: value,
-                                           presets: _aorusRAMIntervalPresets,
-                                           valueText: _aorusRAMIntervalText,
-                                           sectionId: section, updated: args.setRAMCleanInterval)
-        case let .cacheAutoClean(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.cacheAutoClean, $0) })
-        case let .cacheInterval(theme, title, value):
-            return AorusIntervalSliderItem(theme: theme, title: title, value: value,
-                                           sectionId: section, updated: args.setCacheInterval)
-        case let .uiHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .interfaceV2(_, title, value):
-            // No badge and no footnote. It is the first row of the Interface block, it is
-            // released, and a released switch says what it is in its own title.
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.interfaceV2, $0) })
-        case let .oldInterface(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.oldInterface, $0) })
-        case let .glassUI(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.glassUI, $0) })
-        case let .amoledMode(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.amoledMode, $0) })
-        case let .profileReportButton(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.profileReportButton, $0) })
-        case let .hideCallsTab(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideCallsTab, !$0) })
-        case let .siriShortcuts(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.siriShortcuts, $0) })
-        case let .appBadge(_, title, label):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openAppBadgePicker)
-        case let .squareAvatars(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.squareAvatars, $0) })
-        case let .customFont(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openFont)
-        case let .subscriptionBanner(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.subscriptionBanner, $0) })
-        case let .showStories(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.showStories, $0) })
-        case let .bubbleSettings(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openBubbleSettings)
-        case let .tabSettings(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openTabSettings)
-        case let .messageSettings(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMessageSettings)
-        case let .tabsHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .hideSearchButton(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideSearchButton, !$0) })
-        case let .hideTabTitles(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideTabTitles, !$0) })
-        case let .compactTabBar(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.compactTabBar, $0) })
-        case let .editLocalHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .messagesDoubleCopy(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.doubleTapCopy, $0) })
-        case let .messagesTripleDelete(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.tripleTapDelete, $0) })
-        case let .editLocalEnabled(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.editLocally, $0) })
-        case let .userMessagesEnabled(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.userMessages, $0) })
-        case let .messageSeconds(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.messageSeconds, $0) })
-        case let .antiSpoofHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .antiSpoofDeleted(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpoofDeleted, $0) })
-        case let .antiSpoofOnline(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpoofOnline, $0) })
-        case let .accountBackupHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .accountBackup(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAccountBackup)
-        case let .plugins(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openPlugins)
-        case let .pluginShortcut(_, title, subtitle, pluginId, id, _, _, _):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: subtitle, sectionId: section, style: .blocks, action: { args.openPluginShortcut(pluginId, id) })
-        case let .misc(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMisc)
-        case let .aorusCodeHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .aorusCodeEnabled(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.aorusCodeEnabled, $0) })
-        case let .deviceSpoofHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .deviceSpoof(_, title, label):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openDeviceSpoof)
-        case let .bypassHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .bypassSavePaid(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassSavePaid, $0) })
-        case let .bypassSaveViewOnce(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassSaveViewOnce, $0) })
-        case let .bypassStoryDownload(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassStoryDownload, $0) })
-        case let .saveSettings(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.saveSettings)
-        case let .loadSettings(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.loadSettings)
-        case let .subscription(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openSubscription)
-        case let .officialChannel(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
-        case let .proxyDiagnostics(_, title): // AORUS-DIAG
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openProxyDiagnostics) // AORUS-DIAG
-        case let .connectionSettings(_, title): // AORUS-CONN
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openConnectionSettings) // AORUS-CONN
-        }
-    }
-}
-
-// MARK: - Entries builder
+// MARK: - Page contents
 
 // Display label for the currently-selected notch badge.
 private func appBadgeLabel(_ id: String, _ l10n: AorusL10n) -> String {
@@ -1097,230 +642,388 @@ private func appBadgeLabel(_ id: String, _ l10n: AorusL10n) -> String {
     }
 }
 
-private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: AorusL10n) -> [AorusEntry] {
-    // Privacy section: exactly three rows.
-    //   1. Ghost Mode — combined toggle that hides online + typing + read receipts
-    //      (the per-feature sub-flags blockReadReceipts/hideTyping are still in state
-    //       but no longer surfaced; source patches gate on aorusgram_ghost_mode only).
-    //   2. Deleted Messages — preserves incoming deletes/edits inline in chat.
-    //   3. Hide Screen While Recording — renamed from the ambiguous «Screenshot Protection».
-    // A small destructive 'Clear Deleted Cache' action sits between (2) and (3) and
-    // wipes preserved postbox rows accumulated by the source patches.
-    // All visible strings are localized via AorusL10n (RU/EN, follows Telegram language).
-    var entries: [AorusEntry] = [
-        .privacyHeader(theme, l10n.privacyHeader),
-        .ghostMode(theme, l10n.ghostMode, state.ghostMode),
-        .saveDeletedMessages(theme, l10n.deletedMessages, state.saveDeletedMessages),
-        .saveEditedMessages(theme, l10n.editedMessages, state.saveEditedMessages),
-        .clearDeletedCache(theme, l10n.clearDeletedCache),
-        .antiScreenshot(theme, l10n.antiScreenshot, state.antiScreenshot),
-        .callRecording(theme, l10n.callRecording, state.callRecording),
+/// Writes a page's rows in order, a block at a time.
+private struct AorusPageBuilder {
+    let page: AorusPage
+    private(set) var entries: [AorusEntry] = []
+    private var blockIndex: Int32 = 0
+    private var rowsInBlock = 0
 
-        .perfHeader(theme, l10n.perfHeader),
-        .downloadAccel(theme, l10n.downloadAccel, state.downloadAccel),
-        .maxMediaQuality(theme, l10n.maxMediaQuality, state.maxMediaQuality),
-        .antiSpam(theme, l10n.antiSpam, state.antiSpamEnabled),
-        .performanceStats(theme, l10n.performanceStats, state.performanceStatsEnabled),
-        // Detailed metric switches, RAM auto-clean and cache auto-clean are appended
-        // below so they animate in/out directly under their parent toggles.
+    init(page: AorusPage) {
+        self.page = page
+    }
 
-        .uiHeader(theme, l10n.uiHeader),
-        .interfaceV2(theme, l10n.interfaceV2, state.interfaceV2),
-        .oldInterface(theme, l10n.oldInterface, state.oldInterface),
-        .glassUI(theme, l10n.glassUI, state.glassUI),
-        .amoledMode(theme, l10n.amoledMode, state.amoledMode),
-        .profileReportButton(theme, l10n.profileReportButton, state.profileReportButton),
-        .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
-        .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
-        .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
-        .subscriptionBanner(theme, l10n.subscriptionBanner, state.subscriptionBanner),
-        .showStories(theme, l10n.showStories, state.showStories),
-        .bubbleSettings(theme, l10n.bubbleSettings),
-        .messageSettings(theme, l10n.messageSettings),
-        .customFont(theme, l10n.customFont),
+    private var sectionId: ItemListSectionId {
+        // Pages never share a section number, so the search can put rows of several pages
+        // in one list and each keeps its own block.
+        return Int32(AorusPage.allCases.firstIndex(of: self.page) ?? 0) * 100 + self.blockIndex
+    }
 
-        .tabsHeader(theme, l10n.tabsHeader),
-        // This switch reflects tab PRESENCE: on = tab shown. Telegram 13.2 has no Contacts tab
-        // (Settings ▸ Contacts opens them), so there is no switch for one.
-        .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
-        // Search switch reflects PRESENCE: on = button shown (stored hide flag inverted).
-        .hideSearchButton(theme, l10n.hideSearchButton, !state.hideSearchButton),
-        // Names switch reflects PRESENCE: on = names shown (stored hide flag inverted).
-        .hideTabTitles(theme, l10n.hideTabTitles, !state.hideTabTitles),
-        .compactTabBar(theme, l10n.compactTabBar, state.compactTabBar),
-        .tabSettings(theme, aorusL("Настройка вкладок", "Tab Settings")),
+    private mutating func append(_ id: String, _ kind: AorusEntry.Kind) {
+        self.entries.append(AorusEntry(id: self.page.rawValue + "." + id, section: self.sectionId, order: 0, kind: kind))
+        self.rowsInBlock += 1
+    }
 
-        .editLocalHeader(theme, l10n.messagesHeader),
-        .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
-        .messagesTripleDelete(theme, l10n.tripleTapDelete, state.tripleTapDelete),
-        .editLocalEnabled(theme, l10n.editLocally, state.editLocally),
-        .userMessagesEnabled(theme, l10n.userMessagesInGroup, state.userMessages),
-        .messageSeconds(theme, l10n.messageSeconds, state.messageSeconds),
+    /// A new block, under an optional header.
+    mutating func block(_ header: String? = nil) {
+        if self.rowsInBlock > 0 || !self.entries.isEmpty {
+            self.blockIndex += 1
+        }
+        self.rowsInBlock = 0
+        if let header {
+            self.append("header.\(self.blockIndex)", .header(header))
+        }
+    }
 
-        // Unnamed block directly under Messages: the three quick message buttons.
-        .translator(theme, l10n.quickTranslateButton, state.translator),
-        .voiceTranscription(theme, l10n.quickTranscribeButton, state.voiceTranscription),
-        .shareButton(theme, l10n.quickShareButton, state.shareButton),
+    mutating func toggle(_ id: String, _ icon: AorusSettingsIcon?, _ title: String, _ subtitle: String?, _ keyPath: WritableKeyPath<AorusState, Bool>, _ state: AorusState, inverted: Bool = false, enabled: Bool = true) {
+        let value = state[keyPath: keyPath]
+        self.append(id, .row(icon: icon, title: title, subtitle: subtitle, accessory: .toggle(inverted ? !value : value, enabled: enabled), style: .feature, target: .toggle(keyPath, inverted: inverted), highlight: nil))
+    }
 
-        .voiceMessagesHeader(theme, l10n.voiceMessagesHeader),
-        .deviceMicrophone(theme, l10n.deviceMicrophone, state.deviceMicrophone),
+    /// A feature that opens a screen. `isOn` makes the row say whether the feature is on.
+    mutating func screen(_ id: String, _ icon: AorusSettingsIcon?, _ title: String, _ subtitle: String?, _ destination: AorusDestination, isOn: Bool? = nil, value: String? = nil) {
+        var shown = value
+        if shown == nil, let isOn {
+            shown = isOn ? aorusL("Вкл", "On") : aorusL("Выкл", "Off")
+        }
+        self.append(id, .row(icon: icon, title: title, subtitle: subtitle, accessory: .disclosure(value: shown, isOn: isOn), style: .feature, target: .open(destination), highlight: nil))
+    }
 
-        .videoMessagesHeader(theme, l10n.videoMessagesHeader),
-        .videoMessagesRearCamera(theme, l10n.videoMessagesRearCamera, state.videoMessagesRearCamera),
+    mutating func action(_ id: String, _ icon: AorusSettingsIcon?, _ title: String, _ subtitle: String?, _ destination: AorusDestination, destructive: Bool = false) {
+        self.append(id, .row(icon: icon, title: title, subtitle: subtitle, accessory: .action(destructive: destructive), style: .feature, target: .open(destination), highlight: nil))
+    }
 
-        // Calls block (Voice Twin) — moved here from Other.
-        .callsHeader(theme, l10n.callsHeader),
-        .masks(theme, l10n.videoMasks),
-        .voiceTwin(theme, l10n.voiceTwin),
+    mutating func slider(_ id: String, _ title: String, _ value: Int, isRAM: Bool) {
+        self.append(id, .slider(title: title, value: value, isRAM: isRAM))
+    }
 
-        .wallHeader(theme, l10n.wallHeader),
-        .wallEnabled(theme, l10n.wallEnabled, state.wallEnabled),
-        .wallSettings(theme, l10n.wallSettings),
+    mutating func input(_ id: String, _ field: AorusField, _ placeholder: String, _ value: String) {
+        self.append(id, .input(field: field, placeholder: placeholder, value: value))
+    }
 
-        .deviceSpoofHeader(theme, l10n.deviceSpoofHeader),
-        .deviceSpoof(theme, l10n.deviceSpoof, state.spoofedDeviceName ?? l10n.deviceSpoofOff),
+    mutating func footer(_ text: String) {
+        self.append("footer.\(self.blockIndex)", .footer(text))
+    }
 
-        .bypassHeader(theme, l10n.bypassHeader),
-        .bypassSavePaid(theme, l10n.bypassSavePaid, state.bypassSavePaid),
-        .bypassSaveViewOnce(theme, l10n.bypassSaveViewOnce, state.bypassSaveViewOnce),
-        .bypassStoryDownload(theme, l10n.bypassStoryDownload, state.bypassStoryDownload),
+    mutating func pluginShortcut(_ title: String, _ subtitle: String, pluginId: String, id: String) {
+        self.append("plugin.\(pluginId).\(id)", .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: title, subtitle: subtitle.isEmpty ? nil : subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: pluginId, id: id)), highlight: nil))
+    }
+}
 
-        .antiSpoofHeader(theme, l10n.antiSpoofHeader),
-        .antiSpoofDeleted(theme, l10n.antiSpoofDeleted, state.antiSpoofDeleted),
-        .antiSpoofOnline(theme, l10n.antiSpoofOnline, state.antiSpoofOnline),
-
-        .accountBackupHeader(theme, l10n.accountBackupHeader),
-        .accountBackup(theme, l10n.accountBackup),
-
-        .aorusCodeHeader(theme, l10n.aorusCodeHeader),
-        .aorusCodeEnabled(theme, l10n.aorusCode, state.aorusCodeEnabled),
-
-        .plugins(theme, aorusPluginsTitle()),
-        .misc(theme, l10n.misc),
-
-        .saveSettings(theme, aorusL("Сохранить настройки", "Save Settings")),
-        .loadSettings(theme, aorusL("Загрузить настройки", "Load Settings")),
-
-        .subscription(theme, l10n.subscription),
-        .officialChannel(theme, l10n.officialChannel),
-        .connectionSettings(theme, l10n.connectionSettings), // AORUS-CONN
-        .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
-    ]
-
-    // Only the shortcuts placed in a section of this screen. One placed in Telegram's own
+/// A plugin's settings shortcuts placed on `page`.
+private func aorusPluginShortcuts(for page: AorusPage) -> [(title: String, subtitle: String, pluginId: String, id: String)] {
+    // Only the shortcuts placed in AorusGram's own settings. One placed in Telegram's own
     // settings list (`plugins`, the default) is drawn there, by the settings screen, and
     // drawing it here as well is what showed every shortcut twice.
-    let shortcuts = AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().filter { !$0.shortcut.isInTelegramSettings }.prefix(24)
-    for (offset, item) in shortcuts.enumerated() {
-        let placement = item.shortcut.placement
-        let anchor = entries.firstIndex(where: { entry in
-            switch (placement, entry) {
-            case ("privacy", .privacyHeader), ("interface", .uiHeader),
-                 ("tabs", .tabsHeader), ("messages", .editLocalHeader),
-                 ("calls", .callsHeader), ("wall", .wallHeader),
-                 ("aorusCode", .aorusCodeHeader), ("other", .misc):
-                return true
-            default: return false
+    return AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().filter { !$0.shortcut.isInTelegramSettings }.prefix(24).compactMap { item in
+        guard AorusPage.from(placement: item.shortcut.placement) == page else {
+            return nil
+        }
+        return (title: item.shortcut.title, subtitle: item.shortcut.subtitle ?? "", pluginId: item.pluginId, id: item.shortcut.id)
+    }
+}
+
+/// The rows of a section's page.
+private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
+    var b = AorusPageBuilder(page: page)
+    let tint = page.icon.color
+    func icon(_ symbol: String) -> AorusSettingsIcon {
+        return AorusSettingsIcon(symbol, tint)
+    }
+
+    switch page {
+    case .root:
+        break
+
+    case .privacy:
+        b.block()
+        b.toggle("ghostMode", AorusSettingsIcon(glyph: .ghost, color: tint), l10n.ghostMode, aorusL("Скрывает твой онлайн, набор текста и отметки о прочтении", "Hides your online status, typing and read receipts"), \.ghostMode, state)
+        // The ghost beside a chat's avatar exists only while Ghost Mode is on, so its switch does
+        // too: it slides in under Ghost Mode as that is turned on and out as it is turned off,
+        // with its value kept for the next time.
+        if state.ghostMode {
+            b.toggle("ghostChatButton", icon("hand.tap.fill"), l10n.ghostChatButton, aorusL("Включай и выключай режим прямо из чата", "Turn the mode on and off right from a chat"), \.ghostChatButton, state)
+        }
+        b.toggle("antiSpoofOnline", icon("eye.fill"), aorusL("Настоящий онлайн собеседника", "Contact's Real Activity"), aorusL("Показывает, когда человек был активен, даже если он скрыл время захода", "Shows when someone was active even if they hide their last seen"), \.antiSpoofOnline, state)
+        b.block()
+        b.screen("deviceSpoof", icon("iphone"), aorusL("Подмена устройства", "Device Spoofing"), aorusL("Какое устройство видят Telegram и твои сеансы", "Which device Telegram and your sessions see"), .deviceSpoof, isOn: state.spoofedDeviceName != nil, value: state.spoofedDeviceName)
+        b.toggle("phoneSpoof", icon("phone.badge.waveform.fill"), aorusL("Подмена номера", "Phone Spoofing"), aorusL("Боты, которые просят номер, получат защищённый вместо настоящего", "Bots that ask for your number get a protected one instead of the real one"), \.phoneSpoof, state)
+        if state.phoneSpoof {
+            let anonymousTitle = strings.UserInfo_AnonymousNumberLabel
+            b.toggle("anonymousNumber", nil, anonymousTitle.prefix(1).uppercased() + String(anonymousTitle.dropFirst()), nil, \.anonymousNumber, state)
+            b.input("phoneNumber", .phoneNumber, aorusL("Номер", "Number"), state.phoneSpoofNumber)
+            b.action("randomizePhone", nil, aorusL("Рандомизировать", "Randomize"), nil, .randomizePhoneNumber)
+        }
+        b.block()
+        b.toggle("antiSearch", icon("text.magnifyingglass"), aorusL("АнтиПоиск", "AntiSearch"), aorusL("Текст выглядит так же, но его сложнее найти поиском", "Text looks the same but is harder to find by search"), \.antiSearch, state)
+        b.toggle("anonymousStickers", icon("face.dashed.fill"), aorusL("Анонимные стикеры", "Anonymous Stickers"), aorusL("Стикеры уходят без ссылки на свой набор", "Stickers are sent without a link to their pack"), \.anonymousStickers, state)
+
+    case .security:
+        b.block()
+        b.screen("chatLock", icon("lock.fill"), aorusL("Защита чатов", "Chat Protection"), aorusL("Код-пароль или Face ID на выбранные чаты", "A passcode or Face ID on the chats you choose"), .chatLock, isOn: state.chatLockEnabled)
+        b.toggle("antiScreenshot", icon("eye.slash.fill"), l10n.antiScreenshot, aorusL("Прячет переписку, когда идёт запись экрана или трансляция", "Hides your chats while the screen is being recorded or shared"), \.antiScreenshot, state)
+        b.block()
+        b.toggle("linkProtection", icon("link.badge.plus"), aorusL("Защита ссылок", "Link Protection"), aorusL("Предупреждает о фишинге, подменённых адресах и опасных файлах", "Warns about phishing, spoofed addresses and dangerous files"), \.linkProtection, state)
+        if state.linkProtection {
+            b.toggle("linkProtectionRedirects", nil, aorusL("Проверять редиректы", "Check Redirects"), nil, \.linkProtectionRedirects, state)
+            b.toggle("linkProtectionBlockFiles", nil, aorusL("Блокировать опасные файлы", "Block Dangerous Files"), nil, \.linkProtectionBlockFiles, state)
+        }
+        b.toggle("actionConfirmation", icon("checkmark.shield.fill"), aorusL("Подтверждение действий", "Action Confirmation"), aorusL("Спрашивает перед звонком и отправкой голосового или кружка", "Asks before a call and before sending a voice or video message"), \.actionConfirmation, state)
+
+    case .history:
+        b.block()
+        b.toggle("saveDeleted", icon("trash.fill"), aorusL("Сохранять удалённые", "Keep Deleted Messages"), aorusL("Сообщения, которые удалил собеседник, останутся в чате с пометкой", "Messages others delete stay in the chat, marked as deleted"), \.saveDeletedMessages, state)
+        b.toggle("saveEdited", icon("pencil"), aorusL("История изменений", "Edit History"), aorusL("Хранит прежние версии изменённых сообщений", "Keeps earlier versions of edited messages"), \.saveEditedMessages, state)
+        b.toggle("antiSpoofDeleted", icon("eye.trianglebadge.exclamationmark.fill"), aorusL("Чистое удаление", "Clean Deletion"), aorusL("Когда ты удаляешь сообщение, чужие «антиудалёнки» сохранят только заглушку", "When you delete a message, other people's anti-delete tools only keep a placeholder"), \.antiSpoofDeleted, state)
+        b.block()
+        b.action("clearDeletedCache", AorusSettingsIcon("trash.slash.fill", tint), aorusL("Очистить сохранённые", "Clear Saved Messages"), aorusL("Удаляет сохранённые удалённые сообщения и историю изменений", "Removes kept deleted messages and edit history"), .clearDeletedCache, destructive: true)
+
+    case .bypass:
+        b.block()
+        b.toggle("bypassSavePaid", icon("star.circle.fill"), l10n.bypassSavePaid, aorusL("Позволяет сохранять купленные фото и видео", "Lets you save photos and videos you paid for"), \.bypassSavePaid, state)
+        b.toggle("bypassSaveViewOnce", icon("1.circle.fill"), l10n.bypassSaveViewOnce, aorusL("Одноразовые фото и видео можно пересмотреть и сохранить", "View-once photos and videos can be viewed again and saved"), \.bypassSaveViewOnce, state)
+        b.toggle("bypassStoryDownload", icon("arrow.down.circle.fill"), l10n.bypassStoryDownload, aorusL("Кнопка загрузки в любых историях", "A download button in any story"), \.bypassStoryDownload, state)
+
+    case .messages:
+        b.block(aorusL("ЖЕСТЫ", "GESTURES"))
+        b.toggle("doubleTapCopy", icon("hand.tap.fill"), l10n.doubleTapCopy, aorusL("Дважды коснись сообщения — текст скопируется", "Double-tap a message to copy its text"), \.doubleTapCopy, state)
+        b.toggle("tripleTapDelete", icon("hand.point.up.left.fill"), l10n.tripleTapDelete, aorusL("Трижды коснись своего сообщения, чтобы удалить его", "Triple-tap your message to delete it"), \.tripleTapDelete, state)
+        b.block(aorusL("ТЕКСТ", "TEXT"))
+        b.toggle("formattingPanel", icon("textformat"), aorusL("Панель форматирования", "Formatting Panel"), aorusL("Кнопки стилей текста над клавиатурой", "Text style buttons above the keyboard"), \.formattingPanel, state)
+        b.screen("autoFormat", icon("bold.italic.underline"), aorusL("Стиль по умолчанию", "Default Text Style"), aorusL("Применяется ко всему, что ты отправляешь", "Applied to everything you send"), .autoFormat, isOn: state.autoFormatStyle != aorusAutoFormatOff, value: state.autoFormatStyle != aorusAutoFormatOff ? aorusAutoFormatLabel(state.autoFormatStyle, strings) : nil)
+        b.toggle("editLocally", icon("square.and.pencil"), l10n.editLocally, aorusL("Меняет текст сообщения только на твоём устройстве", "Changes a message's text only on your device"), \.editLocally, state)
+        b.toggle("messageSeconds", icon("clock.fill"), l10n.messageSeconds, aorusL("Время отправки с точностью до секунды", "Send time down to the second"), \.messageSeconds, state)
+        b.toggle("profileLink", icon("person.crop.circle.badge.checkmark"), aorusL("Гиперссылка на профиль", "Profile Link"), aorusL("Весь текст сообщения становится ссылкой на профиль", "The whole message becomes a link to a profile"), \.profileLink, state)
+        if state.profileLink {
+            b.screen("profileLinkSelf", nil, aorusL("Мой профиль", "My Profile"), nil, .profileLinkSelf, value: state.profileLinkTargetPeerId == 0 ? aorusL("Выбрано", "Selected") : "")
+            b.screen("profileLinkPeer", nil, aorusL("Чужой профиль", "Other Profile"), nil, .profileLinkPeer, value: state.profileLinkTargetPeerId == 0 ? aorusL("Выбрать", "Choose") : state.profileLinkTargetName)
+        }
+        b.toggle("aorusCode", icon("eye.slash.circle.fill"), aorusL("Скрытые сообщения AorusCode", "AorusCode Hidden Messages"), l10n.aorusCodeHint, \.aorusCodeEnabled, state)
+        b.block(aorusL("КНОПКИ У СООБЩЕНИЙ", "MESSAGE BUTTONS"))
+        b.toggle("translator", icon("character.bubble.fill"), l10n.quickTranslateButton, aorusL("Переводит сообщение в одно касание", "Translates a message in one tap"), \.translator, state)
+        b.toggle("voiceTranscription", icon("waveform"), l10n.quickTranscribeButton, aorusL("Превращает голосовое в текст", "Turns a voice message into text"), \.voiceTranscription, state)
+        b.toggle("shareButton", icon("arrowshape.turn.up.right.fill"), l10n.quickShareButton, aorusL("Быстро пересылает сообщение", "Forwards a message quickly"), \.shareButton, state)
+        b.block(aorusL("ИНСТРУМЕНТЫ", "TOOLS"))
+        b.screen("quickReplies", icon("text.bubble.fill"), aorusL("Быстрые ответы", "Quick Replies"), aorusL("Шаблоны, которые отправляются в одно касание", "Templates you send in one tap"), .quickReplies, isOn: state.autoReply)
+        b.toggle("antiSpam", icon("nosign"), aorusL("Стоп-слова", "Stop Words"), aorusL("Скрывает сообщения со словами из твоего списка", "Hides messages containing words from your list"), \.antiSpamEnabled, state)
+        if state.antiSpamEnabled {
+            b.screen("antiSpamWords", nil, aorusL("Список слов", "Word List"), nil, .antiSpamWords)
+        }
+        b.toggle("userMessages", icon("person.text.rectangle.fill"), l10n.userMessagesInGroup, aorusL("Пункт меню, который показывает все сообщения человека в группе", "A menu item that shows all of a member's messages in a group"), \.userMessages, state)
+        b.toggle("mediaMetadata", icon("info.circle.fill"), aorusL("Метаданные медиа", "Media Metadata"), aorusL("Показывает камеру, место и данные файла у фото и видео", "Shows camera, location and file details of photos and videos"), \.mediaMetadata, state)
+
+    case .media:
+        b.block(aorusL("ГОЛОСОВЫЕ И КРУЖКИ", "VOICE & VIDEO MESSAGES"))
+        b.toggle("deviceMicrophone", icon("mic.fill"), l10n.deviceMicrophone, aorusL("Записывает голосовые встроенным микрофоном, даже с наушниками", "Records voice messages with the built-in microphone even with headphones on"), \.deviceMicrophone, state)
+        b.toggle("rearCamera", icon("camera.rotate.fill"), aorusL("Кружки с задней камеры", "Video Messages From Rear Camera"), aorusL("Запись начинается сразу с основной камеры", "Recording starts with the main camera"), \.videoMessagesRearCamera, state)
+        b.block(l10n.callsHeader)
+        b.toggle("callRecording", icon("record.circle.fill"), l10n.callRecording, aorusL("Сохраняет аудио твоих звонков", "Saves the audio of your calls"), \.callRecording, state)
+        b.screen("masks", icon("theatermasks.fill"), l10n.videoMasks, aorusL("Эффекты на лице в видеозвонках и кружках", "Face effects in video calls and video messages"), .masks, isOn: state.masksEnabled)
+        b.screen("voiceTwin", icon("person.wave.2.fill"), l10n.voiceTwin, aorusL("Меняет голос в голосовых, кружках и звонках", "Changes your voice in voice messages, video messages and calls"), .voiceTwin, isOn: state.voiceTwinEnabled)
+        b.block(aorusL("ЗАГРУЗКИ", "DOWNLOADS"))
+        b.toggle("downloadAccel", icon("bolt.fill"), aorusL("Ускорение загрузок", "Faster Downloads"), aorusL("Скачивает файлы в несколько потоков", "Downloads files over several connections"), \.downloadAccel, state)
+        b.toggle("maxMediaQuality", icon("sparkles.tv.fill"), aorusL("Максимальное качество", "Maximum Quality"), aorusL("Фото и видео без лишнего сжатия", "Photos and videos without extra compression"), \.maxMediaQuality, state)
+
+    case .appearance:
+        b.block(l10n.uiHeader)
+        b.toggle("interfaceV2", icon("sparkles"), l10n.interfaceV2, aorusL("Новый дизайн всего приложения. Нужен перезапуск", "A new design for the whole app. Needs a restart"), \.interfaceV2, state)
+        b.toggle("oldInterface", icon("clock.arrow.2.circlepath"), l10n.oldInterface, aorusL("Классический вид Telegram. Нужен перезапуск", "The classic Telegram look. Needs a restart"), \.oldInterface, state)
+        // The old interface has no glass: the glass effects do nothing there, so they are not
+        // offered. Their value is kept for when it is turned off.
+        if !state.oldInterface {
+            b.toggle("glassUI", icon("drop.fill"), l10n.glassUI, aorusL("Стеклянные панели и кнопки", "Glass bars and buttons"), \.glassUI, state)
+        }
+        b.toggle("amoledMode", icon("moon.fill"), l10n.amoledMode, aorusL("Чисто чёрный фон в тёмной теме", "Pure black background in the dark theme"), \.amoledMode, state)
+        b.block(aorusL("ВНЕШНИЙ ВИД", "LOOK"))
+        b.screen("font", icon("textformat.size"), aorusL("Шрифт", "Font"), aorusL("Шрифт всего приложения", "The font across the app"), .font, value: state.fontTitle)
+        b.screen("bubbles", icon("bubble.left.fill"), aorusL("Пузыри сообщений", "Message Bubbles"), aorusL("Форма, стекло и цвета пузырей", "Shape, glass and colours of bubbles"), .bubbleSettings)
+        b.screen("messageSettings", icon("text.alignleft"), l10n.messageSettings, aorusL("Что показывать в сообщениях и превью", "What messages and previews show"), .messageSettings)
+        b.toggle("squareAvatars", icon("square.fill"), l10n.squareAvatars, aorusL("Квадратные аватарки вместо круглых", "Square avatars instead of round ones"), \.squareAvatars, state)
+        b.screen("appBadge", icon("capsule.fill"), aorusL("Значок у камеры", "Camera Badge"), aorusL("Значок рядом с камерой вверху экрана", "A badge next to the camera at the top of the screen"), .appBadge, isOn: state.appBadge != "off", value: appBadgeLabel(state.appBadge, l10n))
+        b.block(aorusL("ПРОФИЛЬ И ИСТОРИИ", "PROFILE & STORIES"))
+        b.screen("animatedWallpapers", icon("photo.fill"), aorusL("Анимированные обои", "Animated Wallpapers"), aorusL("Живые обои для чатов", "Live wallpapers for chats"), .animatedWallpapers)
+        b.screen("animatedBanner", icon("play.rectangle.fill"), aorusL("Анимированный баннер", "Animated Banner"), aorusL("Видео или GIF в шапке профиля", "A video or GIF in your profile header"), .animatedBanner)
+        b.toggle("showStories", icon("circle.dashed"), l10n.showStories, aorusL("Полоса историй над списком чатов", "The stories strip above the chat list"), \.showStories, state)
+        b.toggle("profileReportButton", icon("exclamationmark.bubble.fill"), l10n.profileReportButton, aorusL("Кнопка «Пожаловаться» в профилях", "A Report button in profiles"), \.profileReportButton, state)
+        b.toggle("subscriptionBanner", icon("bell.badge.fill"), l10n.subscriptionBanner, aorusL("Напоминание о продлении подписки", "A reminder to renew the subscription"), \.subscriptionBanner, state)
+
+    case .tabs:
+        b.block()
+        b.screen("tabSettings", icon("slider.horizontal.3"), aorusL("Настройка вкладок", "Tab Settings"), aorusL("Порядок, цвета, значки и подписи", "Order, colours, icons and labels"), .tabSettings)
+        b.block()
+        // These switches reflect PRESENCE: on = shown (the stored hide flags inverted). Telegram
+        // 13.2 has no Contacts tab (Settings ▸ Contacts opens them), so there is no switch for one.
+        b.toggle("hideCallsTab", icon("phone.fill"), l10n.hideCallsTab, aorusL("Показывать вкладку звонков", "Show the calls tab"), \.hideCallsTab, state, inverted: true)
+        // The old interface has Telegram's classic tab bar: the glass tab bar's search button,
+        // titles and compact panel do nothing there, so they are not offered.
+        if !state.oldInterface {
+            b.toggle("hideSearchButton", icon("magnifyingglass"), l10n.hideSearchButton, aorusL("Кнопка поиска рядом с вкладками", "The search button next to the tabs"), \.hideSearchButton, state, inverted: true)
+            b.toggle("hideTabTitles", icon("textformat.abc"), l10n.hideTabTitles, aorusL("Подписи под значками вкладок", "Labels under tab icons"), \.hideTabTitles, state, inverted: true)
+            b.toggle("compactTabBar", icon("rectangle.compress.vertical"), l10n.compactTabBar, aorusL("Панель ниже и уже", "A lower, narrower bar"), \.compactTabBar, state)
+        }
+
+    case .wall:
+        b.block()
+        b.toggle("wallEnabled", icon("newspaper.fill"), l10n.wallEnabled, aorusL("Вкладка с непрочитанными постами из каналов", "A tab with unread posts from your channels"), \.wallEnabled, state)
+        b.screen("wallSettings", icon("gearshape.fill"), l10n.wallSettings, aorusL("Каналы, рекомендации и архив", "Channels, recommendations and archive"), .wallSettings)
+
+    case .extras:
+        b.block()
+        b.toggle("localPremium", icon("star.fill"), aorusL("Локальный премиум", "Local Premium"), aorusL("Включает Telegram Premium локально на этом устройстве — функции работают только у вас.", "Enables Telegram Premium locally on this device — the features work only for you."), \.localPremium, state)
+        b.screen("fakeGifts", icon("gift.fill"), aorusL("Подарки в профиле", "Fake Gifts"), aorusL("Подарки, которые видишь только ты", "Gifts only you can see"), .fakeGifts)
+        b.screen("fakeUsernames", icon("at"), aorusL("Коллекционные юзернеймы", "Fake usernames"), aorusL("Юзернеймы, которые видишь только ты", "Usernames only you can see"), .fakeUsernames)
+        b.block(aorusL("ЗВЁЗДЫ", "STARS"))
+        b.toggle("fakeStars", icon("star.circle.fill"), aorusL("Баланс звёзд", "Fake Stars"), aorusL("Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся.", "Shows the entered Stars balance locally, only for you. No real stars are created or spent."), \.fakeStars, state)
+        // The amount row animates in/out with the toggle (the list uses animateChanges).
+        if state.fakeStars {
+            b.input("fakeStarsAmount", .fakeStarsAmount, aorusL("Количество", "Amount"), state.fakeStarsAmount)
+        }
+        b.block(aorusL("GRAM (БЫВШИЕ TON)", "GRAM (FORMERLY TON)"))
+        b.toggle("fakeGram", icon("diamond.fill"), aorusL("Баланс GRAM (TON)", "Fake GRAM (TON)"), aorusL("Показывает указанный баланс GRAM (TON) локально, только у вас. Реальные GRAM не создаются и не тратятся.", "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent."), \.fakeGram, state)
+        if state.fakeGram {
+            b.input("fakeGramAmount", .fakeGramAmount, aorusL("Количество", "Amount"), state.fakeGramAmount)
+        }
+
+    case .performance:
+        b.block()
+        b.toggle("performanceStats", icon("chart.bar.fill"), l10n.performanceStats, aorusL("Показывает нагрузку на устройство поверх приложения", "Shows device load on top of the app"), \.performanceStatsEnabled, state)
+        // The metric switches slide in under their parent toggle.
+        if state.performanceStatsEnabled {
+            b.toggle("performanceUptime", nil, l10n.performanceUptime, nil, \.performanceShowUptime, state)
+            b.toggle("performanceRAM", nil, l10n.performanceRAM, nil, \.performanceShowRAM, state)
+            b.toggle("performanceCPU", nil, l10n.performanceCPU, nil, \.performanceShowCPU, state)
+            b.toggle("performanceFPS", nil, l10n.performanceFPS, nil, \.performanceShowFPS, state)
+            b.toggle("performanceBattery", nil, l10n.performanceBattery, nil, \.performanceShowBattery, state)
+            b.toggle("performanceNetwork", nil, l10n.performanceNetwork, nil, \.performanceShowNetwork, state)
+            b.toggle("performanceDisk", nil, l10n.performanceDisk, nil, \.performanceShowDisk, state)
+            b.toggle("performanceThermal", nil, l10n.performanceThermal, nil, \.performanceShowThermal, state)
+            b.toggle("performanceGraph", nil, l10n.performanceGraph, nil, \.performanceShowGraph, state)
+        }
+        b.block(aorusL("ОЧИСТКА", "CLEANUP"))
+        b.toggle("ramAutoClean", icon("memorychip.fill"), l10n.ramAutoClean, aorusL("Освобождает память через заданный интервал", "Frees memory at a set interval"), \.ramAutoClean, state)
+        // The cleanup-interval sliders only appear once their auto-clean is switched on.
+        if state.ramAutoClean {
+            b.slider("ramInterval", l10n.ramCleanInterval, state.ramCleanInterval, isRAM: true)
+        }
+        b.toggle("cacheAutoClean", icon("trash.circle.fill"), l10n.cacheAutoClean, aorusL("Удаляет кэш через заданный интервал", "Deletes cache at a set interval"), \.cacheAutoClean, state)
+        if state.cacheAutoClean {
+            b.slider("cacheInterval", l10n.cacheInterval, state.cacheCleanInterval, isRAM: false)
+        }
+
+    case .data:
+        b.block()
+        b.screen("accountBackup", icon("person.2.badge.key.fill"), aorusL("Резервные копии аккаунтов", "Account Backup"), aorusL("Сохрани вход в аккаунты и восстанови его в любой момент", "Save your account logins and restore them any time"), .accountBackup)
+        b.block(aorusL("НАСТРОЙКИ AORUSGRAM", "AORUSGRAM SETTINGS"))
+        b.action("saveSettings", icon("square.and.arrow.down.fill"), aorusL("Сохранить настройки", "Save Settings"), aorusL("Сохраняет все настройки AorusGram", "Saves all AorusGram settings"), .saveSettings)
+        b.action("loadSettings", icon("square.and.arrow.up.fill"), aorusL("Загрузить настройки", "Load Settings"), aorusL("Возвращает сохранённые настройки", "Brings saved settings back"), .loadSettings)
+        b.block()
+        b.toggle("siriShortcuts", icon("mic.circle.fill"), l10n.siriShortcuts, aorusL("Команды Siri для функций AorusGram", "Siri commands for AorusGram features"), \.siriShortcuts, state)
+    }
+
+    let shortcuts = aorusPluginShortcuts(for: page)
+    if !shortcuts.isEmpty && page != .root {
+        b.block(aorusPluginsTitle().uppercased())
+        for shortcut in shortcuts {
+            b.pluginShortcut(shortcut.title, shortcut.subtitle, pluginId: shortcut.pluginId, id: shortcut.id)
+        }
+    }
+    return b.entries
+}
+
+/// The main screen's own rows: the sections, the plugins and the links under them.
+private func aorusRootEntries(state: AorusState, l10n: AorusL10n) -> [AorusEntry] {
+    var entries: [AorusEntry] = []
+    var section: Int32 = 10
+    for block in AorusPage.blocks {
+        for page in block {
+            entries.append(AorusEntry(id: "root.section." + page.rawValue, section: section, order: 0, kind: .row(icon: page.icon, title: page.title, subtitle: page.subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .section, target: .open(.page(page)), highlight: nil)))
+        }
+        section += 1
+    }
+    entries.append(AorusEntry(id: "root.plugins", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: aorusPluginsTitle(), subtitle: aorusL("Расширения от сообщества", "Extensions from the community"), accessory: .disclosure(value: nil, isOn: nil), style: .section, target: .open(.plugins), highlight: nil)))
+    // A plugin's shortcut placed in "Other", which no longer exists, sits with the plugins.
+    for shortcut in aorusPluginShortcuts(for: .root) {
+        entries.append(AorusEntry(id: "root.plugin.\(shortcut.pluginId).\(shortcut.id)", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill", 0xbf5af2), title: shortcut.title, subtitle: shortcut.subtitle.isEmpty ? nil : shortcut.subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: shortcut.pluginId, id: shortcut.id)), highlight: nil)))
+    }
+    section += 1
+    entries.append(AorusEntry(id: "root.link.channel", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("paperplane.fill", 0x2aabee), title: aorusL("Канал", "Channel"), subtitle: nil, accessory: .disclosure(value: "@aorusgram", isOn: nil), style: .link, target: .open(.channel), highlight: nil)))
+    entries.append(AorusEntry(id: "root.link.subscription", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("crown.fill", 0xffb800), title: l10n.subscription, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.subscription), highlight: nil)))
+    entries.append(AorusEntry(id: "root.link.connection", section: section, order: 0, kind: .row(icon: AorusSettingsIcon("network", 0x30c75e), title: l10n.connectionSettings, subtitle: nil, accessory: .disclosure(value: nil, isOn: nil), style: .link, target: .open(.connectionSettings), highlight: nil)))
+    return entries
+}
+
+/// Lower-cased, without accents, with ё read as е: what the search compares.
+private func aorusSearchNormalized(_ text: String) -> String {
+    return text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil).lowercased().replacingOccurrences(of: "ё", with: "е")
+}
+
+/// Every feature whose name, description or section matches `query`, a block per section.
+private func aorusSearchEntries(query: String, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
+    let words = aorusSearchNormalized(query).split(whereSeparator: { $0 == " " || $0 == "\n" }).map(String.init)
+    guard !words.isEmpty else {
+        return []
+    }
+    func matches(_ fields: [String]) -> Bool {
+        let haystack = aorusSearchNormalized(fields.joined(separator: " "))
+        return words.allSatisfy { haystack.contains($0) }
+    }
+    var entries: [AorusEntry] = []
+    for page in AorusPage.allCases where page != .root {
+        var found: [AorusEntry] = []
+        // A section whose own name matches leads with its card.
+        if matches([page.title, page.subtitle]) {
+            found.append(AorusEntry(id: "search.section." + page.rawValue, section: 0, order: 0, kind: .row(icon: page.icon, title: page.title, subtitle: page.subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .section, target: .open(.page(page)), highlight: query)))
+        }
+        for entry in aorusPageEntries(page, state: state, l10n: l10n, strings: strings) {
+            guard case let .row(icon, title, subtitle, accessory, style, target, _) = entry.kind else {
+                continue
             }
-        })
-        guard let anchor else { continue }
-        let entry: AorusEntry = .pluginShortcut(theme, item.shortcut.title, item.shortcut.subtitle ?? "", item.pluginId, item.shortcut.id, Int32(100 + offset), entries[anchor].section, entries[anchor].stableId * 1000 + Int32(offset + 1))
-        entries.insert(entry, at: anchor + 1)
-    }
-    entries.sort()
-
-    // The ghost beside a chat's avatar exists only while Ghost Mode is on, so its switch does too:
-    // it slides in under Ghost Mode as that is turned on and out as it is turned off, with its
-    // value kept for the next time.
-    if state.ghostMode, let idx = entries.firstIndex(where: {
-        if case .ghostMode = $0 { return true }; return false
-    }) {
-        entries.insert(.ghostChatButton(theme, l10n.ghostChatButton, state.ghostChatButton), at: idx + 1)
-    }
-
-    if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
-        if case .antiSpam = $0 { return true }; return false
-    }) {
-        entries.insert(.antiSpamManage(theme, aorusL("Управление", "Manage")), at: idx + 1)
-    }
-
-    if state.performanceStatsEnabled, let idx = entries.firstIndex(where: {
-        if case .performanceStats = $0 { return true }; return false
-    }) {
-        entries.insert(contentsOf: [
-            .performanceUptime(theme, l10n.performanceUptime, state.performanceShowUptime),
-            .performanceRAM(theme, l10n.performanceRAM, state.performanceShowRAM),
-            .performanceCPU(theme, l10n.performanceCPU, state.performanceShowCPU),
-            .performanceFPS(theme, l10n.performanceFPS, state.performanceShowFPS),
-            .performanceBattery(theme, l10n.performanceBattery, state.performanceShowBattery),
-            .performanceNetwork(theme, l10n.performanceNetwork, state.performanceShowNetwork),
-            .performanceDisk(theme, l10n.performanceDisk, state.performanceShowDisk),
-            .performanceThermal(theme, l10n.performanceThermal, state.performanceShowThermal),
-            .performanceGraph(theme, l10n.performanceGraph, state.performanceShowGraph),
-        ], at: idx + 1)
-    }
-
-    if let idx = entries.firstIndex(where: {
-        if case .performanceStats = $0 { return true }; return false
-    }) {
-        var insertAt = idx + 1
-        var scanningMetrics = true
-        while scanningMetrics && insertAt < entries.count {
-            switch entries[insertAt] {
-            case .performanceUptime, .performanceRAM, .performanceCPU, .performanceFPS, .performanceBattery,
-                 .performanceNetwork, .performanceDisk, .performanceThermal, .performanceGraph:
-                insertAt += 1
-            default:
-                scanningMetrics = false
+            if matches([title, subtitle ?? "", page.title]) {
+                found.append(AorusEntry(id: "search." + entry.id, section: 0, order: 0, kind: .row(icon: icon ?? page.icon, title: title, subtitle: subtitle, accessory: accessory, style: style, target: target, highlight: query)))
             }
         }
-        entries.insert(.ramAutoClean(theme, l10n.ramAutoClean, state.ramAutoClean), at: insertAt)
-    }
-
-    if state.ramAutoClean, let idx = entries.firstIndex(where: {
-        if case .ramAutoClean = $0 { return true }; return false
-    }) {
-        entries.insert(.ramInterval(theme, l10n.ramCleanInterval, state.ramCleanInterval), at: idx + 1)
-    }
-
-    if let idx = entries.firstIndex(where: {
-        if case .ramAutoClean = $0 { return true }; return false
-    }) {
-        let insertAt = state.ramAutoClean ? idx + 2 : idx + 1
-        entries.insert(.cacheAutoClean(theme, l10n.cacheAutoClean, state.cacheAutoClean), at: insertAt)
-    }
-
-    // The cache cleanup-interval slider only appears once cache auto-clean is switched on.
-    if state.cacheAutoClean, let idx = entries.firstIndex(where: {
-        if case .cacheAutoClean = $0 { return true }; return false
-    }) {
-        entries.insert(.cacheInterval(theme, l10n.cacheInterval, state.cacheCleanInterval), at: idx + 1)
-    }
-
-    // The old interface has no glass and Telegram's classic tab bar: the glass effects and the
-    // glass tab bar's search button, titles and compact panel do nothing there, so they are
-    // not offered. Their values are kept for when it is turned off.
-    if state.oldInterface {
-        entries.removeAll(where: { entry in
-            switch entry {
-            case .glassUI, .hideSearchButton, .hideTabTitles, .compactTabBar:
-                return true
-            default:
-                return false
+        if !found.isEmpty {
+            let section = Int32(1000 + (AorusPage.allCases.firstIndex(of: page) ?? 0))
+            entries.append(AorusEntry(id: "search.header." + page.rawValue, section: section, order: 0, kind: .header(page.title.uppercased())))
+            for entry in found {
+                entries.append(AorusEntry(id: entry.id, section: section, order: 0, kind: entry.kind))
             }
-        })
+        }
     }
-
+    if entries.isEmpty {
+        entries.append(AorusEntry(id: "search.empty", section: 999, order: 0, kind: .placeholder(title: aorusL("Ничего не найдено", "Nothing found"), text: aorusL("Попробуй другое слово — например «призрак» или «вкладки»", "Try another word — for example “ghost” or “tabs”"))))
+    }
     return entries
+}
+
+/// Everything a page shows, in order.
+private func aorusEntries(page: AorusPage, query: String, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
+    var entries: [AorusEntry] = []
+    if page == .root {
+        entries.append(AorusEntry(id: "logo", section: 0, order: 0, kind: .logo(version: aorusSettingsVersionText())))
+        entries.append(AorusEntry(id: "search", section: 1, order: 0, kind: .search(query: query, placeholder: aorusL("Поиск по AorusGram", "Search AorusGram"), cancel: strings.Common_Cancel)))
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            entries += aorusRootEntries(state: state, l10n: l10n)
+        } else {
+            entries += aorusSearchEntries(query: query, state: state, l10n: l10n, strings: strings)
+        }
+    } else {
+        entries.append(AorusEntry(id: "pageHeader", section: Int32(AorusPage.allCases.firstIndex(of: page) ?? 0) * 100 - 1, order: 0, kind: .pageHeader(icon: page.icon, text: page.subtitle)))
+        entries += aorusPageEntries(page, state: state, l10n: l10n, strings: strings)
+    }
+    return entries.enumerated().map { index, entry in
+        AorusEntry(id: entry.id, section: entry.section, order: index, kind: entry.kind)
+    }
 }
 
 // MARK: - Public factory
 
 /// The settings as they are stored now: the managers', and the keys some of them keep alone.
-private func aorusStoredState() -> AorusState {
+private func aorusStoredState(accountId: Int64) -> AorusState {
     let mgr = AorusGramManager.shared
     let spoof = AntiSpoofManager.shared
     let stealth = AorusStealthCodec.shared
+    let fakeStarsAmount = AorusFakeStarsStore.amount
     return AorusState(
         ghostMode:          mgr.ghostMode,
         ghostChatButton:    mgr.ghostChatButton,
@@ -1379,11 +1082,39 @@ private func aorusStoredState() -> AorusState {
         spoofedDeviceName:  UserDefaults.standard.string(forKey: "aorusgram_spoofed_device"),
         bypassSavePaid:     UserDefaults.standard.object(forKey: "aorusgram_bypass_save_paid") as? Bool ?? true,
         bypassSaveViewOnce: UserDefaults.standard.object(forKey: "aorusgram_bypass_view_once") as? Bool ?? true,
-        bypassStoryDownload: UserDefaults.standard.object(forKey: "aorusgram_bypass_story_dl") as? Bool ?? true
+        bypassStoryDownload: UserDefaults.standard.object(forKey: "aorusgram_bypass_story_dl") as? Bool ?? true,
+        masksEnabled:       mgr.videoMasksEnabled,
+        voiceTwinEnabled:   UserDefaults.standard.bool(forKey: "aorusgram_voice_twin_enabled"),
+        chatLockEnabled:    AorusChatLock.isEnabled(accountId: accountId),
+        fontTitle:          AorusFontStore.selectedTitle,
+        localPremium:       AorusLocalPremium.isEnabled,
+        fakeStars:          AorusFakeStarsStore.isEnabled,
+        fakeStarsAmount:    fakeStarsAmount > 0 ? "\(fakeStarsAmount)" : "",
+        fakeGram:           AorusFakeGramStore.isEnabled,
+        fakeGramAmount:     AorusLocalGramAmount.text(AorusFakeGramStore.amount),
+        antiSearch:         AorusAntiSearchStore.isEnabled,
+        anonymousStickers:  UserDefaults.standard.bool(forKey: "aorusgram_anonymous_stickers_enabled"),
+        profileLink:        UserDefaults.standard.bool(forKey: "aorusgram_profile_link_enabled"),
+        profileLinkTargetPeerId: Int64(UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_peer_id") ?? "") ?? 0,
+        profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
+        formattingPanel:    UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
+        autoFormatStyle:    aorusAutoFormatStyle(),
+        phoneSpoof:         AorusPhoneSpoofStore.isEnabled,
+        anonymousNumber:    AorusPhoneSpoofStore.isAnonymous,
+        phoneSpoofNumber:   AorusPhoneSpoofStore.ensureNumber(),
+        mediaMetadata:      UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
+        linkProtection:     AorusLinkProtection.isEnabled,
+        linkProtectionRedirects: AorusLinkProtection.checksRedirects,
+        linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles,
+        actionConfirmation: AorusActionConfirmation.isEnabled
     )
 }
 
 public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes, section: String? = nil) -> ViewController {
+    return aorusSettingsPageController(context: context, shortcutRoutes: shortcutRoutes, page: AorusPage.from(section: section))
+}
+
+private func aorusSettingsPageController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes, page: AorusPage) -> ViewController {
     // License gate: opening the AorusGram settings while the subscription is locked
     // routes to the purchase/subscription screen instead (LicenseGate handles the
     // notification). Fail-open — an active user (flag absent/false) is never affected.
@@ -1395,17 +1126,20 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
     let mgr   = AorusGramManager.shared
     let spoof = AntiSpoofManager.shared
     let stealth = AorusStealthCodec.shared
+    let accountId = context.account.id.int64
 
-    let initialState = aorusStoredState()
+    let initialState = aorusStoredState(accountId: accountId)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue   = Atomic(value: initialState)
 
     let updateState: ((AorusState) -> AorusState) -> Void = { f in
         statePromise.set(stateValue.modify { f($0) })
     }
+    let queryPromise = ValuePromise("", ignoreRepeated: true)
 
-    // Weak reference so openChannel can navigate using the controller's nav stack
+    // Weak reference so the rows can navigate using the controller's nav stack
     weak var weakController: ItemListController?
+    let actionsDisposable = DisposableSet()
 
     // Each switch writes its own setting, and only its own.
     let aorusPersisters: [WritableKeyPath<AorusState, Bool>: (Bool) -> Void] = [
@@ -1461,7 +1195,28 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         \.bypassStoryDownload: { UserDefaults.standard.set($0, forKey: "aorusgram_bypass_story_dl") },
         \.subscriptionBanner: { UserDefaults.standard.set($0, forKey: "aorusgram_subscription_banner") },
         \.showStories: { UserDefaults.standard.set($0, forKey: "aorusgram_show_stories") },
+        \.localPremium: { AorusLocalPremium.setEnabled($0) },
+        \.fakeStars: { AorusFakeStarsStore.setEnabled($0) },
+        \.fakeGram: { AorusFakeGramStore.setEnabled($0) },
+        \.antiSearch: { AorusAntiSearchStore.setEnabled($0) },
+        \.anonymousStickers: { UserDefaults.standard.set($0, forKey: "aorusgram_anonymous_stickers_enabled") },
+        \.profileLink: { UserDefaults.standard.set($0, forKey: "aorusgram_profile_link_enabled") },
+        \.formattingPanel: { UserDefaults.standard.set($0, forKey: "aorusgram_formatting_panel") },
+        \.phoneSpoof: { AorusPhoneSpoofStore.setEnabled($0) },
+        \.anonymousNumber: { value in AorusPhoneSpoofStore.setAnonymous(value) },
+        \.mediaMetadata: { UserDefaults.standard.set($0, forKey: "aorusgram_media_metadata_enabled") },
+        \.linkProtection: { AorusLinkProtection.setEnabled($0) },
+        \.linkProtectionRedirects: { AorusLinkProtection.setChecksRedirects($0) },
+        \.linkProtectionBlockFiles: { AorusLinkProtection.setBlocksDangerousFiles($0) },
+        \.actionConfirmation: { value in AorusActionConfirmation.isEnabled = value },
     ]
+
+    let push: (ViewController) -> Void = { screen in
+        guard let navigationController = weakController?.navigationController as? NavigationController else {
+            return
+        }
+        navigationController.pushViewController(screen)
+    }
 
     let arguments = AorusArguments(
         set: { keyPath, value in
@@ -1536,146 +1291,278 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             if keyPath == \AorusState.amoledMode {
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
             }
-        },
-        openChannel: {
-            // Resolve @aorusgram and navigate to the channel inside AorusGram.
-            // `weakController` is referenced directly (no capture list) so the
-            // closure reads the value assigned after it is created — capturing
-            // `[weak weakController]` would freeze the nil it holds right now.
-            // Browser fallback only if the nav stack is genuinely unavailable.
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                context.sharedContext.applicationBindings.openUrl("https://t.me/aorusgram")
-                return
-            }
-            let _ = (context.engine.peers.resolvePeerByName(name: "aorusgram", referrer: nil)
-            |> deliverOnMainQueue).start(next: { result in
-                guard case let .result(peer) = result, let peer = peer else { return }
-                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(
-                    navigationController: navigationController,
-                    context: context,
-                    chatLocation: .peer(peer)
-                ))
-            })
-        },
-        openSubscription: {
-            // The license gate (AorusGram core) owns the subscription UI; just signal it.
-            NotificationCenter.default.post(
-                name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
-        },
-        clearCache: {
-            let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-            let showDone: () -> Void = {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                let alert = UIAlertController(
-                    title: aorusL("Кэш успешно очищен", "Cache cleared"),
-                    message: nil, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .default))
-                weakController?.present(alert, animated: true)
-            }
-            // The texts edited messages had are kept apart from the messages; they go too.
-            AorusEditHistory.removeAll(basePath: context.account.postbox.mediaBox.basePath)
-            let ids: [MessageId] = stored.compactMap { entry in
-                guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
-                return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))
-            }
-            guard !ids.isEmpty else { showDone(); return }
-            let _ = (context.account.postbox.transaction { transaction -> Void in
-                transaction.deleteMessages(ids, forEachMedia: { _ in })
-            } |> deliverOnMainQueue).start(completed: {
-                UserDefaults.standard.removeObject(forKey: "aorusgram_preserved_msgs")
-                showDone()
-            })
-        },
-        openAccountBackup: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            navigationController.pushViewController(accountBackupController(context: context))
-        },
-        openPlugins: {
-            guard let navigationController = weakController?.navigationController as? NavigationController else {
-                return
-            }
-            navigationController.pushViewController(aorusPluginsController(context: context))
-        },
-        openPluginShortcut: { pluginId, id in
-            AorusPluginRuntimeManager.shared.performSettingsShortcut(pluginId: pluginId, id: id)
-        },
-        openMisc: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            navigationController.pushViewController(aorusMiscController(context: context, shortcutRoutes: shortcutRoutes))
-        },
-        openAntiSpamManage: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            navigationController.pushViewController(aorusAntiSpamController(context: context))
-        },
-        openDeviceSpoof: {
-            guard let navigationController = weakController?.navigationController as? NavigationController else {
-                return
-            }
-            let currentModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
-            let currentSystemVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
-            let deviceController = aorusDeviceSpoofController(
-                context: context,
-                initialModel: currentModel,
-                initialSystemVersion: currentSystemVersion,
-                selectionChanged: { model, systemVersion in
-                    let previousModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
-                    let previousVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
-                    guard previousModel != model || previousVersion != systemVersion else {
-                        return
-                    }
-                    if let model, let systemVersion {
-                        UserDefaults.standard.set(model, forKey: "aorusgram_spoofed_device")
-                        UserDefaults.standard.set(systemVersion, forKey: "aorusgram_spoofed_sysver")
-                    } else {
-                        UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_device")
-                        UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_sysver")
-                    }
-                    updateState { state in
-                        var updated = state
-                        updated.spoofedDeviceName = model
-                        return updated
-                    }
-                    let visibleController =
-                        navigationController.topViewController as? ViewController
-                        ?? weakController
-                    aorusPresentRestartNotice(
-                        context: context,
-                        controller: visibleController
-                    )
+            // The protected number is made (or changed) by the switches that use it.
+            if keyPath == \AorusState.phoneSpoof || keyPath == \AorusState.anonymousNumber {
+                let number = AorusPhoneSpoofStore.ensureNumber()
+                updateState { current in
+                    var next = current
+                    next.phoneSpoofNumber = number
+                    return next
                 }
-            )
-            navigationController.pushViewController(deviceController)
-        },
-        openMasks: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
             }
-            navigationController.pushViewController(aorusMasksController(context: context))
         },
-        openVoiceTwin: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
+        open: { destination in
+            switch destination {
+            case let .page(target):
+                push(aorusSettingsPageController(context: context, shortcutRoutes: shortcutRoutes, page: target))
+            case .plugins:
+                push(aorusPluginsController(context: context))
+            case let .pluginShortcut(pluginId, id):
+                AorusPluginRuntimeManager.shared.performSettingsShortcut(pluginId: pluginId, id: id)
+            case .channel:
+                // Resolve @aorusgram and navigate to the channel inside AorusGram.
+                // `weakController` is referenced directly (no capture list) so the
+                // closure reads the value assigned after it is created — capturing
+                // `[weak weakController]` would freeze the nil it holds right now.
+                // Browser fallback only if the nav stack is genuinely unavailable.
+                guard let controller = weakController,
+                      let navigationController = controller.navigationController as? NavigationController else {
+                    context.sharedContext.applicationBindings.openUrl("https://t.me/aorusgram")
+                    return
+                }
+                actionsDisposable.add((context.engine.peers.resolvePeerByName(name: "aorusgram", referrer: nil)
+                |> deliverOnMainQueue).start(next: { result in
+                    guard case let .result(peer) = result, let peer = peer else { return }
+                    context.sharedContext.navigateToChatController(NavigateToChatControllerParams(
+                        navigationController: navigationController,
+                        context: context,
+                        chatLocation: .peer(peer)
+                    ))
+                }))
+            case .subscription:
+                // The license gate (AorusGram core) owns the subscription UI; just signal it.
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
+            case .connectionSettings:
+                // Telegram's own Proxy screen, pushed onto the same stack it is pushed onto from
+                // Data and Storage. The screen itself is built by SettingsUI and handed in as a
+                // route, because SettingsUI depends on this module and not the reverse. The proxy
+                // diagnostics live on it now, under "Stable calls".
+                push(shortcutRoutes.connectionSettings())
+            case .deviceSpoof:
+                guard let navigationController = weakController?.navigationController as? NavigationController else {
+                    return
+                }
+                let currentModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
+                let currentSystemVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
+                let deviceController = aorusDeviceSpoofController(
+                    context: context,
+                    initialModel: currentModel,
+                    initialSystemVersion: currentSystemVersion,
+                    selectionChanged: { model, systemVersion in
+                        let previousModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
+                        let previousVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
+                        guard previousModel != model || previousVersion != systemVersion else {
+                            return
+                        }
+                        if let model, let systemVersion {
+                            UserDefaults.standard.set(model, forKey: "aorusgram_spoofed_device")
+                            UserDefaults.standard.set(systemVersion, forKey: "aorusgram_spoofed_sysver")
+                        } else {
+                            UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_device")
+                            UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_sysver")
+                        }
+                        updateState { state in
+                            var updated = state
+                            updated.spoofedDeviceName = model
+                            return updated
+                        }
+                        let visibleController =
+                            navigationController.topViewController as? ViewController
+                            ?? weakController
+                        aorusPresentRestartNotice(
+                            context: context,
+                            controller: visibleController
+                        )
+                    }
+                )
+                navigationController.pushViewController(deviceController)
+            case .chatLock:
+                // The settings screen itself is protected: it can switch the feature off and
+                // reveals which chats are protected, so it must sit behind the same gate.
+                let present: () -> Void = {
+                    push(aorusChatLockController(context: context))
+                }
+                if AorusChatLock.settingsRequireAuth(accountId: accountId) {
+                    AorusChatLock.authenticate(accountId: accountId, reason: aorusL("Разблокируйте настройки защиты чатов", "Unlock Chat Protection settings")) { success in
+                        if success {
+                            present()
+                        }
+                    }
+                } else {
+                    present()
+                }
+            case .autoFormat:
+                // A pushed screen rather than an action sheet: the list of styles is long enough
+                // that a full screen reads better, and it matches the Font picker next to it.
+                push(aorusAutoFormatController(context: context, onChange: { style in
+                    updateState { s in var n = s; n.autoFormatStyle = style; return n }
+                }))
+            case .quickReplies:
+                push(aorusQuickRepliesController(context: context))
+            case .antiSpamWords:
+                push(aorusAntiSpamController(context: context))
+            case .masks:
+                push(aorusMasksController(context: context))
+            case .voiceTwin:
+                push(voiceTwinController(context: context))
+            case .font:
+                AorusSettingsShortcutHighlight.request(.font)
+                push(aorusFontPickerController(context: context))
+            case .bubbleSettings:
+                if let screen = AorusBubbleSettingsRoute.make(context) {
+                    push(screen)
+                }
+            case .messageSettings:
+                if let screen = AorusMessageSettingsRoute.make(context) {
+                    push(screen)
+                }
+            case .tabSettings:
+                if let screen = AorusTabSettingsRoute.make(context) {
+                    push(screen)
+                }
+            case .appBadge:
+                guard let controller = weakController else { return }
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
+                let current = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"
+
+                let sheet = ActionSheetController(presentationData: presentationData)
+                let options: [(String, String)] = [
+                    ("aorusgram", l10n.appBadgeAorus),
+                    ("titanium",  l10n.appBadgeTitanium),
+                    ("atunnel",   l10n.appBadgeATunnel),
+                    ("personal",  l10n.appBadgePersonal),
+                    ("off",       l10n.appBadgeOff),
+                ]
+                let optionItems: [ActionSheetButtonItem] = options.map { id, name in
+                    return ActionSheetButtonItem(title: name, color: .accent, font: id == current ? .bold : .default, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                        UserDefaults.standard.set(id, forKey: "aorusgram_app_badge")
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("aorusgram_app_badge_changed"), object: nil)
+                        updateState { s in var n = s; n.appBadge = id; return n }
+                    })
+                }
+                sheet.setItemGroups([
+                    ActionSheetItemGroup(items: optionItems),
+                    ActionSheetItemGroup(items: [
+                        ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                            sheet?.dismissAnimated()
+                        })
+                    ])
+                ])
+                controller.present(sheet, in: .window(.root))
+            case .animatedWallpapers:
+                AorusSettingsShortcutHighlight.request(.animatedWallpapers)
+                push(shortcutRoutes.animatedWallpapers())
+            case .animatedBanner:
+                AorusSettingsShortcutHighlight.request(.animatedBanner)
+                push(shortcutRoutes.animatedBanner())
+            case .wallSettings:
+                push(aorusWallSettingsController(context: context))
+            case .fakeGifts:
+                push(aorusFakeGiftsController(context: context))
+            case .fakeUsernames:
+                push(aorusFakeUsernamesController(context: context))
+            case .accountBackup:
+                push(accountBackupController(context: context))
+            case .clearDeletedCache:
+                let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
+                let showDone: () -> Void = {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    let alert = UIAlertController(
+                        title: aorusL("Кэш успешно очищен", "Cache cleared"),
+                        message: nil, preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .default))
+                    weakController?.present(alert, animated: true)
+                }
+                // The texts edited messages had are kept apart from the messages; they go too.
+                AorusEditHistory.removeAll(basePath: context.account.postbox.mediaBox.basePath)
+                let ids: [MessageId] = stored.compactMap { entry in
+                    guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
+                    return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))
+                }
+                guard !ids.isEmpty else { showDone(); return }
+                let _ = (context.account.postbox.transaction { transaction -> Void in
+                    transaction.deleteMessages(ids, forEachMedia: { _ in })
+                } |> deliverOnMainQueue).start(completed: {
+                    UserDefaults.standard.removeObject(forKey: "aorusgram_preserved_msgs")
+                    showDone()
+                })
+            case .saveSettings:
+                AorusSettingsTransfer.present(.save, context: context, from: weakController)
+            case .loadSettings:
+                AorusSettingsTransfer.present(.load, context: context, from: weakController)
+            case .randomizePhoneNumber:
+                let number = AorusPhoneSpoofStore.randomize()
+                updateState { current in
+                    var next = current
+                    next.phoneSpoofNumber = number
+                    return next
+                }
+            case .profileLinkSelf:
+                UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_peer_id")
+                UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_name")
+                updateState { current in
+                    var next = current
+                    next.profileLinkTargetPeerId = 0
+                    next.profileLinkTargetName = ""
+                    return next
+                }
+            case .profileLinkPeer:
+                let selectionController = context.sharedContext.makeContactSelectionController(ContactSelectionControllerParams(
+                    context: context,
+                    autoDismiss: false,
+                    title: { strings in return strings.Contacts_Title }
+                ))
+                actionsDisposable.add((selectionController.result
+                |> deliverOnMainQueue).start(next: { [weak selectionController] result in
+                    selectionController?.dismiss()
+                    if let (peers, _, _, _, _, _) = result, let first = peers.first, case let .peer(peer, _, _) = first {
+                        let peerId = peer.id.toInt64()
+                        let peerName = peer.compactDisplayTitle
+                        UserDefaults.standard.set("\(peerId)", forKey: "aorusgram_profile_link_target_peer_id")
+                        UserDefaults.standard.set(peerName, forKey: "aorusgram_profile_link_target_name")
+                        updateState { current in
+                            var next = current
+                            next.profileLinkTargetPeerId = peerId
+                            next.profileLinkTargetName = peerName
+                            return next
+                        }
+                    }
+                }))
+                weakController?.push(selectionController)
             }
-            navigationController.pushViewController(voiceTwinController(context: context))
         },
-        openWallSettings: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
+        setField: { field, text in
+            switch field {
+            case .fakeStarsAmount:
+                let amount = AorusFakeStarsStore.parseAmount(text)
+                let digits = text.isEmpty ? "" : String(amount)
+                AorusFakeStarsStore.setAmount(amount)
+                updateState { current in
+                    var next = current
+                    next.fakeStarsAmount = digits
+                    return next
+                }
+            case .fakeGramAmount:
+                // Preserve up to nine fractional digits; an empty field means zero.
+                guard let amount = text.isEmpty ? 0 : AorusLocalGramAmount.parse(text) else { return }
+                AorusFakeGramStore.setAmount(amount)
+                updateState { current in
+                    var next = current
+                    next.fakeGramAmount = text
+                    return next
+                }
+            case .phoneNumber:
+                let number = AorusPhoneSpoofStore.setNumber(text)
+                updateState { current in
+                    var next = current
+                    next.phoneSpoofNumber = AorusPhoneSpoofStore.isAnonymous ? text : number
+                    return next
+                }
             }
-            navigationController.pushViewController(aorusWallSettingsController(context: context))
         },
         setRAMCleanInterval: { seconds in
             AorusGramManager.shared.ramCleanInterval = seconds
@@ -1685,106 +1572,11 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             AorusGramManager.shared.cacheCleanInterval = hours
             updateState { s in var n = s; n.cacheCleanInterval = hours; return n }
         },
-        openProxyDiagnostics: { // AORUS-DIAG
-            // Telegram's NavigationController is node-based (ASDisplayNode) and only
-            // accepts Display.ViewController instances — pushing a plain UIViewController
-            // crashes at runtime. So the ATunnel page is shown modally inside a standard
-            // UIKit UINavigationController (same UIKit-present path used for the alerts
-            // above), which fully sidesteps Telegram's custom navigation stack.
-            guard let controller = weakController else { return }
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-            let vc = ATunnelStatusViewController(theme: presentationData.theme, isRu: isRu)
-            let nav = UINavigationController(rootViewController: vc)
-            nav.modalPresentationStyle = .fullScreen
-            controller.present(nav, animated: true)
-        },
-        openConnectionSettings: { // AORUS-CONN
-            // Telegram's own Proxy screen, pushed onto the same stack it is pushed onto from
-            // Data and Storage. It is a real Display.ViewController, so unlike the diagnostics
-            // page above it needs no UIKit modal — the screen itself is built by SettingsUI and
-            // handed in as a route, because SettingsUI depends on this module and not the reverse.
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            navigationController.pushViewController(shortcutRoutes.connectionSettings())
-        },
-        openAppBadgePicker: {
-            guard let controller = weakController else { return }
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            let current = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"
-
-            let sheet = ActionSheetController(presentationData: presentationData)
-            let options: [(String, String)] = [
-                ("aorusgram", l10n.appBadgeAorus),
-                ("titanium",  l10n.appBadgeTitanium),
-                ("atunnel",   l10n.appBadgeATunnel),
-                ("personal",  l10n.appBadgePersonal),
-                ("off",       l10n.appBadgeOff),
-            ]
-            let optionItems: [ActionSheetButtonItem] = options.map { id, name in
-                return ActionSheetButtonItem(title: name, color: .accent, font: id == current ? .bold : .default, action: { [weak sheet] in
-                    sheet?.dismissAnimated()
-                    UserDefaults.standard.set(id, forKey: "aorusgram_app_badge")
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("aorusgram_app_badge_changed"), object: nil)
-                    updateState { s in var n = s; n.appBadge = id; return n }
-                })
-            }
-            sheet.setItemGroups([
-                ActionSheetItemGroup(items: optionItems),
-                ActionSheetItemGroup(items: [
-                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
-                        sheet?.dismissAnimated()
-                    })
-                ])
-            ])
-            controller.present(sheet, in: .window(.root))
-        },
-        openFont: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else {
-                return
-            }
-            AorusSettingsShortcutHighlight.request(.font)
-            navigationController.pushViewController(aorusFontPickerController(context: context))
-        },
-        openBubbleSettings: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController,
-                  let screen = AorusBubbleSettingsRoute.make(context) else {
-                return
-            }
-            navigationController.pushViewController(screen)
-        },
-        openTabSettings: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController,
-                  let screen = AorusTabSettingsRoute.make(context) else { return }
-            navigationController.pushViewController(screen)
-        },
-        openMessageSettings: {
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController,
-                  let screen = AorusMessageSettingsRoute.make(context) else {
-                return
-            }
-            navigationController.pushViewController(screen)
-        },
-        saveSettings: {
-            AorusSettingsTransfer.present(.save, context: context, from: weakController)
-        },
-        loadSettings: {
-            AorusSettingsTransfer.present(.load, context: context, from: weakController)
+        updateQuery: { query in
+            queryPromise.set(query)
         }
     )
 
-    // Combine the settings state with the LIVE presentation-data signal (not a one-shot
-    // snapshot) so the screen re-themes the instant the theme changes — e.g. when AMOLED is
-    // toggled, aorusAmoledTrigger re-emits presentationData and this screen goes true-black
-    // immediately, with no need to leave and re-enter.
     let pluginIntegrationSignal = Signal<Int, NoError> { subscriber in
         var revision = 0
         subscriber.putNext(revision)
@@ -1799,41 +1591,42 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         return ActionDisposable { NotificationCenter.default.removeObserver(token) }
     }
     // The managers say when a setting changes, wherever it was changed: this page, another page
-    // of these settings, a plugin, Siri, the ghost in a chat. The page then shows what is stored.
+    // of these settings, a plugin, Siri, the ghost in a chat, a local purchase of Stars, a chat
+    // locked from its own menu. The page then shows what is stored.
     let storedStateSignal: Signal<Void, NoError> = Signal { subscriber in
-        let token = NotificationCenter.default.addObserver(
-            forName: .aorusSettingsChanged,
-            object: nil,
-            queue: .main
-        ) { _ in
-            updateState { _ in aorusStoredState() }
-        }
+        let tokens = [
+            NotificationCenter.default.addObserver(forName: .aorusSettingsChanged, object: nil, queue: .main) { _ in
+                updateState { _ in aorusStoredState(accountId: accountId) }
+            },
+            NotificationCenter.default.addObserver(forName: AorusFakeStarsStore.changedNotification, object: nil, queue: .main) { _ in
+                updateState { _ in aorusStoredState(accountId: accountId) }
+            },
+            NotificationCenter.default.addObserver(forName: AorusFakeGramStore.changedNotification, object: nil, queue: .main) { _ in
+                updateState { _ in aorusStoredState(accountId: accountId) }
+            },
+            NotificationCenter.default.addObserver(forName: AorusChatLock.changedNotification, object: nil, queue: .main) { _ in
+                updateState { _ in aorusStoredState(accountId: accountId) }
+            },
+        ]
         subscriber.putNext(Void())
-        return ActionDisposable { NotificationCenter.default.removeObserver(token) }
-    }
-    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData, pluginIntegrationSignal, storedStateSignal)
-        |> deliverOnMainQueue
-        |> map { state, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            // The derived theme, not the raw one. Every row Telegram itself draws reaches it
-            // through ItemListPresentationData's convenience init; the rows in this file are our
-            // own ListViewItems and take a PresentationTheme directly, so they have to ask for it
-            // here. Handed the raw theme they paint an opaque card -- which is what put a grey
-            // block behind the interval sliders on top of the pane of glass behind the section.
-            var entries = aorusEntries(state: state, theme: presentationData.theme.aorusGlassListTheme, l10n: l10n)
-            let sections: [String: AorusSection] = [
-                "privacy": .privacy, "interface": .ui, "tabs": .tabs,
-                "messages": .editLocal, "voice": .voiceMessages, "video": .videoMessages,
-                "calls": .calls, "wall": .wall, "performance": .performance,
-                "device": .deviceSpoof, "bypass": .bypass, "antiSpoof": .antiSpoof,
-                "backup": .accountBackup, "code": .aorusCode, "other": .misc
-            ]
-            if let section, let selected = sections[section] {
-                entries = entries.filter { $0.section == selected.rawValue }
+        return ActionDisposable {
+            for token in tokens {
+                NotificationCenter.default.removeObserver(token)
             }
+        }
+    }
+    // Combine the settings state with the LIVE presentation-data signal (not a one-shot
+    // snapshot) so the screen re-themes the instant the theme changes — e.g. when AMOLED is
+    // toggled, aorusAmoledTrigger re-emits presentationData and this screen goes true-black
+    // immediately, with no need to leave and re-enter.
+    let signal = combineLatest(statePromise.get(), queryPromise.get(), aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
+        |> deliverOnMainQueue
+        |> map { state, query, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
+            let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
+            let entries = aorusEntries(page: page, query: query, state: state, l10n: l10n, strings: presentationData.strings)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text("AorusGram"),
+                title: .text(page.title),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
@@ -1845,8 +1638,16 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             )
             return (controllerState, (listState, arguments))
         }
+        |> afterDisposed {
+            actionsDisposable.dispose()
+        }
 
     let controller = ItemListController(context: context, state: signal)
+    // A screen opened from here changes what its row says (a device chosen, a chat locked, the
+    // masks switched on): the page reads the stored settings again whenever it comes back.
+    controller.didAppear = { _ in
+        updateState { _ in aorusStoredState(accountId: accountId) }
+    }
     weakController = controller
     return controller
 }

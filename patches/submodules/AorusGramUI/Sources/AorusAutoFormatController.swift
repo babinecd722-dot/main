@@ -14,7 +14,36 @@ import AccountContext
 // only writes the choice to the shared defaults key; both halves read it back.
 //
 // The style vocabulary (`aorusAutoFormatStyles`, `aorusAutoFormatOff`, the defaults key and
-// the label lookup) is defined once in AorusMiscController and shared across the module.
+// the label lookup) is defined once, below, and shared across the module: the AorusGram
+// settings show the chosen style on the row that opens this screen.
+
+// The identifiers and the defaults key are duplicated from AorusAutoFormat in TextFormat
+// rather than imported: TextFormat sits below this module and pulling it in just to read
+// one string would invert the dependency. scripts/verify_aorus_branding.py pins the two
+// lists against each other so they cannot drift apart.
+let aorusAutoFormatKey = "aorusgram_auto_format_style"
+let aorusAutoFormatOff = "off"
+let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]
+
+func aorusAutoFormatStyle() -> String {
+    let stored = UserDefaults.standard.string(forKey: aorusAutoFormatKey) ?? aorusAutoFormatOff
+    return aorusAutoFormatStyles.contains(stored) ? stored : aorusAutoFormatOff
+}
+
+/// Style names come from Telegram's own formatting menu, so the row reads with the exact
+/// wording the user already sees when they format a selection by hand — in every language
+/// Telegram ships, with nothing for us to translate or keep in sync.
+func aorusAutoFormatLabel(_ style: String, _ strings: PresentationStrings) -> String {
+    switch style {
+    case "bold": return strings.TextFormat_Bold
+    case "italic": return strings.TextFormat_Italic
+    case "monospace": return strings.TextFormat_Monospace
+    case "strikethrough": return strings.TextFormat_Strikethrough
+    case "underline": return strings.TextFormat_Underline
+    case "spoiler": return strings.TextFormat_Spoiler
+    default: return AorusL10n(strings.baseLanguageCode).appBadgeOff
+    }
+}
 
 // Remembers the last real style, so flipping the switch off and back on restores the
 // choice instead of resetting to bold. Only this screen reads it; the composer and the
@@ -144,7 +173,7 @@ public func aorusAutoFormatController(context: AccountContext, onChange: ((Strin
     })
 
     // The theme the app is in, as it changes: the list is drawn again the moment it does.
-    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
+    let signal = combineLatest(statePromise.get(), aorusSettingsPresentationData(context))
         |> deliverOnMainQueue
         |> map { selected, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let entries = aorusAutoFormatEntries(selected: selected, theme: presentationData.theme, strings: presentationData.strings)

@@ -28,6 +28,13 @@ def main():
         expected_font = Path(__file__).resolve().parent.parent / "AorusGram/Resources/Fonts/Benzin-Bold.ttf"
         if font not in archive.namelist() or archive.read(font) != expected_font.read_bytes():
             raise RuntimeError("IPA must embed the attached Benzin Bold in the main bundle")
+        # The AorusGram settings logo, for each theme: a missing one costs no build error, only
+        # an empty space at the top of the screen.
+        for logo in ("aorusgram_logo_dark", "aorusgram_logo_light"):
+            bundled = app_root + "/" + logo + ".tgs"
+            expected_logo = Path(__file__).resolve().parent.parent / "AorusGram/Animations" / (logo + ".tgs")
+            if bundled not in archive.namelist() or archive.read(bundled) != expected_logo.read_bytes():
+                raise RuntimeError("IPA must embed the settings logo " + logo + ".tgs in the main bundle")
         executable = app_root + "/" + info["CFBundleExecutable"]
         with archive.open(executable) as file:
             header = file.read(8)

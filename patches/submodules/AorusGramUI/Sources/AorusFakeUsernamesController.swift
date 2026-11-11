@@ -173,7 +173,7 @@ public func aorusFakeUsernamesController(context: AccountContext) -> ViewControl
     }, remove: { name in
         AorusFakeUsernamesStore.remove(name, account: account)
     })
-    let signal = combineLatest(promise.get(), context.sharedContext.presentationData)
+    let signal = combineLatest(promise.get(), aorusSettingsPresentationData(context))
     |> deliverOnMainQueue
     |> map { value, data -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var entries: [UsernameListEntry] = []
@@ -229,7 +229,7 @@ private func aorusFakeUsernamePriceController(context: AccountContext, username:
         AorusFakeUsernamesStore.remove(username, account: account)
         _ = weakController?.navigationController?.popViewController(animated: true)
     }, inputEnded: finishInput)
-    let signal = combineLatest(promise.get(), context.sharedContext.presentationData)
+    let signal = combineLatest(promise.get(), aorusSettingsPresentationData(context))
     |> deliverOnMainQueue
     |> map { text, data -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let theme = data.theme

@@ -687,7 +687,7 @@ public func aorusWallSettingsController(context: AccountContext) -> ViewControll
         }
     }
 
-    let signal = combineLatest(context.sharedContext.presentationData, statePromise.get(), peersSignal)
+    let signal = combineLatest(aorusSettingsPresentationData(context), statePromise.get(), peersSignal)
     |> deliverOnMainQueue
     |> map { presentationData, state, peers -> (ItemListControllerState, (ItemListNodeState, Any)) in
         // Resolved per emission from the presentation data, not captured once: otherwise

@@ -513,7 +513,7 @@ const remove = aorus.tabs.register({
 | --- | --- |
 | Плагины и справочник | `plugins`, `plugins.documentation` |
 | Текущий плагин | `plugin.details`, `plugin.settings`, `plugin.console`, `plugin.editor`, `plugin.permissions`, `plugin.appearance` |
-| Настройки AorusGram | `aorus`, `aorus.privacy`, `aorus.interface`, `aorus.tabs`, `aorus.messages`, `aorus.voice`, `aorus.video`, `aorus.calls`, `aorus.wall`, `aorus.performance`, `aorus.device`, `aorus.bypass`, `aorus.antiSpoof`, `aorus.backup`, `aorus.code`, `aorus.other` |
+| Настройки AorusGram | `aorus` (главный экран), `aorus.privacy` и `aorus.device` (Приватность), `aorus.interface` (Оформление), `aorus.tabs`, `aorus.messages` и `aorus.code` (Сообщения), `aorus.voice`, `aorus.video` и `aorus.calls` (Медиа и звонки), `aorus.wall`, `aorus.performance`, `aorus.bypass`, `aorus.antiSpoof` (Удалённые и изменённые), `aorus.backup` (Аккаунты и данные), `aorus.other` (главный экран: блока «Прочее» больше нет) |
 | Оформление | `bubbles`, `messageAppearance`, `font` |
 | Инструменты AorusGram | `masks`, `voiceTwin`, `wallSettings`, `antiSpam`, `quickReplies`, `autoFormat`, `fakeGifts`, `chatLocks`, `accountBackup`, `ai` |
 | Настройки Telegram | `settings`, `settings.privacy`, `settings.notifications`, `settings.data`, `settings.appearance`, `settings.language`, `settings.folders`, `settings.proxy`, `settings.stickers` |
@@ -1078,14 +1078,14 @@ const removeSection = aorus.profile.addSection({
 | `placement` | Где ярлык |
 |---|---|
 | `plugins` (по умолчанию) | Основные настройки Telegram, рядом со входом в AorusGram |
-| `privacy` | Настройки AorusGram, блок «Приватность» |
-| `interface` | Настройки AorusGram, блок «Интерфейс» |
-| `tabs` | Настройки AorusGram, блок «Вкладки» |
-| `messages` | Настройки AorusGram, блок «Сообщения» |
-| `calls` | Настройки AorusGram, блок «Звонки» |
-| `wall` | Настройки AorusGram, блок «Стена» |
-| `aorusCode` | Настройки AorusGram, блок AorusCode |
-| `other` | Настройки AorusGram, блок «Прочее» |
+| `privacy` | Настройки AorusGram, раздел «Приватность» |
+| `interface` | Настройки AorusGram, раздел «Оформление» |
+| `tabs` | Настройки AorusGram, раздел «Панель вкладок» |
+| `messages` | Настройки AorusGram, раздел «Сообщения» |
+| `calls` | Настройки AorusGram, раздел «Медиа и звонки» |
+| `wall` | Настройки AorusGram, раздел «Стена» |
+| `aorusCode` | Настройки AorusGram, раздел «Сообщения» |
+| `other` | Главный экран AorusGram, рядом с входом в плагины (блока «Прочее» больше нет) |
 
 Ярлык с разделом AorusGram не повторяется в основных настройках Telegram, а ярлык по
 умолчанию не повторяется в настройках AorusGram. Ярлык с `url` открывает сайт страницей

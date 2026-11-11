@@ -642,8 +642,9 @@ def main() -> None:
         err.append("CustomFont: formatting panel monospace must override the selected client font")
 
     aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
-    misc_controller_shortcuts = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
-    for controller_path in (aorus_controller, misc_controller_shortcuts):
+    # The Other page is gone: its rows are on the AorusGram screen's sections, which alone
+    # take the routes now.
+    for controller_path in (aorus_controller,):
         if not controller_path.is_file():
             err.append(f"SettingsShortcuts: {controller_path.name} is missing")
         elif "shortcutRoutes: AorusSettingsShortcutRoutes? = nil" in controller_path.read_text(encoding="utf-8"):
@@ -776,9 +777,11 @@ def main() -> None:
         if "override func gestureRecognizerShouldBegin" not in editor_text:
             err.append("VideoMasks: canvas gesture gate must override UIView's implementation")
 
-    misc_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    # Phone spoofing and the Stars amount sit on the AorusGram screen's Privacy and
+    # Premium & Gifts sections since the Other page was dissolved.
+    misc_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
     if not misc_controller.is_file():
-        err.append("PhoneSpoof: AorusMiscController.swift is missing")
+        err.append("PhoneSpoof: AorusGramController.swift is missing")
     else:
         misc_text = misc_controller.read_text(encoding="utf-8")
         if "returnKeyType: .done" not in misc_text or "#selector(UIResponder.resignFirstResponder)" not in misc_text:
@@ -2361,16 +2364,21 @@ def main() -> None:
     if rich_node_text.count("aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)") > 1:
         err.append("AutoFormat: base-style stamp injected more than once")
 
-    misc = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    # The style vocabulary lives with the auto-format screen; the row that opens it is on the
+    # Messages section of the AorusGram screen.
+    ui_sources = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources"
+    misc = ui_sources / "AorusGramController.swift"
     if misc.is_file():
         misc_text = misc.read_text(encoding="utf-8")
-        for marker in (
-            'let aorusAutoFormatKey = "aorusgram_auto_format_style"',
-            'let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]',
-            "case .autoFormat:       return 49",
-            "aorusAutoFormatController(context: context, onChange:",
+        vocabulary = ui_sources / "AorusAutoFormatController.swift"
+        vocabulary_text = vocabulary.read_text(encoding="utf-8") if vocabulary.is_file() else ""
+        for marker, text in (
+            ('let aorusAutoFormatKey = "aorusgram_auto_format_style"', vocabulary_text),
+            ('let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]', vocabulary_text),
+            ('b.screen("autoFormat", icon("bold.italic.underline")', misc_text),
+            ("aorusAutoFormatController(context: context, onChange:", misc_text),
         ):
-            if marker not in misc_text:
+            if marker not in text:
                 err.append(f"AutoFormat: settings screen is missing {marker}")
         # The row opens a pushed screen, not an action sheet.
         if "ActionSheetController(presentationData: presentationData)\n            // \"Off\" is only offered" in misc_text:
@@ -2610,10 +2618,11 @@ def main() -> None:
     aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
     aorus_controller_text = aorus_controller.read_text(encoding="utf-8") if aorus_controller.is_file() else ""
     for marker in (
-        ".hideTabTitles(theme, l10n.hideTabTitles, !state.hideTabTitles)",
-        "args.set(\\.hideTabTitles, !$0)",
-        ".voiceMessagesHeader(theme, l10n.voiceMessagesHeader)",
-        ".deviceMicrophone(theme, l10n.deviceMicrophone, state.deviceMicrophone)",
+        'b.toggle("hideTabTitles", icon("textformat.abc"), l10n.hideTabTitles',
+        "\\.hideTabTitles, state, inverted: true)",
+        "args.set(keyPath, inverted ? !value : value)",
+        'b.block(aorusL("ГОЛОСОВЫЕ И КРУЖКИ", "VOICE & VIDEO MESSAGES"))',
+        'b.toggle("deviceMicrophone", icon("mic.fill"), l10n.deviceMicrophone',
     ):
         if marker not in aorus_controller_text:
             err.append(f"AorusSettings: tab-name/device-microphone UI is missing {marker}")
@@ -2624,7 +2633,7 @@ def main() -> None:
     for marker in (
         "aorusPersisters[keyPath]?(value)",
         "\\.wallEnabled: { mgr.wallEnabled = $0 }",
-        "updateState { _ in aorusStoredState() }",
+        "updateState { _ in aorusStoredState(accountId: accountId) }",
         "forName: .aorusSettingsChanged,",
     ):
         if marker not in aorus_controller_text:
@@ -2752,13 +2761,12 @@ def main() -> None:
         if marker not in market_text:
             err.append(f"Plugins: the Market is missing {marker}")
 
-    # Save and Load sit in a block of their own above the subscription's, and a load is put in
-    # force at once: the stores read their data again and the screens are told.
+    # Save and Load sit in a block of their own on the Accounts & Data section, and a load is
+    # put in force at once: the stores read their data again and the screens are told.
     for marker in (
-        '.saveSettings(theme, aorusL("Сохранить настройки", "Save Settings"))',
-        '.loadSettings(theme, aorusL("Загрузить настройки", "Load Settings"))',
-        "case .saveSettings:         return 132",
-        "case .loadSettings:         return 133",
+        'b.block(aorusL("НАСТРОЙКИ AORUSGRAM", "AORUSGRAM SETTINGS"))',
+        'b.action("saveSettings", icon("square.and.arrow.down.fill"), aorusL("Сохранить настройки", "Save Settings")',
+        'b.action("loadSettings", icon("square.and.arrow.up.fill"), aorusL("Загрузить настройки", "Load Settings")',
         "AorusSettingsTransfer.present(.save, context: context, from: weakController)",
         "AorusSettingsTransfer.present(.load, context: context, from: weakController)",
     ):
@@ -2874,9 +2882,9 @@ def main() -> None:
         if marker not in action_recording_text:
             err.append(f"ActionConfirm: recorded-message send is not gated — missing {marker}")
 
-    misc = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    misc = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
     misc_text = misc.read_text(encoding="utf-8") if misc.is_file() else ""
-    for marker in ("case actionConfirmation(", "AorusActionConfirmation.isEnabled = value"):
+    for marker in ('b.toggle("actionConfirmation"', "AorusActionConfirmation.isEnabled = value"):
         if marker not in misc_text:
             err.append(f"ActionConfirm: the Security toggle is missing {marker}")
 
@@ -3065,12 +3073,12 @@ def main() -> None:
     aorus_controller_text = aorus_controller.read_text(encoding="utf-8") if aorus_controller.is_file() else ""
     for marker in (
         "case tabs",
-        ".tabsHeader(theme, l10n.tabsHeader)",
-        ".hideCallsTab(theme, l10n.hideCallsTab",
-        ".hideSearchButton(theme, l10n.hideSearchButton",
-        ".hideTabTitles(theme, l10n.hideTabTitles",
-        ".compactTabBar(theme, l10n.compactTabBar",
-        "updated: { args.set(\\.hideSearchButton, !$0) }",
+        'case .tabs:\n        b.block()\n        b.screen("tabSettings"',
+        'b.toggle("hideCallsTab", icon("phone.fill"), l10n.hideCallsTab',
+        'b.toggle("hideSearchButton", icon("magnifyingglass"), l10n.hideSearchButton',
+        'b.toggle("hideTabTitles", icon("textformat.abc"), l10n.hideTabTitles',
+        'b.toggle("compactTabBar", icon("rectangle.compress.vertical"), l10n.compactTabBar',
+        "\\.hideSearchButton, state, inverted: true)",
     ):
         if marker not in aorus_controller_text:
             err.append(f"TabBarVisibility: settings section is missing {marker}")

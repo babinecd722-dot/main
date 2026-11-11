@@ -40,6 +40,38 @@ public enum AorusGlyphs {
         return image.withRenderingMode(.alwaysTemplate)
     }
 
+    /// A ghost, the sign of Privacy and of Ghost Mode: a dome over straight sides, a hem of three
+    /// rounded lobes and two eyes cut out of it. Drawn on a 24-point grid and scaled, as a template.
+    public static func ghost(size: CGFloat) -> UIImage {
+        let scale = size / 24.0
+        func ghostPoint(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            return CGPoint(x: x * scale, y: y * scale)
+        }
+        let body = UIBezierPath()
+        body.move(to: ghostPoint(4.0, 11.0))
+        body.addArc(withCenter: ghostPoint(12.0, 11.0), radius: 8.0 * scale, startAngle: .pi, endAngle: 0.0, clockwise: true)
+        body.addLine(to: ghostPoint(20.0, 19.0))
+        // The hem: three rounded lobes hanging down, right to left.
+        let hemPoints: [CGFloat] = [20.0, 14.6667, 9.3333, 4.0]
+        for index in 0 ..< 3 {
+            let from = hemPoints[index]
+            let to = hemPoints[index + 1]
+            body.addQuadCurve(to: ghostPoint(to, 19.0), controlPoint: ghostPoint((from + to) / 2.0, 23.4))
+        }
+        body.close()
+        let leftEye = UIBezierPath(ovalIn: CGRect(origin: ghostPoint(8.4, 8.6), size: CGSize(width: 2.4 * scale, height: 3.2 * scale)))
+        let rightEye = UIBezierPath(ovalIn: CGRect(origin: ghostPoint(13.2, 8.6), size: CGSize(width: 2.4 * scale, height: 3.2 * scale)))
+        body.append(leftEye)
+        body.append(rightEye)
+        body.usesEvenOddFillRule = true
+
+        let image = UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { _ in
+            UIColor.black.setFill()
+            body.fill()
+        }
+        return image.withRenderingMode(.alwaysTemplate)
+    }
+
     /// An image drawn left for right, as a template to tint. Drawn into a new bitmap rather than
     /// flagged with a flipped orientation, which not every button honours for a symbol.
     public static func mirrored(_ image: UIImage?) -> UIImage? {

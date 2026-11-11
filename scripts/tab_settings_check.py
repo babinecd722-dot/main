@@ -78,6 +78,13 @@ def main():
         assert controller.count('self.backgroundColor = self.aorusIsPreview ? UIColor.clear : theme.list.plainBackgroundColor') == 2
         assert 'self.isOpaque = false' in tabs
         require('TabBarUI/Sources/TabBarNode.swift', 'CGFloat(self.aorusPreviewPlace(of: container.item, at: i)) * distanceBetweenNodes', 'self.tabBarNodeContainers[self.aorusPreviewContainerIndex(at: index)]', 'node.aorusApplyInk()', 'AorusTabBarSettings.current.badge', 'AorusTabBarSettings.current.title', 'tabBarItemImage(aorusTabBarImage(item.item.selectedImage', 'tabBarItemImage(aorusTabBarImage(item.item.image')
+        modern = require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift')
+        # 13.2 paints unselected tabs in UIKit's label colour and badges in system red; the
+        # theme's (AorusGram's, the chosen tab colours', a plugin's) stay in charge.
+        if 'tabBarUnselectedItemColor' in modern:
+            assert 'let unselectedColor = component.theme.rootController.tabBar.textColor' in modern
+            assert 'let unselectedColor = tabBarUnselectedItemColor(theme: component.theme)' not in modern
+            assert 'aorusBackground: component.theme.rootController.tabBar.badgeBackgroundColor, aorusForeground: component.theme.rootController.tabBar.badgeTextColor' in modern
         require('TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift', 'AorusTabBarSettings.current.selectedTitleOnly', 'AorusTabBarSettings.current.badge', 'aorusTabBarImage(', 'aorusHasCustomInk', 'aorusDraggedFrame = itemFrame', 'self.aorusIsPreview ? .immediate : itemTransition', 'self.liquidLensView.contentView.convert(center, from: self)', '(self.selectionGestureState != nil || self.aorusPreviewDrag != nil) && component.isLiftedStateEnabled', 'aorusCarriedOver && self.aorusPreviewDrag?.id != item.id ? 0.0 : 1.0')
         require('TelegramPresentationData/Sources/MakePresentationTheme.swift', 'let aorusNativeLight =', 'reference: aorusNativeLight ? .day : reference')
         # Ordinary lists are drawn in Telegram's own theme under Interface 2.0; only a profile's

@@ -230,6 +230,21 @@ public func aorusOpenConnectionSupportChat(context: AccountContext, navigationCo
     })
 }
 
+/// The proxy diagnostics, from the row under "Stable calls" on the Proxy screen.
+///
+/// Telegram's NavigationController is node-based and only accepts Display.ViewController
+/// instances -- pushing a plain UIViewController crashes at runtime. So the ATunnel page is shown
+/// modally inside a standard UIKit UINavigationController, which fully sidesteps Telegram's
+/// custom navigation stack.
+public func aorusPresentProxyDiagnostics(context: AccountContext, from controller: UIViewController) {
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
+    let diagnostics = ATunnelStatusViewController(theme: presentationData.theme, isRu: isRu)
+    let navigation = UINavigationController(rootViewController: diagnostics)
+    navigation.modalPresentationStyle = .fullScreen
+    controller.present(navigation, animated: true)
+}
+
 func aorusConnectionLinkColor(theme: PresentationTheme) -> UIColor {
     let accent = theme.list.itemAccentColor
     // Interface 2.0 makes the list accent the page's ink — pure white on a dark pane, pure black

@@ -127,7 +127,7 @@ def main():
         (work / "main.swift").write_text(live_price_source(repo))
         checked(command + [str(core / "AorusFakeUsernamesStore.swift"), str(core / "AorusLocalGramAmount.swift"), str(work / "main.swift"), "-o", str(work / "live-price")])
         checked(["env", "XDG_CONFIG_HOME=" + str(preferences), str(work / "live-price")])
-        checked([args.swiftc, "-frontend", "-parse"] + [str(ui / name) for name in ["AorusFakeUsernamesController.swift", "AorusQuickRepliesController.swift", "AorusMiscController.swift", "AccountBackupController.swift"]])
+        checked([args.swiftc, "-frontend", "-parse"] + [str(ui / name) for name in ["AorusFakeUsernamesController.swift", "AorusQuickRepliesController.swift", "AorusGramController.swift", "AccountBackupController.swift"]])
 
     if args.telegram_source:
         tg = args.telegram_source.resolve()

@@ -8022,19 +8022,21 @@ _PROXY_ORDER_SWIFT = '''    /// Ordering by one number per case instead of a swi
                 return 1
             case .aorusStableCalls:
                 return 2
-            case .aorusInfo:
+            case .aorusDiagnostics:
                 return 3
+            case .aorusInfo:
+                return 4
             case let .aorusUserVPN(_, row):
                 // Every new block sorts by the row's own index, offset to sit between the saved
                 // proxies and the three rows upstream keeps at the bottom -- which is where the
                 // configurations belong: under the proxies, above "Поделиться списком".
                 return 2000000 + row.sortIndex
             case .enabled:
-                return 4
-            case .serversHeader:
                 return 5
-            case .addServer:
+            case .serversHeader:
                 return 6
+            case .addServer:
+                return 7
             case let .server(index, _, _, _, _, _, _, _):
                 return 1000 + index
             case .shareProxyList:
@@ -8214,7 +8216,8 @@ def _patch_proxy_connection_section(tg: Path) -> None:
     Two switches. One decides whether this client carries a tunnel at all; the other whether calls
     go through it instead of straight out. They belong on this screen rather than on a screen of
     ours: it is where a user goes when a connection will not come up, and the rest of it is already
-    about that. Settings gains one row above "Диагностика прокси" that opens this same screen.
+    about that. Under them, in the same block, "Диагностика прокси" opens the tunnel's diagnostics;
+    the AorusGram screen links here as "Настройки соединения".
 
     Under the saved proxies come the user's own VLESS configurations -- a switch that hands this
     client's transport to them, the configurations themselves with a "+" row that imports whatever
@@ -8222,7 +8225,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
 
     The rows themselves, the state signals and the support-chat jump live in AorusGramUI, in
     AorusConnectionSection.swift and AorusUserVPNSection.swift. What is added here is five entries
-    -- four for the connection block, one carrying every row of the configuration blocks -- their
+    -- five for the connection block, one carrying every row of the configuration blocks -- their
     place in the order, and the closures behind them. Nothing upstream draws is changed, and with
     the switches left alone the screen behaves exactly as it shipped.
     """
@@ -8249,6 +8252,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "    let aorusContext: AccountContext?\n"
         "    let aorusToggleBypass: (Bool) -> Void\n"
         "    let aorusToggleStableCalls: (Bool) -> Void\n"
+        "    let aorusOpenDiagnostics: () -> Void\n"
         "    let aorusOpenSupport: () -> Void\n"
         "    // The user's own VLESS configurations. Three closures and no more: everything that is\n"
         "    // a mutation goes straight to AorusGramUI's own free functions, and only what needs\n"
@@ -8263,7 +8267,8 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "toggleUseForCalls: @escaping (Bool) -> Void, shareProxyList: @escaping () -> Void) {\n",
         "toggleUseForCalls: @escaping (Bool) -> Void, shareProxyList: @escaping () -> Void, "
         "aorusContext: AccountContext?, aorusToggleBypass: @escaping (Bool) -> Void, "
-        "aorusToggleStableCalls: @escaping (Bool) -> Void, aorusOpenSupport: @escaping () -> Void, "
+        "aorusToggleStableCalls: @escaping (Bool) -> Void, aorusOpenDiagnostics: @escaping () -> Void, "
+        "aorusOpenSupport: @escaping () -> Void, "
         "aorusPresent: @escaping (ViewController) -> Void, "
         "aorusOpenUserVPNConfig: @escaping (String) -> Void, "
         "aorusAddUserVPNConfig: @escaping () -> Void) {\n",
@@ -8276,6 +8281,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "        self.aorusContext = aorusContext\n"
         "        self.aorusToggleBypass = aorusToggleBypass\n"
         "        self.aorusToggleStableCalls = aorusToggleStableCalls\n"
+        "        self.aorusOpenDiagnostics = aorusOpenDiagnostics\n"
         "        self.aorusOpenSupport = aorusOpenSupport\n"
         "        self.aorusPresent = aorusPresent\n"
         "        self.aorusOpenUserVPNConfig = aorusOpenUserVPNConfig\n"
@@ -8306,6 +8312,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "    case aorusHeader(PresentationTheme, String)\n"
         "    case aorusBypass(PresentationTheme, String, String?, AorusConnectionIndicator, Bool)\n"
         "    case aorusStableCalls(PresentationTheme, String, Bool)\n"
+        "    case aorusDiagnostics(PresentationTheme, String)\n"
         "    case aorusInfo(PresentationTheme, String, String)\n"
         "    // One case for both new blocks: what the rows are, in what order and what a tap does\n"
         "    // are decided in AorusGramUI, so a change to the VPN screen is a change to one module.\n"
@@ -8318,7 +8325,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         text,
         "            case .enabled:\n"
         "                return ProxySettingsControllerSection.enabled.rawValue\n",
-        "            case .aorusHeader, .aorusBypass, .aorusStableCalls, .aorusInfo:\n"
+        "            case .aorusHeader, .aorusBypass, .aorusStableCalls, .aorusDiagnostics, .aorusInfo:\n"
         "                return ProxySettingsControllerSection.aorusConnection.rawValue\n"
         "            case let .aorusUserVPN(_, row):\n"
         "                switch row.section {\n"
@@ -8350,6 +8357,8 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "                return .index(21)\n"
         "            case .aorusStableCalls:\n"
         "                return .index(22)\n"
+        "            case .aorusDiagnostics:\n"
+        "                return .index(24)\n"
         "            case .aorusInfo:\n"
         "                return .index(23)\n"
         "            case let .aorusUserVPN(_, row):\n"
@@ -8384,6 +8393,13 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "            case let .aorusStableCalls(lhsTheme, lhsText, lhsValue):\n"
         "                if case let .aorusStableCalls(rhsTheme, rhsText, rhsValue) = rhs, "
         "lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n"
+        "                    return true\n"
+        "                } else {\n"
+        "                    return false\n"
+        "                }\n"
+        "            case let .aorusDiagnostics(lhsTheme, lhsText):\n"
+        "                if case let .aorusDiagnostics(rhsTheme, rhsText) = rhs, "
+        "lhsTheme === rhsTheme, lhsText == rhsText {\n"
         "                    return true\n"
         "                } else {\n"
         "                    return false\n"
@@ -8430,6 +8446,11 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "statusText: nil, indicator: AorusConnectionIndicator.none, value: value, sectionId: self.section, "
         "updated: { value in\n"
         "                    arguments.aorusToggleStableCalls(value)\n"
+        "                })\n"
+        "            case let .aorusDiagnostics(_, text):\n"
+        "                return ItemListDisclosureItem(presentationData: presentationData, title: text, "
+        "label: \"\", sectionId: self.section, style: .blocks, action: {\n"
+        "                    arguments.aorusOpenDiagnostics()\n"
         "                })\n"
         "            case let .aorusInfo(_, text, linkText):\n"
         "                guard let aorusContext = arguments.aorusContext else {\n"
@@ -8491,6 +8512,8 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "aorusState.bypassEnabled))\n"
         "        entries.append(.aorusStableCalls(theme, l10n.connectionStableCalls, "
         "aorusState.stableCallsEnabled))\n"
+        "        // The tunnel's diagnostics, in the same block as the two switches they explain.\n"
+        "        entries.append(.aorusDiagnostics(theme, l10n.proxyDiagnostics))\n"
         "        entries.append(.aorusInfo(theme, l10n.connectionFooter, l10n.connectionSupportLink))\n"
         "        // The configuration blocks. They sort themselves under the saved proxies, so\n"
         "        // they are appended with the rest of the AorusGram rows rather than spliced into\n"
@@ -8510,6 +8533,7 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "    var shareProxyListImpl: (() -> Void)?\n",
         "    var shareProxyListImpl: (() -> Void)?\n"
         "    var aorusOpenSupportImpl: (() -> Void)?\n"
+        "    var aorusOpenDiagnosticsImpl: (() -> Void)?\n"
         "    // Upstream has no present impl on this screen -- everything it does either pushes or\n"
         "    // dismisses -- and the import pill and its error alert need one.\n"
         "    var aorusPresentImpl: ((ViewController) -> Void)?\n",
@@ -8524,6 +8548,8 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "        aorusConnectionSetBypassEnabled(value)\n"
         "    }, aorusToggleStableCalls: { value in\n"
         "        aorusConnectionSetStableCallsEnabled(value)\n"
+        "    }, aorusOpenDiagnostics: {\n"
+        "        aorusOpenDiagnosticsImpl?()\n"
         "    }, aorusOpenSupport: {\n"
         "        aorusOpenSupportImpl?()\n"
         "    }, aorusPresent: { controller in\n"
@@ -8588,6 +8614,13 @@ def _patch_proxy_connection_section(tg: Path) -> None:
         "    \n"
         "    aorusPresentImpl = { [weak controller] presented in\n"
         "        controller?.present(presented, in: .window(.root))\n"
+        "    }\n"
+        "    \n"
+        "    aorusOpenDiagnosticsImpl = { [weak controller] in\n"
+        "        guard let context = context, let strongController = controller else {\n"
+        "            return\n"
+        "        }\n"
+        "        aorusPresentProxyDiagnostics(context: context, from: strongController)\n"
         "    }\n"
         "    \n"
         "    shareProxyListImpl = { [weak controller] in\n",

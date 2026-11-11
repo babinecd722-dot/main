@@ -24689,6 +24689,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
     """
     from aorus_personal_badge import patch_personal_badge
     patch_personal_badge(tg)
+    # The AorusGram settings logo sits in the same bundle folder as the badge font.
+    from aorus_logo_tgs import install_settings_logo
+    install_settings_logo(tg)
 
     # --- 1. Alternative imagesets ---------------------------------------------
     for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):
