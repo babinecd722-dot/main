@@ -99,6 +99,8 @@ public func aorusSettingsPresentationData(_ context: AccountContext) -> Signal<P
 struct AorusSettingsIcon: Equatable, Hashable {
     enum Glyph: Equatable, Hashable {
         case symbol(String)
+        /// A glyph from Telegram's own asset catalogue, for a sign Telegram already draws.
+        case bundle(String)
         case ghost
     }
 
@@ -113,6 +115,9 @@ struct AorusSettingsIcon: Equatable, Hashable {
     }
 
     static let ghost = AorusSettingsIcon(glyph: .ghost)
+    /// Telegram's Stars and GRAM signs, as its own menus draw them.
+    static let telegramStars = AorusSettingsIcon(glyph: .bundle("Chat/Context Menu/Stars"))
+    static let telegramGram = AorusSettingsIcon(glyph: .bundle("Chat/Context Menu/Ton"))
 }
 
 private final class AorusSettingsIconCache {
@@ -153,6 +158,10 @@ private func aorusSettingsGlyph(_ glyph: AorusSettingsIcon.Glyph, pointSize: CGF
     case let .symbol(name):
         let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
         return UIImage(systemName: name, withConfiguration: configuration) ?? UIImage(systemName: "circle", withConfiguration: configuration)
+    case let .bundle(name):
+        // Telegram's menu glyphs are drawn on a 24-point box with their own padding, which puts
+        // the sign itself at the size of the symbols beside it.
+        return UIImage(bundleImageName: name)
     case .ghost:
         return AorusGlyphs.ghost(size: pointSize * 1.3)
     }
@@ -166,7 +175,16 @@ private func aorusDrawSettingsIcon(_ icon: AorusSettingsIcon, side: CGFloat, ink
     format.opaque = false
     let size = CGSize(width: side, height: side)
     return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-        let tinted = glyph.withTintColor(ink, renderingMode: .alwaysOriginal)
+        let tinted: UIImage
+        if case .bundle = icon.glyph {
+            // A catalogue image is not a symbol: `withTintColor` would leave it in its own ink.
+            guard let image = generateTintedImage(image: glyph, color: ink) else {
+                return
+            }
+            tinted = image
+        } else {
+            tinted = glyph.withTintColor(ink, renderingMode: .alwaysOriginal)
+        }
         let fitted = aorusFit(tinted.size, in: size)
         tinted.draw(in: CGRect(origin: CGPoint(x: floor((side - fitted.width) / 2.0 * 2.0) / 2.0, y: floor((side - fitted.height) / 2.0 * 2.0) / 2.0), size: fitted))
     }

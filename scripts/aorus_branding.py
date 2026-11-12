@@ -15445,6 +15445,10 @@ public enum AorusForwardBypass {
                         isProtected = true
                     }
                 }
+                // A private chat keeps its protection in the cached user data rather than on the peer.
+                if !isProtected, let cachedUserData = transaction.getPeerCachedData(peerId: source.peerId) as? CachedUserData, cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled) {
+                    isProtected = true
+                }
                 guard isProtected else {
                     return .single(message)
                 }
@@ -15871,8 +15875,8 @@ def patch_bypass_channel_copy_protection(tg: Path) -> None:
 
     Scope is deliberately narrow: only the channel/group peer-flag path is
     neutralised. Secret chats (SecretChat namespace / verification codes) and the
-    per-message `.CopyProtected` flag and view-once toggles are LEFT INTACT, so
-    this does not disturb any of those independent protections.
+    view-once toggles are LEFT INTACT here; the per-message `.CopyProtected` flag and a private
+    chat's protection are lifted later, by patch_bypass_protection_residue.
 
     Enforcement of channel copy protection is purely client-side for everything
     we touch here (screenshots, copy text, save media, action buttons). Forwarding
@@ -16093,6 +16097,108 @@ def patch_save_view_once(tg: Path) -> None:
         print("ViewOnce: patched — peerIsCopyProtected gated on UserDefaults toggle")
     else:
         print("ViewOnce: WARNING — peerIsCopyProtected anchor not found")
+
+
+def patch_bypass_protection_residue(tg: Path) -> None:
+    """Licensed, stock (no UI entry) bypass of the content protection the narrower patches above miss.
+
+    Telegram keeps a chat's protection in three places, and the patches before this one lift only
+    the channel and group peer flags:
+      - the per-message `.CopyProtected` flag (the server's `noforwards`), which every message of a
+        protected channel or chat and every protect_content bot message carries; while it stood,
+        Message.isCopyProtected() still answered true in exactly the chats the bypass is for;
+      - a private chat's protection in CachedUserData (`copyProtectionEnabled` from the other side,
+        `myCopyProtectionEnabled` from ours), read directly by the chat, the history, the profile,
+        the gallery, the music player and media auto-save;
+      - a protected story's `isForwardingDisabled`, which still kept the profile's posts grid out
+        of screenshots (only its blur showed) and swapped a story mention for the author's photo.
+    Each site keeps Telegram's check behind the license lock, so a locked build is native again.
+    Every anchor is required: a missed one fails the build instead of quietly leaving a gap.
+    """
+    lock_expr = f'UserDefaults.standard.bool(forKey: "{_AG_LICENSE_LOCK_KEY}")'
+    marker = "// AorusGram: protection residue bypass"
+    edits = [
+        ("submodules/TelegramCore/Sources/Utils/MessageUtils.swift", [(
+            "        if self.flags.contains(.CopyProtected) {\n"
+            "            return true\n"
+            "        } else if let group = self.peers[self.id.peerId] as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {\n",
+            "        if self.flags.contains(.CopyProtected) {\n"
+            f"            return {lock_expr} {marker}\n"
+            "        } else if let group = self.peers[self.id.peerId] as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {\n",
+        )]),
+        ("submodules/TelegramCore/Sources/TelegramEngine/Data/PeersData.swift", [(
+            "                if let cachedPeerData = view.cachedData as? CachedUserData {\n"
+            "                    return cachedPeerData.flags.contains(.copyProtectionEnabled)\n",
+            f"                guard {lock_expr} else {{ {marker}\n"
+            "                    return false\n"
+            "                }\n"
+            "                if let cachedPeerData = view.cachedData as? CachedUserData {\n"
+            "                    return cachedPeerData.flags.contains(.copyProtectionEnabled)\n",
+        )]),
+        ("submodules/TelegramUI/Sources/ChatControllerContentData.swift", [(
+            "                            copyProtectionEnabled = cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled)\n",
+            f"                            copyProtectionEnabled = {lock_expr} && (cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled)) {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Sources/ChatHistoryListNode.swift", [(
+            "                            isCopyProtectionEnabled = cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled)\n",
+            f"                            isCopyProtectionEnabled = {lock_expr} && (cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled)) {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift", [(
+            "func peerInfoIsCopyProtected(data: PeerInfoScreenData, sharedMediaFromForumTopic: (EnginePeer.Id, Int64)?) -> Bool {\n",
+            "func peerInfoIsCopyProtected(data: PeerInfoScreenData, sharedMediaFromForumTopic: (EnginePeer.Id, Int64)?) -> Bool {\n"
+            f"    guard {lock_expr} else {{ {marker}\n"
+            "        return false\n"
+            "    }\n",
+        )]),
+        ("submodules/GalleryUI/Sources/GalleryController.swift", [(
+            "return (message, cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled))\n",
+            f"return (message, {lock_expr} && (cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled))) {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Sources/StoreDownloadedMedia.swift", [(
+            "if let cachedUserData = cachedData as? CachedUserData, cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled) {\n",
+            f"if {lock_expr}, let cachedUserData = cachedData as? CachedUserData, cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled) {{ {marker}\n",
+        ), (
+            "                        if channel.flags.contains(.copyProtectionEnabled) {\n",
+            f"                        if {lock_expr} && channel.flags.contains(.copyProtectionEnabled) {{ {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Sources/OverlayAudioPlayerControllerNode.swift", [(
+            "                    return copyProtectionEnabled || myCopyProtectionEnabled\n",
+            f"                    return {lock_expr} && (copyProtectionEnabled || myCopyProtectionEnabled) {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Sources/Chat/ChatControllerOpenMessageContextMenu.swift", [(
+            "let isSecret = self.presentationInterfaceState.copyProtectionEnabled || self.presentationInterfaceState.myCopyProtectionEnabled || ",
+            f"let isSecret = ({lock_expr} && (self.presentationInterfaceState.copyProtectionEnabled || self.presentationInterfaceState.myCopyProtectionEnabled)) || ",
+        )]),
+        ("submodules/TelegramUI/Sources/ChatPinnedMessageTitlePanelNode.swift", [(
+            "        self.captureProtected = interfaceState.copyProtectionEnabled || interfaceState.myCopyProtectionEnabled\n",
+            f"        self.captureProtected = {lock_expr} && (interfaceState.copyProtectionEnabled || interfaceState.myCopyProtectionEnabled) {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Sources/ChatController.swift", [(
+            "|| self.presentationInterfaceState.myCopyProtectionEnabled,  /* AorusGram: channel copy bypass (gallery) */",
+            f"|| ({lock_expr} && self.presentationInterfaceState.myCopyProtectionEnabled),  /* AorusGram: channel copy bypass (gallery) */",
+        )]),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift", [(
+            "        if let item = item as? VisualMediaItem, item.story.isForwardingDisabled {\n",
+            f"        if {lock_expr}, let item = item as? VisualMediaItem, item.story.isForwardingDisabled {{ {marker}\n",
+        )]),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageStoryMentionContentNode/Sources/ChatMessageStoryMentionContentNode.swift", [(
+            "                                    if story.isForwardingDisabled {\n",
+            f"                                    if {lock_expr} && story.isForwardingDisabled {{ {marker}\n",
+        )]),
+    ]
+    for relative, replacements in edits:
+        path = tg / relative
+        text = path.read_text(encoding="utf-8")
+        pending = [(old, new) for old, new in replacements if new not in text]
+        if not pending:
+            print(f"ProtectionResidue: {path.name} already patched")
+            continue
+        for old, new in pending:
+            if text.count(old) != 1:
+                raise RuntimeError(f"ProtectionResidue: anchor in {relative} found {text.count(old)} times: {old.strip()[:80]}")
+            text = text.replace(old, new, 1)
+        path.write_text(text, encoding="utf-8")
+        print(f"ProtectionResidue: {path.name} lifted while licensed")
 
 
 def patch_view_once_capture(tg: Path) -> None:
@@ -31604,6 +31710,8 @@ def main() -> None:
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)
+    # After every narrower copy-protection patch: it anchors on the text they leave.
+    patch_bypass_protection_residue(tg)
     patch_view_once_save_button(tg)
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)

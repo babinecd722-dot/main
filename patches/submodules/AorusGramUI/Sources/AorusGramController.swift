@@ -459,6 +459,7 @@ private struct AorusState: Equatable {
     var voiceTwinEnabled: Bool
     var chatLockEnabled: Bool
     var fontTitle: String
+    var fontIsCustom: Bool
     // What the "Other" page used to hold, each on the page it belongs to now.
     var localPremium: Bool
     var fakeStars: Bool
@@ -840,11 +841,11 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         }
         b.toggle("amoledMode", icon("moon.fill"), l10n.amoledMode, aorusL("Чисто чёрный фон в тёмной теме", "Pure black background in the dark theme"), \.amoledMode, state)
         b.block(aorusL("ВНЕШНИЙ ВИД", "LOOK"))
-        b.screen("font", icon("textformat.size"), aorusL("Шрифт", "Font"), aorusL("Шрифт всего приложения", "The font across the app"), .font, value: state.fontTitle)
+        b.screen("font", icon("textformat.size"), aorusL("Шрифт", "Font"), aorusL("Шрифт всего приложения", "The font across the app"), .font, isOn: state.fontIsCustom, value: state.fontTitle)
         b.screen("bubbles", icon("bubble.left.fill"), aorusL("Пузыри сообщений", "Message Bubbles"), aorusL("Форма, стекло и цвета пузырей", "Shape, glass and colours of bubbles"), .bubbleSettings)
         b.screen("messageSettings", icon("text.alignleft"), l10n.messageSettings, aorusL("Что показывать в сообщениях и превью", "What messages and previews show"), .messageSettings)
-        b.toggle("squareAvatars", icon("square.fill"), l10n.squareAvatars, aorusL("Квадратные аватарки вместо круглых", "Square avatars instead of round ones"), \.squareAvatars, state)
-        b.screen("appBadge", icon("capsule.fill"), aorusL("Значок у камеры", "Camera Badge"), aorusL("Значок рядом с камерой вверху экрана", "A badge next to the camera at the top of the screen"), .appBadge, isOn: state.appBadge != "off", value: appBadgeLabel(state.appBadge, l10n))
+        b.toggle("squareAvatars", icon("person.crop.square"), l10n.squareAvatars, aorusL("Квадратные аватарки вместо круглых", "Square avatars instead of round ones"), \.squareAvatars, state)
+        b.screen("appBadge", icon("app.badge"), aorusL("Бейдж в статус-баре", "Status Bar Badge"), aorusL("Бейдж вверху экрана, рядом с камерой", "A badge at the top of the screen, beside the camera"), .appBadge, isOn: state.appBadge != "off", value: appBadgeLabel(state.appBadge, l10n))
         b.block(aorusL("ПРОФИЛЬ И ИСТОРИИ", "PROFILE & STORIES"))
         b.screen("animatedWallpapers", icon("photo.fill"), aorusL("Анимированные обои", "Animated Wallpapers"), aorusL("Живые обои для чатов", "Live wallpapers for chats"), .animatedWallpapers)
         b.screen("animatedBanner", icon("play.rectangle.fill"), aorusL("Анимированный баннер", "Animated Banner"), aorusL("Видео или GIF в шапке профиля", "A video or GIF in your profile header"), .animatedBanner)
@@ -878,13 +879,13 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         b.screen("fakeGifts", icon("gift.fill"), aorusL("Подарки в профиле", "Fake Gifts"), aorusL("Подарки, которые видишь только ты", "Gifts only you can see"), .fakeGifts)
         b.screen("fakeUsernames", icon("at"), aorusL("Коллекционные юзернеймы", "Fake usernames"), aorusL("Юзернеймы, которые видишь только ты", "Usernames only you can see"), .fakeUsernames)
         b.block(aorusL("ЗВЁЗДЫ", "STARS"))
-        b.toggle("fakeStars", icon("star.circle.fill"), aorusL("Баланс звёзд", "Fake Stars"), aorusL("Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся.", "Shows the entered Stars balance locally, only for you. No real stars are created or spent."), \.fakeStars, state)
+        b.toggle("fakeStars", .telegramStars, aorusL("Баланс звёзд", "Fake Stars"), aorusL("Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся.", "Shows the entered Stars balance locally, only for you. No real stars are created or spent."), \.fakeStars, state)
         // The amount row animates in/out with the toggle (the list uses animateChanges).
         if state.fakeStars {
             b.input("fakeStarsAmount", .fakeStarsAmount, aorusL("Количество", "Amount"), state.fakeStarsAmount)
         }
         b.block(aorusL("GRAM (БЫВШИЕ TON)", "GRAM (FORMERLY TON)"))
-        b.toggle("fakeGram", icon("diamond.fill"), aorusL("Баланс GRAM (TON)", "Fake GRAM (TON)"), aorusL("Показывает указанный баланс GRAM (TON) локально, только у вас. Реальные GRAM не создаются и не тратятся.", "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent."), \.fakeGram, state)
+        b.toggle("fakeGram", .telegramGram, aorusL("Баланс GRAM (TON)", "Fake GRAM (TON)"), aorusL("Показывает указанный баланс GRAM (TON) локально, только у вас. Реальные GRAM не создаются и не тратятся.", "Shows the entered GRAM (TON) balance locally, only for you. No real GRAM are created or spent."), \.fakeGram, state)
         if state.fakeGram {
             b.input("fakeGramAmount", .fakeGramAmount, aorusL("Количество", "Amount"), state.fakeGramAmount)
         }
@@ -1115,6 +1116,7 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
         voiceTwinEnabled:   UserDefaults.standard.bool(forKey: "aorusgram_voice_twin_enabled"),
         chatLockEnabled:    AorusChatLock.isEnabled(accountId: accountId),
         fontTitle:          AorusFontStore.selectedTitle,
+        fontIsCustom:       !AorusFontStore.isSystemSelected,
         localPremium:       AorusLocalPremium.isEnabled,
         fakeStars:          AorusFakeStarsStore.isEnabled,
         fakeStarsAmount:    fakeStarsAmount > 0 ? "\(fakeStarsAmount)" : "",

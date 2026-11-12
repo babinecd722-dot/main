@@ -722,6 +722,15 @@ def main() -> int:
     for marker in ("lock_expr =", "guard {lock_expr} else", "({lock_expr} &&"):
         if marker not in late_block:
             fail(errors, f"late copy-protection patch can bypass the license guard: {marker}")
+    residue_start = branding.find("def patch_bypass_protection_residue")
+    residue_end = branding.find("\ndef ", residue_start + 4)
+    residue_block = branding[residue_start:residue_end] if residue_start >= 0 else ""
+    if residue_start < 0 or "patch_bypass_protection_residue(tg)" not in branding:
+        fail(errors, "the content protection residue patch is missing or never runs")
+    else:
+        for marker in ("lock_expr =", "return {lock_expr}", "guard {lock_expr} else", "{lock_expr} && (", "raise RuntimeError"):
+            if marker not in residue_block:
+                fail(errors, f"content protection residue bypass does not restore native protection while locked: {marker}")
     story_start = branding.find("def patch_bypass_story_screenshot")
     story_end = branding.find("_AORUS_AMOLED_HELPER", story_start)
     if story_start < 0 or story_end < 0:

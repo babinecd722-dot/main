@@ -107,6 +107,11 @@ public enum AorusFontStore {
         return "system"
     }
 
+    /// The stock system font, the one the app ships with: its row says so in grey, any other in the accent.
+    public static var isSystemSelected: Bool {
+        return selectedId == "system"
+    }
+
     public static var selectedTitle: String {
         let id = selectedId
         return choices.first(where: { $0.id == id })?.title ?? presets[0].title

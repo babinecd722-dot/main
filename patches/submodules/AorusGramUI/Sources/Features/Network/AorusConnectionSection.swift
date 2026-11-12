@@ -170,6 +170,26 @@ public func aorusConnectionSwitchItem(
     )
 }
 
+/// "Диагностика прокси", under the two switches: their glass, and their empty gutter, so its title
+/// starts in the same column as theirs instead of at the block's edge.
+public func aorusConnectionDiagnosticsItem(
+    presentationData: ItemListPresentationData,
+    title: String,
+    sectionId: ItemListSectionId,
+    action: @escaping () -> Void
+) -> ListViewItem {
+    return ItemListDisclosureItem(
+        presentationData: presentationData,
+        systemStyle: .glass,
+        icon: aorusConnectionEmptyGlyph,
+        title: title,
+        label: "",
+        sectionId: sectionId,
+        style: .blocks,
+        action: action
+    )
+}
+
 /// The caption under the block, with "напишите в поддержку" as the only tappable part of it.
 public func aorusConnectionFooterItem(
     presentationData: ItemListPresentationData,
