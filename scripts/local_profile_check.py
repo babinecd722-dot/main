@@ -59,6 +59,27 @@ enum AorusFakeGiftsStore {
     static func stored(reference: StarGiftReference) -> AorusStoredGift? { values[reference.id] }
     static func update(_ stored: AorusStoredGift) { values[stored.instanceId] = stored }
 }
+// Telegram's libphonenumber as Phone Spoofing reads it, for two countries: Russian mobile numbers
+// are 9 and nine digits, American ones 2-9, two digits, 2-9 and six digits. The real library is
+// exercised for every region by client_work_check.py.
+enum AorusPhoneNumbering {
+    static func region(ofPhone phone: String) -> String? {
+        let digits = phone.filter { $0.isASCII && $0.isNumber }
+        return digits.hasPrefix("7") ? "RU" : digits.hasPrefix("1") ? "US" : nil
+    }
+    static func isValid(_ value: String) -> Bool {
+        let digits = Array(value.dropFirst())
+        guard value.hasPrefix("+"), digits.count == 11, digits.allSatisfy({ $0.isASCII && $0.isNumber }) else { return false }
+        return digits[0] == "7" ? digits[1] == "9" : digits[0] == "1" && digits[1] >= "2" && digits[4] >= "2"
+    }
+    static func mobileNumber(region: String, excluding current: String?) -> String? {
+        guard region == "RU" || region == "US" else { return nil }
+        while true {
+            let value = (region == "RU" ? "+79" : "+1") + (0 ..< (region == "RU" ? 9 : 10)).map { _ in String(Int.random(in: 0 ... 9)) }.joined()
+            if value != current && isValid(value) { return value }
+        }
+    }
+}
 var checks = 0
 func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
 let aorusIconPixelStandard: CGFloat = 1.5
@@ -130,6 +151,30 @@ for data in [Data(), Data("{bad json}".utf8), Data("{\"number\":\"+88800000000\"
 testDefaults.removeObject(forKey: "aorusgram_phone_spoof_anonymous_purchase")
 let migratedPurchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
 expect(migratedPurchase.ton > 0 && AorusPhoneSpoofStore.number == savedNumber, "existing numbers acquire local purchase metadata")
+AorusPhoneSpoofStore.setAnonymous(false)
+expect(AorusPhoneSpoofStore.number == regular, "a valid typed number stays")
+AorusPhoneSpoofStore.setAccountPhone("+7 916 123-45-67")
+expect(testDefaults.string(forKey: "aorusgram_phone_spoof_region") == "RU", "the account's number names the country")
+AorusPhoneSpoofStore.setAccountPhone(nil)
+AorusPhoneSpoofStore.setAccountPhone("")
+expect(testDefaults.string(forKey: "aorusgram_phone_spoof_region") == "RU", "an unknown account number keeps the country")
+for _ in 0 ..< 200 {
+    let previous = AorusPhoneSpoofStore.number
+    let drawn = AorusPhoneSpoofStore.randomize()
+    expect(drawn != previous && drawn.hasPrefix("+79") && drawn.count == 12, "Randomize draws a new number of the account's country")
+    expect(AorusPhoneSpoofStore.number == drawn && AorusPhoneSpoofStore.ensureNumber() == drawn, "a drawn number stays")
+}
+expect(AorusPhoneSpoofStore.setNumber("+7 (916) 123-45-67") == "+79161234567", "a typed number keeps its digits")
+expect(AorusPhoneSpoofStore.number == "+79161234567", "a valid typed number is kept")
+expect(AorusPhoneSpoofStore.setNumber("+7 123") == "+7123", "a number being typed is stored as typed")
+let repaired = AorusPhoneSpoofStore.number
+expect(repaired != "+7123" && repaired.hasPrefix("+79") && repaired.count == 12, "an invalid number is replaced by a valid one")
+expect(AorusPhoneSpoofStore.setNumber("  ") == "", "the field can be cleared")
+expect(AorusPhoneSpoofStore.number.hasPrefix("+79"), "a cleared number is drawn again")
+expect(AorusPhoneSpoofStore.setNumber("+1234567890123456789") == "+123456789012345", "a number has at most 15 digits")
+testDefaults.set("SH", forKey: "aorusgram_phone_spoof_region")
+let fallback = AorusPhoneSpoofStore.randomize()
+expect(AorusPhoneNumbering.isValid(fallback), "a country without mobile numbers falls back to the device's or the United States")
 testDefaults.set(true, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
 expect(!AorusPhoneSpoofStore.isEnabled, "existing global disable still disables spoofing")
 testDefaults.removeObject(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")

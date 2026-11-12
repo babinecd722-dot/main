@@ -320,6 +320,108 @@ def phone_region_api(swiftc, headers, work):
     print("Native phone-region API type-check passed")
 
 
+PHONE_SPOOF_TESTS = r'''
+var checks = 0
+func expect(_ value: Bool, _ message: @autoclosure () -> String) {
+    checks += 1
+    if !value {
+        print("FAILED: " + message())
+        exit(1)
+    }
+}
+let util = NBPhoneNumberUtil()
+func parsed(_ value: String) -> NBPhoneNumber? { return try? util.parse(value, defaultRegion: nil) }
+func isMobile(_ number: NBPhoneNumber) -> Bool {
+    let type = util.getNumberType(number)
+    return type == .MOBILE || type == .FIXED_LINE_OR_MOBILE
+}
+testDefaults.removePersistentDomain(forName: "AorusPhoneSpoofNumbers")
+let regions = ((util.getSupportedRegions() as? [String]) ?? []).sorted()
+expect(regions.count > 200, "libphonenumber lists its regions")
+var slowest = (region: "", seconds: 0.0)
+var drawnCount = 0
+for region in regions {
+    testDefaults.set(region, forKey: "aorusgram_phone_spoof_region")
+    let hasMobile = (try? util.getExampleNumber(forType: region, type: .MOBILE)) != nil
+    var previous = AorusPhoneSpoofStore.number
+    for _ in 0 ..< 6 {
+        let started = Date()
+        let drawn = AorusPhoneSpoofStore.randomize()
+        let seconds = Date().timeIntervalSince(started)
+        if seconds > slowest.seconds {
+            slowest = (region, seconds)
+        }
+        drawnCount += 1
+        expect(drawn != previous, region + ": Randomize changes the number")
+        guard let number = parsed(drawn) else {
+            expect(false, region + ": " + drawn + " parses")
+            continue
+        }
+        let readBack = "+" + (number.countryCode?.stringValue ?? "") + (util.getNationalSignificantNumber(number) ?? "")
+        expect(drawn == readBack, region + ": " + drawn + " is read back unchanged")
+        expect(util.isValidNumber(number) && isMobile(number), region + ": " + drawn + " is a valid mobile number")
+        if hasMobile {
+            expect(util.isValidNumber(forRegion: number, regionCode: region), region + ": " + drawn + " is a number of the region")
+        }
+        expect(AorusPhoneSpoofStore.number == drawn && AorusPhoneSpoofStore.ensureNumber() == drawn, region + ": the number stays until it is changed")
+        previous = drawn
+    }
+}
+expect(slowest.seconds < 1.5, "drawing a number takes " + String(slowest.seconds) + " s in " + slowest.region)
+for (phone, region) in [("79161234567", "RU"), ("+380 50 123 4567", "UA"), ("14155552671", "US"), ("77011234567", "KZ"), ("998901234567", "UZ"), ("4915112345678", "DE")] {
+    AorusPhoneSpoofStore.setAccountPhone(phone)
+    for _ in 0 ..< 20 {
+        let drawn = AorusPhoneSpoofStore.randomize()
+        expect(parsed(drawn).map { util.getRegionCode(for: $0) == region && util.isValidNumber($0) && isMobile($0) } ?? false, "an account of " + region + " gets a mobile number of " + region + ", not " + drawn)
+    }
+}
+expect(AorusPhoneSpoofStore.setNumber("+7 (916) 123-45-67") == "+79161234567" && AorusPhoneSpoofStore.number == "+79161234567", "a valid typed number is kept")
+_ = AorusPhoneSpoofStore.setNumber("+7 123")
+expect(parsed(AorusPhoneSpoofStore.number).map { util.isValidNumber($0) } ?? false, "an invalid number is replaced by a valid one")
+let lock = NSLock()
+var parallel: [String] = []
+DispatchQueue.concurrentPerform(iterations: 64) { index in
+    let value = AorusPhoneNumbering.mobileNumber(region: index % 2 == 0 ? "RU" : "BR", excluding: nil) ?? ""
+    let valid = AorusPhoneNumbering.isValid(value)
+    lock.lock()
+    parallel.append(valid ? value : "")
+    lock.unlock()
+}
+expect(parallel.count == 64 && !parallel.contains(""), "numbers are drawn and read from several threads at once")
+testDefaults.removePersistentDomain(forName: "AorusPhoneSpoofNumbers")
+print("Phone Spoofing numbers: \(checks) checks, \(drawnCount) numbers in \(regions.count) regions, slowest \(slowest.region) \(Int(slowest.seconds * 1000)) ms")
+'''
+
+
+def phone_spoof_numbers(swiftc, headers, work):
+    """Phone Spoofing's numbers, as TelegramCore builds them, on Telegram's own libphonenumber."""
+    from local_profile_check import declaration
+    source = aorus_branding.AORUS_ANTI_SEARCH_SWIFT
+    numbering = declaration(source, "enum AorusPhoneNumbering {")
+    store = declaration(source, "public enum AorusPhoneSpoofStore {")
+    # TelegramCore compiles with warnings as errors against the same pinned headers.
+    probe = work / "PhoneSpoofProbe.swift"
+    probe.write_text("import Foundation\nimport libphonenumber\n\n" + numbering + "\n\n" + store + "\n")
+    sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
+    checked([swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", "-I", str(work), "-I", str(headers.resolve()), str(probe)])
+    print("Phone Spoofing numbering type-check passed")
+    sources = headers.resolve().parent / "Sources"
+    if platform.system() != "Darwin" or not sources.is_dir():
+        print("Phone Spoofing numbers: libphonenumber sources are not here, drawing skipped")
+        return
+    # The library itself, built for this Mac, and every region it knows drawn from.
+    objects = []
+    for source_file in sorted(sources.glob("*.m")):
+        target = work / (source_file.stem + ".o")
+        checked(["xcrun", "clang", "-c", "-fobjc-arc", "-fmodules", "-fmodules-cache-path=" + str(work / "cache"), "-w", "-I", str(headers.resolve()), "-I", str(sources), str(source_file), "-o", str(target)])
+        objects.append(str(target))
+    test = work / "PhoneSpoofNumbers.swift"
+    test.write_text("import Foundation\nimport libphonenumber\n\nlet testDefaults = UserDefaults(suiteName: \"AorusPhoneSpoofNumbers\")!\n\n" + numbering + "\n\n" + store.replace("UserDefaults.standard", "testDefaults") + "\n" + PHONE_SPOOF_TESTS)
+    executable = work / "phone-spoof-numbers"
+    checked([swiftc, "-module-cache-path", str(work / "cache"), "-I", str(work), "-I", str(headers.resolve()), str(test), *objects, "-framework", "Foundation", "-o", str(executable)])
+    checked([str(executable)])
+
+
 def share_preview_api(swiftc, repo, work):
     from ai_share_preview_fixtures import share_preview_test_source
     probe = work / "AISharePreviewProbe.swift"
@@ -343,6 +445,7 @@ def main():
         work = Path(directory)
         if args.phone_headers:
             phone_region_api(args.swiftc, args.phone_headers, work)
+            phone_spoof_numbers(args.swiftc, args.phone_headers, work)
             share_preview_api(args.swiftc, args.repo, work)
             return
         run(args.swiftc, work, "eligibility", eligibility(args.repo))

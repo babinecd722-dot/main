@@ -14480,6 +14480,7 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
 AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
 import Postbox
 import SwiftSignalKit
+import libphonenumber
 
 // AorusGram AntiSearch — swap visually identical Cyrillic <-> Latin letters on outgoing
 // text at send and edit time so the rendered message looks pixel-identical but no longer
@@ -14537,191 +14538,92 @@ public enum AorusProfileLinkStore {
     }
 }
 
-public enum AorusPhoneSpoofStore {
-    private struct PhoneRule {
-        let countryCode: String
-        let nationalLengths: [Int]
+/// Phone Spoofing's numbers, every one of them decided by Telegram's own libphonenumber: the
+/// country of the account's number, whether a number is valid, and a new number of a country.
+/// A bot that asks for the phone number checks the contact with libphonenumber or its ports, so
+/// the number drawn here passes the same check: a valid mobile number of the account's country.
+enum AorusPhoneNumbering {
+    // NBPhoneNumberUtil keeps caches of its own and is not safe across threads; the settings and
+    // outgoing messages read numbers on different queues.
+    private static let lock = NSLock()
+    private static let util = NBPhoneNumberUtil()
+    private static var lastChecked: (value: String, isValid: Bool)?
 
-        var preferredLength: Int {
-            return nationalLengths.last ?? 10
+    /// The country (ISO 3166, "RU") of an international number, written with or without "+".
+    static func region(ofPhone phone: String) -> String? {
+        let digits = phone.filter { $0.isASCII && $0.isNumber }
+        guard !digits.isEmpty else {
+            return nil
         }
-
-        var maxNationalLength: Int {
-            return nationalLengths.max() ?? preferredLength
+        lock.lock()
+        defer { lock.unlock() }
+        guard let number = try? util.parse("+" + digits, defaultRegion: nil), let region = util.getRegionCode(for: number), region.count == 2 else {
+            return nil
         }
+        return region
     }
 
+    /// Whether libphonenumber holds an international number ("+" and digits) to be valid.
+    static func isValid(_ value: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if let checked = lastChecked, checked.value == value {
+            return checked.isValid
+        }
+        var isValid = false
+        if value.hasPrefix("+"), let number = try? util.parse(value, defaultRegion: nil) {
+            isValid = util.isValidNumber(number)
+        }
+        lastChecked = (value, isValid)
+        return isValid
+    }
+
+    /// A new valid mobile number of the region, other than `current`. The region's example mobile
+    /// number keeps its leading digits -- none at first, then one, two and so on, the fewer the
+    /// more varied -- and the rest are drawn at random, until libphonenumber reads the result back
+    /// unchanged as a valid mobile number of that region. nil for a region without mobile numbers.
+    static func mobileNumber(region: String, excluding current: String?) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let sample = try? util.getExampleNumber(forType: region, type: .MOBILE),
+              let countryCode = sample.countryCode?.stringValue,
+              let exampleNational = util.getNationalSignificantNumber(sample),
+              !exampleNational.isEmpty else {
+            return nil
+        }
+        let prefix = "+" + countryCode
+        for kept in 0 ..< exampleNational.count {
+            for _ in 0 ..< 32 {
+                var national = String(exampleNational.prefix(kept))
+                while national.count < exampleNational.count {
+                    national.append(Character(String(Int.random(in: 0 ... 9))))
+                }
+                let candidate = prefix + national
+                if national != exampleNational, candidate != current, isMobile(candidate, national: national, region: region) {
+                    return candidate
+                }
+            }
+        }
+        let example = prefix + exampleNational
+        return example != current && isMobile(example, national: exampleNational, region: region) ? example : nil
+    }
+
+    // The caller holds the lock.
+    private static func isMobile(_ value: String, national: String, region: String) -> Bool {
+        guard let number = try? util.parse(value, defaultRegion: nil),
+              util.getNationalSignificantNumber(number) == national,
+              util.isValidNumber(forRegion: number, regionCode: region) else {
+            return false
+        }
+        let type = util.getNumberType(number)
+        return type == .MOBILE || type == .FIXED_LINE_OR_MOBILE
+    }
+}
+
+public enum AorusPhoneSpoofStore {
     private static let enabledKey = "aorusgram_phone_spoof_enabled"
     private static let numberKey = "aorusgram_phone_spoof_number"
-
-    private static let regionRules: [String: PhoneRule] = [
-        "AC": PhoneRule(countryCode: "247", nationalLengths: [4]), "AD": PhoneRule(countryCode: "376", nationalLengths: [6]),
-        "AE": PhoneRule(countryCode: "971", nationalLengths: [9]), "AF": PhoneRule(countryCode: "93", nationalLengths: [9]),
-        "AG": PhoneRule(countryCode: "1", nationalLengths: [10]), "AI": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "AL": PhoneRule(countryCode: "355", nationalLengths: [9]), "AM": PhoneRule(countryCode: "374", nationalLengths: [8]),
-        "AO": PhoneRule(countryCode: "244", nationalLengths: [9]), "AR": PhoneRule(countryCode: "54", nationalLengths: [10]),
-        "AS": PhoneRule(countryCode: "1", nationalLengths: [10]), "AT": PhoneRule(countryCode: "43", nationalLengths: [10, 11, 12, 13]),
-        "AU": PhoneRule(countryCode: "61", nationalLengths: [9]), "AW": PhoneRule(countryCode: "297", nationalLengths: [7]),
-        "AX": PhoneRule(countryCode: "358", nationalLengths: [6, 7, 8, 9, 10]), "AZ": PhoneRule(countryCode: "994", nationalLengths: [9]),
-        "BA": PhoneRule(countryCode: "387", nationalLengths: [8]), "BB": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "BD": PhoneRule(countryCode: "880", nationalLengths: [10]), "BE": PhoneRule(countryCode: "32", nationalLengths: [9]),
-        "BF": PhoneRule(countryCode: "226", nationalLengths: [8]), "BG": PhoneRule(countryCode: "359", nationalLengths: [9]),
-        "BH": PhoneRule(countryCode: "973", nationalLengths: [8]), "BI": PhoneRule(countryCode: "257", nationalLengths: [8]),
-        "BJ": PhoneRule(countryCode: "229", nationalLengths: [8, 10]), "BL": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "BM": PhoneRule(countryCode: "1", nationalLengths: [10]), "BN": PhoneRule(countryCode: "673", nationalLengths: [7]),
-        "BO": PhoneRule(countryCode: "591", nationalLengths: [8]), "BQ": PhoneRule(countryCode: "599", nationalLengths: [7]),
-        "BR": PhoneRule(countryCode: "55", nationalLengths: [10, 11]), "BS": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "BT": PhoneRule(countryCode: "975", nationalLengths: [8]), "BW": PhoneRule(countryCode: "267", nationalLengths: [7, 8]),
-        "BY": PhoneRule(countryCode: "375", nationalLengths: [9]), "BZ": PhoneRule(countryCode: "501", nationalLengths: [7]),
-        "CA": PhoneRule(countryCode: "1", nationalLengths: [10]), "CC": PhoneRule(countryCode: "61", nationalLengths: [9]),
-        "CD": PhoneRule(countryCode: "243", nationalLengths: [9]), "CF": PhoneRule(countryCode: "236", nationalLengths: [8]),
-        "CG": PhoneRule(countryCode: "242", nationalLengths: [9]), "CH": PhoneRule(countryCode: "41", nationalLengths: [9]),
-        "CI": PhoneRule(countryCode: "225", nationalLengths: [10]), "CK": PhoneRule(countryCode: "682", nationalLengths: [5]),
-        "CL": PhoneRule(countryCode: "56", nationalLengths: [9]), "CM": PhoneRule(countryCode: "237", nationalLengths: [9]),
-        "CN": PhoneRule(countryCode: "86", nationalLengths: [11]), "CO": PhoneRule(countryCode: "57", nationalLengths: [10]),
-        "CR": PhoneRule(countryCode: "506", nationalLengths: [8]), "CU": PhoneRule(countryCode: "53", nationalLengths: [8]),
-        "CV": PhoneRule(countryCode: "238", nationalLengths: [7]), "CW": PhoneRule(countryCode: "599", nationalLengths: [7]),
-        "CX": PhoneRule(countryCode: "61", nationalLengths: [9]), "CY": PhoneRule(countryCode: "357", nationalLengths: [8]),
-        "CZ": PhoneRule(countryCode: "420", nationalLengths: [9]), "DE": PhoneRule(countryCode: "49", nationalLengths: [10, 11]),
-        "DJ": PhoneRule(countryCode: "253", nationalLengths: [8]), "DK": PhoneRule(countryCode: "45", nationalLengths: [8]),
-        "DM": PhoneRule(countryCode: "1", nationalLengths: [10]), "DO": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "DZ": PhoneRule(countryCode: "213", nationalLengths: [9]), "EC": PhoneRule(countryCode: "593", nationalLengths: [9]),
-        "EE": PhoneRule(countryCode: "372", nationalLengths: [7, 8]), "EG": PhoneRule(countryCode: "20", nationalLengths: [10]),
-        "EH": PhoneRule(countryCode: "212", nationalLengths: [9]), "ER": PhoneRule(countryCode: "291", nationalLengths: [7]),
-        "ES": PhoneRule(countryCode: "34", nationalLengths: [9]), "ET": PhoneRule(countryCode: "251", nationalLengths: [9]),
-        "FI": PhoneRule(countryCode: "358", nationalLengths: [8, 9, 10]), "FJ": PhoneRule(countryCode: "679", nationalLengths: [7]),
-        "FK": PhoneRule(countryCode: "500", nationalLengths: [5]), "FM": PhoneRule(countryCode: "691", nationalLengths: [7]),
-        "FO": PhoneRule(countryCode: "298", nationalLengths: [6]), "FR": PhoneRule(countryCode: "33", nationalLengths: [9]),
-        "GA": PhoneRule(countryCode: "241", nationalLengths: [7, 8]), "GB": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "GD": PhoneRule(countryCode: "1", nationalLengths: [10]), "GE": PhoneRule(countryCode: "995", nationalLengths: [9]),
-        "GF": PhoneRule(countryCode: "594", nationalLengths: [9]), "GG": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "GH": PhoneRule(countryCode: "233", nationalLengths: [9]), "GI": PhoneRule(countryCode: "350", nationalLengths: [8]),
-        "GL": PhoneRule(countryCode: "299", nationalLengths: [6]), "GM": PhoneRule(countryCode: "220", nationalLengths: [7]),
-        "GN": PhoneRule(countryCode: "224", nationalLengths: [9]), "GP": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "GQ": PhoneRule(countryCode: "240", nationalLengths: [9]), "GR": PhoneRule(countryCode: "30", nationalLengths: [10]),
-        "GT": PhoneRule(countryCode: "502", nationalLengths: [8]), "GU": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "GW": PhoneRule(countryCode: "245", nationalLengths: [7]), "GY": PhoneRule(countryCode: "592", nationalLengths: [7]),
-        "HK": PhoneRule(countryCode: "852", nationalLengths: [8]), "HN": PhoneRule(countryCode: "504", nationalLengths: [8]),
-        "HR": PhoneRule(countryCode: "385", nationalLengths: [8, 9]), "HT": PhoneRule(countryCode: "509", nationalLengths: [8]),
-        "HU": PhoneRule(countryCode: "36", nationalLengths: [9]), "ID": PhoneRule(countryCode: "62", nationalLengths: [9, 10, 11, 12]),
-        "IE": PhoneRule(countryCode: "353", nationalLengths: [9]), "IL": PhoneRule(countryCode: "972", nationalLengths: [9]),
-        "IM": PhoneRule(countryCode: "44", nationalLengths: [10]), "IN": PhoneRule(countryCode: "91", nationalLengths: [10]),
-        "IO": PhoneRule(countryCode: "246", nationalLengths: [7]), "IQ": PhoneRule(countryCode: "964", nationalLengths: [10]),
-        "IR": PhoneRule(countryCode: "98", nationalLengths: [10]), "IS": PhoneRule(countryCode: "354", nationalLengths: [7]),
-        "IT": PhoneRule(countryCode: "39", nationalLengths: [9, 10, 11]), "JE": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "JM": PhoneRule(countryCode: "1", nationalLengths: [10]), "JO": PhoneRule(countryCode: "962", nationalLengths: [9]),
-        "JP": PhoneRule(countryCode: "81", nationalLengths: [10]), "KE": PhoneRule(countryCode: "254", nationalLengths: [9]),
-        "KG": PhoneRule(countryCode: "996", nationalLengths: [9]), "KH": PhoneRule(countryCode: "855", nationalLengths: [8, 9]),
-        "KI": PhoneRule(countryCode: "686", nationalLengths: [5, 8]), "KM": PhoneRule(countryCode: "269", nationalLengths: [7]),
-        "KN": PhoneRule(countryCode: "1", nationalLengths: [10]), "KP": PhoneRule(countryCode: "850", nationalLengths: [10]),
-        "KR": PhoneRule(countryCode: "82", nationalLengths: [9, 10]), "KW": PhoneRule(countryCode: "965", nationalLengths: [8]),
-        "KY": PhoneRule(countryCode: "1", nationalLengths: [10]), "KZ": PhoneRule(countryCode: "7", nationalLengths: [10]),
-        "LA": PhoneRule(countryCode: "856", nationalLengths: [8, 10]), "LB": PhoneRule(countryCode: "961", nationalLengths: [7, 8]),
-        "LC": PhoneRule(countryCode: "1", nationalLengths: [10]), "LI": PhoneRule(countryCode: "423", nationalLengths: [7]),
-        "LK": PhoneRule(countryCode: "94", nationalLengths: [9]), "LR": PhoneRule(countryCode: "231", nationalLengths: [7, 8]),
-        "LS": PhoneRule(countryCode: "266", nationalLengths: [8]), "LT": PhoneRule(countryCode: "370", nationalLengths: [8]),
-        "LU": PhoneRule(countryCode: "352", nationalLengths: [9]), "LV": PhoneRule(countryCode: "371", nationalLengths: [8]),
-        "LY": PhoneRule(countryCode: "218", nationalLengths: [9]), "MA": PhoneRule(countryCode: "212", nationalLengths: [9]),
-        "MC": PhoneRule(countryCode: "377", nationalLengths: [8, 9]), "MD": PhoneRule(countryCode: "373", nationalLengths: [8]),
-        "ME": PhoneRule(countryCode: "382", nationalLengths: [8]), "MF": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "MG": PhoneRule(countryCode: "261", nationalLengths: [9]), "MH": PhoneRule(countryCode: "692", nationalLengths: [7]),
-        "MK": PhoneRule(countryCode: "389", nationalLengths: [8]), "ML": PhoneRule(countryCode: "223", nationalLengths: [8]),
-        "MM": PhoneRule(countryCode: "95", nationalLengths: [8, 9, 10]), "MN": PhoneRule(countryCode: "976", nationalLengths: [8]),
-        "MO": PhoneRule(countryCode: "853", nationalLengths: [8]), "MP": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "MQ": PhoneRule(countryCode: "596", nationalLengths: [9]), "MR": PhoneRule(countryCode: "222", nationalLengths: [8]),
-        "MS": PhoneRule(countryCode: "1", nationalLengths: [10]), "MT": PhoneRule(countryCode: "356", nationalLengths: [8]),
-        "MU": PhoneRule(countryCode: "230", nationalLengths: [8]), "MV": PhoneRule(countryCode: "960", nationalLengths: [7]),
-        "MW": PhoneRule(countryCode: "265", nationalLengths: [9]), "MX": PhoneRule(countryCode: "52", nationalLengths: [10]),
-        "MY": PhoneRule(countryCode: "60", nationalLengths: [9, 10]), "MZ": PhoneRule(countryCode: "258", nationalLengths: [9]),
-        "NA": PhoneRule(countryCode: "264", nationalLengths: [9]), "NC": PhoneRule(countryCode: "687", nationalLengths: [6]),
-        "NE": PhoneRule(countryCode: "227", nationalLengths: [8]), "NF": PhoneRule(countryCode: "672", nationalLengths: [6]),
-        "NG": PhoneRule(countryCode: "234", nationalLengths: [10]), "NI": PhoneRule(countryCode: "505", nationalLengths: [8]),
-        "NL": PhoneRule(countryCode: "31", nationalLengths: [9]), "NO": PhoneRule(countryCode: "47", nationalLengths: [8]),
-        "NP": PhoneRule(countryCode: "977", nationalLengths: [10]), "NR": PhoneRule(countryCode: "674", nationalLengths: [7]),
-        "NU": PhoneRule(countryCode: "683", nationalLengths: [4]), "NZ": PhoneRule(countryCode: "64", nationalLengths: [8, 9]),
-        "OM": PhoneRule(countryCode: "968", nationalLengths: [8]), "PA": PhoneRule(countryCode: "507", nationalLengths: [8]),
-        "PE": PhoneRule(countryCode: "51", nationalLengths: [9]), "PF": PhoneRule(countryCode: "689", nationalLengths: [6]),
-        "PG": PhoneRule(countryCode: "675", nationalLengths: [8]), "PH": PhoneRule(countryCode: "63", nationalLengths: [10]),
-        "PK": PhoneRule(countryCode: "92", nationalLengths: [10]), "PL": PhoneRule(countryCode: "48", nationalLengths: [9]),
-        "PM": PhoneRule(countryCode: "508", nationalLengths: [6]), "PR": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "PS": PhoneRule(countryCode: "970", nationalLengths: [9]), "PT": PhoneRule(countryCode: "351", nationalLengths: [9]),
-        "PW": PhoneRule(countryCode: "680", nationalLengths: [7]), "PY": PhoneRule(countryCode: "595", nationalLengths: [9]),
-        "QA": PhoneRule(countryCode: "974", nationalLengths: [8]), "RE": PhoneRule(countryCode: "262", nationalLengths: [9]),
-        "RO": PhoneRule(countryCode: "40", nationalLengths: [9]), "RS": PhoneRule(countryCode: "381", nationalLengths: [8, 9]),
-        "RU": PhoneRule(countryCode: "7", nationalLengths: [10]), "RW": PhoneRule(countryCode: "250", nationalLengths: [9]),
-        "SA": PhoneRule(countryCode: "966", nationalLengths: [9]), "SB": PhoneRule(countryCode: "677", nationalLengths: [5, 7]),
-        "SC": PhoneRule(countryCode: "248", nationalLengths: [7]), "SD": PhoneRule(countryCode: "249", nationalLengths: [9]),
-        "SE": PhoneRule(countryCode: "46", nationalLengths: [9]), "SG": PhoneRule(countryCode: "65", nationalLengths: [8]),
-        "SH": PhoneRule(countryCode: "290", nationalLengths: [4]), "SI": PhoneRule(countryCode: "386", nationalLengths: [8]),
-        "SJ": PhoneRule(countryCode: "47", nationalLengths: [8]), "SK": PhoneRule(countryCode: "421", nationalLengths: [9]),
-        "SL": PhoneRule(countryCode: "232", nationalLengths: [8]), "SM": PhoneRule(countryCode: "378", nationalLengths: [10]),
-        "SN": PhoneRule(countryCode: "221", nationalLengths: [9]), "SO": PhoneRule(countryCode: "252", nationalLengths: [8, 9]),
-        "SR": PhoneRule(countryCode: "597", nationalLengths: [6, 7]), "SS": PhoneRule(countryCode: "211", nationalLengths: [9]),
-        "ST": PhoneRule(countryCode: "239", nationalLengths: [7]), "SV": PhoneRule(countryCode: "503", nationalLengths: [8]),
-        "SX": PhoneRule(countryCode: "1", nationalLengths: [10]), "SY": PhoneRule(countryCode: "963", nationalLengths: [9]),
-        "SZ": PhoneRule(countryCode: "268", nationalLengths: [8]), "TA": PhoneRule(countryCode: "290", nationalLengths: [4]),
-        "TC": PhoneRule(countryCode: "1", nationalLengths: [10]), "TD": PhoneRule(countryCode: "235", nationalLengths: [8]),
-        "TG": PhoneRule(countryCode: "228", nationalLengths: [8]), "TH": PhoneRule(countryCode: "66", nationalLengths: [9]),
-        "TJ": PhoneRule(countryCode: "992", nationalLengths: [9]), "TK": PhoneRule(countryCode: "690", nationalLengths: [4]),
-        "TL": PhoneRule(countryCode: "670", nationalLengths: [7, 8]), "TM": PhoneRule(countryCode: "993", nationalLengths: [8]),
-        "TN": PhoneRule(countryCode: "216", nationalLengths: [8]), "TO": PhoneRule(countryCode: "676", nationalLengths: [5, 7]),
-        "TR": PhoneRule(countryCode: "90", nationalLengths: [10]), "TT": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "TV": PhoneRule(countryCode: "688", nationalLengths: [5, 6]), "TW": PhoneRule(countryCode: "886", nationalLengths: [9]),
-        "TZ": PhoneRule(countryCode: "255", nationalLengths: [9]), "UA": PhoneRule(countryCode: "380", nationalLengths: [9]),
-        "UG": PhoneRule(countryCode: "256", nationalLengths: [9]), "US": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "UY": PhoneRule(countryCode: "598", nationalLengths: [8]), "UZ": PhoneRule(countryCode: "998", nationalLengths: [9]),
-        "VA": PhoneRule(countryCode: "39", nationalLengths: [10]), "VC": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "VE": PhoneRule(countryCode: "58", nationalLengths: [10]), "VG": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "VI": PhoneRule(countryCode: "1", nationalLengths: [10]), "VN": PhoneRule(countryCode: "84", nationalLengths: [9, 10]),
-        "VU": PhoneRule(countryCode: "678", nationalLengths: [5, 7]), "WF": PhoneRule(countryCode: "681", nationalLengths: [6]),
-        "WS": PhoneRule(countryCode: "685", nationalLengths: [5, 7]), "XK": PhoneRule(countryCode: "383", nationalLengths: [8]),
-        "YE": PhoneRule(countryCode: "967", nationalLengths: [9]), "YT": PhoneRule(countryCode: "262", nationalLengths: [9]),
-        "ZA": PhoneRule(countryCode: "27", nationalLengths: [9]), "ZM": PhoneRule(countryCode: "260", nationalLengths: [9]),
-        "ZW": PhoneRule(countryCode: "263", nationalLengths: [9])
-    ]
-
-    private static let codeRules: [String: [Int]] = [
-        "1": [10], "7": [10], "20": [10], "27": [9], "30": [10], "31": [9], "32": [9], "33": [9], "34": [9],
-        "36": [9], "39": [9, 10, 11], "40": [9], "41": [9], "43": [10, 11, 12, 13], "44": [10], "45": [8],
-        "46": [9], "47": [8], "48": [9], "49": [10, 11], "51": [9], "52": [10], "53": [8], "54": [10],
-        "55": [10, 11], "56": [9], "57": [10], "58": [10], "60": [9, 10], "61": [9], "62": [9, 10, 11, 12],
-        "63": [10], "64": [8, 9], "65": [8], "66": [9], "81": [10], "82": [9, 10], "84": [9, 10], "86": [11],
-        "90": [10], "91": [10], "92": [10], "93": [9], "94": [9], "95": [8, 9, 10], "98": [10],
-        "211": [9], "212": [9], "213": [9], "216": [8], "218": [9], "220": [7], "221": [9], "222": [8],
-        "223": [8], "224": [9], "225": [10], "226": [8], "227": [8], "228": [8], "229": [8, 10],
-        "230": [8], "231": [7, 8], "232": [8], "233": [9], "234": [10], "235": [8], "236": [8], "237": [9],
-        "238": [7], "239": [7], "240": [9], "241": [7, 8], "242": [9], "243": [9], "244": [9], "245": [7],
-        "246": [7], "247": [4], "248": [7], "249": [9], "250": [9], "251": [9], "252": [8, 9], "253": [8],
-        "254": [9], "255": [9], "256": [9], "257": [8], "258": [9], "260": [9], "261": [9], "262": [9],
-        "263": [9], "264": [9], "265": [9], "266": [8], "267": [7, 8], "268": [8], "269": [7], "290": [4],
-        "291": [7], "297": [7], "298": [6], "299": [6], "350": [8], "351": [9], "352": [9], "353": [9],
-        "354": [7], "355": [9], "356": [8], "357": [8], "358": [6, 7, 8, 9, 10], "359": [9], "370": [8],
-        "371": [8], "372": [7, 8], "373": [8], "374": [8], "375": [9], "376": [6], "377": [8, 9], "378": [10],
-        "380": [9], "381": [8, 9], "382": [8], "383": [8], "385": [8, 9], "386": [8], "387": [8], "389": [8],
-        "420": [9], "421": [9], "423": [7], "500": [5], "501": [7], "502": [8], "503": [8], "504": [8],
-        "505": [8], "506": [8], "507": [8], "508": [6], "509": [8], "590": [9], "591": [8], "592": [7],
-        "593": [9], "594": [9], "595": [9], "596": [9], "597": [6, 7], "598": [8], "599": [7], "670": [7, 8],
-        "672": [6], "673": [7], "674": [7], "675": [8], "676": [5, 7], "677": [5, 7], "678": [5, 7],
-        "679": [7], "680": [7], "681": [6], "682": [5], "683": [4], "685": [5, 7], "686": [5, 8],
-        "687": [6], "688": [5, 6], "689": [6], "690": [4], "691": [7], "692": [7], "850": [10],
-        "852": [8], "853": [8], "855": [8, 9], "856": [8, 10], "880": [10], "886": [9], "960": [7],
-        "961": [7, 8], "962": [9], "963": [9], "964": [10], "965": [8], "966": [9], "967": [9], "968": [8],
-        "970": [9], "971": [9], "972": [9], "973": [8], "974": [8], "975": [8], "976": [8], "977": [10],
-        "992": [9], "993": [8], "994": [9], "995": [9], "996": [9], "998": [9]
-    ]
-
-    private static var defaultRule: PhoneRule {
-        let currentRegion: String?
-        if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
-            currentRegion = Locale.current.region?.identifier
-        } else {
-            currentRegion = Locale.current.regionCode
-        }
-        if let region = currentRegion?.uppercased(), let rule = regionRules[region] {
-            return rule
-        }
-        return PhoneRule(countryCode: "1", nationalLengths: [10])
-    }
+    private static let regionKey = "aorusgram_phone_spoof_region"
 
     public static var isEnabled: Bool {
         return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: enabledKey)
@@ -14738,15 +14640,32 @@ public enum AorusPhoneSpoofStore {
 
     public static let changedNotification = Notification.Name("AorusGramPhoneSpoofChanged")
 
-    /// Draws a real-looking mobile number: the settings install one built on Telegram's
-    /// libphonenumber (AorusPhoneNumberGenerator in AorusGramUI), which this module does not
-    /// link. It is handed the region of the account's own number when the settings know it,
-    /// and returns an E.164 number ("+" and digits) that libphonenumber holds to be a valid
-    /// mobile number there, or nil to fall back to the rules below.
-    public static var numberGenerator: ((_ region: String?) -> String?)?
-    /// The region of the account's own number (ISO 3166, "RU"), set by the settings.
-    public static var accountRegion: String?
-    private static let validatedNumberKey = "aorusgram_phone_spoof_validated_number"
+    /// The account's own number names the country the protected number is drawn in; the
+    /// settings pass it in when they open.
+    public static func setAccountPhone(_ phone: String?) {
+        guard let phone = phone, let region = AorusPhoneNumbering.region(ofPhone: phone) else {
+            return
+        }
+        UserDefaults.standard.set(region, forKey: regionKey)
+    }
+
+    // The account's country, else the device's, else the United States.
+    private static var regions: [String] {
+        let deviceRegion: String?
+        if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+            deviceRegion = Locale.current.region?.identifier
+        } else {
+            deviceRegion = Locale.current.regionCode
+        }
+        var result: [String] = []
+        for candidate in [UserDefaults.standard.string(forKey: regionKey), deviceRegion, "US"] {
+            if let region = candidate?.uppercased(), region.count == 2, !result.contains(region) {
+                result.append(region)
+            }
+        }
+        return result
+    }
+
     private static let anonymousKey = "aorusgram_phone_spoof_anonymous"
     private static let anonymousNumberKey = "aorusgram_phone_spoof_anonymous_number"
     private static let anonymousDateKey = "aorusgram_phone_spoof_anonymous_date"
@@ -14812,7 +14731,7 @@ public enum AorusPhoneSpoofStore {
             if let stored = UserDefaults.standard.string(forKey: anonymousNumberKey), completeAnonymous(stored) { return stored }
             return randomize()
         }
-        if let stored = UserDefaults.standard.string(forKey: numberKey), isComplete(stored) {
+        if let stored = UserDefaults.standard.string(forKey: numberKey), AorusPhoneNumbering.isValid(stored) {
             return stored
         }
         return randomize()
@@ -14847,109 +14766,23 @@ public enum AorusPhoneSpoofStore {
             NotificationCenter.default.post(name: changedNotification, object: nil)
             return value
         }
-        let value: String
-        if let generated = numberGenerator?(accountRegion), generated.hasPrefix("+"), generated.count >= 8 {
-            value = generated
-            UserDefaults.standard.set(generated, forKey: validatedNumberKey)
-        } else {
-            let rule = defaultRule
-            value = "+\\(rule.countryCode)\\(randomNationalNumber(rule: rule))"
+        let current = UserDefaults.standard.string(forKey: numberKey)
+        var value = current ?? ""
+        for region in regions {
+            if let drawn = AorusPhoneNumbering.mobileNumber(region: region, excluding: current) {
+                value = drawn
+                break
+            }
         }
         UserDefaults.standard.set(value, forKey: numberKey)
         NotificationCenter.default.post(name: changedNotification, object: nil)
         return value
     }
 
-    private static func randomNationalNumber(rule: PhoneRule) -> String {
-        if rule.countryCode == "7", rule.preferredLength == 10 {
-            let prefixes = [
-                "900", "901", "902", "903", "904", "905", "906", "908", "909",
-                "910", "911", "912", "913", "914", "915", "916", "917", "918", "919",
-                "920", "921", "922", "923", "924", "925", "926", "927", "928", "929",
-                "930", "931", "932", "933", "934", "936", "937", "938", "939",
-                "950", "951", "952", "953", "958", "960", "961", "962", "963", "964",
-                "965", "966", "967", "968", "969", "970", "971", "977", "978", "980",
-                "981", "982", "983", "984", "985", "986", "987", "988", "989", "991",
-                "992", "993", "994", "995", "996", "997", "999",
-                "700", "701", "702", "705", "707", "708", "747", "750", "751", "760",
-                "761", "762", "763", "764", "771", "775", "776", "777", "778"
-            ]
-            var digits = prefixes.randomElement() ?? "900"
-            while digits.count < 10 {
-                digits.append(String(Int.random(in: 0 ... 9)))
-            }
-            return digits
-        }
-
-        if rule.countryCode == "1", rule.preferredLength == 10 {
-            var digits = ""
-            for index in 0 ..< 10 {
-                if index == 0 || index == 3 {
-                    digits.append(String(Int.random(in: 2 ... 9)))
-                } else {
-                    digits.append(String(Int.random(in: 0 ... 9)))
-                }
-            }
-            return digits
-        }
-
-        var digits = ""
-        digits.reserveCapacity(rule.preferredLength)
-        for index in 0 ..< rule.preferredLength {
-            let minDigit = index == 0 ? 1 : 0
-            digits.append(String(Int.random(in: minDigit ... 9)))
-        }
-        return digits
-    }
-
+    // An international number as Telegram keeps it: "+" and at most 15 digits (E.164).
     private static func normalize(_ rawValue: String) -> String {
-        var digits = rawValue.filter { $0.isNumber }
-        if digits.isEmpty {
-            return ""
-        }
-        let rule = ruleForDigits(digits)
-        let maxLength = rule.countryCode.count + rule.maxNationalLength
-        if digits.count > maxLength {
-            digits = String(digits.prefix(maxLength))
-        }
-        return "+\\(digits)"
-    }
-
-    private static func isComplete(_ value: String) -> Bool {
-        // A number libphonenumber drew is complete as it is, whatever length the table below
-        // gives its country.
-        if !value.isEmpty, value == UserDefaults.standard.string(forKey: validatedNumberKey) {
-            return true
-        }
-        let digits = value.filter { $0.isNumber }
-        let rule = ruleForDigits(digits)
-        let nationalLength = max(0, digits.count - rule.countryCode.count)
-        return digits.hasPrefix(rule.countryCode) && rule.nationalLengths.contains(nationalLength) && isPlausible(rule: rule, digits: digits)
-    }
-
-    private static func ruleForDigits(_ digits: String) -> PhoneRule {
-        let knownCodes = codeRules.keys.sorted { $0.count > $1.count }
-        for code in knownCodes {
-            if digits.hasPrefix(code), let lengths = codeRules[code] {
-                return PhoneRule(countryCode: code, nationalLengths: lengths)
-            }
-        }
-        return defaultRule
-    }
-
-    private static func isPlausible(rule: PhoneRule, digits: String) -> Bool {
-        let national = String(digits.dropFirst(rule.countryCode.count))
-        if rule.countryCode == "7", national.count == 10 {
-            return national.hasPrefix("9") || national.hasPrefix("7")
-        }
-        if rule.countryCode == "1", national.count == 10 {
-            let values = Array(national)
-            guard let area = values.first, let exchange = values.dropFirst(3).first else {
-                return false
-            }
-            return ("2"..."9").contains(String(area)) && ("2"..."9").contains(String(exchange))
-        }
-        return true
+        let digits = String(rawValue.filter { $0.isASCII && $0.isNumber }.prefix(15))
+        return digits.isEmpty ? "" : "+" + digits
     }
 
     public static var number: String {
@@ -15765,6 +15598,20 @@ def patch_anti_search(tg: Path) -> None:
     store = tg / "submodules/TelegramCore/Sources/AorusAntiSearch.swift"
     store.write_text(AORUS_ANTI_SEARCH_SWIFT, encoding="utf-8")
     print("AntiSearch: wrote AorusAntiSearch.swift")
+
+    # Phone Spoofing reads and draws numbers with Telegram's libphonenumber (AorusPhoneNumbering
+    # in the file above), a leaf Objective-C library TelegramCore did not link yet.
+    build = tg / "submodules/TelegramCore/BUILD"
+    build_text = build.read_text(encoding="utf-8")
+    phone_dependency = '        "//submodules/libphonenumber:libphonenumber",\n'
+    if phone_dependency not in build_text:
+        target = build_text.find('    name = "TelegramCore",\n')
+        deps = build_text.find("    deps = [\n", target) if target >= 0 else -1
+        if deps < 0:
+            raise RuntimeError("AntiSearch: TelegramCore dependency list not found")
+        deps += len("    deps = [\n")
+        build.write_text(build_text[:deps] + phone_dependency + build_text[deps:], encoding="utf-8")
+        print("AntiSearch: TelegramCore links libphonenumber")
 
     enqueue = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
     if enqueue.is_file():
