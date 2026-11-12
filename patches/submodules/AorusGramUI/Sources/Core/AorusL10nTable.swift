@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Il numero viene sostituito nel tuo contatto che riceve un bot o una mini app. È Telegram stesso a indicare nel contatto di chi è il numero, quindi i bot che verificano che il numero sia tuo accettano solo quello vero.",
         "Hides what you choose: online, reading, typing, stories": "Nasconde ciò che scegli: online, lettura, digitazione, storie",
         "Hides everything chosen below from others": "Nasconde agli altri tutto ciò che è scelto qui sotto",
         "WHAT TO HIDE": "COSA NASCONDERE",
@@ -1234,6 +1235,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Numer jest podmieniany w twoim kontakcie, który otrzymuje bot lub mini aplikacja. Telegram sam zaznacza w kontakcie, czyj to numer, więc boty sprawdzające, czy numer jest twój, przyjmą tylko prawdziwy.",
         "Hides what you choose: online, reading, typing, stories": "Ukrywa to, co wybierzesz: online, czytanie, pisanie, relacje",
         "Hides everything chosen below from others": "Ukrywa przed innymi wszystko, co wybrano poniżej",
         "WHAT TO HIDE": "CO UKRYWAĆ",
@@ -2415,6 +2417,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Het nummer wordt vervangen in je eigen contact dat een bot of mini-app ontvangt. Telegram geeft zelf in het contact aan van wie het nummer is, dus bots die controleren of het nummer van jou is, accepteren alleen het echte.",
         "Hides what you choose: online, reading, typing, stories": "Verbergt wat je kiest: online, lezen, typen, verhalen",
         "Hides everything chosen below from others": "Verbergt alles wat hieronder is gekozen voor anderen",
         "WHAT TO HIDE": "WAT VERBERGEN",
@@ -3596,6 +3599,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "El número es substitueix al teu contacte que rep un bot o una miniaplicació. És Telegram mateix qui indica al contacte de qui és el número, així que els bots que comproven que el número és teu només accepten el real.",
         "Hides what you choose: online, reading, typing, stories": "Amaga el que triïs: en línia, lectura, escriptura, històries",
         "Hides everything chosen below from others": "Amaga als altres tot el que hi ha triat a sota",
         "WHAT TO HIDE": "QUÈ CAL AMAGAR",
@@ -4777,6 +4781,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Nomor diganti di kontakmu sendiri yang diterima bot atau aplikasi mini. Telegram sendiri yang menandai milik siapa nomor dalam kontak, jadi bot yang memeriksa bahwa nomor itu milikmu hanya menerima nomor asli.",
         "Hides what you choose: online, reading, typing, stories": "Menyembunyikan yang kamu pilih: online, dibaca, mengetik, story",
         "Hides everything chosen below from others": "Menyembunyikan semua yang dipilih di bawah dari orang lain",
         "WHAT TO HIDE": "YANG DISEMBUNYIKAN",
@@ -5958,6 +5963,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Nombor diganti dalam kenalan anda sendiri yang diterima oleh bot atau aplikasi mini. Telegram sendiri menandakan milik siapa nombor dalam kenalan, jadi bot yang menyemak bahawa nombor itu milik anda hanya menerima nombor sebenar.",
         "Hides what you choose: online, reading, typing, stories": "Menyembunyikan apa yang anda pilih: dalam talian, bacaan, menaip, cerita",
         "Hides everything chosen below from others": "Menyembunyikan semua yang dipilih di bawah daripada orang lain",
         "WHAT TO HIDE": "APA YANG DISEMBUNYIKAN",
@@ -7139,6 +7145,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Падмяняецца нумар у тваім кантакце, які атрымлівае бот або міні-праграма. Чый гэта нумар, Telegram адзначае ў кантакце сам, таму боты, якія правяраюць, што нумар твой, прымуць толькі сапраўдны.",
         "Hides what you choose: online, reading, typing, stories": "Хавае тое, што ты выбераш: анлайн, прачытанне, набор, гісторыі",
         "Hides everything chosen below from others": "Хавае ад іншых усё, што выбрана ніжэй",
         "WHAT TO HIDE": "ШТО ХАВАЦЬ",
@@ -8320,6 +8327,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Bot yoki mini ilova oladigan o'z kontaktingizdagi raqam almashtiriladi. Raqam kimniki ekanini Telegram kontaktda o'zi belgilaydi, shuning uchun raqam sizniki ekanini tekshiradigan botlar faqat haqiqiysini qabul qiladi.",
         "Hides what you choose: online, reading, typing, stories": "Siz tanlaganini yashiradi: onlayn, o'qish, yozish, hikoyalar",
         "Hides everything chosen below from others": "Quyida tanlangan hamma narsani boshqalardan yashiradi",
         "WHAT TO HIDE": "NIMANI YASHIRISH",
@@ -9501,6 +9509,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "봇이나 미니 앱이 받는 내 연락처의 번호가 바뀝니다. 연락처의 번호가 누구 것인지는 텔레그램이 직접 표시하므로, 번호가 내 것인지 확인하는 봇은 실제 번호만 받습니다.",
         "Hides what you choose: online, reading, typing, stories": "선택한 항목을 숨깁니다: 온라인, 읽음, 입력, 스토리",
         "Hides everything chosen below from others": "아래에서 선택한 모든 항목을 다른 사람에게 숨깁니다",
         "WHAT TO HIDE": "숨길 항목",
@@ -10682,6 +10691,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "يُستبدل الرقم في جهة اتصالك التي يتلقاها البوت أو التطبيق المصغّر. تيليجرام نفسه يحدد في جهة الاتصال لمن يعود الرقم، لذا لا تقبل البوتات التي تتحقق من أن الرقم رقمك إلا الرقم الحقيقي.",
         "Hides what you choose: online, reading, typing, stories": "يخفي ما تختاره: الاتصال والقراءة والكتابة والقصص",
         "Hides everything chosen below from others": "يخفي عن الآخرين كل ما اخترته أدناه",
         "WHAT TO HIDE": "ما الذي يُخفى",
@@ -11863,6 +11873,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "شمارهٔ مخاطب خودت که ربات یا مینی‌اپ دریافت می‌کند جایگزین می‌شود. تلگرام خودش در مخاطب مشخص می‌کند شماره مال کیست، پس ربات‌هایی که بررسی می‌کنند شماره مال تو باشد فقط شمارهٔ واقعی را می‌پذیرند.",
         "Hides what you choose: online, reading, typing, stories": "آنچه انتخاب کنی را پنهان می‌کند: آنلاین، خواندن، نوشتن، استوری‌ها",
         "Hides everything chosen below from others": "همهٔ موارد انتخاب‌شده در زیر را از دیگران پنهان می‌کند",
         "WHAT TO HIDE": "چه چیزی پنهان شود",
@@ -13044,6 +13055,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Бот немесе мини-қолданба алатын өз контактіңдегі нөмір ауыстырылады. Нөмірдің кімдікі екенін Telegram контактіде өзі белгілейді, сондықтан нөмірдің сенікі екенін тексеретін боттар тек шынайысын қабылдайды.",
         "Hides what you choose: online, reading, typing, stories": "Сен таңдағанды жасырады: онлайн, оқу, теру, тарихтар",
         "Hides everything chosen below from others": "Төменде таңдалғанның бәрін басқалардан жасырады",
         "WHAT TO HIDE": "НЕНІ ЖАСЫРУ",
@@ -14225,6 +14237,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "机器人或小程序收到的你本人联系人中的号码会被替换。号码属于谁由 Telegram 自己在联系人中标明，因此会核对号码是否属于你的机器人只接受真实号码。",
         "Hides what you choose: online, reading, typing, stories": "隐藏你选择的内容：在线、已读、输入、快拍",
         "Hides everything chosen below from others": "向他人隐藏下方选中的全部内容",
         "WHAT TO HIDE": "隐藏内容",
@@ -15407,6 +15420,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "機器人或小程式收到的你本人聯絡人中的號碼會被替換。號碼屬於誰由 Telegram 自己在聯絡人中標明，因此會核對號碼是否屬於你的機器人只接受真實號碼。",
         "Hides what you choose: online, reading, typing, stories": "隱藏你選擇的內容：上線、已讀、輸入、限時動態",
         "Hides everything chosen below from others": "向他人隱藏下方選取的全部內容",
         "WHAT TO HIDE": "隱藏內容",
@@ -16588,6 +16602,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "ボットやミニアプリが受け取るあなた自身の連絡先の番号が置き換わります。番号が誰のものかはTelegram自身が連絡先に記録するため、番号があなたのものか確認するボットは本物の番号しか受け付けません。",
         "Hides what you choose: online, reading, typing, stories": "選んだものを隠します：オンライン、既読、入力中、ストーリー",
         "Hides everything chosen below from others": "下で選んだものをすべて他の人から隠します",
         "WHAT TO HIDE": "隠すもの",
@@ -17769,6 +17784,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Numero vaihdetaan omaan yhteystietoosi, jonka botti tai miniapp saa. Telegram itse merkitsee yhteystietoon, kenen numero on, joten botit, jotka tarkistavat numeron olevan sinun, hyväksyvät vain oikean.",
         "Hides what you choose: online, reading, typing, stories": "Piilottaa valitsemasi: online-tilan, lukemisen, kirjoittamisen, tarinat",
         "Hides everything chosen below from others": "Piilottaa muilta kaiken alla valitun",
         "WHAT TO HIDE": "MITÄ PIILOTETAAN",
@@ -18950,6 +18966,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "המספר מוחלף באיש הקשר שלך שמקבל בוט או מיני-אפליקציה. טלגרם עצמה מסמנת באיש הקשר של מי המספר, ולכן בוטים שבודקים שהמספר שלך יקבלו רק את האמיתי.",
         "Hides what you choose: online, reading, typing, stories": "מסתיר את מה שתבחר: מחובר, קריאה, הקלדה, סטוריז",
         "Hides everything chosen below from others": "מסתיר מאחרים את כל מה שנבחר למטה",
         "WHAT TO HIDE": "מה להסתיר",
@@ -20131,6 +20148,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Broj se zamjenjuje u tvom kontaktu koji dobiva bot ili mini aplikacija. Čiji je broj, Telegram sam označava u kontaktu, pa botovi koji provjeravaju je li broj tvoj prihvaćaju samo pravi.",
         "Hides what you choose: online, reading, typing, stories": "Skriva ono što odabereš: na mreži, čitanje, tipkanje, priče",
         "Hides everything chosen below from others": "Skriva od drugih sve što je odabrano ispod",
         "WHAT TO HIDE": "ŠTO SKRIVATI",
@@ -21312,6 +21330,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Број се замењује у твом контакту који добија бот или мини апликација. Чији је број, Telegram сам означава у контакту, па ботови који проверавају да ли је број твој прихватају само прави.",
         "Hides what you choose: online, reading, typing, stories": "Скрива оно што изабереш: на мрежи, читање, куцање, приче",
         "Hides everything chosen below from others": "Скрива од других све што је изабрано испод",
         "WHAT TO HIDE": "ШТА СКРИВАТИ",
@@ -22493,6 +22512,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Číslo se nahradí ve tvém kontaktu, který dostane bot nebo miniaplikace. Komu číslo patří, si Telegram v kontaktu označuje sám, takže boti, kteří ověřují, že je číslo tvoje, přijmou jen to skutečné.",
         "Hides what you choose: online, reading, typing, stories": "Skrývá, co si vybereš: online, čtení, psaní, příběhy",
         "Hides everything chosen below from others": "Skrývá před ostatními vše, co je vybrané níže",
         "WHAT TO HIDE": "CO SKRÝVAT",
@@ -23674,6 +23694,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Číslo sa nahradí v tvojom kontakte, ktorý dostane bot alebo miniaplikácia. Komu číslo patrí, si Telegram v kontakte označuje sám, takže boty, ktoré overujú, že je číslo tvoje, prijmú len skutočné.",
         "Hides what you choose: online, reading, typing, stories": "Skrýva, čo si vyberieš: online, čítanie, písanie, príbehy",
         "Hides everything chosen below from others": "Skrýva pred ostatnými všetko, čo je vybrané nižšie",
         "WHAT TO HIDE": "ČO SKRÝVAŤ",
@@ -24855,6 +24876,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Numărul este înlocuit în contactul tău pe care îl primește un bot sau o mini aplicație. Telegram însuși marchează în contact al cui este numărul, așa că boții care verifică dacă numărul este al tău îl acceptă doar pe cel real.",
         "Hides what you choose: online, reading, typing, stories": "Ascunde ce alegi: online, citire, tastare, povești",
         "Hides everything chosen below from others": "Ascunde de ceilalți tot ce este ales mai jos",
         "WHAT TO HIDE": "CE SE ASCUNDE",
@@ -26036,6 +26058,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "A szám abban a saját névjegyedben cserélődik, amelyet egy bot vagy miniapp kap meg. Hogy kié a szám, azt a Telegram maga jelöli a névjegyben, ezért azok a botok, amelyek ellenőrzik, hogy a szám a tiéd-e, csak a valódit fogadják el.",
         "Hides what you choose: online, reading, typing, stories": "Elrejti, amit választasz: online, olvasás, gépelés, történetek",
         "Hides everything chosen below from others": "Mindent elrejt mások elől, ami lent ki van választva",
         "WHAT TO HIDE": "MIT REJTSEN",
@@ -27217,6 +27240,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Nummeret byttes ut i din egen kontakt som en bot eller miniapp mottar. Telegram markerer selv i kontakten hvem nummeret tilhører, så boter som sjekker at nummeret er ditt, godtar bare det ekte.",
         "Hides what you choose: online, reading, typing, stories": "Skjuler det du velger: pålogget, lesing, skriving, historier",
         "Hides everything chosen below from others": "Skjuler alt som er valgt nedenfor for andre",
         "WHAT TO HIDE": "HVA SOM SKJULES",
@@ -28398,6 +28422,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Numret byts ut i din egen kontakt som en bot eller miniapp får. Telegram markerar själv i kontakten vems numret är, så botar som kontrollerar att numret är ditt godtar bara det riktiga.",
         "Hides what you choose: online, reading, typing, stories": "Döljer det du väljer: online, läsning, skrivande, berättelser",
         "Hides everything chosen below from others": "Döljer allt som är valt nedan för andra",
         "WHAT TO HIDE": "VAD SOM DÖLJS",
@@ -29579,6 +29604,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Số điện thoại được thay trong danh bạ của chính bạn mà bot hoặc mini app nhận được. Telegram tự đánh dấu trong danh bạ số đó là của ai, nên các bot kiểm tra số có phải của bạn chỉ chấp nhận số thật.",
         "Hides what you choose: online, reading, typing, stories": "Ẩn những gì bạn chọn: trực tuyến, đã đọc, đang nhập, tin",
         "Hides everything chosen below from others": "Ẩn với người khác mọi thứ được chọn bên dưới",
         "WHAT TO HIDE": "NHỮNG GÌ CẦN ẨN",
@@ -30760,6 +30786,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Підмінюється номер у твоєму контакті, який отримує бот або міні-застосунок. Чий це номер, Telegram позначає в контакті сам, тому боти, що перевіряють, що номер твій, приймуть тільки справжній.",
         "Hides what you choose: online, reading, typing, stories": "Приховує те, що ти обереш: онлайн, прочитання, набір, історії",
         "Hides everything chosen below from others": "Приховує від інших усе, що вибрано нижче",
         "WHAT TO HIDE": "ЩО ПРИХОВУВАТИ",
@@ -31950,6 +31977,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "El número se sustituye en tu propio contacto que recibe un bot o una miniapp. Es Telegram quien marca en el contacto de quién es el número, así que los bots que comprueban que el número es tuyo solo aceptan el real.",
         "Hides what you choose: online, reading, typing, stories": "Oculta lo que elijas: en línea, lectura, escritura, historias",
         "Hides everything chosen below from others": "Oculta a los demás todo lo que elijas abajo",
         "WHAT TO HIDE": "QUÉ OCULTAR",
@@ -33140,6 +33168,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "O número é substituído no seu próprio contato que um bot ou miniapp recebe. É o próprio Telegram que marca no contato de quem é o número, então bots que verificam se o número é seu aceitam apenas o verdadeiro.",
         "Hides what you choose: online, reading, typing, stories": "Oculta o que você escolher: online, leitura, digitação, stories",
         "Hides everything chosen below from others": "Oculta dos outros tudo o que estiver escolhido abaixo",
         "WHAT TO HIDE": "O QUE OCULTAR",
@@ -34330,6 +34359,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Die Nummer wird in deinem eigenen Kontakt ersetzt, den ein Bot oder eine Mini-App erhält. Wem die Nummer gehört, vermerkt Telegram selbst im Kontakt, daher akzeptieren Bots, die prüfen, ob die Nummer deine ist, nur die echte.",
         "Hides what you choose: online, reading, typing, stories": "Verbirgt, was du auswählst: online, Lesen, Tippen, Storys",
         "Hides everything chosen below from others": "Verbirgt alles, was unten ausgewählt ist, vor anderen",
         "WHAT TO HIDE": "WAS VERBORGEN WIRD",
@@ -35520,6 +35550,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Le numéro est remplacé dans votre propre contact que reçoit un bot ou une mini-app. C'est Telegram qui indique dans le contact à qui appartient le numéro, donc les bots qui vérifient que le numéro est le vôtre n'acceptent que le vrai.",
         "Hides what you choose: online, reading, typing, stories": "Masque ce que vous choisissez : en ligne, lecture, saisie, stories",
         "Hides everything chosen below from others": "Masque aux autres tout ce qui est choisi ci-dessous",
         "WHAT TO HIDE": "CE QUI EST MASQUÉ",
@@ -36710,6 +36741,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one.": "Bir botun veya mini uygulamanın aldığı kendi kişindeki numara değiştirilir. Numaranın kime ait olduğunu kişide Telegram kendisi belirtir, bu yüzden numaranın sana ait olduğunu kontrol eden botlar yalnızca gerçeğini kabul eder.",
         "Hides what you choose: online, reading, typing, stories": "Seçtiklerini gizler: çevrimiçi, okuma, yazma, hikâyeler",
         "Hides everything chosen below from others": "Aşağıda seçilen her şeyi başkalarından gizler",
         "WHAT TO HIDE": "NELER GİZLENSİN",

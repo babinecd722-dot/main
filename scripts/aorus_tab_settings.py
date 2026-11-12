@@ -114,10 +114,15 @@ def patch_tab_settings(tg: Path) -> None:
     # A template is tinted by the item itself (13.1.1), so a chosen colour only has to make one.
     s = edit(s, 'let iconImage = aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image)\n', 'let iconImage = aorusTabBarImage(aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image), customInk: aorusHasCustomInk)\n', 'static tab icon template')
     s = patch_theme_tab_colours(s)
+    # The Wall's still icon springs when its tab is tapped, as the animated icons play.
+    s = edit(s, '        func playSelectionAnimation() {\n            if let animationIconView = self.animationIcon?.view as? LottieComponent.View {\n                animationIconView.playOnce()\n            }\n        }',
+             '        func playSelectionAnimation() {\n            if let animationIconView = self.animationIcon?.view as? LottieComponent.View {\n                animationIconView.playOnce()\n            } else if let imageIconView = self.imageIcon?.view, let component = self.component, case let .tabBarItem(tabBarItem) = component.item.content, tabBarItem.aorusTabIdentifier == "wall" {\n                AorusTabIconBounce.play(imageIconView.layer)\n            }\n        }', 'wall icon springs on selection')
     path.write_text(s)
 
     path = tg / 'submodules/TabBarUI/Sources/TabBarNode.swift'
     s = path.read_text()
+    s = edit(s, '                    if let selectedIndex = self.selectedIndex, let _ = self.tabBarItems[selectedIndex].item.animationName {\n                        container.imageNode.animationNode.play(firstFrame: false, fromIndex: nil)\n                    }',
+             '                    if let selectedIndex = self.selectedIndex, let _ = self.tabBarItems[selectedIndex].item.animationName {\n                        container.imageNode.animationNode.play(firstFrame: false, fromIndex: nil)\n                    } else if let selectedIndex = self.selectedIndex, self.tabBarItems[selectedIndex].item.aorusTabIdentifier == "wall" {\n                        AorusTabIconBounce.play(container.imageNode.imageNode.layer)\n                    }', 'classic wall icon springs on selection')
     s = edit(s, '    func frameForControllerTab(at index: Int) -> CGRect? {', CLASSIC + '    func frameForControllerTab(at index: Int) -> CGRect? {', 'classic preview native movement')
     s = edit(s, '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {', '\n'.join([
         '    func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, additionalSideInsets: UIEdgeInsets, bottomInset: CGFloat, transition: ContainedViewLayoutTransition) {',

@@ -2122,9 +2122,11 @@ def patch_ghost_mode_proactive_offline(tg: Path) -> None:
         "            forName: NSNotification.Name(\"aorusgram_settings_changed\"),\n"
         "            object: nil, queue: nil\n"
         "        ) { [weak self] _ in\n"
-        "            guard UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") else { return }\n"
-        "            // Online shown again or hidden again: either way the next status the server\n"
-        "            // hears is decided anew, by the override in updatePresence.\n"
+        "            // Only while online status is hidden: the override in updatePresence then tells\n"
+        "            // the server \"offline\" at once. With online shown, nothing is sent from here --\n"
+        "            // a settings change, from a plugin or Siri in the background too, must not mark\n"
+        "            // the account online; the presence timer brings the normal status back.\n"
+        "            guard UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true) else { return }\n"
         "            aorusQueue.async {\n"
         "                self?.updatePresence(true)\n"
         "            }\n"
@@ -14735,6 +14737,16 @@ public enum AorusPhoneSpoofStore {
     }
 
     public static let changedNotification = Notification.Name("AorusGramPhoneSpoofChanged")
+
+    /// Draws a real-looking mobile number: the settings install one built on Telegram's
+    /// libphonenumber (AorusPhoneNumberGenerator in AorusGramUI), which this module does not
+    /// link. It is handed the region of the account's own number when the settings know it,
+    /// and returns an E.164 number ("+" and digits) that libphonenumber holds to be a valid
+    /// mobile number there, or nil to fall back to the rules below.
+    public static var numberGenerator: ((_ region: String?) -> String?)?
+    /// The region of the account's own number (ISO 3166, "RU"), set by the settings.
+    public static var accountRegion: String?
+    private static let validatedNumberKey = "aorusgram_phone_spoof_validated_number"
     private static let anonymousKey = "aorusgram_phone_spoof_anonymous"
     private static let anonymousNumberKey = "aorusgram_phone_spoof_anonymous_number"
     private static let anonymousDateKey = "aorusgram_phone_spoof_anonymous_date"
@@ -14835,9 +14847,14 @@ public enum AorusPhoneSpoofStore {
             NotificationCenter.default.post(name: changedNotification, object: nil)
             return value
         }
-        let rule = defaultRule
-        let digits = randomNationalNumber(rule: rule)
-        let value = "+\\(rule.countryCode)\\(digits)"
+        let value: String
+        if let generated = numberGenerator?(accountRegion), generated.hasPrefix("+"), generated.count >= 8 {
+            value = generated
+            UserDefaults.standard.set(generated, forKey: validatedNumberKey)
+        } else {
+            let rule = defaultRule
+            value = "+\\(rule.countryCode)\\(randomNationalNumber(rule: rule))"
+        }
         UserDefaults.standard.set(value, forKey: numberKey)
         NotificationCenter.default.post(name: changedNotification, object: nil)
         return value
@@ -14899,6 +14916,11 @@ public enum AorusPhoneSpoofStore {
     }
 
     private static func isComplete(_ value: String) -> Bool {
+        // A number libphonenumber drew is complete as it is, whatever length the table below
+        // gives its country.
+        if !value.isEmpty, value == UserDefaults.standard.string(forKey: validatedNumberKey) {
+            return true
+        }
         let digits = value.filter { $0.isNumber }
         let rule = ruleForDigits(digits)
         let nationalLength = max(0, digits.count - rule.countryCode.count)
@@ -14997,7 +15019,7 @@ public enum AorusAntiSearch {
                 updatedMediaReference = anonymizedMediaReference(updatedMediaReference, mediaBox: mediaBox)
             }
             if AorusPhoneSpoofStore.isEnabled {
-                updatedMediaReference = spoofedContactMediaReference(updatedMediaReference)
+                updatedMediaReference = spoofedContactMediaReference(updatedMediaReference, accountPeerId: accountPeerId)
             }
             return .message(
                 text: normalizedText,
@@ -15171,24 +15193,27 @@ public enum AorusAntiSearch {
         return file.isSticker || file.isAnimatedSticker || file.isVideoSticker
     }
 
-    private static func spoofedContactMediaReference(_ reference: AnyMediaReference?) -> AnyMediaReference? {
+    private static func spoofedContactMediaReference(_ reference: AnyMediaReference?, accountPeerId: PeerId) -> AnyMediaReference? {
         guard let reference = reference else {
             return nil
         }
         switch reference {
         case let .standalone(media):
-            return .standalone(media: spoofedContactMedia(media))
+            return .standalone(media: spoofedContactMedia(media, accountPeerId: accountPeerId))
         case let .message(_, media):
-            return .standalone(media: spoofedContactMedia(media))
+            return .standalone(media: spoofedContactMedia(media, accountPeerId: accountPeerId))
         case let .webPage(_, media):
-            return .standalone(media: spoofedContactMedia(media))
+            return .standalone(media: spoofedContactMedia(media, accountPeerId: accountPeerId))
         default:
             return reference
         }
     }
 
-    private static func spoofedContactMedia(_ media: Media) -> Media {
-        guard let contact = media as? TelegramMediaContact else {
+    private static func spoofedContactMedia(_ media: Media, accountPeerId: PeerId) -> Media {
+        // Only the account's own number is protected: the contact a bot's "share my phone
+        // number" button sends, a web app's phone request and the account's own card. Anyone
+        // else's contact is sent with the number it has.
+        guard let contact = media as? TelegramMediaContact, contact.peerId == accountPeerId else {
             return media
         }
         // Match Telegram's own contact format exactly, only swapping digits. Telegram's
@@ -20043,8 +20068,6 @@ private func aorusTabBarStillImage(animationName: String) -> UIImage? {
         name = "Chat List/Tabs/IconCalls"
     case "TabSettings":
         name = "Chat List/Tabs/IconSettings"
-    case "AorusWallTab":
-        name = "AorusGram/Tabs/Wall"
     default:
         return nil
     }
@@ -24743,9 +24766,6 @@ def patch_app_badge_switcher(tg: Path) -> None:
     # The AorusGram settings logo sits in the same bundle folder as the badge font.
     from aorus_logo_tgs import install_settings_logo
     install_settings_logo(tg)
-    # The Wall tab's animated icon, which the tab bar finds by `animationName` in the main bundle.
-    from aorus_wall_tab_animation import install_wall_tab_animation
-    install_wall_tab_animation(tg)
 
     # --- 1. Alternative imagesets ---------------------------------------------
     for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):

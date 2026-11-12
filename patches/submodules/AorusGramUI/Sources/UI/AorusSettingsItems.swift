@@ -91,18 +91,27 @@ private final class AorusSettingsLogoSource: AnimatedStickerNodeSource {
     }
 }
 
-/// The animated AorusGram logo: white for the dark theme, black for the light one. It plays when
-/// the screen opens, rests on the wordmark it starts and ends on and plays again when tapped.
-/// When the theme changes the other logo takes its place at once, without playing: it fades in
-/// over the old one as soon as its wordmark is drawn, so the space is never empty.
+/// Whether a settings screen has played its logo. One per screen: the logo plays when the screen
+/// is entered and never again while it stays open -- not when it comes back from a section, from
+/// the background or into view, and not when the theme changes.
+final class AorusSettingsLogoPlayback {
+    var hasPlayed = false
+}
+
+/// The animated AorusGram logo: white for the dark theme, black for the light one. It plays once
+/// as the screen is entered and rests on the wordmark it starts and ends on; it does not answer a
+/// tap. When the theme changes the other logo takes its place at once, without playing: it fades
+/// in over the old one as soon as its wordmark is drawn, so the space is never empty.
 final class AorusSettingsLogoItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
+    let playback: AorusSettingsLogoPlayback
     let sectionId: ItemListSectionId
     let tag: ItemListItemTag? = nil
     let selectable: Bool = false
 
-    init(presentationData: ItemListPresentationData, sectionId: ItemListSectionId) {
+    init(presentationData: ItemListPresentationData, playback: AorusSettingsLogoPlayback, sectionId: ItemListSectionId) {
         self.presentationData = presentationData
+        self.playback = playback
         self.sectionId = sectionId
     }
 
@@ -135,21 +144,12 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
 
     override func didLoad() {
         super.didLoad()
-        self.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.logoTapped)))
         self.view.isAccessibilityElement = true
         self.view.accessibilityLabel = "AorusGram"
         self.view.accessibilityTraits = .image
     }
 
-    @objc private func logoTapped() {
-        guard let shownNode = self.shownNode else {
-            return
-        }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        shownNode.play(firstFrame: false, fromIndex: 0)
-    }
-
-    private func installLogo(name: String, size: CGSize, replacing: Bool) {
+    private func installLogo(name: String, size: CGSize, replacing: Bool, playback: AorusSettingsLogoPlayback) {
         if let pendingNode = self.pendingNode {
             self.pendingNode = nil
             pendingNode.removeFromSupernode()
@@ -159,8 +159,8 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
         node.frame = self.logoFrame
         if replacing, let previous = self.shownNode {
             // A theme change only recolours the logo. The old one stops where it is; the new one
-            // shows the wordmark the animation starts and ends on, without playing, and plays
-            // when tapped. Set before the node is added: it is read when the node first appears.
+            // shows the wordmark the animation starts and ends on, without playing. Set before
+            // the node is added: it is read when the node first appears.
             previous.visibility = false
             node.automaticallyLoadFirstFrame = true
             node.alpha = 0.0
@@ -184,11 +184,23 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
         } else {
             self.shownNode?.removeFromSupernode()
             self.shownNode = node
+            if playback.hasPlayed {
+                // The screen played its logo already (this row was drawn again: scrolled back
+                // into view, or back from the search): the wordmark, still.
+                node.automaticallyLoadFirstFrame = true
+            }
             self.addSubnode(node)
         }
         node.setup(source: AorusSettingsLogoSource(name: name), width: Int(size.width * UIScreenScale), height: Int(size.height * UIScreenScale), playbackMode: .once, mode: .direct(cachePathPrefix: nil))
         node.updateLayout(size: size)
-        if self.shownNode === node {
+        if self.shownNode === node && !playback.hasPlayed {
+            // Played once, as the screen is entered. Once it has run, the node stops asking to
+            // play: shown again (back from a section, from the background) it keeps the
+            // wordmark it ended on instead of starting over.
+            playback.hasPlayed = true
+            node.completed = { [weak node] _ in
+                node?.visibility = false
+            }
             node.visibility = true
         }
     }
@@ -217,7 +229,7 @@ final class AorusSettingsLogoItemNode: ListViewItemNode, ItemListItemNode {
                 if strongSelf.loadedName != name {
                     let replacing = strongSelf.loadedName != nil
                     strongSelf.loadedName = name
-                    strongSelf.installLogo(name: name, size: logoSize, replacing: replacing)
+                    strongSelf.installLogo(name: name, size: logoSize, replacing: replacing, playback: item.playback)
                 }
                 for node in [strongSelf.shownNode, strongSelf.pendingNode] {
                     guard let node else {

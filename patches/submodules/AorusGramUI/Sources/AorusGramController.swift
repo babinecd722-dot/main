@@ -565,7 +565,7 @@ private struct AorusEntry: ItemListNodeEntry {
         let args = arguments as! AorusArguments
         switch self.kind {
         case .logo:
-            return AorusSettingsLogoItem(presentationData: presentationData, sectionId: self.section)
+            return AorusSettingsLogoItem(presentationData: presentationData, playback: args.logoPlayback, sectionId: self.section)
         case let .header(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .footer(text):
@@ -626,6 +626,8 @@ private final class AorusArguments {
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
     let updateQuery: (String) -> Void
+    /// Whether this screen has played its logo: once, when it is entered (AorusSettingsLogoItem).
+    let logoPlayback = AorusSettingsLogoPlayback()
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void, open: @escaping (AorusDestination) -> Void, setField: @escaping (AorusField, String) -> Void, setRAMCleanInterval: @escaping (Int) -> Void, setCacheInterval: @escaping (Int) -> Void, updateQuery: @escaping (String) -> Void) {
         self.set = set
@@ -756,6 +758,7 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
             b.toggle("anonymousNumber", nil, anonymousTitle.prefix(1).uppercased() + String(anonymousTitle.dropFirst()), nil, \.anonymousNumber, state)
             b.input("phoneNumber", .phoneNumber, aorusL("Номер", "Number"), state.phoneSpoofNumber)
             b.action("randomizePhone", nil, aorusL("Рандомизировать", "Randomize"), nil, .randomizePhoneNumber)
+            b.footer(aorusL("Подменяется номер в твоём контакте, который получает бот или мини-приложение. Чей это номер, Telegram отмечает в контакте сам, поэтому боты, проверяющие, что номер твой, примут только настоящий.", "The number is replaced in your own contact that a bot or mini app receives. Telegram itself marks whose number a contact is, so bots that check the number is yours accept only the real one."))
         }
         b.block()
         b.toggle("antiSearch", icon("text.magnifyingglass"), aorusL("АнтиПоиск", "AntiSearch"), aorusL("Текст выглядит так же, но его сложнее найти поиском", "Text looks the same but is harder to find by search"), \.antiSearch, state)
@@ -1710,6 +1713,16 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
         |> afterDisposed {
             actionsDisposable.dispose()
         }
+
+    // Phone Spoofing draws its number with libphonenumber, in the region of the account's own
+    // number (AorusPhoneNumberGenerator); until that is read, in the device's region.
+    AorusPhoneNumberGenerator.install(accountPhone: nil)
+    actionsDisposable.add((context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId))
+    |> deliverOnMainQueue).start(next: { peer in
+        if case let .user(user)? = peer {
+            AorusPhoneNumberGenerator.install(accountPhone: user.phone)
+        }
+    }))
 
     let controller = ItemListController(context: context, state: signal)
     // A screen opened from here changes what its row says (a device chosen, a chat locked, the

@@ -4225,11 +4225,11 @@ def main() -> None:
         )),
         ("submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift", ("if isOnline && AorusProtectedAccess.boolPreference(\"aorusgram_ghost_mode\") && (AorusProtectedAccess.boolPreference(\"aorusgram_ghost_conceal_online\", default: true)) {",)),
         ("submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift", ("guard aorusHidesInChats else {",)),
-        # The Wall tab plays its house when tapped, as Telegram's tabs play theirs, and shows a
-        # plugin's replacement still (scripts/aorus_wall_tab_animation.py, docs/tab-bar.md).
-        ("submodules/TelegramUI/Sources/AorusWall.swift", ('item.animationName = "AorusWallTab"',)),
-        ("submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift", ('case "AorusWallTab":',)),
-        ("Telegram/Telegram-iOS/Resources/AorusWallTab.json", ('"nm":"AorusWallTab"',)),
+        # The Wall tab keeps its own still house and springs it when tapped, in both bars, as
+        # Telegram's tabs play their icons (docs/tab-bar.md).
+        ("submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift", ('tabBarItem.aorusTabIdentifier == "wall" {\n                AorusTabIconBounce.play(imageIconView.layer)',)),
+        ("submodules/TabBarUI/Sources/TabBarNode.swift", ('AorusTabIconBounce.play(container.imageNode.imageNode.layer)',)),
+        ("submodules/Display/Source/AorusTabBarIdentity.swift", ("public enum AorusTabIconBounce {",)),
         # AorusGram's own screens follow the app's theme as it changes, from the shared context the
         # app hands AorusLiveTheme as its first account context is made (docs/appearance.md).
         ("submodules/TelegramUI/Sources/AccountContext.swift", ("AorusLiveTheme.attach(sharedContext)",)),
