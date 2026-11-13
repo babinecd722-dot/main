@@ -139,7 +139,7 @@ public enum AorusAccountImport {
         }
     }
 
-    private static func beginReading(context: AccountContext, controller: ViewController) -> OverlayStatusController? {
+    private static func beginReading(context: AccountContext, controller: ViewController) -> ViewController? {
         guard !self.isReading else { return nil }
         self.isReading = true
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }

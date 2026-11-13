@@ -216,6 +216,53 @@ int64_t sqlite3_column_int64(sqlite3_stmt *, int);
         subprocess.run([str(binary), str(work)], check=True)
 
 
+def test_progress_controller(repo: Path, swiftc: str) -> None:
+    from telegram13_list_check import block
+
+    source = (repo / "patches/submodules/AorusGramUI/Sources/Features/Accounts/AorusAccountImport.swift").read_text()
+    method = block(source, "    private static func beginReading(").replace("private static func", "static func", 1)
+    # Telegram 24638bc: PresentationDataUtils/Sources/OverlayStatusController.swift
+    # exports a factory returning Display.ViewController, not a class of that name.
+    fixture = r'''
+enum OverlayStatusControllerType { case loading(cancelled: (() -> Void)?) }
+enum Window { case root }
+enum Location { case window(Window) }
+class ViewController {
+    var presented: ViewController?
+    func present(_ controller: ViewController, in location: Location) { presented = controller }
+}
+struct PresentationTheme {}
+struct PresentationData { let theme = PresentationTheme() }
+struct CurrentPresentationData {
+    func with<T>(_ body: (PresentationData) -> T) -> T { body(PresentationData()) }
+}
+struct SharedContext { let currentPresentationData = CurrentPresentationData() }
+struct AccountContext { let sharedContext = SharedContext() }
+func OverlayStatusController(theme: PresentationTheme, type: OverlayStatusControllerType) -> ViewController {
+    return ViewController()
+}
+enum ImportProbe {
+    static var isReading = false
+''' + method + r'''
+}
+let presenter = ViewController()
+let first = ImportProbe.beginReading(context: AccountContext(), controller: presenter)
+precondition(first != nil && presenter.presented === first && ImportProbe.isReading)
+precondition(ImportProbe.beginReading(context: AccountContext(), controller: presenter) == nil)
+ImportProbe.isReading = false
+let next = ImportProbe.beginReading(context: AccountContext(), controller: presenter)
+precondition(next != nil && next !== first && presenter.presented === next)
+print("Import progress: factory return type and reading guard passed")
+'''
+    with tempfile.TemporaryDirectory(prefix="aorus-import-progress-") as directory:
+        work = Path(directory)
+        path = work / "main.swift"
+        path.write_text(fixture)
+        binary = work / "tests"
+        subprocess.run([swiftc, "-module-cache-path", str(work / "cache"), str(path), "-o", str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: session_import_check.py <repo root>")
@@ -230,6 +277,7 @@ def main() -> int:
     swiftc = shutil.which("swiftc")
     if swiftc:
         test_readers(repo, swiftc)
+        test_progress_controller(repo, swiftc)
     else:
         print("Session string execution: not run (swiftc unavailable)")
     print("Session import check: OK")
