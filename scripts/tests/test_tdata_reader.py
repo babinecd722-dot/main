@@ -172,12 +172,14 @@ SWIFT_TEST = r'''
    do { _ = try read(name, password: "fixture-passcode"); preconditionFailure("unsupported KDF accepted") }
    catch AorusTDataFailure.unsupportedFormat { checks += 1 }
   }
-  for name in ["corrupt", "modernNoFallback"] {
-   do { _ = try read(name); preconditionFailure("corrupt file accepted") }
+  for name in ["corrupt", "modernNoFallback", "truncatedWrap", "oversizedWrap"] {
+   do { _ = try read(name, password: name.hasSuffix("Wrap") ? "fixture-passcode" : ""); preconditionFailure("corrupt file accepted") }
    catch AorusTDataFailure.corrupt { checks += 1 }
   }
   let plain = root.appendingPathComponent("plain")
   precondition(AorusTDataReader.resolveFolder(plain) == plain); checks += 1
+  precondition(AorusTDataReader.resolveFolder(root.appendingPathComponent("singleParent"))?.lastPathComponent == "archive"); checks += 1
+  precondition(AorusTDataReader.resolveFolder(root.appendingPathComponent("ambiguousParent")) == nil); checks += 1
   let key = Data((0..<256).map { UInt8($0) })
   let malformed = try Data(contentsOf: root.appendingPathComponent("bad-padding"))
   do { _ = try AorusTDataCrypto.decryptLocal(malformed, key: key); preconditionFailure("excess padding accepted") }
@@ -190,6 +192,9 @@ SWIFT_TEST = r'''
 with tempfile.TemporaryDirectory(prefix='aorus-tdata-') as temporary:
     work = Path(temporary)
     fixture(work, 'plain')
+    shutil.copytree(work/'plain', work/'singleParent/archive')
+    shutil.copytree(work/'plain', work/'ambiguousParent/first')
+    shutil.copytree(work/'plain', work/'ambiguousParent/second')
     fixture(work, 'oldIds', wide=False)
     fixture(work, 'duplicate', duplicate=True)
     fixture(work, 'password', password=b'fixture-passcode')
@@ -217,6 +222,19 @@ with tempfile.TemporaryDirectory(prefix='aorus-tdata-') as temporary:
             size = struct.unpack('>I',data[:4])[0]
             parts.append(data[4:4+size]); data = data[4+size:]
         trailer = bytearray(parts[3]); trailer[offset:offset+4] = u32(value); parts[3] = bytes(trailer)
+        (work/name/'key_datas').write_bytes(container(b''.join(blob(part) for part in parts)))
+    for name, encrypted in [('truncatedWrap', bytes(32)), ('oversizedWrap', bytes(304))]:
+        shutil.copytree(work/'argon', work/name)
+        original_body = (work/'argon/key_datas').read_bytes()[8:-16]
+        parts = []
+        while original_body:
+            size = struct.unpack('>I', original_body[:4])[0]
+            parts.append(original_body[4:4+size])
+            original_body = original_body[4+size:]
+        # A malformed committed wrap with an unsupported KDF must be rejected
+        # structurally, before attempting the expensive derivation.
+        wrap = u32(99) + u32(7) + u32(32) + u32(2) + u32(1) + blob(bytes(range(32))) + blob(encrypted)
+        parts[3] = u32(0x4b443200) + u32(2) + u32(7) + u32(1) + wrap
         (work/name/'key_datas').write_bytes(container(b''.join(blob(part) for part in parts)))
     (work/'bad-padding').write_bytes(encrypt(bytes(60), bytes(range(256)), declared=4))
     # Compile the exact vendored production KDF. On macOS use brew's host OpenSSL

@@ -165,12 +165,13 @@ public enum AorusSessionFileReader {
     }
 
     private static func decodeBase64(_ input: String) -> Data? {
-        var normalized = input.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        // Allow line wrapping when pasted, but never silently discard damaged data.
+        var normalized = input.filter { !$0.isWhitespace }.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         let remainder = normalized.count % 4
         if remainder > 0 {
             normalized += String(repeating: "=", count: 4 - remainder)
         }
-        return Data(base64Encoded: normalized, options: [.ignoreUnknownCharacters])
+        return Data(base64Encoded: normalized)
     }
 
     private static func decodeHex(_ input: String) -> Data? {

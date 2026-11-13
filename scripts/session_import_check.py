@@ -149,8 +149,9 @@ def test_readers(repo: Path, swiftc: str) -> None:
         }
         try check((Data([5,0,0,0,1,0]) + key + Data([0,0,0,0,0,0,0,42,0])).base64EncodedString(), dc: 5, user: 42)
         try check(key.base64EncodedString(), dc: 0)
+        try check("\n" + key.prefix(120).base64EncodedString() + "\n" + key.dropFirst(120).base64EncodedString() + "\n", dc: 0)
         try check(key.map { String(format: "%02x", $0) }.joined(), dc: 0)
-        for invalid in ["", "1abc", "not a session", String(repeating: "A", count: 4097), "1" + Data(repeating: 0, count: 12).base64EncodedString()] {
+        for invalid in [key.base64EncodedString() + "!!!!", "", "1abc", "not a session", String(repeating: "A", count: 4097), "1" + Data(repeating: 0, count: 12).base64EncodedString()] {
             do { _ = try AorusSessionFileReader.readSessionString(invalid); preconditionFailure("accepted invalid string") }
             catch { checks += 1 }
         }

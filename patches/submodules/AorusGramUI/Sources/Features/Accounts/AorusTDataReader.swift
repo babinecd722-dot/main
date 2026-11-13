@@ -357,6 +357,8 @@ public enum AorusTDataReader {
     private static let maxAccounts = 6
     private static let mtpBlockId: Int32 = 75
     private static let authKeySize = 256
+    // Message key + the length-prefixed local key rounded up to an AES block.
+    private static let encryptedLocalKeySize = 16 + ((4 + authKeySize + 15) / 16) * 16
 
     /// The `tdata` under what was chosen: the folder itself, a folder that contains one, or a
     /// folder whose single child is one (what a copied-out folder usually looks like).
@@ -380,12 +382,16 @@ public enum AorusTDataReader {
         guard let children = try? fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
             return nil
         }
+        var match: URL?
         for child in children {
             if (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true, holdsKeyData(child) {
-                return child
+                // Directory enumeration has no stable order. Never choose an arbitrary
+                // account archive when the selected parent contains several of them.
+                guard match == nil else { return nil }
+                match = child
             }
         }
-        return nil
+        return match
     }
 
     /// Whether the folder's key is behind a passcode, so the UI can ask for it before reading.
@@ -434,15 +440,19 @@ public enum AorusTDataReader {
                 let encrypted = try trailer.readByteArray()
                 guard generations.insert(generation).inserted, wrapSalt.count >= 8, wrapSalt.count <= 1024 else { throw AorusTDataFailure.corrupt }
                 if generation == committed {
+                    guard encrypted.count == self.encryptedLocalKeySize else {
+                        throw AorusTDataFailure.corrupt
+                    }
                     liveWrap = (kind, memory, time, parallel, wrapSalt, encrypted)
                 }
             }
             guard trailer.isAtEnd else { throw AorusTDataFailure.corrupt }
             if passcode.isEmpty {
-                wrapKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data())
                 guard !wrappedKey.isEmpty else {
                     throw liveWrap == nil ? AorusTDataFailure.corrupt : AorusTDataFailure.passcodeRequired
                 }
+                guard wrappedKey.count == self.encryptedLocalKeySize else { throw AorusTDataFailure.corrupt }
+                wrapKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data())
             } else if let liveWrap {
                 wrapKey = try self.derivePasscodeKey(passcode, kind: liveWrap.kind, memory: liveWrap.memory, time: liveWrap.time, parallel: liveWrap.parallel, salt: liveWrap.salt)
                 wrappedKey = liveWrap.encrypted
@@ -450,6 +460,7 @@ public enum AorusTDataReader {
                 throw AorusTDataFailure.passcodeRequired
             }
         } else {
+            guard wrappedKey.count == self.encryptedLocalKeySize else { throw AorusTDataFailure.corrupt }
             wrapKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data(passcode.utf8))
         }
         let localKey = try AorusTDataCrypto.decryptLocal(wrappedKey, key: wrapKey)
