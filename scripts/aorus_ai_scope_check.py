@@ -91,6 +91,7 @@ SYSTEM_MODULES = {
     "ObjectiveC",
     "MachO",
     "SQLite3",
+    "CommonCrypto",
     "ImageIO",
     "IntentsUI",
     "BackgroundTasks",

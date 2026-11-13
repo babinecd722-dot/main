@@ -126,6 +126,9 @@ jobs:
       - name: Local phone, rating and gift conversion preflight
         run: python3 aorusgram/scripts/local_profile_check.py aorusgram
 
+      - name: Session import preflight
+        run: python3 aorusgram/scripts/session_import_check.py aorusgram
+
       - name: Plugin network profile preflight
         run: |
           mkdir -p /tmp/aorus-plugin-scope
@@ -935,6 +938,7 @@ jobs:
           cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusAttachmentDraft.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/TelegramCore/Sources/AorusAttachmentDraftCleanup.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusSessionImport.swift $TG/submodules/TelegramCore/Sources/
           cp $PATCHES/submodules/LegacyComponents/Sources/AorusMediaDraftEditing.m $TG/submodules/LegacyComponents/Sources/
           cp $PATCHES/submodules/MediaPickerUI/Sources/AorusAttachmentDraftPicker.swift $TG/submodules/MediaPickerUI/Sources/
           cp $PATCHES/submodules/ChatListUI/Sources/Node/AorusAttachmentDraftPreviewView.swift $TG/submodules/ChatListUI/Sources/Node/

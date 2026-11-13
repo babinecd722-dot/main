@@ -622,6 +622,31 @@ def patch_accent_color_purple(tg: Path) -> None:
         print(f"AccentPurple: {label} -> neon violet")
 
 
+def patch_media_send_button_accent(tg: Path) -> None:
+    """The send button of the media picker is filled with Telegram's own blue (0x0088ff), a
+    literal independent of the theme, so in AorusGram it stayed blue beside accent-coloured
+    controls. Fill it with the accent the app is running on instead; the glyph on it stays
+    white, which the tinted glass already draws."""
+    path = tg / "submodules/MediaPickerUI/Sources/MediaPickerPhotoToolbarView.swift"
+    if not path.is_file():
+        print("MediaSendAccent: MediaPickerPhotoToolbarView.swift not found -- skip")
+        return
+    text = path.read_text(encoding="utf-8")
+    new = (
+        "            // AorusGram: the send button takes the accent of the running theme, not\n"
+        "            // Telegram's fixed blue, so it matches every other accent-filled control.\n"
+        "            let doneBackgroundColor: UIColor? = component.context.sharedContext.currentPresentationData.with({ $0 }).theme.list.itemAccentColor\n"
+    )
+    if "doneBackgroundColor: UIColor? = component.context.sharedContext" in text:
+        print("MediaSendAccent: already on the accent")
+        return
+    old = "            let doneBackgroundColor: UIColor? = UIColor(rgb: 0x0088ff)\n"
+    if text.count(old) != 1:
+        raise RuntimeError(f"MediaSendAccent: anchor found {text.count(old)} times")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("MediaSendAccent: media send button -> theme accent")
+
+
 def patch_premium_button_purple(tg: Path) -> None:
     """The Premium / subscription screens hardcode a blue button colour (0x0077ff),
     independent of the theme accent, so their buttons stayed blue. Repoint that blue to
@@ -31597,6 +31622,8 @@ def main() -> None:
     patch_fake_stars_all_gifts(tg)
     from aorus_fake_gram import patch as patch_fake_gram
     patch_fake_gram(tg)
+    from aorus_account_import import patch as patch_account_import
+    patch_account_import(tg)
     from aorus_local_stars_state import patch as patch_local_stars_state
     patch_local_stars_state(tg)
     patch_stars_purchase_redirects(tg)
@@ -31760,6 +31787,7 @@ def main() -> None:
     from aorus_light_surfaces import patch_light_surfaces
     from aorus_tab_settings import patch_tab_settings
     patch_light_surfaces(tg)
+    patch_media_send_button_accent(tg)
     # After Interface 2.0's posts block: it anchors on the grid layout and the glass that adds.
     from aorus_posts_page_ink import patch_posts_page_ink
     patch_posts_page_ink(tg)

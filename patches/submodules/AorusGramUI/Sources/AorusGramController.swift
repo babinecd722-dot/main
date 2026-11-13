@@ -511,6 +511,9 @@ private enum AorusDestination: Equatable {
     case fakeGifts
     case fakeUsernames
     case accountBackup
+    case importTData
+    case importSessionFile
+    case importSessionString
     case clearDeletedCache
     case saveSettings
     case loadSettings
@@ -938,6 +941,10 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
     case .data:
         b.block()
         b.screen("accountBackup", icon("person.2.badge.key.fill"), aorusL("Резервные копии аккаунтов", "Account Backup"), aorusL("Сохрани вход в аккаунты и восстанови его в любой момент", "Save your account logins and restore them any time"), .accountBackup)
+        b.block(aorusL("ДОБАВИТЬ АККАУНТ", "ADD AN ACCOUNT"))
+        b.action("importTData", icon("desktopcomputer"), aorusL("Telegram Desktop (.tdata)", "Telegram Desktop (.tdata)"), nil, .importTData)
+        b.action("importSessionFile", icon("doc.text.fill"), aorusL("Файл сессии (.session)", "Session File (.session)"), nil, .importSessionFile)
+        b.action("importSessionString", icon("text.alignleft"), aorusL("Строка сессии", "Session String"), nil, .importSessionString)
         b.block(aorusL("НАСТРОЙКИ AORUSGRAM", "AORUSGRAM SETTINGS"))
         b.action("saveSettings", icon("square.and.arrow.down.fill"), aorusL("Сохранить настройки", "Save Settings"), aorusL("Сохраняет все настройки AorusGram", "Saves all AorusGram settings"), .saveSettings)
         b.action("loadSettings", icon("square.and.arrow.up.fill"), aorusL("Загрузить настройки", "Load Settings"), aorusL("Возвращает сохранённые настройки", "Brings saved settings back"), .loadSettings)
@@ -1502,6 +1509,12 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                 push(aorusFakeUsernamesController(context: context))
             case .accountBackup:
                 push(accountBackupController(context: context))
+            case .importTData:
+                AorusAccountImport.present(.tdata, context: context, from: weakController)
+            case .importSessionFile:
+                AorusAccountImport.present(.sessionFile, context: context, from: weakController)
+            case .importSessionString:
+                AorusAccountImport.present(.sessionString, context: context, from: weakController)
             case .clearDeletedCache:
                 let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
                 let showDone: () -> Void = {
