@@ -69,7 +69,7 @@ public func aorusAuthKeyId(_ authKey: Data) -> Int64 {
         return 0
     }
     var value: Int64 = 0
-    withUnsafeMutableBytes(of: &value) { target in
+    _ = withUnsafeMutableBytes(of: &value) { target in
         digest.suffix(8).copyBytes(to: target.bindMemory(to: UInt8.self))
     }
     return value
