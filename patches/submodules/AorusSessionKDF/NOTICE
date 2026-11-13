@@ -1,0 +1,1 @@
+Argon2 reference implementation, P-H-C/phc-winner-argon2, tag 20190702, commit 62358ba2123abd17fccf2a108a301d4b52c01a7c. Files under Sources except AorusSessionKDF.c and Namespace.h are unmodified upstream files. Built with ARGON2_NO_THREADS; local imports run on a background queue. See LICENSE and source notices. Scrypt uses Telegram iOS's existing BoringSSL.

@@ -171,6 +171,8 @@ private func aorusResolveImportedSession(
             }
         }
     }
+    // Connection retries may run indefinitely when Telegram is unreachable.
+    |> timeout(30.0, queue: .mainQueue(), alternate: .fail(.network))
     |> afterDisposed {
         let _ = try? FileManager.default.removeItem(atPath: probePath)
     }

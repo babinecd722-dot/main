@@ -96,7 +96,8 @@ public enum AorusSessionFileReader {
     /// version character and validated binary layout.
     public static func readSessionString(_ input: String) throws -> AorusImportedSession {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        // All supported layouts fit well below this bound, including hex keys.
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 4096 else {
             throw AorusSessionFileFailure.unsupported
         }
 

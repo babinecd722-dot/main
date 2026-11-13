@@ -14,6 +14,7 @@ swift_library(
     # linked in the builds that shipped.
     deps = [
         "//submodules/AorusGram:AorusGram",
+        "//submodules/AorusSessionKDF:AorusSessionKDF",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Display:Display",
         # The UIView properties a plugin's web page sets so that swiping back goes through the

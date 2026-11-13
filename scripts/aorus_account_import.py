@@ -6,6 +6,7 @@ it needs the account manager, the network and MTProto's own types — so that on
 here, next to the other AorusGram files in that module.
 """
 from pathlib import Path
+import shutil
 
 
 SOURCES = (
@@ -15,6 +16,7 @@ SOURCES = (
 
 def patch(tg: Path) -> None:
     repo = Path(__file__).resolve().parent.parent
+    shutil.copytree(repo / "patches/submodules/AorusSessionKDF", tg / "submodules/AorusSessionKDF", dirs_exist_ok=True)
     for rel in SOURCES:
         source = repo / "patches" / rel
         if not source.is_file():

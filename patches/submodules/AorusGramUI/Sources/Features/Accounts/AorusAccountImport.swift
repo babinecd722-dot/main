@@ -24,6 +24,7 @@ public enum AorusAccountImportKind {
 public enum AorusAccountImport {
     /// Kept alive while the picker is on screen: UIKit holds its delegate weakly.
     private static var pickerDelegate: AorusImportPickerDelegate?
+    private static var isReading = false
 
     public static func present(_ kind: AorusAccountImportKind, context: AccountContext, from controller: ViewController?) {
         guard let controller else {
@@ -68,6 +69,7 @@ public enum AorusAccountImport {
     // MARK: - Reading
 
     private static func readTData(url: URL, passcode: String?, context: AccountContext, controller: ViewController) {
+        guard let progress = self.beginReading(context: context, controller: controller) else { return }
         // PBKDF2 (100000 rounds) and provider I/O must not block Files or the UI.
         DispatchQueue.global(qos: .userInitiated).async {
             let scoped = url.startAccessingSecurityScopedResource()
@@ -85,6 +87,8 @@ public enum AorusAccountImport {
             if let coordinationError { result = .failure(coordinationError) }
             let outcome = result
             DispatchQueue.main.async {
+                self.isReading = false
+                progress.dismiss()
                 switch outcome {
                 case let .success(sessions):
                     self.add(sessions: sessions, context: context, controller: controller)
@@ -104,6 +108,7 @@ public enum AorusAccountImport {
     }
 
     private static func readSessionFile(url: URL, context: AccountContext, controller: ViewController) {
+        guard let progress = self.beginReading(context: context, controller: controller) else { return }
         DispatchQueue.global(qos: .userInitiated).async {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
@@ -120,6 +125,8 @@ public enum AorusAccountImport {
             if let coordinationError { result = .failure(coordinationError) }
             let outcome = result
             DispatchQueue.main.async {
+                self.isReading = false
+                progress.dismiss()
                 switch outcome {
                 case let .success(session):
                     self.add(sessions: [session], context: context, controller: controller)
@@ -130,6 +137,15 @@ public enum AorusAccountImport {
                 }
             }
         }
+    }
+
+    private static func beginReading(context: AccountContext, controller: ViewController) -> OverlayStatusController? {
+        guard !self.isReading else { return nil }
+        self.isReading = true
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let progress = OverlayStatusController(theme: presentationData.theme, type: .loading(cancelled: nil))
+        controller.present(progress, in: .window(.root))
+        return progress
     }
 
     // MARK: - Prompts
@@ -319,6 +335,8 @@ public enum AorusAccountImport {
                 text = aorusL("Неверный пароль", "Wrong passcode")
             case .noAccounts:
                 text = aorusL("В этих данных нет аккаунтов", "This data holds no accounts")
+            case .unsupportedFormat:
+                text = aorusL("Этот формат не поддерживается", "This format isn't supported")
             case .corrupt:
                 text = aorusL("Файл повреждён", "The file is damaged")
             }

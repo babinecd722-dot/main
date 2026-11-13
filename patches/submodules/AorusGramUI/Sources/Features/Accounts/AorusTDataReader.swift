@@ -2,6 +2,7 @@ import Foundation
 import CommonCrypto
 import CryptoKit
 import TelegramCore
+import AorusSessionKDF
 
 // Reading a Telegram Desktop `tdata` folder.
 //
@@ -31,6 +32,8 @@ public enum AorusTDataFailure: Error {
     case passcodeRequired
     /// It read, but it holds no authorised account.
     case noAccounts
+    /// A newer envelope or KDF exceeds the supported format or resource limits.
+    case unsupportedFormat
 }
 
 // MARK: - Qt stream
@@ -50,7 +53,7 @@ struct AorusQtReader {
     }
 
     mutating func readBytes(_ count: Int) throws -> Data {
-        guard count >= 0, self.offset + count <= self.data.count else {
+        guard count >= 0, count <= self.data.count - self.offset else {
             throw AorusTDataFailure.corrupt
         }
         let start = self.data.index(self.data.startIndex, offsetBy: self.offset)
@@ -135,12 +138,6 @@ enum AorusTDataCrypto {
         let hashKey = Data(SHA512.hash(data: hashInput))
         let iterations = passcode.isEmpty ? 1 : 100000
         return self.pbkdf2SHA512(password: hashKey, salt: salt, iterations: iterations, keyLength: self.localKeySize)
-    }
-
-    /// The legacy key of an old `map`, derived from the passcode without the SHA-512 step.
-    static func createLegacyLocalKey(salt: Data, passcode: Data) -> Data {
-        let iterations = passcode.isEmpty ? 1 : 100000
-        return self.pbkdf2SHA512(password: passcode, salt: salt, iterations: iterations, keyLength: self.localKeySize)
     }
 
     /// The old MTProto derivation, which is what Desktop's local files still use: four SHA-1s over
@@ -249,7 +246,7 @@ enum AorusTDataCrypto {
             return UInt32(littleEndian: raw.loadUnaligned(as: UInt32.self))
         }
         let length = Int(declared)
-        guard length >= 4, length <= decrypted.count else {
+        guard length >= 4, length <= decrypted.count, length > decrypted.count - 16 else {
             throw AorusTDataFailure.corrupt
         }
         // The first four bytes are that length; the body follows, as Desktop reads it.
@@ -295,12 +292,31 @@ enum AorusTDataCrypto {
         return base
     }
 
-    /// A TDF container: magic, version, body, and the MD5 that has to match it. Desktop writes
-    /// three generations of every file (`s`, then `1`/`0` alternating); the first that reads wins.
+    /// Match Desktop ReadFile: a modern `s` supersedes the legacy generations;
+    /// otherwise try the newest of `0` and `1` first. Never revive a stale key
+    /// from a legacy file beside a corrupt modern one.
     static func readFile(named name: String, in folder: URL) throws -> (version: Int32, body: Data) {
+        let manager = FileManager.default
+        let modern = folder.appendingPathComponent(name + "s")
+        let suffixes: [String]
+        if manager.fileExists(atPath: modern.path) {
+            suffixes = ["s"]
+        } else {
+            suffixes = ["0", "1"].sorted { left, right in
+                func modified(_ suffix: String) -> Date {
+                    return (try? folder.appendingPathComponent(name + suffix).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                }
+                return modified(left) > modified(right)
+            }
+        }
         var lastFailure: AorusTDataFailure = .noTData
-        for suffix in ["s", "1", "0"] {
+        for suffix in suffixes {
             let url = folder.appendingPathComponent(name + suffix)
+            guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else { continue }
+            guard size <= 64 * 1024 * 1024 else {
+                lastFailure = .corrupt
+                continue
+            }
             guard let data = try? Data(contentsOf: url) else {
                 continue
             }
@@ -395,12 +411,56 @@ public enum AorusTDataReader {
             throw AorusTDataFailure.corrupt
         }
 
-        let passcodeKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data(passcode.utf8))
-        let keyInner = try AorusTDataCrypto.decryptLocal(keyEncrypted, key: passcodeKey)
-        var keyInnerStream = AorusQtReader(keyInner)
-        let localKey = try keyInnerStream.readBytes(self.authKeySize)
-
-        let info = try AorusTDataCrypto.decryptLocal(infoEncrypted, key: localKey)
+        // Desktop 7.4 writes KD2 as a fourth QByteArray. The first three arrays
+        // remain in place, but a protected modern folder has no open-key blob.
+        var wrapKey = Data()
+        var wrappedKey = keyEncrypted
+        if !keyStream.isAtEnd {
+            var trailer = AorusQtReader(try keyStream.readByteArray())
+            guard keyStream.isAtEnd, try trailer.readUInt32() == 0x4b443200 else { throw AorusTDataFailure.corrupt }
+            guard try trailer.readUInt32() == 2 else { throw AorusTDataFailure.unsupportedFormat }
+            let committed = try trailer.readUInt32()
+            let wrapCount = try trailer.readUInt32()
+            guard wrapCount <= 2 else { throw AorusTDataFailure.corrupt }
+            var generations = Set<UInt32>()
+            var liveWrap: (kind: UInt32, memory: UInt32, time: UInt32, parallel: UInt32, salt: Data, encrypted: Data)?
+            for _ in 0 ..< wrapCount {
+                let kind = try trailer.readUInt32()
+                let generation = try trailer.readUInt32()
+                let memory = try trailer.readUInt32()
+                let time = try trailer.readUInt32()
+                let parallel = try trailer.readUInt32()
+                let wrapSalt = try trailer.readByteArray()
+                let encrypted = try trailer.readByteArray()
+                guard generations.insert(generation).inserted, wrapSalt.count >= 8, wrapSalt.count <= 1024 else { throw AorusTDataFailure.corrupt }
+                if generation == committed {
+                    liveWrap = (kind, memory, time, parallel, wrapSalt, encrypted)
+                }
+            }
+            guard trailer.isAtEnd else { throw AorusTDataFailure.corrupt }
+            if passcode.isEmpty {
+                wrapKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data())
+                guard !wrappedKey.isEmpty else {
+                    throw liveWrap == nil ? AorusTDataFailure.corrupt : AorusTDataFailure.passcodeRequired
+                }
+            } else if let liveWrap {
+                wrapKey = try self.derivePasscodeKey(passcode, kind: liveWrap.kind, memory: liveWrap.memory, time: liveWrap.time, parallel: liveWrap.parallel, salt: liveWrap.salt)
+                wrappedKey = liveWrap.encrypted
+            } else {
+                throw AorusTDataFailure.passcodeRequired
+            }
+        } else {
+            wrapKey = AorusTDataCrypto.createLocalKey(salt: salt, passcode: Data(passcode.utf8))
+        }
+        let localKey = try AorusTDataCrypto.decryptLocal(wrappedKey, key: wrapKey)
+        guard localKey.count == self.authKeySize else { throw AorusTDataFailure.corrupt }
+        let info: Data
+        do {
+            info = try AorusTDataCrypto.decryptLocal(infoEncrypted, key: localKey)
+        } catch {
+            // The passcode already proved the local key; this is damaged account data.
+            throw AorusTDataFailure.corrupt
+        }
         var infoStream = AorusQtReader(info)
         let count = try infoStream.readInt32()
         guard count > 0, count <= self.maxAccounts else {
@@ -408,19 +468,39 @@ public enum AorusTDataReader {
         }
 
         var sessions: [AorusImportedSession] = []
+        var seen = Set<Int32>()
+        var hadCorruptAccount = false
         for _ in 0 ..< count {
             let index = try infoStream.readInt32()
-            guard index >= 0, index < self.maxAccounts else {
+            guard index >= 0, index < self.maxAccounts, seen.insert(index).inserted else {
                 continue
             }
-            if let session = try? self.readAccount(folder: folder, index: Int(index), localKey: localKey) {
-                sessions.append(session)
+            do {
+                sessions.append(try self.readAccount(folder: folder, index: Int(index), localKey: localKey))
+            } catch AorusTDataFailure.noAccounts {
+                continue
+            } catch {
+                hadCorruptAccount = true
             }
         }
         guard !sessions.isEmpty else {
-            throw AorusTDataFailure.noAccounts
+            throw hadCorruptAccount ? AorusTDataFailure.corrupt : AorusTDataFailure.noAccounts
         }
         return sessions
+    }
+
+    private static func derivePasscodeKey(_ passcode: String, kind: UInt32, memory: UInt32, time: UInt32, parallel: UInt32, salt: Data) throws -> Data {
+        let password = Data(passcode.utf8)
+        var key = Data(count: self.authKeySize)
+        let success = key.withUnsafeMutableBytes { output in
+            password.withUnsafeBytes { passwordBytes in
+                salt.withUnsafeBytes { saltBytes in
+                    aorus_session_kdf(kind, passwordBytes.baseAddress, password.count, saltBytes.baseAddress, salt.count, memory, time, parallel, output.baseAddress, self.authKeySize)
+                }
+            }
+        }
+        guard success == 1 else { throw AorusTDataFailure.unsupportedFormat }
+        return key
     }
 
     /// One account's MTProto authorisation: its user id, its main datacenter, and the key for

@@ -23,6 +23,7 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import sqlite3
 from pathlib import Path
 
 
@@ -102,6 +103,17 @@ def check(repo: Path) -> list[str]:
         if f"AorusAccountImport.present({kind}" not in controller_body:
             err.append(f"AorusGramController: the {kind} row no longer opens the import")
 
+    kdf = repo / "patches/submodules/AorusSessionKDF"
+    for name in ("BUILD", "LICENSE", "Sources/argon2.c", "Sources/AorusSessionKDF.c", "PublicHeaders/AorusSessionKDF/AorusSessionKDF.h"):
+        if not (kdf / name).is_file():
+            err.append(f"Session KDF: missing {name}")
+    if '"//submodules/AorusSessionKDF:AorusSessionKDF"' not in (repo / "patches/submodules/AorusGramUI/BUILD").read_text():
+        err.append("AorusGramUI: session KDF dependency is missing")
+    if '"patches/submodules/AorusSessionKDF"' not in (repo / "scripts/aorus_account_import.py").read_text():
+        err.append("Session import: KDF sources are not copied into the build")
+    if 'timeout(30.0' not in core_body:
+        err.append("Session import: Telegram probe has no bounded timeout")
+
     # The TelegramCore half only exists in the build if it is copied in.
     if "cp $PATCHES/submodules/TelegramCore/Sources/AorusSessionImport.swift" not in workflow_body:
         err.append("build-aorusgram.yml: AorusSessionImport.swift is no longer copied into telegram-ios")
@@ -109,10 +121,10 @@ def check(repo: Path) -> list[str]:
     return err
 
 
-def test_strings(repo: Path, swiftc: str) -> None:
+def test_readers(repo: Path, swiftc: str) -> None:
     reader = (repo / "patches/submodules/AorusGramUI/Sources/Features/Accounts/AorusSessionFileReader.swift").read_text()
-    # Execute the production string reader; SQLite and TelegramCore are not needed.
-    reader = "import Foundation\n" + reader[reader.index("public enum AorusSessionFileFailure"):reader.index("public enum AorusSessionFileReader")]+ "public enum AorusSessionFileReader {\n    private static let authKeySize = 256\n" + reader.split("    // MARK: - Session strings", 1)[1]
+    # Execute both production readers against independent binary/SQLite fixtures.
+    reader = reader.replace("import TelegramCore\n", "")
     fixture = r'''
 @main struct Tests {
     static func main() throws {
@@ -138,11 +150,23 @@ def test_strings(repo: Path, swiftc: str) -> None:
         try check((Data([5,0,0,0,1,0]) + key + Data([0,0,0,0,0,0,0,42,0])).base64EncodedString(), dc: 5, user: 42)
         try check(key.base64EncodedString(), dc: 0)
         try check(key.map { String(format: "%02x", $0) }.joined(), dc: 0)
-        for invalid in ["", "1abc", "not a session", "1" + Data(repeating: 0, count: 12).base64EncodedString()] {
+        for invalid in ["", "1abc", "not a session", String(repeating: "A", count: 4097), "1" + Data(repeating: 0, count: 12).base64EncodedString()] {
             do { _ = try AorusSessionFileReader.readSessionString(invalid); preconditionFailure("accepted invalid string") }
             catch { checks += 1 }
         }
-        print("Session string readers: \(checks) checks passed")
+        let directory = URL(fileURLWithPath: CommandLine.arguments[1])
+        for (name, testing, user) in [("telethon", false, nil as Int64?), ("pyrogram", true, Int64(5000000000))] {
+            let session = try AorusSessionFileReader.readSessionFile(url: directory.appendingPathComponent(name + ".session"))
+            precondition(session.dcId == 2 && session.authKey == key && session.userId == user && session.isTestingEnvironment == testing && session.isWellFormed)
+            checks += 1
+        }
+        for name in ["empty", "short", "null", "schema", "corrupt"] {
+            do { _ = try AorusSessionFileReader.readSessionFile(url: directory.appendingPathComponent(name + ".session")); preconditionFailure("accepted invalid session file") }
+            catch { checks += 1 }
+        }
+        let invalidDC = try AorusSessionFileReader.readSessionFile(url: directory.appendingPathComponent("invalidDC.session"))
+        precondition(!invalidDC.isWellFormed); checks += 1
+        print("Session readers: \(checks) checks passed")
     }
 }
 '''
@@ -153,8 +177,42 @@ def test_strings(repo: Path, swiftc: str) -> None:
         models = core[core.index("public struct AorusImportedDatacenterKey"):core.index("public enum AorusSessionImportError")]
         source.write_text(reader + models + fixture)
         binary = work / "tests"
-        subprocess.run([swiftc, "-module-cache-path", str(work / "cache"), "-parse-as-library", str(source), "-o", str(binary)], check=True)
-        subprocess.run([str(binary)], check=True)
+        key = bytes(range(256))
+        for name in ("telethon", "pyrogram", "empty", "short", "null", "schema", "invalidDC"):
+            with sqlite3.connect(work / (name + ".session")) as db:
+                if name == "schema":
+                    db.execute("CREATE TABLE unrelated(id INTEGER)")
+                    continue
+                db.execute("CREATE TABLE sessions(dc_id INTEGER, auth_key BLOB" + (", test_mode INTEGER, user_id INTEGER" if name == "pyrogram" else ", server_address TEXT, port INTEGER") + ")")
+                if name != "empty":
+                    fields = (2, key, 1, 5000000000) if name == "pyrogram" else (0 if name == "invalidDC" else 2, None if name == "null" else key[:12] if name == "short" else key, "149.154.167.50", 443)
+                    db.execute("INSERT INTO sessions VALUES(?,?,?,?)", fields)
+        (work / "corrupt.session").write_bytes(b"this is not a SQLite database")
+        command = [swiftc, "-module-cache-path", str(work / "cache"), "-parse-as-library"]
+        if sys.platform.startswith("linux"):
+            # Declarations for the stable SQLite C ABI; use the installed runtime
+            # even on images that do not carry the separate development headers.
+            (work / "SQLite3.h").write_text("""#include <stdint.h>
+#define SQLITE_OK 0
+#define SQLITE_ROW 100
+#define SQLITE_OPEN_READONLY 1
+typedef struct sqlite3 sqlite3;
+typedef struct sqlite3_stmt sqlite3_stmt;
+int sqlite3_open_v2(const char *, sqlite3 **, int, const char *);
+int sqlite3_close(sqlite3 *);
+int sqlite3_prepare_v2(sqlite3 *, const char *, int, sqlite3_stmt **, const char **);
+int sqlite3_step(sqlite3_stmt *);
+int sqlite3_finalize(sqlite3_stmt *);
+const unsigned char *sqlite3_column_text(sqlite3_stmt *, int);
+const void *sqlite3_column_blob(sqlite3_stmt *, int);
+int sqlite3_column_bytes(sqlite3_stmt *, int);
+int sqlite3_column_int(sqlite3_stmt *, int);
+int64_t sqlite3_column_int64(sqlite3_stmt *, int);
+""")
+            (work / "module.modulemap").write_text('module SQLite3 [system] { header "SQLite3.h" export * }')
+            command += ["-I", str(work), "-Xlinker", "-l:libsqlite3.so.0"]
+        subprocess.run(command + [str(source), "-o", str(binary)], check=True)
+        subprocess.run([str(binary), str(work)], check=True)
 
 
 def main() -> int:
@@ -170,7 +228,7 @@ def main() -> int:
         return 1
     swiftc = shutil.which("swiftc")
     if swiftc:
-        test_strings(repo, swiftc)
+        test_readers(repo, swiftc)
     else:
         print("Session string execution: not run (swiftc unavailable)")
     print("Session import check: OK")
