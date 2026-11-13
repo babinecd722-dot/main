@@ -1844,6 +1844,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// here and never in the stored conversation.
     /// The cancel handle of each running download, so a second tap stops the transfer.
     private var artifactDownloads: [String: AorusAIDownloadHandle] = [:]
+    private var artifactDownloadAttempts: [String: UUID] = [:]
     private var quotaTimer: Foundation.Timer?
     private var keyboardHeight: CGFloat = 0
     private var lastLayout: ContainerViewLayout?
@@ -5180,17 +5181,23 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // request and gives a truthful answer.
         let id = artifact.artifactId
         if loadingArtifactIds.contains(id) {
+            artifactDownloadAttempts.removeValue(forKey: id)
             artifactDownloads.removeValue(forKey: id)?.cancel()
             setArtifactLoading(false, artifactId: id)
             return
         }
+        let attempt = UUID()
+        artifactDownloadAttempts[id] = attempt
         setArtifactLoading(true, artifactId: id)
         let handle = AorusAIClient.shared.downloadArtifact(artifact) { [weak self] result in
             guard let self else { return }
             // A transfer the user stopped already cleared its own state, and a rejected
             // path answered before the handle was even stored: in both cases this id is
             // no longer loading and the answer is stale.
-            guard self.loadingArtifactIds.contains(id) else { return }
+            // Cancellation completes asynchronously. An earlier request for this file
+            // must not clear a new request started by the next tap.
+            guard self.artifactDownloadAttempts[id] == attempt else { return }
+            self.artifactDownloadAttempts.removeValue(forKey: id)
             self.artifactDownloads.removeValue(forKey: id)
             self.setArtifactLoading(false, artifactId: id)
             switch result {
@@ -5209,7 +5216,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // A path the client refuses answers synchronously, before this line runs: the
         // completion has then already cleared the flag, so storing the handle would leave
         // a dead entry that turns the next tap into a cancel.
-        if loadingArtifactIds.contains(id) {
+        if artifactDownloadAttempts[id] == attempt {
             artifactDownloads[id] = handle
         }
     }

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 // The UIKit the AI chat leans on, checked against the real SDK.
 //
@@ -102,4 +103,25 @@ final class AorusProbeTextViewDelegate: NSObject, UITextViewDelegate {
                   interaction: UITextItemInteraction) -> Bool {
         return interaction == .invokeDefaultAction
     }
+}
+
+// The work-trail sheet must keep a usable detent when medium becomes inactive.
+@available(iOS 15.0, *)
+func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
+    controller.sheetPresentationController?.detents = [.medium(), .large()]
+    controller.sheetPresentationController?.selectedDetentIdentifier = compact ? .large : .medium
+    controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = true
+    controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+    controller.sheetPresentationController?.animateChanges {
+        controller.sheetPresentationController?.selectedDetentIdentifier = .large
+    }
+}
+
+func aorusProbeAccountImportPicker(folder: Bool, url: URL) {
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: folder ? [.folder] : [.item], asCopy: false)
+    picker.allowsMultipleSelection = false
+    picker.shouldShowFileExtensions = true
+    picker.modalPresentationStyle = .fullScreen
+    var error: NSError?
+    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { _ in }
 }

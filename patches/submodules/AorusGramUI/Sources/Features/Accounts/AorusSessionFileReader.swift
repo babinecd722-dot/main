@@ -10,7 +10,7 @@ import TelegramCore
 //   Pyrogram  .session   SQLite, table `sessions`: dc_id, test_mode, auth_key, user_id, is_bot
 //   Telethon  string     "1" + base64: dc id, server address, port, key
 //   Pyrogram  string     base64: dc id, api id, test mode, key, user id, is bot
-//   GramJS    string     Telethon's string, byte for byte
+//   GramJS    string     "1" + base64: dc id, address length, address, port, key
 //
 // A Telethon session names no user, which is why the import asks Telegram who the key belongs to
 // rather than trusting the file.
@@ -92,8 +92,8 @@ public enum AorusSessionFileReader {
 
     // MARK: - Session strings
 
-    /// A Telethon/GramJS or Pyrogram session string. Both are base64 over a fixed layout, told
-    /// apart by Telethon's leading version character and by their length.
+    /// A Telethon/GramJS or Pyrogram session string, distinguished by the leading
+    /// version character and validated binary layout.
     public static func readSessionString(_ input: String) throws -> AorusImportedSession {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -109,6 +109,18 @@ public enum AorusSessionFileReader {
                     throw AorusSessionFileFailure.unsupported
                 }
                 return AorusImportedSession(dcId: dcId, authKey: authKey, userId: nil, isTestingEnvironment: false, additionalKeys: [])
+            }
+            // GramJS writes a two-byte hostname length before the address, unlike
+            // Telethon's fixed IPv4/IPv6 bytes (StringSession.save in GramJS).
+            let bytes = [UInt8](payload)
+            if bytes.count >= 5 + self.authKeySize {
+                let addressLength = Int(bytes[1]) << 8 | Int(bytes[2])
+                if addressLength > 0, addressLength <= 255,
+                   bytes.count == 1 + 2 + addressLength + 2 + self.authKeySize,
+                   let address = String(bytes: bytes[3 ..< 3 + addressLength], encoding: .utf8),
+                   !address.isEmpty, (1 ... 5).contains(Int(bytes[0])) {
+                    return AorusImportedSession(dcId: Int32(bytes[0]), authKey: Data(bytes.suffix(self.authKeySize)), userId: nil, isTestingEnvironment: false, additionalKeys: [])
+                }
             }
         }
 
@@ -126,12 +138,13 @@ public enum AorusSessionFileReader {
                 return AorusImportedSession(dcId: dcId, authKey: authKey, userId: userId > 0 ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])
             }
             // Pyrogram, older: dc id (1), test mode (1), key (256), user id (4), is bot (1)
-            if bytes.count == 1 + 1 + self.authKeySize + 4 + 1 {
+            if bytes.count == 1 + 1 + self.authKeySize + 4 + 1 || bytes.count == 1 + 1 + self.authKeySize + 8 + 1 {
                 let dcId = Int32(bytes[0])
                 let isTestMode = bytes[1] != 0
                 let authKey = Data(bytes[2 ..< 2 + self.authKeySize])
                 var userId: Int64 = 0
-                for i in 0 ..< 4 {
+                let userIdSize = bytes.count - (1 + 1 + self.authKeySize + 1)
+                for i in 0 ..< userIdSize {
                     userId = (userId << 8) | Int64(bytes[2 + self.authKeySize + i])
                 }
                 return AorusImportedSession(dcId: dcId, authKey: authKey, userId: userId > 0 ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])

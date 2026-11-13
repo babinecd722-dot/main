@@ -150,6 +150,9 @@ jobs:
       - name: Access level preflight
         run: python3 aorusgram/scripts/swift_access_level_check.py aorusgram
 
+      - name: AorusAI artifact cancellation preflight
+        run: python3 aorusgram/scripts/tests/test_ai_artifact_download.py
+
       - name: AorusAI transport and store preflight
         run: |
           AORUS_PREFLIGHT_LOG="$RUNNER_TEMP/aorus-ai-preflight.log"

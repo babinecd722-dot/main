@@ -20,6 +20,9 @@ Usage: session_import_check.py <repo root>
 from __future__ import annotations
 
 import sys
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -106,6 +109,54 @@ def check(repo: Path) -> list[str]:
     return err
 
 
+def test_strings(repo: Path, swiftc: str) -> None:
+    reader = (repo / "patches/submodules/AorusGramUI/Sources/Features/Accounts/AorusSessionFileReader.swift").read_text()
+    # Execute the production string reader; SQLite and TelegramCore are not needed.
+    reader = "import Foundation\n" + reader[reader.index("public enum AorusSessionFileFailure"):reader.index("public enum AorusSessionFileReader")]+ "public enum AorusSessionFileReader {\n    private static let authKeySize = 256\n" + reader.split("    // MARK: - Session strings", 1)[1]
+    fixture = r'''
+@main struct Tests {
+    static func main() throws {
+        let key = Data((0..<256).map { UInt8($0) })
+        var checks = 0
+        func check(_ value: String, dc: Int32, user: Int64? = nil, test: Bool = false) throws {
+            let result = try AorusSessionFileReader.readSessionString(value)
+            precondition(result.dcId == dc && result.authKey == key && result.userId == user && result.isTestingEnvironment == test)
+            checks += 1
+        }
+        for address in [Data([149,154,167,50]), Data(repeating: 1, count: 16)] {
+            try check("1" + (Data([2]) + address + Data([1,187]) + key).base64EncodedString(), dc: 2)
+        }
+        for host in ["149.154.167.50", "pluto.web.telegram.org"] {
+            let address = Data(host.utf8)
+            try check("1" + (Data([4,0,UInt8(address.count)]) + address + Data([1,187]) + key).base64EncodedString(), dc: 4)
+        }
+        // The three formats declared by Pyrogram storage.py, including old Q user ids.
+        for width in [4,8] {
+            let user = Data(repeating: 0, count: width - 1) + Data([42])
+            try check((Data([3,1]) + key + user + Data([0])).base64EncodedString(), dc: 3, user: 42, test: true)
+        }
+        try check((Data([5,0,0,0,1,0]) + key + Data([0,0,0,0,0,0,0,42,0])).base64EncodedString(), dc: 5, user: 42)
+        try check(key.base64EncodedString(), dc: 0)
+        try check(key.map { String(format: "%02x", $0) }.joined(), dc: 0)
+        for invalid in ["", "1abc", "not a session", "1" + Data(repeating: 0, count: 12).base64EncodedString()] {
+            do { _ = try AorusSessionFileReader.readSessionString(invalid); preconditionFailure("accepted invalid string") }
+            catch { checks += 1 }
+        }
+        print("Session string readers: \(checks) checks passed")
+    }
+}
+'''
+    with tempfile.TemporaryDirectory(prefix="aorus-session-tests-") as directory:
+        work = Path(directory)
+        source = work / "Reader.swift"
+        core = (repo / "patches/submodules/TelegramCore/Sources/AorusSessionImport.swift").read_text()
+        models = core[core.index("public struct AorusImportedDatacenterKey"):core.index("public enum AorusSessionImportError")]
+        source.write_text(reader + models + fixture)
+        binary = work / "tests"
+        subprocess.run([swiftc, "-module-cache-path", str(work / "cache"), "-parse-as-library", str(source), "-o", str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print("Usage: session_import_check.py <repo root>")
@@ -117,6 +168,11 @@ def main() -> int:
         for item in err:
             print(f"  - {item}")
         return 1
+    swiftc = shutil.which("swiftc")
+    if swiftc:
+        test_strings(repo, swiftc)
+    else:
+        print("Session string execution: not run (swiftc unavailable)")
     print("Session import check: OK")
     return 0
 

@@ -192,8 +192,21 @@ enum AorusAIConversationPDF {
             .foregroundColor: style.text,
             .kern: 0.4
         ])
-        let icon = UIImage(bundleImageName: aorusAIMessageMenuIconName())?.withRenderingMode(.alwaysTemplate)
+        // Resolve the template in a bitmap context once. A PDF-backed UIImage tinted
+        // directly inside a PDF context can export its rectangular tint mask instead
+        // of its alpha; every page and the preview share this concrete raster image.
+        let icon = UIImage(bundleImageName: aorusAIMessageMenuIconName()).map { rasterIcon($0, color: style.accent) }
         return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, title: title)
+    }
+
+    static func rasterIcon(_ source: UIImage, color: UIColor) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = 3.0
+        return UIGraphicsImageRenderer(size: source.size, format: format).image { _ in
+            source.withTintColor(color, renderingMode: .alwaysOriginal)
+                .draw(in: CGRect(origin: .zero, size: source.size))
+        }.withRenderingMode(.alwaysOriginal)
     }
 
     private static func codeText(language: String?, code: String, style: AorusAIPDFStyle) -> NSAttributedString {
@@ -392,7 +405,7 @@ enum AorusAIConversationPDF {
                 text.draw(at: point)
             case let .icon(rect):
                 if let icon = content.icon {
-                    icon.withTintColor(style.accent, renderingMode: .alwaysOriginal).draw(in: rect)
+                    icon.draw(in: rect)
                 }
             case let .glyphs(_, manager, container, range, origin):
                 manager.drawBackground(forGlyphRange: range, at: origin)
@@ -416,7 +429,7 @@ enum AorusAIConversationPDF {
         if let icon = content.icon {
             let side: CGFloat = 18.0
             let rect = CGRect(x: wordmarkOrigin.x - 7.0 - side, y: baseline - side / 2.0, width: side, height: side)
-            icon.withTintColor(style.accent, renderingMode: .alwaysOriginal).draw(in: rect)
+            icon.draw(in: rect)
         }
         let pageNumber = NSAttributedString(string: "\(number) / \(total)", attributes: [
             .font: UIFont.monospacedDigitSystemFont(ofSize: 11.0, weight: .medium),

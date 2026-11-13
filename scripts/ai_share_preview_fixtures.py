@@ -7,6 +7,7 @@ def share_preview_test_source(repo: Path) -> str:
     source = (repo / "patches/submodules/AorusGramUI/Sources/Features/AI/AorusAIConversationShare.swift").read_text()
     controller = block(source, "final class AorusAISharePreviewController:")
     target = block(source, "private final class AorusAIWeakDisplayLinkTarget:")
+    raster = block(source, "    static func rasterIcon(")
     return '''import UIKit
 // Display's optional blur and layer animation are unrelated to the backdrop. The UIKit
 // controller, its real views and both UIView animation paths run unchanged below.
@@ -14,7 +15,7 @@ private extension CALayer {
     static func blur() -> NSObject? { return nil }
     func animate(from: AnyObject, to: AnyObject, keyPath: String, timingFunction: String, duration: Double) {}
 }
-''' + controller + "\n" + target + r'''
+''' + "enum AorusAIPDFIconFixture {\n" + raster + "\n}\n" + controller + "\n" + target + r'''
 
 extension AorusAISharePreviewController {
     fileprivate func checkBackdrop(size: CGSize) async -> Int {
@@ -52,6 +53,23 @@ extension AorusAISharePreviewController {
         context.cgContext.fill(CGRect(x: 0, y: 0, width: 960, height: 600))
     }
     var checks = 0
+    // The exported mark must be an alpha-bearing bitmap, never a deferred PDF
+    // template. Inspect the pixels so a solid tinted rectangle fails this check.
+    let mark = UIImage(systemName: "sparkles")!
+    for color in [UIColor.systemPurple, UIColor.white, UIColor.black] {
+        let raster = AorusAIPDFIconFixture.rasterIcon(mark, color: color)
+        precondition(raster.cgImage != nil && raster.renderingMode == .alwaysOriginal)
+        let cgImage = raster.cgImage!
+        let width = cgImage.width, height = cgImage.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        pixels.withUnsafeMutableBytes { bytes in
+            let bitmap = CGContext(data: bytes.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            bitmap.draw(cgImage, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+        }
+        let alpha = stride(from: 3, to: pixels.count, by: 4).map { pixels[$0] }
+        precondition(alpha.contains(0) && alpha.contains(where: { $0 > 128 }), "mark lost its transparent shape")
+        checks += 2
+    }
     for dark in [false, true] {
         for size in [CGSize(width: 390, height: 844), CGSize(width: 844, height: 390), CGSize(width: 1024, height: 1366)] {
             let controller = AorusAISharePreviewController(image: image, isDark: dark)

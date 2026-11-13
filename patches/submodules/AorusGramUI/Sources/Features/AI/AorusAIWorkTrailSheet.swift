@@ -58,7 +58,10 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
     let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
     controller.modalPresentationStyle = .pageSheet
     controller.sheetPresentationController?.detents = [.medium(), .large()]
-    controller.sheetPresentationController?.selectedDetentIdentifier = .medium
+    controller.sheetPresentationController?.selectedDetentIdentifier = presenter.traitCollection.verticalSizeClass == .compact ? .large : .medium
+    // Medium is inactive in compact height. Keep a usable sheet on rotation too.
+    controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = true
+    controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
     controller.sheetPresentationController?.prefersGrabberVisible = true
     controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
     controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
@@ -160,6 +163,22 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         super.viewWillAppear(animated)
         // The turn may have moved between the tap and the sheet coming up.
         refresh()
+        updateTicker()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        ticker?.invalidate()
+        ticker = nil
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        if size.width > size.height {
+            sheetPresentationController?.animateChanges {
+                self.sheetPresentationController?.selectedDetentIdentifier = .large
+            }
+        }
     }
 
     /// While the turn runs: its cost keeps climbing in the heading, and the list is read again

@@ -24,6 +24,24 @@ def patch_round_video(tg: Path) -> None:
     repo = Path(__file__).resolve().parent.parent
     for name in ["TelegramCore/Sources/SyncCore/AorusRoundVideoMessageAttribute.swift", "Display/Source/AorusRoundVideoCountdownView.swift"]:
         shutil.copyfile(repo / "patches/submodules" / name, tg / "submodules" / name)
+    # Telegram 13.2 routes the attachment gallery to ChatMediaEditorV2. Round-mode
+    # adjustments and the realistic-send attribute belong to the legacy editor;
+    # the new prebuilt-media bridge drops message attributes. Keep the ordinary
+    # gallery on its complete native legacy path (including swiping between items).
+    picker = tg / "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift"
+    replace(picker, '        self.routesPickerGallery = context.routesToChatMediaEditorV2(.pickerGallery)',
+            '        self.routesPickerGallery = false // AorusGram: legacy gallery owns round-video editing')
+    replace(picker, '        private func sendThroughChatMediaSend(fromGallery: Bool, silently: Bool, scheduleTime: Int32?, animated: Bool, parameters: ChatSendMessageActionSheetController.SendParameters?, completion: @escaping () -> Void) -> Bool {', '''        private func sendThroughChatMediaSend(fromGallery: Bool, silently: Bool, scheduleTime: Int32?, animated: Bool, parameters: ChatSendMessageActionSheetController.SendParameters?, completion: @escaping () -> Void) -> Bool {
+            // A prebuilt ChatMediaSend item retains media, but loses our send deadline.
+            if let interaction = self.controller?.interaction {
+                for item in interaction.selectionState?.selectedItems() ?? [] {
+                    if let item = item as? TGMediaEditableItem,
+                       let adjustments = interaction.editingState.adjustments(for: item) as? TGVideoEditAdjustments,
+                       adjustments.aorusRoundVideo {
+                        return false
+                    }
+                }
+            }''')
     lc = tg / "submodules/LegacyComponents"
     h = lc / "PublicHeaders/LegacyComponents/TGVideoEditAdjustments.h"
     properties = '''
@@ -640,6 +658,7 @@ BADGE_PLACEMENT = '''
 
 def verify_round_video(tg: Path) -> list[str]:
     checks = {
+        'MediaPickerUI/Sources/MediaPickerScreen.swift': ['self.routesPickerGallery = false // AorusGram: legacy gallery owns round-video editing', 'adjustments.aorusRoundVideo {'],
         'LegacyComponents/PublicHeaders/LegacyComponents/TGVideoEditAdjustments.h': ['aorusRealisticSending', 'aorusCopyRoundModeFrom:'],
         'LegacyComponents/Sources/TGMediaEditingContext.m': ['[circle aorusCopyRoundModeFrom:video]', 'video.trimStartValue + 60.0'],
         'LegacyComponents/Sources/PGPhotoEditor.m': ['[result aorusCopyRoundModeFrom:initialAdjustments]', 'self.cropRotation = videoAdjustments.cropRotation;'],

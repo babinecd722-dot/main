@@ -36,12 +36,9 @@ public enum AorusAccountImport {
                 self.readTData(url: url, passcode: nil, context: context, controller: controller)
             }
         case .sessionFile:
-            var types: [UTType] = []
-            if let session = UTType(filenameExtension: "session") {
-                types.append(session)
-            }
-            types.append(.data)
-            self.presentPicker(types: types, context: context, controller: controller) { url in
+            // `.session` has no registered system UTI. Providers may expose it as
+            // public.item rather than public.data; validate its contents in the reader.
+            self.presentPicker(types: [.item], context: context, controller: controller) { url in
                 self.readSessionFile(url: url, context: context, controller: controller)
             }
         case .sessionString:
@@ -54,6 +51,8 @@ public enum AorusAccountImport {
     private static func presentPicker(types: [UTType], context: AccountContext, controller: ViewController, completion: @escaping (URL) -> Void) {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
         picker.allowsMultipleSelection = false
+        picker.shouldShowFileExtensions = true
+        picker.modalPresentationStyle = .fullScreen
         let delegate = AorusImportPickerDelegate(completion: { url in
             self.pickerDelegate = nil
             guard let url else {
@@ -69,54 +68,67 @@ public enum AorusAccountImport {
     // MARK: - Reading
 
     private static func readTData(url: URL, passcode: String?, context: AccountContext, controller: ViewController) {
-        // A folder picked outside the app's own container is reached only inside a security scope.
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer {
-            if scoped {
-                url.stopAccessingSecurityScopedResource()
+        // PBKDF2 (100000 rounds) and provider I/O must not block Files or the UI.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            var result: Result<[AorusImportedSession], Error> = .failure(AorusTDataFailure.noTData)
+            var coordinationError: NSError?
+            NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
+                result = Result {
+                    guard let folder = AorusTDataReader.resolveFolder(readableURL) else {
+                        throw AorusTDataFailure.noTData
+                    }
+                    return try AorusTDataReader.read(folder: folder, passcode: passcode ?? "")
+                }
             }
-        }
-        guard let folder = AorusTDataReader.resolveFolder(url) else {
-            self.presentError(.noTData, context: context, controller: controller)
-            return
-        }
-        do {
-            let sessions = try AorusTDataReader.read(folder: folder, passcode: passcode ?? "")
-            self.add(sessions: sessions, context: context, controller: controller)
-        } catch AorusTDataFailure.passcodeRequired {
-            if passcode == nil {
-                self.presentPasscodePrompt(url: url, context: context, controller: controller)
-            } else {
-                self.presentError(.wrongPasscode, context: context, controller: controller)
+            if let coordinationError { result = .failure(coordinationError) }
+            let outcome = result
+            DispatchQueue.main.async {
+                switch outcome {
+                case let .success(sessions):
+                    self.add(sessions: sessions, context: context, controller: controller)
+                case .failure(AorusTDataFailure.passcodeRequired):
+                    if passcode == nil {
+                        self.presentPasscodePrompt(url: url, context: context, controller: controller)
+                    } else {
+                        self.presentError(.wrongPasscode, context: context, controller: controller)
+                    }
+                case let .failure(error as AorusTDataFailure):
+                    self.presentError(.tdata(error), context: context, controller: controller)
+                case .failure:
+                    self.presentError(.tdata(.corrupt), context: context, controller: controller)
+                }
             }
-        } catch let error as AorusTDataFailure {
-            self.presentError(.tdata(error), context: context, controller: controller)
-        } catch {
-            self.presentError(.tdata(.corrupt), context: context, controller: controller)
         }
     }
 
     private static func readSessionFile(url: URL, context: AccountContext, controller: ViewController) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer {
-            if scoped {
-                url.stopAccessingSecurityScopedResource()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-session-\(UUID().uuidString).session")
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            var result: Result<AorusImportedSession, Error> = .failure(AorusSessionFileFailure.unreadable)
+            var coordinationError: NSError?
+            NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
+                result = Result {
+                    try FileManager.default.copyItem(at: readableURL, to: temporary)
+                    return try AorusSessionFileReader.readSessionFile(url: temporary)
+                }
             }
-        }
-        // Read from a copy in the app's own directory: SQLite opens journals beside the file and
-        // the picked location is read-only.
-        let temporary = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("aorus-session-\(UInt64.random(in: 0 ..< UInt64.max)).session")
-        defer {
-            try? FileManager.default.removeItem(at: temporary)
-        }
-        do {
-            try FileManager.default.copyItem(at: url, to: temporary)
-            let session = try AorusSessionFileReader.readSessionFile(url: temporary)
-            self.add(sessions: [session], context: context, controller: controller)
-        } catch let error as AorusSessionFileFailure {
-            self.presentError(.sessionFile(error), context: context, controller: controller)
-        } catch {
-            self.presentError(.sessionFile(.unreadable), context: context, controller: controller)
+            if let coordinationError { result = .failure(coordinationError) }
+            let outcome = result
+            DispatchQueue.main.async {
+                switch outcome {
+                case let .success(session):
+                    self.add(sessions: [session], context: context, controller: controller)
+                case let .failure(error as AorusSessionFileFailure):
+                    self.presentError(.sessionFile(error), context: context, controller: controller)
+                case .failure:
+                    self.presentError(.sessionFile(.unreadable), context: context, controller: controller)
+                }
+            }
         }
     }
 
@@ -353,10 +365,22 @@ private final class AorusImportPickerDelegate: NSObject, UIDocumentPickerDelegat
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        self.completion(urls.first)
+        self.finish(controller, url: urls.first)
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        self.completion(nil)
+        self.finish(controller, url: nil)
+    }
+
+    private var finished = false
+
+    private func finish(_ controller: UIDocumentPickerViewController, url: URL?) {
+        guard !finished else { return }
+        finished = true
+        // A protected tdata immediately asks for a passcode. Presenting that prompt
+        // while Files is still dismissing drops the presentation at the root host.
+        controller.dismiss(animated: true) { [completion] in
+            completion(url)
+        }
     }
 }
