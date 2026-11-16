@@ -90,6 +90,10 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
     private var finishedAt: Date? { return snapshot.finishedAt }
 
     private let titleLabel = UILabel()
+    /// Always present, so the sheet can be closed whatever the detent or the orientation. In
+    /// landscape the sheet sits at its large detent with no room to swipe it down, and there is
+    /// no dimmed area to tap outside it, so a grabber alone left no way out.
+    private let closeButton = UIButton(type: .system)
     private let tableView = UITableView(frame: .zero, style: .plain)
     /// Which phases the reader has opened. A phase with no renderable file never enters
     /// this set, because there is nothing to show and a row that opens onto nothing is
@@ -112,6 +116,8 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
             guard self.isViewLoaded else { return }
             self.view.backgroundColor = self.palette.background
             self.titleLabel.textColor = self.palette.label
+            self.closeButton.tintColor = self.palette.secondary
+            self.closeButton.backgroundColor = self.palette.fill
             self.tableView.reloadData()
         })
     }
@@ -133,6 +139,19 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
 
+        closeButton.setImage(
+            UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .semibold)),
+            for: .normal
+        )
+        closeButton.tintColor = palette.secondary
+        closeButton.backgroundColor = palette.fill
+        closeButton.layer.cornerRadius = 16.0
+        closeButton.layer.cornerCurve = .continuous
+        closeButton.accessibilityLabel = aorusAILocalized("Закрыть", "Close")
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
+
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
         tableView.dataSource = self
@@ -146,10 +165,16 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         view.addSubview(tableView)
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18.0),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20.0),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20.0),
-            tableView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14.0),
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14.0),
+            closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16.0),
+            closeButton.widthAnchor.constraint(equalToConstant: 32.0),
+            closeButton.heightAnchor.constraint(equalToConstant: 32.0),
+            titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            // The title stays centred in the sheet; the close button sits over its trailing
+            // margin, and the title's own margins keep it from running under the button.
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 52.0),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -52.0),
+            tableView.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 12.0),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -157,6 +182,10 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
 
         updateTitle()
         updateTicker()
+    }
+
+    @objc private func closeTapped() {
+        dismiss(animated: true)
     }
 
     override func viewWillAppear(_ animated: Bool) {

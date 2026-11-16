@@ -192,10 +192,13 @@ enum AorusAIConversationPDF {
             .foregroundColor: style.text,
             .kern: 0.4
         ])
-        // Resolve the template in a bitmap context once. A PDF-backed UIImage tinted
-        // directly inside a PDF context can export its rectangular tint mask instead
-        // of its alpha; every page and the preview share this concrete raster image.
-        let icon = UIImage(bundleImageName: aorusAIMessageMenuIconName()).map { rasterIcon($0, color: style.accent) }
+        // The real AorusGram mark, in full colour: the white glow on a dark page, the inked
+        // violet on a light one. It is already a concrete raster, so, unlike a PDF-backed
+        // template, it exports its own alpha rather than a rectangular tint mask. The generic
+        // in-app glyph, tinted to the accent, is kept only as a fallback if the mark cannot
+        // be decoded — that generic glyph was the "plain square" this export used to show.
+        let icon = AorusAIBrandLogo.image(dark: style.isDark)
+            ?? UIImage(bundleImageName: aorusAIMessageMenuIconName()).map { rasterIcon($0, color: style.accent) }
         return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, title: title)
     }
 

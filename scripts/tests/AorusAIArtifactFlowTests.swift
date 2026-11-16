@@ -79,6 +79,19 @@ private func decodesProductionPayload() {
     require(AorusAIArtifactFlow.decode(object("{\"filename\":\"a.pdf\"}")) == nil, "id is required")
     require(AorusAIArtifactFlow.decode(object("{\"artifact_id\":\"abc\"}")) == nil, "filename is required")
 
+    // The gateway's envelope is not uniform — `response.delta` carries its text under
+    // `data` — so an `artifact.ready`/`build_result` event whose file sits under `data`,
+    // or under `data.artifact`, must still decode instead of silently losing the file.
+    let nested = "{\"event\":\"build_result\",\"data\":{\"artifact_id\":\"77777777-8888-9999-aaaa-bbbbbbbbbbbb\",\"filename\":\"deck.pptx\",\"size\":10,\"download\":{\"path\":\"/download/77777777-8888-9999-aaaa-bbbbbbbbbbbb\"}}}"
+    guard let fromData = AorusAIArtifactFlow.decode(object(nested)) else {
+        fputs("AorusAIArtifactFlow test failed: an artifact nested under data did not decode\n", stderr)
+        exit(1)
+    }
+    require(fromData.filename == "deck.pptx", "an artifact nested under data decodes")
+    require(fromData.downloadPath == "/download/77777777-8888-9999-aaaa-bbbbbbbbbbbb", "its download path survives nesting")
+    let nestedArtifact = "{\"event\":\"artifact.ready\",\"data\":{\"artifact\":{\"artifact_id\":\"77777777-8888-9999-aaaa-cccccccccccc\",\"filename\":\"doc.pdf\",\"size\":10}}}"
+    require(AorusAIArtifactFlow.decode(object(nestedArtifact))?.filename == "doc.pdf", "an artifact under data.artifact decodes")
+
     // Formats we must icon natively.
     let families: [(String, String, String)] = [
         ("a.pdf", "pdf", "doc.richtext"),

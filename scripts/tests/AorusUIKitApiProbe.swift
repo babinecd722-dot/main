@@ -117,11 +117,86 @@ func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
     }
 }
 
-func aorusProbeAccountImportPicker(folder: Bool, url: URL) {
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: folder ? [.folder] : [.item], asCopy: false)
+// The account import picker: a folder or an item, and in either case a ZIP that holds one. Its
+// presentation style is left to the picker -- forcing `.fullScreen` dropped the toolbar that
+// carries the Open button -- and it goes on whatever is on top of the window.
+func aorusProbeAccountImportPicker(folder: Bool, url: URL, from controller: UIViewController) {
+    var types: [UTType] = folder ? [.folder, .zip] : [.item, .zip]
+    if let archive = UTType("public.archive") { types.append(archive) }
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
     picker.allowsMultipleSelection = false
     picker.shouldShowFileExtensions = true
-    picker.modalPresentationStyle = .fullScreen
+    var top: UIViewController? = controller.view.window?.rootViewController
+    while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+        top = presented
+    }
+    top?.present(picker, animated: true)
     var error: NSError?
-    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { _ in }
+    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { readableURL in
+        let isDirectory = (try? readableURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        _ = isDirectory
+        if let handle = try? FileHandle(forReadingFrom: readableURL) {
+            _ = try? handle.read(upToCount: 4)
+            _ = try? handle.close()
+        }
+        _ = try? Data(contentsOf: readableURL, options: .alwaysMapped)
+    }
+    let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+    for case let fileURL as URL in enumerator! {
+        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        _ = (values?.isRegularFile, values?.fileSize)
+    }
+}
+
+// A downloaded artifact is shown on the controller on top of the window, after any
+// presentation that is still leaving.
+func aorusProbeArtifactPreview(_ preview: UIViewController, from controller: UIViewController) {
+    guard var top = controller.view.window?.rootViewController else {
+        controller.present(preview, animated: true)
+        return
+    }
+    while let presented = top.presentedViewController, !presented.isBeingDismissed {
+        top = presented
+    }
+    if let leaving = top.presentedViewController, leaving.isBeingDismissed, let coordinator = leaving.transitionCoordinator {
+        coordinator.animate(alongsideTransition: nil, completion: { [weak top] _ in
+            top?.present(preview, animated: true)
+        })
+    } else {
+        top.present(preview, animated: true)
+    }
+}
+
+// The work-trail sheet's close button: always there, whatever the detent or orientation.
+final class AorusProbeWorkTrailClose: UIViewController {
+    private let closeButton = UIButton(type: .system)
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        closeButton.setImage(
+            UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .semibold)),
+            for: .normal
+        )
+        closeButton.layer.cornerRadius = 16.0
+        closeButton.layer.cornerCurve = .continuous
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
+        NSLayoutConstraint.activate([
+            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14.0),
+            closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16.0),
+            closeButton.widthAnchor.constraint(equalToConstant: 32.0),
+            closeButton.heightAnchor.constraint(equalToConstant: 32.0)
+        ])
+    }
+
+    @objc private func closeTapped() {
+        dismiss(animated: true)
+    }
+}
+
+// The conversation PDF's mark is a decoded raster drawn as-is, never tinted.
+func aorusProbeBrandMark(_ base64: String, in rect: CGRect) {
+    guard let data = Data(base64Encoded: base64), let image = UIImage(data: data) else { return }
+    image.draw(in: rect)
 }

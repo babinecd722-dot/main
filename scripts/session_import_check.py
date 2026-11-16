@@ -118,6 +118,27 @@ def check(repo: Path) -> list[str]:
     if "cp $PATCHES/submodules/TelegramCore/Sources/AorusSessionImport.swift" not in workflow_body:
         err.append("build-aorusgram.yml: AorusSessionImport.swift is no longer copied into telegram-ios")
 
+    # A folder or a session file can be shared inside a .zip; the import unpacks it and reads
+    # the folder or session inside. The extractor is part of the AorusGram core module (copied
+    # whole into the build) and the UI must offer archives and route a picked one through it.
+    archive = repo / "AorusGram/Sources/Features/Accounts/AorusImportArchive.swift"
+    if not archive.is_file():
+        err.append("AorusImportArchive.swift is missing from the AorusGram core module")
+    else:
+        archive_body = archive.read_text(encoding="utf-8")
+        for needle in ("public static func extract(", "public static func extractFile(", "public static func looksLikeZip(", "0x06054b50", "0x04034b50"):
+            if needle not in archive_body:
+                err.append(f"AorusImportArchive: {needle} is gone")
+        if '".."' not in archive_body:
+            err.append("AorusImportArchive: traversal guard against '..' is gone")
+    if "import AorusGram" not in ui_body or "AorusImportArchive." not in ui_body:
+        err.append("AorusAccountImport: the archive extractor is no longer used")
+    if "UTType.zip" not in ui_body and ".zip" not in ui_body:
+        err.append("AorusAccountImport: archives are no longer offered in the picker")
+    # Forcing a document picker full-screen drops the toolbar that carries the Open button.
+    if "modalPresentationStyle = .fullScreen" in ui_body:
+        err.append("AorusAccountImport: the document picker must not be forced full-screen")
+
     return err
 
 

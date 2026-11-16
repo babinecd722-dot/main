@@ -5207,7 +5207,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 let preview = QLPreviewController()
                 preview.dataSource = self
                 preview.delegate = self
-                self.present(preview, animated: true)
+                self.presentArtifactPreview(preview)
             case let .failure(error):
                 guard error != .cancelled else { return }
                 self.presentArtifactError(error, artifact: artifact)
@@ -5218,6 +5218,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // a dead entry that turns the next tap into a cancel.
         if artifactDownloadAttempts[id] == attempt {
             artifactDownloads[id] = handle
+        }
+    }
+
+    /// Shows a downloaded file on whatever is on top of this window.
+    ///
+    /// Display's `present` hands a UIKit controller to the window's root, and the root refuses
+    /// it, silently, while it is already presenting something — a sheet still on screen, or
+    /// one still on its way out. The file had downloaded and the spinner had stopped, yet the
+    /// preview never appeared. A presentation still leaving is waited for, then the preview
+    /// goes on the controller that will be on top.
+    private func presentArtifactPreview(_ preview: QLPreviewController) {
+        guard var top = self.view.window?.rootViewController else {
+            self.present(preview, animated: true)
+            return
+        }
+        while let presented = top.presentedViewController, !presented.isBeingDismissed {
+            top = presented
+        }
+        if let leaving = top.presentedViewController, leaving.isBeingDismissed, let coordinator = leaving.transitionCoordinator {
+            coordinator.animate(alongsideTransition: nil, completion: { [weak top] _ in
+                top?.present(preview, animated: true)
+            })
+        } else {
+            top.present(preview, animated: true)
         }
     }
 

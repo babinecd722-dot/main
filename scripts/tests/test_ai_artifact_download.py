@@ -30,6 +30,8 @@ final class Controller {
  func setArtifactLoading(_ loading: Bool, artifactId: String) { if loading { loadingArtifactIds.insert(artifactId) } else { loadingArtifactIds.remove(artifactId) } }
  func removePreviewArtifact() {}
  func present(_ preview: QLPreviewController, animated: Bool) {}
+ var presentedPreviews = 0
+ func presentArtifactPreview(_ preview: QLPreviewController) { presentedPreviews += 1 }
  func presentArtifactError(_ error: AorusAIClientError, artifact: AorusAIArtifact) {}
 '''
 test='''
@@ -46,7 +48,7 @@ AorusAIClient.shared.completions[0](.failure(.cancelled))
 let retained = controller.loadingArtifactIds.contains("a") && controller.artifactDownloads["a"] === second
 precondition(retained, "late cancellation cleared the replacement download")
 AorusAIClient.shared.completions[1](.success(URL(fileURLWithPath: "/tmp/test.txt")))
-if retained { precondition(controller.previewURL != nil && !controller.loadingArtifactIds.contains("a")) }
+if retained { precondition(controller.previewURL != nil && !controller.loadingArtifactIds.contains("a") && controller.presentedPreviews == 1, "the downloaded file is shown once") }
 '''
 
 with tempfile.TemporaryDirectory(prefix="aorus-artifact-cancellation-") as directory:

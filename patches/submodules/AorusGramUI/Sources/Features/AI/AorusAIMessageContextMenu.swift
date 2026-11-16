@@ -39,12 +39,17 @@ public func aorusAIPresentMessageActions(
         )
         controller.modalPresentationStyle = .pageSheet
         controller.sheetPresentationController?.detents = [.medium(), .large()]
-        controller.sheetPresentationController?.selectedDetentIdentifier = .medium
-        controller.sheetPresentationController?.prefersGrabberVisible = true
-        controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
         controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
         let presenter = navigationController.topViewController
             ?? navigationController.view.window?.rootViewController
+        // Medium is inactive in compact height (landscape on a phone): open at large there and
+        // keep the sheet edge-attached so it stays usable, with its own close button to leave.
+        let isCompactHeight = presenter?.traitCollection.verticalSizeClass == .compact
+        controller.sheetPresentationController?.selectedDetentIdentifier = isCompactHeight ? .large : .medium
+        controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = true
+        controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+        controller.sheetPresentationController?.prefersGrabberVisible = true
+        controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
         presenter?.present(controller, animated: true)
     }
 }

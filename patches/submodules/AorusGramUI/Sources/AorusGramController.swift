@@ -396,6 +396,7 @@ private struct AorusState: Equatable {
     var ghostMode: Bool
     var ghostChatButton: Bool
     var ghostHideOnline: Bool
+    var alwaysOnline: Bool
     var blockReadReceipts: Bool
     var hideTyping: Bool
     var ghostHideStories: Bool
@@ -753,6 +754,9 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         // Ghost Mode has a screen of its own: what it hides is chosen there, item by item, and
         // the ghost in chats with it (`.ghost` below).
         b.screen("ghostMode", .ghost, l10n.ghostMode, AorusPage.ghost.subtitle, .page(.ghost), isOn: state.ghostMode)
+        // Always Online broadcasts "online" whenever the app can; it is the opposite of Ghost
+        // Mode's "Online Status", so switching it on switches that off (and vice versa).
+        b.toggle("alwaysOnline", icon("wifi"), aorusL("Всегда в сети", "Always Online"), aorusL("Постоянно показывает твой статус «в сети». Нельзя включить вместе с его скрытием в Режиме призрака.", "Keeps your online status showing. Can't be on together with hiding it in Ghost Mode."), \.alwaysOnline, state)
         b.toggle("antiSpoofOnline", icon("eye.fill"), aorusL("Настоящий онлайн собеседника", "Contact's Real Activity"), aorusL("Показывает, когда человек был активен, даже если он скрыл время захода", "Shows when someone was active even if they hide their last seen"), \.antiSpoofOnline, state)
         b.block()
         b.screen("deviceSpoof", icon("iphone"), aorusL("Подмена устройства", "Device Spoofing"), aorusL("Какое устройство видят Telegram и твои сеансы", "Which device Telegram and your sessions see"), .deviceSpoof, isOn: state.spoofedDeviceName != nil, value: state.spoofedDeviceName)
@@ -1061,6 +1065,7 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
         ghostMode:          mgr.ghostMode,
         ghostChatButton:    mgr.ghostChatButton,
         ghostHideOnline:    mgr.ghostHideOnline,
+        alwaysOnline:       mgr.alwaysOnline,
         blockReadReceipts:  mgr.blockReadReceipts,
         hideTyping:         mgr.hideTyping,
         ghostHideStories:   mgr.ghostHideStories,
@@ -1185,6 +1190,7 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
         \.ghostMode: { mgr.ghostMode = $0 },
         \.ghostChatButton: { mgr.ghostChatButton = $0 },
         \.ghostHideOnline: { mgr.ghostHideOnline = $0 },
+        \.alwaysOnline: { mgr.alwaysOnline = $0 },
         \.blockReadReceipts: { mgr.blockReadReceipts = $0 },
         \.hideTyping: { mgr.hideTyping = $0 },
         \.ghostHideStories: { mgr.ghostHideStories = $0 },
@@ -1273,6 +1279,18 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             // off on its own page, came back at the next switch touched on another.
             aorusPersisters[keyPath]?(value)
             let s = stateValue.with { $0 }
+            // Always Online and Ghost Mode's "Online Status" are opposites — one keeps the
+            // account broadcasting online, the other broadcasting offline — so turning either on
+            // turns the other off. The list uses animateChanges, so the other switch flips with
+            // a visible animation.
+            if keyPath == \AorusState.alwaysOnline, value, s.ghostHideOnline {
+                updateState { current in var next = current; next.ghostHideOnline = false; return next }
+                mgr.ghostHideOnline = false
+            }
+            if keyPath == \AorusState.ghostHideOnline, value, s.alwaysOnline {
+                updateState { current in var next = current; next.alwaysOnline = false; return next }
+                mgr.alwaysOnline = false
+            }
             // Glass effects are read once when the nav bar / input panel / HUD build
             // their layers, so toggling only fully applies (everywhere) after a restart.
             if keyPath == \AorusState.glassUI {

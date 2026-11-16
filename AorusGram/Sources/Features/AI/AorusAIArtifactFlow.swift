@@ -17,7 +17,14 @@ public enum AorusAIArtifactFlow {
     /// dropped: the model has no field for them, so they cannot be stored, shown or
     /// replayed. A payload without an id or a filename is not an artifact.
     public static func decode(_ object: [String: Any]) -> AorusAIArtifact? {
-        let source = (object["artifact"] as? [String: Any]) ?? object
+        // The streaming envelope is not uniform: `response.delta` carries its text under
+        // `data`, `tool.request` keeps its fields at the top level. An `artifact.ready` or
+        // `build_result` event is the one that, when its file sits under `data` (or under
+        // `data.artifact`), was dropped here — the whole payload read as "no id, no
+        // filename" and the user's file was silently lost. Unwrap `data` the same way the
+        // top level is unwrapped so every shape the gateway sends reaches the decoder.
+        let nested = (object["data"] as? [String: Any]).map { ($0["artifact"] as? [String: Any]) ?? $0 }
+        let source = (object["artifact"] as? [String: Any]) ?? nested ?? object
         guard let artifactId = source["artifact_id"] as? String ?? source["id"] as? String,
               isSafeArtifactId(artifactId) else { return nil }
         guard let rawFilename = source["filename"] as? String else { return nil }

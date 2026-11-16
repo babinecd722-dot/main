@@ -60,6 +60,11 @@ public final class AorusGramManager {
     // What Ghost Mode hides, each on its own (docs/ghost-mode.md). All of it by default, as
     // Ghost Mode always did; listening to voice and video messages is new and hidden too.
     public var ghostHideOnline: Bool   = true  { didSet { save() } }
+    // Always Online: the account keeps broadcasting "online" whenever the app has an execution
+    // window — in front, and during every background wake (push, fetch). It cannot be on with
+    // Ghost Mode's "Online Status", which does the opposite, so the two settings turn each
+    // other off; the native presence manager reads the flat key `aorusgram_always_online`.
+    public var alwaysOnline: Bool      = false { didSet { save() } }
     public var blockReadReceipts: Bool = true  { didSet { save() } }
     public var hideTyping: Bool        = true  { didSet { save() } }
     public var ghostHideStories: Bool  = true  { didSet { save() } }
@@ -158,6 +163,8 @@ public final class AorusGramManager {
         ud.set(ghostChatButton,                forKey: "aorusgram_ghost_chat_button")
         // Read by the guards in TelegramCore, next to the master key above (aorus_branding.py).
         ud.set(ghostHideOnline,                forKey: "aorusgram_ghost_conceal_online")
+        // A feature of its own, so it follows the licence like the other features do.
+        ud.set(effective(alwaysOnline),        forKey: "aorusgram_always_online")
         ud.set(blockReadReceipts,              forKey: "aorusgram_ghost_conceal_read")
         ud.set(hideTyping,                     forKey: "aorusgram_ghost_conceal_typing")
         ud.set(ghostHideStories,               forKey: "aorusgram_ghost_conceal_stories")
@@ -214,6 +221,7 @@ public final class AorusGramManager {
         ghostMode           = d["ghostMode"]           as? Bool ?? false
         ghostChatButton     = d["ghostChatButton"]     as? Bool ?? true
         ghostHideOnline     = d["ghostHideOnline"]     as? Bool ?? true
+        alwaysOnline        = d["alwaysOnline"]        as? Bool ?? false
         blockReadReceipts   = d["blockReadReceipts"]   as? Bool ?? true
         hideTyping          = d["hideTyping"]          as? Bool ?? true
         ghostHideStories    = d["ghostHideStories"]    as? Bool ?? true
@@ -279,6 +287,7 @@ public final class AorusGramManager {
             "ghostMode":           ghostMode,
             "ghostChatButton":     ghostChatButton,
             "ghostHideOnline":     ghostHideOnline,
+            "alwaysOnline":        alwaysOnline,
             "blockReadReceipts":   blockReadReceipts,
             "hideTyping":          hideTyping,
             "ghostHideStories":    ghostHideStories,

@@ -647,6 +647,111 @@ def patch_media_send_button_accent(tg: Path) -> None:
     print("MediaSendAccent: media send button -> theme accent")
 
 
+def patch_always_online(tg: Path) -> None:
+    """Always Online: keep the primary account broadcasting "online" whenever the app has an
+    execution window, not only while it is in front.
+
+    The wakeup manager drives presence from `shouldKeepOnlinePresence`, which it sets to
+    `primary && inForeground` while the app is active and clears otherwise. When Always Online
+    is on, the primary account is kept online in that active branch regardless of foreground —
+    so a background wake (a push, a fetch) re-asserts online through the same presence manager
+    that already pings every 30s, with no extra timers or connections of its own. It stays off
+    in the fully-idle branch, where the network is torn down anyway, so it adds no battery cost
+    beyond the wakeups the app already takes.
+
+    Patched file: submodules/TelegramUI/Sources/SharedWakeupManager.swift
+    """
+    path = tg / "submodules/TelegramUI/Sources/SharedWakeupManager.swift"
+    if not path.is_file():
+        print("AlwaysOnline: SharedWakeupManager.swift not found -- skip")
+        return
+    text = path.read_text(encoding="utf-8")
+    if "aorusgram_always_online" in text:
+        print("AlwaysOnline: already injected")
+        return
+    old = "account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground))"
+    if text.count(old) != 1:
+        raise RuntimeError(f"AlwaysOnline: anchor found {text.count(old)} times")
+    new = (
+        "account.shouldKeepOnlinePresence.set(.single(primary && (self.inForeground || UserDefaults.standard.bool(forKey: \"aorusgram_always_online\"))))"
+    )
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("AlwaysOnline: primary account stays online during every active window")
+
+
+def patch_gallery_date_color(tg: Path) -> None:
+    """The floating month plate the gallery shows while scrolling took its text colour from
+    the running app theme, so in light mode it drew a black month (e.g. "August 2026") — and
+    the gallery's own chrome, while scrolling the full grid, is a dark glass. Black on that is
+    unreadable. Give the plate a dark theme whenever that dark chrome is up, so its label is
+    light and legible over it; at rest, in light mode, it keeps the app theme."""
+    path = tg / "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift"
+    if not path.is_file():
+        print("GalleryDate: MediaPickerScreen.swift not found -- skip")
+        return
+    text = path.read_text(encoding="utf-8")
+    anchor = (
+        "                date: (dateString ?? \"\", tag ?? 0),\n"
+        "                theme: self.presentationData.theme,\n"
+    )
+    replacement = (
+        "                date: (dateString ?? \"\", tag ?? 0),\n"
+        "                // AorusGram: while the gallery shows its dark glass chrome (scrolling the\n"
+        "                // full grid), the month plate is dark too, so its label is light instead\n"
+        "                // of a black month on a dark panel.\n"
+        "                theme: (self.currentDisplayMode == .all && !self.scrolledToTop) ? defaultDarkColorPresentationTheme : self.presentationData.theme,\n"
+    )
+    if "// AorusGram: while the gallery shows its dark glass chrome" in text:
+        print("GalleryDate: already applied")
+        return
+    if text.count(anchor) != 1:
+        raise RuntimeError(f"GalleryDate: anchor found {text.count(anchor)} times")
+    path.write_text(text.replace(anchor, replacement, 1), encoding="utf-8")
+    print("GalleryDate: month plate follows the dark gallery chrome")
+
+
+def patch_media_editor_send_accent(tg: Path) -> None:
+    """The Send control the chat media editor shows after you pick a photo stayed blue: its
+    fill is a fixed literal, and the attachment sheet's own Send/Next controls take their
+    colour from `defaultDarkColorPresentationTheme` — a dark chrome theme pinned to Telegram
+    blue that the accent theme never recolours. Repoint all three to the AorusGram accent so
+    "Send" is accent-coloured everywhere media is sent, not blue in some flows."""
+    accent = "0x9b4dff"
+    edits = [
+        (
+            "submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift",
+            "public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0x3e88f7),",
+            "public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: " + accent + "),",
+            "dark media chrome accent",
+        ),
+        (
+            "submodules/TelegramUI/Components/ChatMediaEditorScreen/Sources/ChatMediaEditorBottomControlsComponent.swift",
+            "private let chatMediaEditorBottomControlsSendColor = UIColor(rgb: 0x0088ff)",
+            "private let chatMediaEditorBottomControlsSendColor = UIColor(rgb: " + accent + ")",
+            "chat media editor send",
+        ),
+        (
+            "submodules/TelegramUI/Components/ChatMediaEditorScreen/Sources/ChatMediaEditorCover.swift",
+            "self.saveButton.backgroundColor = UIColor(rgb: 0x0088ff)",
+            "self.saveButton.backgroundColor = UIColor(rgb: " + accent + ")",
+            "chat media editor cover save",
+        ),
+    ]
+    for rel, old, new, label in edits:
+        path = tg / rel
+        if not path.is_file():
+            print(f"MediaEditorSendAccent: {rel} not found -- skip {label}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        if new in text:
+            print(f"MediaEditorSendAccent: {label} already on the accent")
+            continue
+        if text.count(old) != 1:
+            raise RuntimeError(f"MediaEditorSendAccent: anchor for {label} found {text.count(old)} times")
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+        print(f"MediaEditorSendAccent: {label} -> accent")
+
+
 def patch_premium_button_purple(tg: Path) -> None:
     """The Premium / subscription screens hardcode a blue button colour (0x0077ff),
     independent of the theme accent, so their buttons stayed blue. Repoint that blue to
@@ -31788,6 +31893,9 @@ def main() -> None:
     from aorus_tab_settings import patch_tab_settings
     patch_light_surfaces(tg)
     patch_media_send_button_accent(tg)
+    patch_media_editor_send_accent(tg)
+    patch_gallery_date_color(tg)
+    patch_always_online(tg)
     # After Interface 2.0's posts block: it anchors on the grid layout and the glass that adds.
     from aorus_posts_page_ink import patch_posts_page_ink
     patch_posts_page_ink(tg)

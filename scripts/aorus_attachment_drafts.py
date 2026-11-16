@@ -12,6 +12,130 @@ def edit(source, old, new, label, count=1):
     return source.replace(old, new)
 
 
+# The transition a draft tile opens its editor with. The stock gallery transition maps the
+# tile -- a small square showing an aspect-fill crop -- onto the media's own content rect with
+# a separate scale per axis, and it was reading that rect before the page had fitted its photo,
+# so the photo first appeared far larger than the screen and then shrank back to fit. This one
+# scales the page by one factor, so at the start the media covers the tile exactly as the
+# tile's crop did, and reveals the rest of it through a rounded mask that grows from the tile
+# to the whole page. A target rect larger than the page (a page that was not fitted yet) is
+# replaced by the fitted rect it is about to become.
+DRAFT_TRANSITION_IN = r'''- (void)aorusAnimateDraftTransitionInFromView:(UIView *)fromView toView:(UIView *)toView toViewContentRect:(CGRect)toViewContentRect
+{
+    if (fromView.window == nil || toView.window == nil || toView.superview == nil || toView.bounds.size.width < FLT_EPSILON || toView.bounds.size.height < FLT_EPSILON)
+    {
+        [self animateTransitionInFromView:fromView toView:toView toViewContentRect:toViewContentRect];
+        return;
+    }
+
+    CGRect bounds = toView.bounds;
+    CGRect contentRect = toViewContentRect;
+    bool contentIsFitted = contentRect.size.width > 1.0f && contentRect.size.height > 1.0f && contentRect.size.width <= bounds.size.width * 1.02f + 1.0f && contentRect.size.height <= bounds.size.height * 1.02f + 1.0f;
+    if (!contentIsFitted)
+    {
+        CGSize aspect = (contentRect.size.width > 1.0f && contentRect.size.height > 1.0f) ? contentRect.size : fromView.bounds.size;
+        if (aspect.width < FLT_EPSILON || aspect.height < FLT_EPSILON)
+            aspect = bounds.size;
+        CGFloat fit = MIN(bounds.size.width / aspect.width, bounds.size.height / aspect.height);
+        CGSize fitted = CGSizeMake(aspect.width * fit, aspect.height * fit);
+        contentRect = CGRectMake(CGRectGetMidX(bounds) - fitted.width / 2.0f, CGRectGetMidY(bounds) - fitted.height / 2.0f, fitted.width, fitted.height);
+    }
+
+    CGRect tileRect = [fromView convertRect:fromView.bounds toView:nil];
+    CGRect targetRect = [toView convertRect:contentRect toView:nil];
+    if (tileRect.size.width < FLT_EPSILON || tileRect.size.height < FLT_EPSILON || targetRect.size.width < FLT_EPSILON || targetRect.size.height < FLT_EPSILON)
+    {
+        [self animateTransitionInFromView:fromView toView:toView toViewContentRect:toViewContentRect];
+        return;
+    }
+
+    // One factor for both axes: the media covers the tile (aspect fill), as the tile's crop did.
+    CGFloat scale = MAX(tileRect.size.width / targetRect.size.width, tileRect.size.height / targetRect.size.height);
+    // Points of the page per point on screen at rest; 1 unless something above it is scaled.
+    CGFloat unit = scale * MAX(0.01f, targetRect.size.width / contentRect.size.width);
+
+    CGRect toFrame = toView.frame;
+    CGPoint tileCenter = [toView.superview convertPoint:CGPointMake(CGRectGetMidX(tileRect), CGRectGetMidY(tileRect)) fromView:nil];
+    CGPoint contentCenter = CGPointMake(CGRectGetMidX(contentRect) - bounds.origin.x, CGRectGetMidY(contentRect) - bounds.origin.y);
+    CGRect fromFrame = CGRectMake(tileCenter.x - contentCenter.x * scale, tileCenter.y - contentCenter.y * scale, toFrame.size.width * scale, toFrame.size.height * scale);
+
+    CGFloat tileRadius = fromView.layer.cornerRadius;
+    if (tileRadius < FLT_EPSILON && fromView.superview != nil)
+        tileRadius = fromView.superview.layer.cornerRadius;
+    if (tileRadius < FLT_EPSILON)
+        tileRadius = 10.0f;
+
+    // The visible part starts as the tile and grows to the whole page. A plain layer is the mask,
+    // so its bounds, position and corner radius animate on their own without path interpolation.
+    CALayer *mask = [CALayer layer];
+    mask.backgroundColor = [UIColor blackColor].CGColor;
+    mask.bounds = CGRectMake(0.0f, 0.0f, bounds.size.width, bounds.size.height);
+    mask.position = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
+    mask.cornerRadius = 0.0f;
+    toView.layer.mask = mask;
+
+    CAMediaTimingFunction *curve = [CAMediaTimingFunction functionWithControlPoints:0.22f :1.0f :0.36f :1.0f];
+    CABasicAnimation *maskBounds = [CABasicAnimation animationWithKeyPath:@"bounds"];
+    maskBounds.fromValue = [NSValue valueWithCGRect:CGRectMake(0.0f, 0.0f, tileRect.size.width / unit, tileRect.size.height / unit)];
+    maskBounds.toValue = [NSValue valueWithCGRect:mask.bounds];
+    CABasicAnimation *maskPosition = [CABasicAnimation animationWithKeyPath:@"position"];
+    maskPosition.fromValue = [NSValue valueWithCGPoint:CGPointMake(CGRectGetMidX(contentRect), CGRectGetMidY(contentRect))];
+    maskPosition.toValue = [NSValue valueWithCGPoint:mask.position];
+    CABasicAnimation *maskRadius = [CABasicAnimation animationWithKeyPath:@"cornerRadius"];
+    maskRadius.fromValue = @(tileRadius / unit);
+    maskRadius.toValue = @(0.0f);
+    for (CABasicAnimation *animation in @[maskBounds, maskPosition, maskRadius])
+    {
+        animation.duration = 0.36;
+        animation.timingFunction = curve;
+        animation.removedOnCompletion = true;
+        adjustFrameRate(animation);
+        [mask addAnimation:animation forKey:animation.keyPath];
+    }
+
+    __weak TGModernGalleryController *weakSelf = self;
+    __weak UIView *weakToView = toView;
+    self.view.userInteractionEnabled = false;
+    [self animateView:toView frameFrom:fromFrame to:toFrame velocity:CGPointZero rotationFrom:0.0f to:0.0f animatingIn:true completion:^(bool __unused finished)
+    {
+        weakToView.layer.mask = nil;
+        __strong TGModernGalleryController *strongSelf = weakSelf;
+        if (strongSelf != nil)
+        {
+            strongSelf.view.userInteractionEnabled = true;
+
+            TGModernGalleryItemView *itemView = nil;
+            if (strongSelf.finishedTransitionIn && strongSelf.model.focusItem != nil)
+            {
+                for (TGModernGalleryItemView *visibleItemView in strongSelf->_visibleItemViews)
+                {
+                    if ([visibleItemView.item isEqual:strongSelf.model.focusItem])
+                    {
+                        itemView = visibleItemView;
+                        break;
+                    }
+                }
+            }
+
+            if (strongSelf.finishedTransitionIn)
+                strongSelf.finishedTransitionIn(strongSelf.model.focusItem, itemView);
+
+            strongSelf->_preloadVisibleItemViews = true;
+            [strongSelf scrollViewBoundsChanged:strongSelf->_view.scrollView.bounds synchronously:false];
+
+            [strongSelf.model _transitionCompleted];
+        }
+    }];
+
+    toView.alpha = 0.0f;
+    [UIView animateWithDuration:0.08 animations:^{
+        toView.alpha = 1.0f;
+    }];
+}
+
+'''
+
+
 def patch_state(tg):
     path = tg / 'submodules/ChatInterfaceState/Sources/ChatInterfaceState.swift'
     s = path.read_text()
@@ -386,10 +510,20 @@ def patch_picker(tg):
                         if (strongSelf.aorusRefreshTransitionGeometry) {
                             [strongSelf.view layoutIfNeeded];
                             [transitionFromItemView layoutIfNeeded];
+                            // A zoomable page that was laid out before it had its final frame keeps
+                            // its photo at natural size; fit it now, so the target is where the photo
+                            // will actually settle rather than a rect far larger than the screen.
+                            if ([transitionFromItemView isKindOfClass:[TGModernGalleryZoomableItemView class]]) {
+                                [(TGModernGalleryZoomableItemView *)transitionFromItemView forceUpdateLayout];
+                            }
                             targetView = [transitionFromItemView transitionView];
                             targetRect = [transitionFromItemView transitionViewContentRect];
-                        }
-                        [strongSelf animateTransitionInFromView:transitionInFromView toView:targetView toViewContentRect:targetRect];''', 'resolve the draft transition destination after image readiness')
+                            [strongSelf aorusAnimateDraftTransitionInFromView:transitionInFromView toView:targetView toViewContentRect:targetRect];
+                        } else {
+                            [strongSelf animateTransitionInFromView:transitionInFromView toView:targetView toViewContentRect:targetRect];
+                        }''', 'resolve the draft transition destination after image readiness')
+    s = edit(s, '#import <LegacyComponents/TGModernGalleryItemView.h>\n', '#import <LegacyComponents/TGModernGalleryItemView.h>\n#import <LegacyComponents/TGModernGalleryZoomableItemView.h>\n', 'zoomable page fit before the draft transition')
+    s = edit(s, '- (void)animateTransitionOutFromView:(UIView *)fromView fromViewContentRect:(CGRect)fromViewContentRect toView:(UIView *)toView velocity:(CGPoint)velocity\n', DRAFT_TRANSITION_IN + '- (void)animateTransitionOutFromView:(UIView *)fromView fromViewContentRect:(CGRect)fromViewContentRect toView:(UIView *)toView velocity:(CGPoint)velocity\n', 'uniform draft transition in')
     path.write_text(s)
 
 

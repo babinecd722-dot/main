@@ -9,11 +9,16 @@ import AccountContext
 import TelegramPresentationData
 import PresentationDataUtils
 import UndoUI
+import AorusGram
 
 // Adding an account from a session made elsewhere. The rows live under the backups block of
 // "Accounts and data"; each one picks up a file (or a pasted string), reads the authorisation key
 // out of it, asks Telegram who it belongs to, and adds it as an account. From that point it is an
 // ordinary account: it is in the account list, it switches, it syncs, it signs out.
+//
+// A Telegram Desktop folder and a session file can each be shared on their own or zipped up —
+// a whole `tdata` inside a `.zip`, or a `.session` next to other files. A picked `.zip` is
+// unpacked to the app's own directory and the folder or session inside it is found and read.
 
 public enum AorusAccountImportKind {
     case tdata
@@ -32,14 +37,16 @@ public enum AorusAccountImport {
         }
         switch kind {
         case .tdata:
-            // A `tdata` is a folder, so the folder itself is what is chosen.
-            self.presentPicker(types: [.folder], context: context, controller: controller) { url in
-                self.readTData(url: url, passcode: nil, context: context, controller: controller)
+            // A `tdata` is a folder, so the folder itself is what is chosen — or a `.zip`
+            // holding one, which is unpacked and searched.
+            self.presentPicker(types: self.tdataTypes, context: context, controller: controller) { url in
+                self.readTData(url: url, extracted: nil, passcode: nil, context: context, controller: controller)
             }
         case .sessionFile:
-            // `.session` has no registered system UTI. Providers may expose it as
-            // public.item rather than public.data; validate its contents in the reader.
-            self.presentPicker(types: [.item], context: context, controller: controller) { url in
+            // `.session` has no registered system UTI, so `public.item` is used to keep every
+            // provider's file selectable; a `.zip` is accepted and searched for a session inside.
+            // The reader validates the contents either way.
+            self.presentPicker(types: self.sessionTypes, context: context, controller: controller) { url in
                 self.readSessionFile(url: url, context: context, controller: controller)
             }
         case .sessionString:
@@ -49,11 +56,27 @@ public enum AorusAccountImport {
 
     // MARK: - Picking
 
+    /// The folder itself, plus archives that may hold one.
+    private static var tdataTypes: [UTType] {
+        var types: [UTType] = [.folder, .zip]
+        if let archive = UTType("public.archive") { types.append(archive) }
+        return types
+    }
+
+    /// Any item (a `.session` has no registered type), plus archives.
+    private static var sessionTypes: [UTType] {
+        var types: [UTType] = [.item, .zip]
+        if let archive = UTType("public.archive") { types.append(archive) }
+        return types
+    }
+
     private static func presentPicker(types: [UTType], context: AccountContext, controller: ViewController, completion: @escaping (URL) -> Void) {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
         picker.allowsMultipleSelection = false
         picker.shouldShowFileExtensions = true
-        picker.modalPresentationStyle = .fullScreen
+        // Deliberately no `modalPresentationStyle` override: a document picker lays out its own
+        // navigation chrome, and forcing `.fullScreen` on it dropped the toolbar that carries the
+        // "Open" button — the row then opened a picker with no way to confirm a choice.
         let delegate = AorusImportPickerDelegate(completion: { url in
             self.pickerDelegate = nil
             guard let url else {
@@ -63,44 +86,102 @@ public enum AorusAccountImport {
         })
         self.pickerDelegate = delegate
         picker.delegate = delegate
-        controller.present(picker, animated: true)
+        // Present from whatever is actually on top of this window: the settings screen can sit
+        // under its own modal, and presenting blindly from the window root would then do nothing.
+        if let presenter = self.topmostController(from: controller) {
+            presenter.present(picker, animated: true)
+        } else {
+            controller.present(picker, animated: true)
+        }
+    }
+
+    /// The view controller currently on top of `controller`'s window, so a sheet is never
+    /// presented onto one that is already presenting and silently dropped.
+    private static func topmostController(from controller: ViewController) -> UIViewController? {
+        var top: UIViewController? = controller.view.window?.rootViewController
+        while let presented = top?.presentedViewController, !presented.isBeingDismissed {
+            top = presented
+        }
+        return top
     }
 
     // MARK: - Reading
 
-    private static func readTData(url: URL, passcode: String?, context: AccountContext, controller: ViewController) {
+    /// Reads a Telegram Desktop folder, whether it was picked as a folder or as a `.zip` that
+    /// holds one. `extracted`, when set, is a directory the app unpacked and must remove once
+    /// the read (and any passcode retry) is finished.
+    private static func readTData(url: URL, extracted: URL?, passcode: String?, context: AccountContext, controller: ViewController) {
         guard let progress = self.beginReading(context: context, controller: controller) else { return }
-        // PBKDF2 (100000 rounds) and provider I/O must not block Files or the UI.
+        // PBKDF2 (100000 rounds), unpacking and provider I/O must not block Files or the UI.
         DispatchQueue.global(qos: .userInitiated).async {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             var result: Result<[AorusImportedSession], Error> = .failure(AorusTDataFailure.noTData)
+            // The folder that was actually read: the picked directory, or the one unpacked from
+            // the archive. A passcode retry reads this directly instead of unpacking again.
+            var readFolder: URL?
+            var unpacked: URL? = extracted
             var coordinationError: NSError?
             NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
                 result = Result {
-                    guard let folder = AorusTDataReader.resolveFolder(readableURL) else {
+                    let searchRoot: URL
+                    let isDirectory = (try? readableURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                    if isDirectory {
+                        searchRoot = readableURL
+                    } else if AorusImportArchive.looksLikeZip(url: readableURL) {
+                        // A picked archive: find the tdata in its directory and unpack only that
+                        // folder's own files — all Desktop's key reader reads. The media cache a
+                        // zipped tdata usually carries (often gigabytes) is never inflated.
+                        let archive = try AorusImportArchive.open(readableURL)
+                        guard let root = self.tdataRoot(in: try AorusImportArchive.fileNames(in: archive)) else {
+                            throw AorusTDataFailure.noTData
+                        }
+                        let directory = AorusImportArchive.temporaryUnpackDirectory()
+                        unpacked = directory
+                        try AorusImportArchive.extract(archive, to: directory, including: { name in
+                            self.parentPath(of: name) == root
+                        })
+                        searchRoot = root.split(separator: "/").reduce(directory) { $0.appendingPathComponent(String($1)) }
+                    } else {
+                        // Neither a folder nor a ZIP (a .rar or .7z, say): nothing here can be read.
+                        throw AorusTDataFailure.unsupportedFormat
+                    }
+                    guard let folder = AorusTDataReader.resolveFolder(searchRoot) else {
                         throw AorusTDataFailure.noTData
                     }
+                    readFolder = folder
                     return try AorusTDataReader.read(folder: folder, passcode: passcode ?? "")
                 }
             }
             if let coordinationError { result = .failure(coordinationError) }
             let outcome = result
+            let cleanup = unpacked
+            let retryFolder = readFolder
             DispatchQueue.main.async {
                 self.isReading = false
                 progress.dismiss()
+                let removeUnpacked = { if let cleanup { try? FileManager.default.removeItem(at: cleanup) } }
                 switch outcome {
                 case let .success(sessions):
+                    removeUnpacked()
                     self.add(sessions: sessions, context: context, controller: controller)
                 case .failure(AorusTDataFailure.passcodeRequired):
                     if passcode == nil {
-                        self.presentPasscodePrompt(url: url, context: context, controller: controller)
+                        // Ask for the passcode and read again. An unpacked archive is read from
+                        // its own folder on retry (no scope needed, no second unpack); a picked
+                        // folder must be re-read through its original security-scoped URL, not a
+                        // child path, so the scope still covers it.
+                        let retryURL = cleanup != nil ? (retryFolder ?? url) : url
+                        self.presentPasscodePrompt(url: retryURL, extracted: cleanup, context: context, controller: controller)
                     } else {
+                        removeUnpacked()
                         self.presentError(.wrongPasscode, context: context, controller: controller)
                     }
                 case let .failure(error as AorusTDataFailure):
+                    removeUnpacked()
                     self.presentError(.tdata(error), context: context, controller: controller)
                 case .failure:
+                    removeUnpacked()
                     self.presentError(.tdata(.corrupt), context: context, controller: controller)
                 }
             }
@@ -118,6 +199,17 @@ public enum AorusAccountImport {
             var coordinationError: NSError?
             NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
                 result = Result {
+                    if AorusImportArchive.looksLikeZip(url: readableURL) {
+                        // A picked archive: unpack only its session stores and read the first
+                        // that holds a session.
+                        let directory = try AorusImportArchive.extractFile(at: readableURL, including: { name in
+                            !self.isArchiveMetadata(name) && name.lowercased().hasSuffix(".session")
+                        })
+                        defer { try? FileManager.default.removeItem(at: directory) }
+                        return try self.sessionFromArchive(at: directory)
+                    }
+                    // Read from a copy in the app's own directory: SQLite opens journals beside
+                    // the file and the picked location is read-only.
                     try FileManager.default.copyItem(at: readableURL, to: temporary)
                     return try AorusSessionFileReader.readSessionFile(url: temporary)
                 }
@@ -139,6 +231,67 @@ public enum AorusAccountImport {
         }
     }
 
+    // MARK: - Archives
+
+    /// Desktop's key file, in each generation it writes (`key_data` + `s`, `0` or `1`).
+    private static let tdataKeyNames: Set<String> = ["key_datas", "key_data0", "key_data1"]
+
+    /// The folder inside an archive that is a tdata: the one holding Desktop's key file. The
+    /// shallowest such folder wins; two at the same depth are ambiguous and neither is chosen,
+    /// the same rule `AorusTDataReader.resolveFolder` applies to a picked folder.
+    private static func tdataRoot(in names: [String]) -> String? {
+        var roots = Set<String>()
+        for name in names where !self.isArchiveMetadata(name) {
+            let parts = name.split(separator: "/")
+            guard let last = parts.last, self.tdataKeyNames.contains(String(last)) else { continue }
+            roots.insert(parts.dropLast().joined(separator: "/"))
+        }
+        let depth: (String) -> Int = { $0.isEmpty ? 0 : $0.split(separator: "/").count }
+        guard let shallowest = roots.map(depth).min() else { return nil }
+        let candidates = roots.filter { depth($0) == shallowest }
+        return candidates.count == 1 ? candidates.first : nil
+    }
+
+    /// The folder a file sits in, as a path inside the archive ("" at its root).
+    private static func parentPath(of name: String) -> String {
+        return name.split(separator: "/").dropLast().joined(separator: "/")
+    }
+
+    /// Finder's resource forks (`__MACOSX/…`, `._name`) that ride along in archives made on a Mac.
+    private static func isArchiveMetadata(_ name: String) -> Bool {
+        let parts = name.split(separator: "/")
+        return parts.first == "__MACOSX" || (parts.last?.hasPrefix("._") ?? false)
+    }
+
+    /// The first readable session in an unpacked archive. A `.session` by name is tried first;
+    /// failing that every plain file is tried, because the reader, not the extension, is what
+    /// decides whether a file holds a session.
+    private static func sessionFromArchive(at directory: URL) throws -> AorusImportedSession {
+        let manager = FileManager.default
+        guard let enumerator = manager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]) else {
+            throw AorusSessionFileFailure.noSession
+        }
+        var candidates: [URL] = []
+        for case let fileURL as URL in enumerator {
+            let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values?.isRegularFile == true else { continue }
+            // A session store is a small SQLite database or a short string; skip anything large
+            // so an archive full of media is not opened file by file.
+            if let size = values?.fileSize, size > 64 * 1024 * 1024 { continue }
+            candidates.append(fileURL)
+            if candidates.count >= 4096 { break }
+        }
+        candidates.sort { lhs, rhs in
+            (lhs.pathExtension.lowercased() == "session" ? 0 : 1) < (rhs.pathExtension.lowercased() == "session" ? 0 : 1)
+        }
+        for fileURL in candidates {
+            if let session = try? AorusSessionFileReader.readSessionFile(url: fileURL) {
+                return session
+            }
+        }
+        throw AorusSessionFileFailure.noSession
+    }
+
     private static func beginReading(context: AccountContext, controller: ViewController) -> ViewController? {
         guard !self.isReading else { return nil }
         self.isReading = true
@@ -150,7 +303,7 @@ public enum AorusAccountImport {
 
     // MARK: - Prompts
 
-    private static func presentPasscodePrompt(url: URL, context: AccountContext, controller: ViewController) {
+    private static func presentPasscodePrompt(url: URL, extracted: URL?, context: AccountContext, controller: ViewController) {
         let alert = UIAlertController(
             title: aorusL("Пароль Telegram Desktop", "Telegram Desktop Passcode"),
             message: aorusL("Эта папка защищена локальным паролем.", "This folder is protected by a local passcode."),
@@ -160,14 +313,18 @@ public enum AorusAccountImport {
             field.isSecureTextEntry = true
             field.placeholder = aorusL("Пароль", "Passcode")
         }
-        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel, handler: { _ in
+            // The reader waits for a passcode; leaving removes the folder it unpacked.
+            if let extracted { try? FileManager.default.removeItem(at: extracted) }
+        }))
         alert.addAction(UIAlertAction(title: aorusL("Продолжить", "Continue"), style: .default, handler: { [weak controller] _ in
             guard let controller else {
+                if let extracted { try? FileManager.default.removeItem(at: extracted) }
                 return
             }
-            self.readTData(url: url, passcode: alert.textFields?.first?.text ?? "", context: context, controller: controller)
+            self.readTData(url: url, extracted: extracted, passcode: alert.textFields?.first?.text ?? "", context: context, controller: controller)
         }))
-        controller.present(alert, animated: true)
+        (self.topmostController(from: controller) ?? controller.view.window?.rootViewController)?.present(alert, animated: true)
     }
 
     private static func presentStringPrompt(context: AccountContext, controller: ViewController) {
@@ -202,7 +359,7 @@ public enum AorusAccountImport {
                 self.presentError(.sessionFile(.unsupported), context: context, controller: controller)
             }
         }))
-        controller.present(alert, animated: true)
+        (self.topmostController(from: controller) ?? controller.view.window?.rootViewController)?.present(alert, animated: true)
     }
 
     private static func presentDatacenterPrompt(session: AorusImportedSession, context: AccountContext, controller: ViewController) {
@@ -227,7 +384,7 @@ public enum AorusAccountImport {
             popover.sourceRect = CGRect(origin: CGPoint(x: controller.view.bounds.midX, y: controller.view.bounds.midY), size: CGSize())
             popover.permittedArrowDirections = []
         }
-        controller.present(alert, animated: true)
+        (self.topmostController(from: controller) ?? controller.view.window?.rootViewController)?.present(alert, animated: true)
     }
 
     // MARK: - Adding
