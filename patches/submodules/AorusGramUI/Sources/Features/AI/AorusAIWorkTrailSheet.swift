@@ -65,6 +65,8 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
     controller.sheetPresentationController?.prefersGrabberVisible = true
     controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
     controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
+    // Opened from the chat while its composer may have the keyboard: the sheet goes over it.
+    AorusKeyboardHold.keepBelow(controller, in: presenter.view.window)
     presenter.present(controller, animated: true)
     return AorusAIWorkTrailHandle(controller: controller)
 }

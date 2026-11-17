@@ -250,6 +250,10 @@ private func aorusAIPresentActionSheet(_ controller: UIAlertController, from pre
         popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 1, width: 1, height: 1)
         popover.permittedArrowDirections = []
     }
+    // A sheet of choices rises from the bottom edge, where an open keyboard would cover it.
+    if controller.preferredStyle == .actionSheet {
+        AorusKeyboardHold.keepBelow(controller, in: presenter.view.window)
+    }
     presenter.present(controller, animated: true)
 }
 
@@ -304,6 +308,7 @@ private func aorusAIPresentDialog(context: AccountContext, title: String?, messa
                 }
             }
             sheet.setItemGroups(groups)
+            AorusKeyboardHold.keepBelow(sheet, in: presenter.view.window)
             presenter.present(sheet, in: .window(.root))
         } else {
             let alert = textAlertController(context: context, title: title, text: message ?? "", actions: actions.map { item in
@@ -612,6 +617,9 @@ private func aorusAIPresentHistoryCount(context: AccountContext, navigationContr
             })
         ])
     ])
+    // Opened from a message's menu, as the chat focuses its input again: the same sheet as
+    // the badge picker, which the keyboard covered.
+    AorusKeyboardHold.keepBelow(sheet, in: navigationController.view.window)
     (navigationController.topViewController as? ViewController)?.present(sheet, in: .window(.root))
 }
 

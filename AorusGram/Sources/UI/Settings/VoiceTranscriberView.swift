@@ -224,8 +224,8 @@ struct VoiceTranscriberView: View {
     }
 
     private func beginAudio() {
+        let session = AVAudioSession.sharedInstance()
         do {
-            let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             if UserDefaults.standard.bool(forKey: "aorusgram_device_microphone") {
@@ -241,9 +241,24 @@ struct VoiceTranscriberView: View {
             return
         }
 
+        // No microphone (access withdrawn in Settings, another app holding the input, a route
+        // with no input) leaves the input node with a zero-rate, zero-channel format, and
+        // `installTap` with that format raises an Objective-C exception the app cannot catch.
+        guard session.recordPermission == .granted, session.isInputAvailable else {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            errorMessage = SubL10n.t("Нет разрешения на микрофон", "Microphone access is not permitted")
+            showError = true
+            return
+        }
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0.0, recordingFormat.channelCount > 0 else {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            errorMessage = SubL10n.t("Не удалось включить микрофон", "Could not start microphone")
+            showError = true
+            return
+        }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true

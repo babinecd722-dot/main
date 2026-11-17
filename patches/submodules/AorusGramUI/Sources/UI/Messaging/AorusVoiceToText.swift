@@ -305,8 +305,8 @@ public final class AorusVoiceSession {
 
     private func beginAudio() {
         if self.isCancelled || self.isFinished { return }
+        let session = AVAudioSession.sharedInstance()
         do {
-            let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
             if UserDefaults.standard.bool(forKey: "aorusgram_device_microphone") {
@@ -321,9 +321,22 @@ public final class AorusVoiceSession {
             return
         }
 
+        // No microphone (access withdrawn in Settings, another app holding the input, a route
+        // with no input) leaves the input node with a zero-rate, zero-channel format, and
+        // `installTap` with that format raises an Objective-C exception the app cannot catch.
+        guard session.recordPermission == .granted, session.isInputAvailable else {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            self.overlay?.showMessage(aorusL("Нет доступа к микрофону", "No microphone access"))
+            return
+        }
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0.0, recordingFormat.channelCount > 0 else {
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            self.overlay?.showMessage(aorusL("Не удалось включить микрофон", "Could not start microphone"))
+            return
+        }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true

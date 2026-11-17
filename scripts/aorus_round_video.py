@@ -55,6 +55,11 @@ def patch_round_video(tg: Path) -> None:
 - (void)aorusCopyRoundModeFrom:(TGVideoEditAdjustments *)source;
 '''
     replace(h, "- (CMTimeRange)trimTimeRange;", properties + "\n- (CMTimeRange)trimTimeRange;")
+    # The longest circle, the same as Telegram's own recorder, which stops at 59.5 s. A
+    # clip trimmed to exactly 60 s encodes a few frames past the minute, and Telegram
+    # delivers a "video note" over a minute as an ordinary video: every circle made from a
+    # video longer than a minute arrived as a plain rectangle.
+    replace(h, "@interface TGVideoEditAdjustments : NSObject <TGMediaEditAdjustments>", "static const NSTimeInterval AorusRoundVideoMaximumDuration = 59.5;\n\n@interface TGVideoEditAdjustments : NSObject <TGMediaEditAdjustments>")
     m = lc / "Sources/TGVideoEditAdjustments.m"
     copy = '''- (void)aorusCopyRoundModeFrom:(TGVideoEditAdjustments *)source
 {
@@ -107,7 +112,7 @@ def patch_round_video(tg: Path) -> None:
             if (side <= 0.0) { crop = CGRectMake(0, 0, video.originalSize.width, video.originalSize.height); side = MIN(crop.size.width, crop.size.height); }
             crop = CGRectMake(floor(CGRectGetMidX(crop) - side / 2.0), floor(CGRectGetMidY(crop) - side / 2.0), floor(side), floor(side));
             NSTimeInterval end = video.trimEndValue > video.trimStartValue ? video.trimEndValue : item.originalDuration;
-            TGVideoEditAdjustments *circle = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:video.originalSize cropRect:crop cropOrientation:video.cropOrientation cropRotation:video.cropRotation cropLockedAspectRatio:1.0 cropMirrored:video.cropMirrored trimStartValue:video.trimStartValue trimEndValue:MIN(end, video.trimStartValue + 60.0) toolValues:video.toolValues paintingData:video.paintingData sendAsGif:false preset:video.preset];
+            TGVideoEditAdjustments *circle = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:video.originalSize cropRect:crop cropOrientation:video.cropOrientation cropRotation:video.cropRotation cropLockedAspectRatio:1.0 cropMirrored:video.cropMirrored trimStartValue:video.trimStartValue trimEndValue:MIN(end, video.trimStartValue + AorusRoundVideoMaximumDuration) toolValues:video.toolValues paintingData:video.paintingData sendAsGif:false preset:video.preset];
             [circle aorusCopyRoundModeFrom:video];
             adjustments = circle;
         }
@@ -120,7 +125,7 @@ def patch_round_video(tg: Path) -> None:
     view = lc / "Sources/TGMediaPickerGalleryVideoItemView.m"
     replace(view, '            strongSelf->_sendAsGif = baseAdjustments.sendAsGif;', '''            strongSelf->_sendAsGif = baseAdjustments.sendAsGif;
             TGVideoEditAdjustments *aorusVideo = [baseAdjustments isKindOfClass:[TGVideoEditAdjustments class]] ? (TGVideoEditAdjustments *)baseAdjustments : nil;
-            strongSelf->_scrubberView.maximumLength = aorusVideo.aorusRoundVideo ? 60.0 : 0.0;
+            strongSelf->_scrubberView.maximumLength = aorusVideo.aorusRoundVideo ? AorusRoundVideoMaximumDuration : 0.0;
             if (aorusVideo.aorusRoundVideo) {
                 strongSelf->_scrubberView.trimStartValue = aorusVideo.trimStartValue;
                 strongSelf->_scrubberView.trimEndValue = aorusVideo.trimEndValue;
@@ -151,7 +156,7 @@ def patch_round_video(tg: Path) -> None:
     }
     NSTimeInterval start = old != nil ? old.trimStartValue : 0.0;
     NSTimeInterval end = old != nil && old.trimEndValue > start ? old.trimEndValue : _videoDuration;
-    if (round) end = MIN(end, start + 60.0);
+    if (round) end = MIN(end, start + AorusRoundVideoMaximumDuration);
     TGVideoEditAdjustments *next = [TGVideoEditAdjustments editAdjustmentsWithOriginalSize:_videoDimensions cropRect:crop cropOrientation:old.cropOrientation cropRotation:old.cropRotation cropLockedAspectRatio:aspect cropMirrored:old.cropMirrored trimStartValue:start trimEndValue:end toolValues:old.toolValues paintingData:old.paintingData sendAsGif:false preset:preset];
     [next aorusCopyRoundModeFrom:old];
     next.aorusHasRoundMode = true;
@@ -169,7 +174,7 @@ def patch_round_video(tg: Path) -> None:
 {
     TGVideoEditAdjustments *old = (TGVideoEditAdjustments *)[self.item.editingContext adjustmentsForItem:self.item.editableMediaItem];
     if (!old.aorusRoundVideo) return;
-    TGVideoEditAdjustments *next = [old editAdjustmentsWithPreset:old.preset maxDuration:60.0];
+    TGVideoEditAdjustments *next = [old editAdjustmentsWithPreset:old.preset maxDuration:AorusRoundVideoMaximumDuration];
     next.aorusRealisticSending = !old.aorusRealisticSending;
     [self.item.editingContext setAdjustments:next forItem:self.item.editableMediaItem];
 }
@@ -659,8 +664,8 @@ BADGE_PLACEMENT = '''
 def verify_round_video(tg: Path) -> list[str]:
     checks = {
         'MediaPickerUI/Sources/MediaPickerScreen.swift': ['self.routesPickerGallery = false // AorusGram: legacy gallery owns round-video editing', 'adjustments.aorusRoundVideo {'],
-        'LegacyComponents/PublicHeaders/LegacyComponents/TGVideoEditAdjustments.h': ['aorusRealisticSending', 'aorusCopyRoundModeFrom:'],
-        'LegacyComponents/Sources/TGMediaEditingContext.m': ['[circle aorusCopyRoundModeFrom:video]', 'video.trimStartValue + 60.0'],
+        'LegacyComponents/PublicHeaders/LegacyComponents/TGVideoEditAdjustments.h': ['aorusRealisticSending', 'aorusCopyRoundModeFrom:', 'AorusRoundVideoMaximumDuration = 59.5;'],
+        'LegacyComponents/Sources/TGMediaEditingContext.m': ['[circle aorusCopyRoundModeFrom:video]', 'video.trimStartValue + AorusRoundVideoMaximumDuration'],
         'LegacyComponents/Sources/PGPhotoEditor.m': ['[result aorusCopyRoundModeFrom:initialAdjustments]', 'self.cropRotation = videoAdjustments.cropRotation;'],
         'LegacyComponents/Sources/TGPhotoEditorPreviewView.m': ['self.layer.cornerRadius = self.aorusRoundVideo'],
         'LegacyComponents/Sources/TGPhotoDrawingController.m': ['if (_photoEditor.aorusRoundVideo)', '_scrollContainerView.layer.mask = circle'],

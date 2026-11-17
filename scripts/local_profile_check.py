@@ -191,10 +191,15 @@ for operation in [AorusLocalStarRating.Operation.gift, .upgrade, .resale, .conve
     _ = AorusLocalStarRating.points(amount: Int64.max, operation: operation)
 }
 expect(AorusLocalStarRating.points(amount: Int64.max, operation: .refund) == -Int64.max, "overflow-safe native negative rating")
-for (stars, level, lower, upper) in [(Int64(0),0,Int64(0),Int64(100)),(99,0,0,100),(100,1,100,1000),(999,1,100,1000),(1000,2,1000,3000),(2999,2,1000,3000),(3000,3,3000,10000),(10000,4,10000,30000)] {
+for (stars, level, lower, upper) in [(Int64(0),0,Int64(0),Int64(1)),(1,1,1,5000),(4999,1,1,5000),(5000,2,5000,12000),(11999,2,5000,12000),(12000,3,12000,19000),(27000,5,27000,36000),(57000,8,57000,69000),(68999,8,57000,69000),(81000,10,81000,94125),(606000,50,606000,619125),(999750,80,999750,1399650),(2000000,82,1959510,2743314)] {
     let value = AorusLocalStarRating.rating(stars: stars)
     expect(value.level == level && value.currentLevelStars == lower && value.nextLevelStars == upper, "native level boundary")
 }
+// Level 8 is tens of thousands of stars, not millions; the ladder ends at level 100.
+expect(AorusLocalStarRating.ladder.count == 101 && zip(AorusLocalStarRating.ladder, AorusLocalStarRating.ladder.dropFirst()).allSatisfy { $0 < $1 }, "one hundred strictly rising levels")
+let top = AorusLocalStarRating.rating(stars: 836473002)
+expect(top.level == 100 && top.currentLevelStars == 836473002 && top.nextLevelStars == nil, "level 100 is the last")
+expect(AorusLocalStarRating.rating(stars: Int64.max).level == 100, "no level past 100")
 for stars in [Int64.min, -1, 0, 1, 100, 10000, 1000000000, Int64.max] {
     let value = AorusLocalStarRating.rating(stars: stars)
     if stars >= 0 {

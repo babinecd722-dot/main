@@ -85,8 +85,30 @@ public enum AorusLocalStarRating {
         return try? JSONEncoder().encode(all)
     }
 
+    /// The stars at which each level starts, level 0 through 100.
+    ///
+    /// Telegram does not publish its scale; these are the values profiles show: 5 000 for
+    /// level 2, 12 000 for 3, 19 000, 27 000, 36 000, and 81 000 for level 10; then about
+    /// 13 thousand a level, which gives the 606 000 seen at level 50 and about a million at
+    /// level 80; then forty percent more each level, about 836 million at level 100.
+    ///
+    /// It used to be Telegram's debug placeholder stretched out — 100, 1 000, 3 000, then ×3
+    /// and ×10 in turn — which put two million stars at level 8, where a real profile
+    /// has about sixty thousand.
+    public static let ladder: [Int64] = {
+        var levels: [Int64] = [0, 1, 5_000, 12_000, 19_000, 27_000, 36_000, 46_000, 57_000, 69_000, 81_000]
+        for _ in 11 ... 80 {
+            levels.append(levels[levels.count - 1] + 13_125)
+        }
+        for _ in 81 ... 100 {
+            levels.append(levels[levels.count - 1] * 14 / 10)
+        }
+        return levels
+    }()
+
     /// The server's current interval takes precedence. The local ladder supplies
     /// intervals beyond it, where a local purchase cannot ask Telegram for a new level.
+    /// Past level 100 there is no next level.
     public static func rating(stars: Int64, baseline: TelegramStarRating? = nil) -> TelegramStarRating {
         if stars < 0 {
             return TelegramStarRating(level: -1, currentLevelStars: -1, stars: max(-Int64.max, stars), nextLevelStars: 0)
@@ -95,14 +117,7 @@ public enum AorusLocalStarRating {
            baseline.nextLevelStars.map({ stars < $0 }) ?? true {
             return TelegramStarRating(level: baseline.level, currentLevelStars: baseline.currentLevelStars, stars: stars, nextLevelStars: baseline.nextLevelStars)
         }
-        var thresholds: [Int64] = [0, 100, 1000, 3000]
-        var magnitude: Int64 = 10000
-        while magnitude <= Int64.max / 3 {
-            thresholds.append(magnitude)
-            thresholds.append(magnitude * 3)
-            guard magnitude <= Int64.max / 10 else { break }
-            magnitude *= 10
-        }
+        var thresholds = ladder
         if let baseline, baseline.level >= 0 {
             let index = Int(baseline.level)
             if index < thresholds.count {

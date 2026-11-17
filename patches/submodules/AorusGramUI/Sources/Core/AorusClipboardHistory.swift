@@ -367,5 +367,8 @@ public func aorusPresentClipboardHistory(context: AccountContext, parent: UIView
     aorusStyleClipboardBar(nav.navigationBar, theme: theme)
     nav.modalPresentationStyle = .formSheet
 
+    // Opened from the composer's toolbar, so the chat's keyboard is up: the history and its
+    // "Clear" sheet go over it rather than under it.
+    AorusKeyboardHold.keepBelow(nav, in: parent.view.window)
     parent.present(nav, animated: true)
 }

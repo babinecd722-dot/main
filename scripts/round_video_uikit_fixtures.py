@@ -371,7 +371,7 @@ int AorusNativeRoundEditorTests(void) {
                 expect(!circle.sendAsGif, "circle retains audio");
                 expect(circle.cropRect.size.width == circle.cropRect.size.height, "portrait and landscape become square");
                 expect(CGRectGetMidX(circle.cropRect) == CGRectGetMidX(crop) && CGRectGetMidY(circle.cropRect) == CGRectGetMidY(crop), "crop remains centered");
-                expect(circle.trimEndValue-circle.trimStartValue == 60.0, "native note limit");
+                expect(circle.trimEndValue-circle.trimStartValue == AorusRoundVideoMaximumDuration && AorusRoundVideoMaximumDuration < 60.0, "native note limit, under a minute like the native recorder");
                 expect(circle.preset == TGMediaVideoConversionPresetCompressedVeryHigh, "maximum quality by default");
                 expect(circle.cropOrientation == orientation && circle.cropMirrored == mirrored, "orientation and mirror remain");
                 expect(circle.cropRotation == 0.1 && [circle.toolValues isEqual:original.toolValues] && circle.paintingData == original.paintingData, "filters, rotation and paint remain");
@@ -399,7 +399,7 @@ int AorusNativeRoundEditorTests(void) {
                 [gallery aorusToggleRealisticSending];
                 expect(!gallery.item.editingContext.current.aorusRealisticSending, "native timer disables recording delay");
                 [gallery aorusToggleRealisticSending];
-                TGVideoEditAdjustments *qualityCopy = [gallery.item.editingContext.current editAdjustmentsWithPreset:TGMediaVideoConversionPresetCompressedHigh maxDuration:60.0];
+                TGVideoEditAdjustments *qualityCopy = [gallery.item.editingContext.current editAdjustmentsWithPreset:TGMediaVideoConversionPresetCompressedHigh maxDuration:AorusRoundVideoMaximumDuration];
                 expect(qualityCopy.aorusRoundVideo && qualityCopy.aorusRealisticSending, "quality sheet keeps mode");
                 for (int edit = 0; edit < 5; edit++) {
                     RoundPhotoEditor *editor = [[RoundPhotoEditor alloc] initWithAdjustments:qualityCopy];
@@ -426,7 +426,7 @@ int AorusNativeRoundEditorTests(void) {
                 [gallery.item.editingContext setAdjustments:tools forItem:gallery.item];
                 TGVideoEditAdjustments *edited = gallery.item.editingContext.current;
                 expect(edited.aorusRoundVideo && edited.aorusRealisticSending && !edited.sendAsGif, "shared editor commit retains circle and audio");
-                expect(edited.cropRect.size.width == edited.cropRect.size.height && edited.cropLockedAspectRatio == 1.0 && edited.trimEndValue-edited.trimStartValue <= 60.0, "editor cannot export a rectangular or long circle");
+                expect(edited.cropRect.size.width == edited.cropRect.size.height && edited.cropLockedAspectRatio == 1.0 && edited.trimEndValue-edited.trimStartValue <= AorusRoundVideoMaximumDuration, "editor cannot export a rectangular or long circle");
                 expect([edited.toolValues isEqual:tools.toolValues] && edited.paintingData == original.paintingData, "edited filters and paint survive normalization");
                 [gallery aorusToggleRoundVideo];
                 TGVideoEditAdjustments *video = gallery.item.editingContext.current;

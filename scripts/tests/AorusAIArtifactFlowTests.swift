@@ -339,6 +339,62 @@ private func buildsTheURLOnlyFromTheTrustedBase() {
     require(AorusAIArtifactFlow.safeMIME("text/plain\r\nX: 1") == nil, "header injection through MIME is refused")
 }
 
+/// A file the agent named in the reader's own language, and a vault that writes its paths
+/// percent-encoded, both reach the server instead of stopping on the device as
+/// "could not be downloaded (path)".
+private func downloadsFilesNamedOutsideASCII() {
+    // An id in Cyrillic: before, the canonical path kept it raw, failed the path check it
+    // was built to pass and every tap ended before a request was made.
+    let cyrillic = """
+    {"artifact_id":"Отчёт-2026","filename":"Отчёт 2026.pptx","size":10,"download":{"path":"/download/Отчёт-2026"}}
+    """
+    guard let named = AorusAIArtifactFlow.decode(object(cyrillic)) else {
+        fputs("AorusAIArtifactFlow test failed: a Cyrillic id must decode\n", stderr)
+        exit(1)
+    }
+    let encodedId = "%D0%9E%D1%82%D1%87%D1%91%D1%82-2026"
+    require(named.downloadPath == "/download/" + encodedId, "the server's path is encoded, not refused: \(named.downloadPath)")
+    require(AorusAIArtifactFlow.signingPath(for: named) == "/download/" + encodedId, "and is signable")
+    require(AorusAIArtifactFlow.downloadURL(for: named)?.absoluteString == "https://ai.aorusgram.com/download/" + encodedId, "and resolves on our host")
+    require(AorusAIArtifactFlow.canonicalPath(artifactId: "Отчёт-2026") == "/download/" + encodedId, "the canonical path is encoded too")
+    // A card stored by an earlier build kept the raw canonical path. It is signable now.
+    let stored = AorusAIArtifact(artifactId: "Отчёт-2026", filename: "a.pptx", mime: "application/pdf", size: 1, format: "pptx", downloadPath: "/download/Отчёт-2026", expiresAt: nil)
+    require(AorusAIArtifactFlow.signingPath(for: stored) == "/download/" + encodedId, "a stored raw path is encoded on the way out")
+
+    let id = "cf962f69-a3b8-4824-a107-00aea794318c"
+    // An escape the vault already wrote is kept byte for byte, also from an absolute link.
+    let escaped = "/v1/vault/%D0%9E%D1%82%D1%87%D1%91%D1%82%202026.pptx"
+    require(AorusAIArtifactFlow.sanitizedPath(escaped, artifactId: id) == escaped, "an encoded file name is accepted as written")
+    require(AorusAIArtifactFlow.relativePath(from: "https://ai.aorusgram.com" + escaped) == escaped, "an absolute link keeps its encoding")
+    require(AorusAIArtifactFlow.relativePath(from: "https://ai.aorusgram.com/v1/vault/Отчёт.pptx") == "/v1/vault/%D0%9E%D1%82%D1%87%D1%91%D1%82.pptx", "a raw absolute link is encoded")
+    require(AorusAIArtifactFlow.relativePath(from: "https://user:pw@ai.aorusgram.com/x") == nil, "a link with credentials is refused")
+    // The documented object may name the link `url`; a flat `download_url` is read as well.
+    let urlMember = "{\"artifact_id\":\"\(id)\",\"filename\":\"a.pdf\",\"download\":{\"url\":\"https://ai.aorusgram.com/v1/vault/a.pdf?sig=1\"}}"
+    require(AorusAIArtifactFlow.decode(object(urlMember))?.downloadPath == "/v1/vault/a.pdf?sig=1", "download.url is read")
+    let flat = "{\"artifact_id\":\"\(id)\",\"filename\":\"a.pdf\",\"download_url\":\"/v1/vault/b.pdf\"}"
+    require(AorusAIArtifactFlow.decode(object(flat))?.downloadPath == "/v1/vault/b.pdf", "download_url is read")
+    // A long signed link is kept rather than traded for the canonical guess.
+    let longSigned = "/v1/vault/report.pptx?X-Amz-Security-Token=" + String(repeating: "A", count: 1800) + "&X-Amz-Signature=abc"
+    require(AorusAIArtifactFlow.sanitizedPath(longSigned, artifactId: id) == longSigned, "a signed link past a kilobyte is kept")
+    // Traversal is judged after decoding, and a stray or broken escape is refused.
+    for hostile in [
+        "/v1/vault/%2e%2e/%2E%2E/etc/passwd",
+        "/v1/vault/..%2fetc",
+        "/v1/vault/x%2F..%2Fy",
+        "/v1/vault/a%5c..%5cb",
+        "/v1/vault/x.pptx%0d%0aX-Injected:%201",
+        "/v1/vault/x.pptx?a=%2e%2e%2fetc",
+        "/v1/vault/100%.pptx",
+        "/v1/vault/%zz.pptx",
+        "/v1/vault/<x>.pptx",
+        "/v1/vault/" + String(repeating: "a", count: 5000)
+    ] {
+        require(AorusAIArtifactFlow.sanitizedPath(hostile, artifactId: id) == nil, "must be refused: \(hostile)")
+    }
+    // A name with dots in it is still a name.
+    require(AorusAIArtifactFlow.sanitizedPath("/v1/vault/report..v2.pdf", artifactId: id) == "/v1/vault/report..v2.pdf", "dots inside a name are not traversal")
+}
+
 /// The signature of a `GET`/`HEAD` covers the SHA-256 of zero bytes. The transport is
 /// what enforces that (`request.httpBody` is only set for other methods, and the hash
 /// is taken over the empty `Data()` handed to `signedRequest`); the invariant the flow
@@ -614,6 +670,7 @@ private enum AorusAIArtifactFlowTests {
         supportsMultipleArtifacts()
         dropsAnyTokenAndSessionId()
         buildsTheURLOnlyFromTheTrustedBase()
+        downloadsFilesNamedOutsideASCII()
         downloadIsABodylessRequest()
         persistsAcrossARestart()
         continuesATurnAfterARestart()

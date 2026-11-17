@@ -86,7 +86,23 @@ enum AorusAIConversationPDF {
         let style: AorusAIPDFStyle
         let icon: UIImage?
         let wordmark: NSAttributedString
+        /// The larger name beside the mark at the head of the first slide.
+        let headerWordmark: NSAttributedString
         let title: String
+    }
+
+    /// The brand mark's sizes, in points on a 960 × 600 slide. The mark is drawn from a
+    /// 200-pixel raster, so even the header's is well over 300 dpi in print.
+    ///
+    /// They were 16 beside an answer and 18 in the footer: next to 16.5-point body text a
+    /// 16-point mark read as a bullet, not as a logo.
+    enum Mark {
+        /// At the head of the first slide, beside the name, over the title.
+        static let header: CGFloat = 48.0
+        /// Before each answer, level with the "AorusAI" label.
+        static let author: CGFloat = 24.0
+        /// In the footer of every slide, to the left of the name.
+        static let footer: CGFloat = 26.0
     }
 
     // MARK: Content
@@ -140,7 +156,7 @@ enum AorusAIConversationPDF {
             case .assistant:
                 guard !raw.isEmpty || !message.artifacts.isEmpty else { continue }
                 pieces.append(.gap(24.0))
-                pieces.append(.author(NSAttributedString(string: "AorusAI", attributes: [.font: UIFont.systemFont(ofSize: 13.0, weight: .semibold).aorusPDFRounded(), .foregroundColor: style.secondary, .kern: 0.2])))
+                pieces.append(.author(NSAttributedString(string: "AorusAI", attributes: [.font: UIFont.systemFont(ofSize: 15.0, weight: .semibold).aorusPDFRounded(), .foregroundColor: style.secondary, .kern: 0.2])))
                 var firstBlock = true
                 for block in AorusAIMarkdown.blocks(raw) {
                     if !firstBlock {
@@ -188,9 +204,14 @@ enum AorusAIConversationPDF {
         }
 
         let wordmark = NSAttributedString(string: "AorusAI", attributes: [
-            .font: UIFont.systemFont(ofSize: 15.0, weight: .bold).aorusPDFRounded(),
+            .font: UIFont.systemFont(ofSize: 17.0, weight: .bold).aorusPDFRounded(),
             .foregroundColor: style.text,
             .kern: 0.4
+        ])
+        let headerWordmark = NSAttributedString(string: "AorusAI", attributes: [
+            .font: UIFont.systemFont(ofSize: 24.0, weight: .bold).aorusPDFRounded(),
+            .foregroundColor: style.text,
+            .kern: 0.3
         ])
         // The real AorusGram mark, in full colour: the white glow on a dark page, the inked
         // violet on a light one. It is already a concrete raster, so, unlike a PDF-backed
@@ -199,7 +220,7 @@ enum AorusAIConversationPDF {
         // be decoded — that generic glyph was the "plain square" this export used to show.
         let icon = AorusAIBrandLogo.image(dark: style.isDark)
             ?? UIImage(bundleImageName: aorusAIMessageMenuIconName()).map { rasterIcon($0, color: style.accent) }
-        return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, title: title)
+        return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, headerWordmark: headerWordmark, title: title)
     }
 
     static func rasterIcon(_ source: UIImage, color: UIColor) -> UIImage {
@@ -316,6 +337,15 @@ enum AorusAIConversationPDF {
                 add(.rule(CGRect(x: left, y: y + 9.0, width: right - left, height: 1.0)))
                 y += 20.0
             case let .title(title, subtitle):
+                // The mark and the name head the first slide, the way a letterhead does, so the
+                // document is recognisably AorusAI's before a word of it is read.
+                if content.icon != nil {
+                    let side = Mark.header
+                    add(.icon(CGRect(x: left, y: y, width: side, height: side)))
+                    let nameSize = content.headerWordmark.size()
+                    add(.text(content.headerWordmark, CGPoint(x: left + side + 14.0, y: y + (side - nameSize.height) / 2.0)))
+                    y += side + 22.0
+                }
                 let titleHeight = ceil(title.boundingRect(with: CGSize(width: right - left, height: 200.0), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height)
                 add(.text(title, CGPoint(x: left, y: y)))
                 y += titleHeight + 6.0
@@ -326,12 +356,14 @@ enum AorusAIConversationPDF {
             case let .author(label):
                 // A name is never left alone at the foot of a slide: it goes over with the
                 // first lines of what it introduces.
-                if y + 22.0 + 60.0 > bottom {
+                let side = Mark.author
+                if y + side + 60.0 > bottom {
                     newPage()
                 }
-                add(.icon(CGRect(x: left, y: y + 1.0, width: 16.0, height: 16.0)))
-                add(.text(label, CGPoint(x: left + 22.0, y: y)))
-                y += 26.0
+                add(.icon(CGRect(x: left, y: y, width: side, height: side)))
+                let labelHeight = label.size().height
+                add(.text(label, CGPoint(x: left + side + 9.0, y: y + (side - labelHeight) / 2.0)))
+                y += side + 10.0
             case let .box(box):
                 let textWidth = max(10.0, box.maximumWidth - box.insets.left - box.insets.right)
                 let storage = NSTextStorage(attributedString: box.text)
@@ -425,13 +457,13 @@ enum AorusAIConversationPDF {
     /// number, quietly, in the lower left.
     private static func drawFooter(number: Int, of total: Int, content: Content) {
         let style = content.style
-        let baseline = pageSize.height - 36.0
+        let baseline = pageSize.height - 38.0
         let wordmarkSize = content.wordmark.size()
         let wordmarkOrigin = CGPoint(x: pageSize.width - margin.right - wordmarkSize.width, y: baseline - wordmarkSize.height / 2.0)
         content.wordmark.draw(at: wordmarkOrigin)
         if let icon = content.icon {
-            let side: CGFloat = 18.0
-            let rect = CGRect(x: wordmarkOrigin.x - 7.0 - side, y: baseline - side / 2.0, width: side, height: side)
+            let side = Mark.footer
+            let rect = CGRect(x: wordmarkOrigin.x - 8.0 - side, y: baseline - side / 2.0, width: side, height: side)
             icon.draw(in: rect)
         }
         let pageNumber = NSAttributedString(string: "\(number) / \(total)", attributes: [

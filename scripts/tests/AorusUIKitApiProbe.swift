@@ -121,7 +121,16 @@ func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
 // presentation style is left to the picker -- forcing `.fullScreen` dropped the toolbar that
 // carries the Open button -- and it goes on whatever is on top of the window.
 func aorusProbeAccountImportPicker(folder: Bool, url: URL, from controller: UIViewController) {
-    var types: [UTType] = folder ? [.folder, .zip] : [.item, .zip]
+    var types: [UTType] = folder ? [.folder, .zip] : [.zip]
+    if !folder {
+        if let declared = UTType("org.aorusgram.telegram-session") {
+            types.append(declared)
+        } else if let byExtension = UTType(filenameExtension: "session", conformingTo: .data) {
+            types.append(byExtension)
+        } else {
+            types.append(.item)
+        }
+    }
     if let archive = UTType("public.archive") { types.append(archive) }
     let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
     picker.allowsMultipleSelection = false
@@ -145,6 +154,18 @@ func aorusProbeAccountImportPicker(folder: Bool, url: URL, from controller: UIVi
     for case let fileURL as URL in enumerator! {
         let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
         _ = (values?.isRegularFile, values?.fileSize)
+    }
+    // The delegate hands a choice on after the picker's own dismissal, never by dismissing
+    // it a second time.
+    let deliver: () -> Void = {}
+    if let coordinator = picker.transitionCoordinator,
+       coordinator.animate(alongsideTransition: nil, completion: { _ in deliver() }) {
+        return
+    }
+    if picker.presentingViewController == nil {
+        deliver()
+    } else {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { deliver() }
     }
 }
 

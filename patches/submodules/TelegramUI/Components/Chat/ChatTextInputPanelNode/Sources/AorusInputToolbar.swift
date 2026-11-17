@@ -310,7 +310,12 @@ struct AorusFormattingToolbarView: View {
     }
 
     private func languageButton(kind: AorusLanguagePickerKind, code: String) -> some View {
-        Button(action: { self.languagePicker = kind }) {
+        Button(action: {
+            // The picker is a sheet from the bottom edge and the chat's keyboard is up:
+            // left focused, it covered the lower half of the list.
+            AorusKeyboardHold.releaseKeyboard(in: nil)
+            self.languagePicker = kind
+        }) {
             HStack(spacing: 5) {
                 Text(AorusTranslationLanguage.localizedName(for: code, interfaceLanguageCode: self.model.interfaceLanguageCode))
                     .font(.system(size: 15, weight: .semibold))

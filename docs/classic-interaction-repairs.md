@@ -37,3 +37,21 @@ syntax. On macOS it also type-checks the UIKit regression fixture. The existing
 UIKit simulator step executes those interaction checks and the username keyboard
 checks. Visual frame-by-frame review of the full application's search transitions
 still requires a running iOS client.
+
+## Pinning a hidden archive by swiping
+
+Swiping the hidden "Archived Chats" row and choosing **Pin** used to leave the archive
+gone and a green capsule at the top of the list. Two parts of Telegram's chat-list row met
+there:
+
+- A hidden row is drawn one level below its neighbours (`zPosition = -1`) so it can slide
+  under them, and nothing put it back. Once the archive had been hidden it stayed below
+  everything sharing its container, also after it was pinned again. The row now returns to
+  its neighbours' level as soon as it is not hidden.
+- **Pin** changed the list while the row's green option was still on screen, held there
+  while it closed, so the archive was laid out again around a capsule that never finished
+  leaving. **Pin** now closes the option first and pins the archive once it has gone; if
+  the closing is interrupted by another swipe, the archive is pinned 0.6 s later anyway, so
+  the action is never lost.
+
+`patch_archive_pin_swipe` in `aorus_branding.py` applies both to `ChatListItem.swift`.

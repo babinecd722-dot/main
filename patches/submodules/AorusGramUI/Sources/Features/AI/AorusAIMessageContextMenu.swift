@@ -50,6 +50,9 @@ public func aorusAIPresentMessageActions(
         controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
         controller.sheetPresentationController?.prefersGrabberVisible = true
         controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
+        // The chat focuses its input again as the message menu closes; without this the
+        // keyboard came back over the sheet and hid its lower rows.
+        AorusKeyboardHold.keepBelow(controller, in: presenter?.view.window ?? navigationController.view.window)
         presenter?.present(controller, animated: true)
     }
 }

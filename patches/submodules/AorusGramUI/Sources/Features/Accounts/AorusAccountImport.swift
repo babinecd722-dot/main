@@ -43,9 +43,8 @@ public enum AorusAccountImport {
                 self.readTData(url: url, extracted: nil, passcode: nil, context: context, controller: controller)
             }
         case .sessionFile:
-            // `.session` has no registered system UTI, so `public.item` is used to keep every
-            // provider's file selectable; a `.zip` is accepted and searched for a session inside.
-            // The reader validates the contents either way.
+            // `.session` files (the app declares the extension) and archives; a `.zip` is
+            // searched for a session inside. The reader validates the contents either way.
             self.presentPicker(types: self.sessionTypes, context: context, controller: controller) { url in
                 self.readSessionFile(url: url, context: context, controller: controller)
             }
@@ -63,12 +62,30 @@ public enum AorusAccountImport {
         return types
     }
 
-    /// Any item (a `.session` has no registered type), plus archives.
+    /// The type the app declares for `.session` (Telethon, Pyrogram), plus archives.
+    ///
+    /// It used to be `public.item`, because the system registers nothing for `.session` —
+    /// which enabled every file in Files and gave no hint of what to choose. The app now
+    /// declares the extension itself (`UTImportedTypeDeclarations`), so the picker greys out
+    /// everything that is not a session or an archive.
     private static var sessionTypes: [UTType] {
-        var types: [UTType] = [.item, .zip]
+        var types: [UTType] = []
+        if let declared = UTType(self.sessionTypeIdentifier) {
+            types.append(declared)
+        } else if let byExtension = UTType(filenameExtension: "session", conformingTo: .data) {
+            types.append(byExtension)
+        } else {
+            // Nothing resolves the extension on this system: every file stays selectable and
+            // the reader decides, rather than nothing being selectable at all.
+            types.append(.item)
+        }
+        types.append(.zip)
         if let archive = UTType("public.archive") { types.append(archive) }
         return types
     }
+
+    /// Declared in the app's Info.plist for the `session` extension.
+    static let sessionTypeIdentifier = "org.aorusgram.telegram-session"
 
     private static func presentPicker(types: [UTType], context: AccountContext, controller: ViewController, completion: @escaping (URL) -> Void) {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
@@ -534,6 +551,7 @@ public enum AorusAccountImport {
 
 private final class AorusImportPickerDelegate: NSObject, UIDocumentPickerDelegate {
     private let completion: (URL?) -> Void
+    private var finished = false
 
     init(completion: @escaping (URL?) -> Void) {
         self.completion = completion
@@ -547,15 +565,42 @@ private final class AorusImportPickerDelegate: NSObject, UIDocumentPickerDelegat
         self.finish(controller, url: nil)
     }
 
-    private var finished = false
-
+    /// Hands the choice on once the picker is off screen.
+    ///
+    /// A document picker dismisses itself when it reports a choice. This used to dismiss it
+    /// a second time and wait for that dismissal's completion — but a second dismissal that
+    /// lands in the middle of the first (or after it) is dropped by UIKit, completion and
+    /// all. Nothing was ever read: choosing a session file, a folder or an archive and
+    /// tapping "Open" did nothing, not even an error for a folder with no Telegram data.
+    ///
+    /// The choice is still not handed on while the picker is leaving, because a passcode
+    /// prompt presented then is dropped as well; it waits for the picker's own transition.
     private func finish(_ controller: UIDocumentPickerViewController, url: URL?) {
-        guard !finished else { return }
-        finished = true
-        // A protected tdata immediately asks for a passcode. Presenting that prompt
-        // while Files is still dismissing drops the presentation at the root host.
-        controller.dismiss(animated: true) { [completion] in
-            completion(url)
+        guard !self.finished else { return }
+        self.finished = true
+        self.deliver(url, after: controller, attempt: 0)
+    }
+
+    private func deliver(_ url: URL?, after picker: UIViewController, attempt: Int) {
+        if let coordinator = picker.transitionCoordinator,
+           coordinator.animate(alongsideTransition: nil, completion: { _ in self.completion(url) }) {
+            return
+        }
+        guard picker.presentingViewController != nil else {
+            // Already gone: nothing to wait for.
+            self.completion(url)
+            return
+        }
+        if attempt < 10 {
+            // Reported a choice but not yet leaving: give UIKit a moment to start.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.deliver(url, after: picker, attempt: attempt + 1)
+            }
+        } else {
+            // A picker that never dismisses itself is dismissed here, once.
+            picker.dismiss(animated: true) {
+                self.completion(url)
+            }
         }
     }
 }

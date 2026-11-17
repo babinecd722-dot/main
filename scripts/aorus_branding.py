@@ -5045,6 +5045,138 @@ def patch_info_plist_face_id(tg: Path) -> None:
         print(f"{name}: added NSFaceIDUsageDescription")
 
 
+_SESSION_TYPE_IDENTIFIER = "org.aorusgram.telegram-session"
+_SESSION_TYPE_DECLARATION = (
+    "        <dict>\n"
+    "            <key>UTTypeConformsTo</key>\n"
+    "            <array>\n"
+    "                <string>public.data</string>\n"
+    "            </array>\n"
+    "            <key>UTTypeDescription</key>\n"
+    "            <string>Telegram Session</string>\n"
+    "            <key>UTTypeIdentifier</key>\n"
+    f"            <string>{_SESSION_TYPE_IDENTIFIER}</string>\n"
+    "            <key>UTTypeTagSpecification</key>\n"
+    "            <dict>\n"
+    "                <key>public.filename-extension</key>\n"
+    "                <array>\n"
+    "                    <string>session</string>\n"
+    "                </array>\n"
+    "            </dict>\n"
+    "        </dict>\n"
+)
+
+
+def patch_archive_pin_swipe(tg: Path) -> None:
+    """Pinning a hidden archive by swiping it left the archive gone and a green capsule
+    on top of the list.
+
+    Two things in Telegram's own chat-list row met there. A row that is hidden is drawn one
+    level below its neighbours (`zPosition = -1`) so it can slide under them, and nothing
+    ever put it back: once the archive had been hidden, it stayed below everything that
+    shares its container, also after it was pinned again. And "Pin" changed the list's state
+    while the row's swipe option — the green "Pin" capsule — was still on screen, held there
+    while it closed, so the list laid the archive out again around a capsule that was on its
+    way out and never finished leaving.
+
+    The row now goes back to its neighbours' level as soon as it is not hidden, and "Pin"
+    first closes its option, then pins the archive once the option has gone. If the closing
+    is interrupted — another swipe begins — the archive is pinned a moment later anyway.
+    """
+    path = tg / "submodules/ChatListUI/Sources/Node/ChatListItem.swift"
+    text = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: archive pin swipe"
+    if sentinel in text:
+        print("ArchivePinSwipe: already patched")
+        return
+    z_old = (
+        "                    if item.hiddenOffset {\n"
+        "                        strongSelf.layer.zPosition = -1.0\n"
+        "                    }\n"
+    )
+    z_new = (
+        "                    " + sentinel + ": a row that is no longer hidden is drawn at its neighbours' level again.\n"
+        "                    strongSelf.layer.zPosition = item.hiddenOffset ? -1.0 : 0.0\n"
+    )
+    pin_old = (
+        "            case RevealOptionKey.unhide.rawValue:\n"
+        "                self.closeRevealOptionsHoldingOptions()\n"
+        "                item.interaction.toggleArchivedFolderHiddenByDefault()\n"
+    )
+    pin_new = (
+        "            case RevealOptionKey.unhide.rawValue:\n"
+        "                // AorusGram: pin the archive once its swipe option has closed, so the list is\n"
+        "                // never laid out around a capsule still on its way out.\n"
+        "                close = false\n"
+        "                let aorusPinned = Atomic<Bool>(value: false)\n"
+        "                let aorusPin: () -> Void = { [weak self] in\n"
+        "                    if aorusPinned.swap(true) {\n"
+        "                        return\n"
+        "                    }\n"
+        "                    self?.revealOptionsInteractivelyClosed()\n"
+        "                    item.interaction.toggleArchivedFolderHiddenByDefault()\n"
+        "                }\n"
+        "                self.updateRevealOffsetInternal(offset: 0.0, transition: .animated(duration: 0.3, curve: .spring), completion: aorusPin)\n"
+        "                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.6, execute: {\n"
+        "                    aorusPin()\n"
+        "                })\n"
+    )
+    for old, name in ((z_old, "hidden row level"), (pin_old, "archive pin action")):
+        if text.count(old) != 1:
+            raise RuntimeError(f"ArchivePinSwipe: {name} anchor moved")
+    text = text.replace(z_old, z_new, 1).replace(pin_old, pin_new, 1)
+    path.write_text(text, encoding="utf-8")
+    print("ArchivePinSwipe: the archive pins after its option closes and returns to its neighbours' level")
+
+
+def patch_session_file_type(tg: Path) -> None:
+    """Declare the `.session` extension (Telethon, Pyrogram) as an imported type.
+
+    The system registers nothing for it, so the account import's file picker could only
+    offer `public.item`: every file in Files was enabled and nothing hinted at what to pick.
+    With the type declared, `UTType("org.aorusgram.telegram-session")` resolves and the picker
+    greys out everything that is neither a session nor an archive. Imported, not exported:
+    the app reads these files, it does not own the format.
+    """
+    build = tg / "Telegram/BUILD"
+    text = build.read_text(encoding="utf-8")
+    if _SESSION_TYPE_IDENTIFIER in text:
+        print("Telegram/BUILD: .session type already declared")
+    else:
+        anchor = (
+            "                    <string>tgios-theme</string>\n"
+            "                </array>\n"
+            "            </dict>\n"
+            "        </dict>\n"
+        )
+        if text.count(anchor) != 1:
+            raise RuntimeError("Telegram/BUILD: the imported theme type is not where it was; cannot declare .session")
+        text = text.replace(anchor, anchor + _SESSION_TYPE_DECLARATION, 1)
+        build.write_text(text, encoding="utf-8")
+        print("Telegram/BUILD: declared the .session type for the account import picker")
+    for name in ("Info.plist", "InfoBazel.plist"):
+        path = tg / "Telegram/Telegram-iOS" / name
+        if not path.is_file():
+            continue
+        with path.open("rb") as f:
+            pl = plistlib.load(f)
+        declarations = pl.get("UTImportedTypeDeclarations")
+        if not isinstance(declarations, list):
+            declarations = []
+        if any(isinstance(item, dict) and item.get("UTTypeIdentifier") == _SESSION_TYPE_IDENTIFIER for item in declarations):
+            continue
+        declarations.append({
+            "UTTypeConformsTo": ["public.data"],
+            "UTTypeDescription": "Telegram Session",
+            "UTTypeIdentifier": _SESSION_TYPE_IDENTIFIER,
+            "UTTypeTagSpecification": {"public.filename-extension": ["session"]},
+        })
+        pl["UTImportedTypeDeclarations"] = declarations
+        with path.open("wb") as f:
+            plistlib.dump(pl, f, fmt=plistlib.FMT_XML)
+        print(f"{name}: declared the .session type")
+
+
 def patch_info_plist_file_sharing(tg: Path) -> None:
     """Keep the app container private.
 
@@ -31881,6 +32013,7 @@ def main() -> None:
     patch_info_plist_bgtask(tg)
     patch_info_plist_speech_usage(tg)
     patch_info_plist_file_sharing(tg)
+    patch_session_file_type(tg)
     patch_info_plist_face_id(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)
@@ -31896,6 +32029,7 @@ def main() -> None:
     patch_media_editor_send_accent(tg)
     patch_gallery_date_color(tg)
     patch_always_online(tg)
+    patch_archive_pin_swipe(tg)
     # After Interface 2.0's posts block: it anchors on the grid layout and the glass that adds.
     from aorus_posts_page_ink import patch_posts_page_ink
     patch_posts_page_ink(tg)

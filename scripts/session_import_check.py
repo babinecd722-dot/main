@@ -138,6 +138,27 @@ def check(repo: Path) -> list[str]:
     # Forcing a document picker full-screen drops the toolbar that carries the Open button.
     if "modalPresentationStyle = .fullScreen" in ui_body:
         err.append("AorusAccountImport: the document picker must not be forced full-screen")
+    # The picker dismisses itself after it reports a choice. Dismissing it again from the
+    # delegate and waiting for that completion lost every choice: UIKit drops a second
+    # dismissal, completion included, so "Open" did nothing.
+    delegate_start = ui_body.find("class AorusImportPickerDelegate")
+    delegate_body = ui_body[delegate_start:] if delegate_start >= 0 else ""
+    if not delegate_body:
+        err.append("AorusAccountImport: the picker delegate is gone")
+    else:
+        if "transitionCoordinator" not in delegate_body or "presentingViewController" not in delegate_body:
+            err.append("AorusAccountImport: the picker delegate no longer waits for the picker's own dismissal")
+        finish = delegate_body[delegate_body.find("private func finish("):]
+        finish = finish[:finish.find("\n    }\n")]
+        if "dismiss(" in finish:
+            err.append("AorusAccountImport: the delegate dismisses the picker again on a choice; UIKit drops that and the choice is lost")
+    # `.session` is declared by the app so the picker can filter for it.
+    identifier = "org.aorusgram.telegram-session"
+    if identifier not in ui_body:
+        err.append("AorusAccountImport: the session picker no longer asks for the declared .session type")
+    branding = (repo / "scripts/aorus_branding.py").read_text(encoding="utf-8")
+    if identifier not in branding or "patch_session_file_type(tg)" not in branding:
+        err.append("aorus_branding: the .session type is no longer declared in the app's Info.plist")
 
     return err
 
