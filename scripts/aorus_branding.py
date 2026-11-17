@@ -685,13 +685,18 @@ def patch_background_presence(tg: Path) -> None:
     it leaves the screen: the status drops to "last seen" and messages wait until it is opened.
     The wakeup manager now starts `AorusBackgroundKeepAlive` (AorusBackgroundPresence.swift) —
     a looped second of silence through Telegram's own audio session, under the `audio`
-    background mode the Info.plist declares for every signing method — when the app goes to
-    the background with either feature on, and stops it the moment the app is in front again.
-    While it plays, the manager stays in its active branch: transactions stay open, the primary
-    account keeps its online status (30-second pings, no drop to offline in between) and, for
-    notifications, every account keeps its connection, so `AorusBackgroundNotifier` sees each
-    message as it arrives. When a call or an alarm interrupts the sound, the keep-alive lets go
-    and the manager closes storage as it always does before a suspension.
+    background mode the Info.plist declares for every signing method — as the app stops being
+    active, while it is still in front (where iOS always lets audio start), with either feature
+    on, and stops it the moment the app is active again. A session another sound still holds
+    without playing — a video paused on the way out — keeps it out for a second and a half at
+    most, so the app is never suspended waiting for it; Telegram's own music and calls keep the
+    app running by themselves and are never pushed aside. While the silence plays, the manager
+    stays in its active branch: transactions stay open, the primary account keeps its online
+    status (30-second pings, no drop to offline in between) and, for notifications, every
+    account keeps its connection, so `AorusBackgroundNotifier` sees each message as it arrives.
+    When a call or an alarm interrupts the sound, the keep-alive lets go and the manager closes
+    storage as it always does before a suspension. Each step is written to Telegram's log
+    ("AorusBackground").
 
     Patched file: submodules/TelegramUI/Sources/SharedWakeupManager.swift
     """
@@ -717,7 +722,11 @@ def patch_background_presence(tg: Path) -> None:
         "    // background on a silent sound of their own (AorusBackgroundPresence.swift).\n"
         "    private let aorusAudioSession: ManagedAudioSession\n"
         "    private var aorusKeepAlive: AorusBackgroundKeepAlive?\n"
-        "    private var aorusNotifier: AorusBackgroundNotifier?\n",
+        "    private var aorusNotifier: AorusBackgroundNotifier?\n"
+        "    private var aorusIsActive: Bool = true\n"
+        "    private var aorusActiveObservers: [NSObjectProtocol] = []\n"
+        "    private var aorusSessionBusySince: Double?\n"
+        "    private var aorusSessionWaitTimer: SwiftSignalKit.Timer?\n",
         "properties",
     )
     sub(
@@ -726,13 +735,29 @@ def patch_background_presence(tg: Path) -> None:
         "        self.acquireIdleExtension = acquireIdleExtension\n"
         "        self.presentationData = presentationData\n"
         "        self.aorusAudioSession = mediaManager.audioSession\n"
-        "        self.aorusNotifier = AorusBackgroundNotifier(activeAccounts: activeAccounts, presentationData: presentationData)\n",
+        "        self.aorusNotifier = AorusBackgroundNotifier(activeAccounts: activeAccounts, presentationData: presentationData)\n"
+        "        // AorusGram: the keep-alive starts as the app stops being active, while it is still\n"
+        "        // in front, where iOS always lets audio start.\n"
+        "        self.aorusActiveObservers = [\n"
+        "            NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main, using: { [weak self] _ in\n"
+        "                self?.aorusIsActive = false\n"
+        "                self?.checkTasks()\n"
+        "            }),\n"
+        "            NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main, using: { [weak self] _ in\n"
+        "                self?.aorusIsActive = true\n"
+        "                self?.checkTasks()\n"
+        "            })\n"
+        "        ]\n",
         "init",
     )
     sub(
         "        self.keepIdleDisposable?.dispose()\n",
         "        self.keepIdleDisposable?.dispose()\n"
-        "        self.aorusKeepAlive?.stop()\n",
+        "        self.aorusKeepAlive?.stop()\n"
+        "        self.aorusSessionWaitTimer?.invalidate()\n"
+        "        for observer in self.aorusActiveObservers {\n"
+        "            NotificationCenter.default.removeObserver(observer)\n"
+        "        }\n",
         "deinit",
     )
     sub(
@@ -754,30 +779,66 @@ def patch_background_presence(tg: Path) -> None:
     )
     sub(
         "    private func updateAccounts(hasTasks: Bool, endTaskAfterTransactionsComplete: UIBackgroundTaskIdentifier?) {\n",
-        "    // AorusGram: starts the silent keep-alive once the app is in the background with Always\n"
-        "    // Online or background notifications on, and stops it as soon as the app is in front.\n"
+        "    // AorusGram: Telegram's in-app notification settings, for the background notifications.\n"
+        "    func aorusAttach(accountManager: AccountManager<TelegramAccountManagerTypes>) {\n"
+        "        self.aorusNotifier?.attach(accountManager: accountManager)\n"
+        "    }\n"
+        "    \n"
+        "    // AorusGram: starts the silent keep-alive as the app stops being active with Always Online\n"
+        "    // or background notifications on, and stops it as soon as the app is active again.\n"
         "    private func aorusUpdateBackgroundWork() {\n"
-        "        let isWanted = !self.inForeground && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted\n"
-        "        if isWanted {\n"
-        "            if self.aorusKeepAlive == nil {\n"
-        "                // A sound of Telegram's own (music, a voice message, a video, a call) already\n"
-        "                // keeps the app running, and a session pushed over it would pause it: the\n"
-        "                // keep-alive starts once it is over, which runs this again.\n"
-        "                let hasActiveCalls = self.accountsAndTasks.contains(where: { $0.2.activeCalls })\n"
-        "                if !self.hasActiveAudioSession && !hasActiveCalls {\n"
-        "                    let keepAlive = AorusBackgroundKeepAlive(audioSession: self.aorusAudioSession)\n"
-        "                    keepAlive.engagedChanged = { [weak self] in\n"
-        "                        self?.checkTasks()\n"
-        "                    }\n"
-        "                    self.aorusKeepAlive = keepAlive\n"
-        "                    // Should iOS unload the app to free memory, a refresh brings it back.\n"
-        "                    AorusBackgroundRefresh.schedule()\n"
-        "                }\n"
+        "        let isAway = !self.inForeground || !self.aorusIsActive\n"
+        "        guard isAway && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted else {\n"
+        "            self.aorusSessionWaitTimer?.invalidate()\n"
+        "            self.aorusSessionWaitTimer = nil\n"
+        "            self.aorusSessionBusySince = nil\n"
+        "            if let keepAlive = self.aorusKeepAlive {\n"
+        "                self.aorusKeepAlive = nil\n"
+        "                keepAlive.stop()\n"
         "            }\n"
-        "        } else if let keepAlive = self.aorusKeepAlive {\n"
-        "            self.aorusKeepAlive = nil\n"
-        "            keepAlive.stop()\n"
+        "            return\n"
         "        }\n"
+        "        if self.aorusKeepAlive != nil {\n"
+        "            return\n"
+        "        }\n"
+        "        // Telegram's own music or a call keeps the app running by itself, and a session pushed\n"
+        "        // over it would pause it: the keep-alive starts once it is over, which runs this again.\n"
+        "        if self.accountsAndTasks.contains(where: { $0.2.backgroundAudio || $0.2.activeCalls }) {\n"
+        "            return\n"
+        "        }\n"
+        "        if self.hasActiveAudioSession {\n"
+        "            // The session is held by something that is not music or a call: in front, a video\n"
+        "            // that may still be playing, so it is left alone; in the background, most often one\n"
+        "            // paused on the way out, which would keep the app from being kept alive at all.\n"
+        "            if self.inForeground {\n"
+        "                return\n"
+        "            }\n"
+        "            let timestamp = CFAbsoluteTimeGetCurrent()\n"
+        "            let busySince = self.aorusSessionBusySince ?? timestamp\n"
+        "            self.aorusSessionBusySince = busySince\n"
+        "            if timestamp - busySince < 1.5 {\n"
+        "                if self.aorusSessionWaitTimer == nil {\n"
+        "                    let timer = SwiftSignalKit.Timer(timeout: 1.6, repeat: false, completion: { [weak self] in\n"
+        "                        self?.aorusSessionWaitTimer = nil\n"
+        "                        self?.checkTasks()\n"
+        "                    }, queue: Queue.mainQueue())\n"
+        "                    self.aorusSessionWaitTimer = timer\n"
+        "                    timer.start()\n"
+        "                }\n"
+        "                return\n"
+        "            }\n"
+        "            Logger.shared.log(\"AorusBackground\", \"the audio session is held without a sound playing; starting the keep-alive over it\")\n"
+        "        }\n"
+        "        self.aorusSessionWaitTimer?.invalidate()\n"
+        "        self.aorusSessionWaitTimer = nil\n"
+        "        self.aorusSessionBusySince = nil\n"
+        "        let keepAlive = AorusBackgroundKeepAlive(audioSession: self.aorusAudioSession)\n"
+        "        keepAlive.engagedChanged = { [weak self] in\n"
+        "            self?.checkTasks()\n"
+        "        }\n"
+        "        self.aorusKeepAlive = keepAlive\n"
+        "        // Should iOS unload the app to free memory, a refresh brings it back.\n"
+        "        AorusBackgroundRefresh.schedule()\n"
         "    }\n"
         "    \n"
         "    // AorusGram: while the app is kept running in the background, every account stays\n"
@@ -796,13 +857,22 @@ def patch_background_presence(tg: Path) -> None:
 
     # The refresh that brings the app back after iOS unloaded it must be registered while the
     # app finishes launching, next to Telegram's own background task.
+    # Telegram's in-app notification settings ("Names on Lock Screen") reach the notifier
+    # through the wakeup manager once the shared context exists.
     delegate = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     delegate_text = delegate.read_text(encoding="utf-8")
+    original_delegate_text = delegate_text
+    if "wakeupManager.aorusAttach(accountManager:" not in delegate_text:
+        anchor = "            let sharedApplicationContext = SharedApplicationContext(sharedContext: sharedContext, notificationManager: notificationManager, wakeupManager: wakeupManager)\n"
+        if delegate_text.count(anchor) != 1:
+            raise RuntimeError(f"BackgroundPresence: AppDelegate wakeup anchor found {delegate_text.count(anchor)} times")
+        delegate_text = delegate_text.replace(anchor, "            wakeupManager.aorusAttach(accountManager: sharedContext.accountManager)\n" + anchor, 1)
     if "AorusBackgroundRefresh.register()" not in delegate_text:
         anchor = '            let cleanupTaskId = "\\(baseAppBundleId).cleanup"\n'
         if delegate_text.count(anchor) != 1:
             raise RuntimeError(f"BackgroundPresence: AppDelegate anchor found {delegate_text.count(anchor)} times")
         delegate_text = delegate_text.replace(anchor, "            AorusBackgroundRefresh.register()\n            \n" + anchor, 1)
+    if delegate_text != original_delegate_text:
         delegate.write_text(delegate_text, encoding="utf-8")
 
     build = tg / "submodules/TelegramUI/BUILD"
@@ -7542,6 +7612,7 @@ def patch_alternate_icons(tg: Path) -> None:
         ("Cosmos",     "Космос",       "Cosmos",      False),
         ("Cosmos2",    "Космос 2",     "Cosmos 2",    False),
         ("Duck",       "Утка",         "Ducky",       False),
+        ("Samurai",    "Самурай",      "Samurai",     False),
         ("BlackWhite", "Черно-белая",  "Black White", False),
         ("Black",      "Черная",       "Black",       False),
         ("White",      "Белая",        "White",       False),

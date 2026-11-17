@@ -75,7 +75,6 @@ enum AorusAIConversationPDF {
 
     enum Piece {
         case title(NSAttributedString, NSAttributedString)
-        case author(NSAttributedString)
         case box(Box)
         case rule
         case gap(CGFloat)
@@ -86,21 +85,13 @@ enum AorusAIConversationPDF {
         let style: AorusAIPDFStyle
         let icon: UIImage?
         let wordmark: NSAttributedString
-        /// The larger name beside the mark at the head of the first slide.
-        let headerWordmark: NSAttributedString
         let title: String
     }
 
-    /// The brand mark's sizes, in points on a 960 × 600 slide. The mark is drawn from a
-    /// 200-pixel raster, so even the header's is well over 300 dpi in print.
-    ///
-    /// They were 16 beside an answer and 18 in the footer: next to 16.5-point body text a
-    /// 16-point mark read as a bullet, not as a logo.
+    /// The brand mark's size, in points on a 960 × 600 slide, drawn from a 200-pixel raster.
+    /// The mark and the name appear once on a slide, in its lower right corner: the answers
+    /// are told from the questions by their layout, as in the chat, not by a label each.
     enum Mark {
-        /// At the head of the first slide, beside the name, over the title.
-        static let header: CGFloat = 48.0
-        /// Before each answer, level with the "AorusAI" label.
-        static let author: CGFloat = 24.0
         /// In the footer of every slide, to the left of the name.
         static let footer: CGFloat = 26.0
     }
@@ -156,7 +147,6 @@ enum AorusAIConversationPDF {
             case .assistant:
                 guard !raw.isEmpty || !message.artifacts.isEmpty else { continue }
                 pieces.append(.gap(24.0))
-                pieces.append(.author(NSAttributedString(string: "AorusAI", attributes: [.font: UIFont.systemFont(ofSize: 15.0, weight: .semibold).aorusPDFRounded(), .foregroundColor: style.secondary, .kern: 0.2])))
                 var firstBlock = true
                 for block in AorusAIMarkdown.blocks(raw) {
                     if !firstBlock {
@@ -208,11 +198,6 @@ enum AorusAIConversationPDF {
             .foregroundColor: style.text,
             .kern: 0.4
         ])
-        let headerWordmark = NSAttributedString(string: "AorusAI", attributes: [
-            .font: UIFont.systemFont(ofSize: 24.0, weight: .bold).aorusPDFRounded(),
-            .foregroundColor: style.text,
-            .kern: 0.3
-        ])
         // The real AorusGram mark, in full colour: the white glow on a dark page, the inked
         // violet on a light one. It is already a concrete raster, so, unlike a PDF-backed
         // template, it exports its own alpha rather than a rectangular tint mask. The generic
@@ -220,7 +205,7 @@ enum AorusAIConversationPDF {
         // be decoded — that generic glyph was the "plain square" this export used to show.
         let icon = AorusAIBrandLogo.image(dark: style.isDark)
             ?? UIImage(bundleImageName: aorusAIMessageMenuIconName()).map { rasterIcon($0, color: style.accent) }
-        return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, headerWordmark: headerWordmark, title: title)
+        return Content(pieces: pieces, style: style, icon: icon, wordmark: wordmark, title: title)
     }
 
     static func rasterIcon(_ source: UIImage, color: UIColor) -> UIImage {
@@ -292,7 +277,6 @@ enum AorusAIConversationPDF {
         /// an unowned reference to the text it lays out.
         case glyphs(NSTextStorage, NSLayoutManager, NSTextContainer, NSRange, CGPoint)
         case text(NSAttributedString, CGPoint)
-        case icon(CGRect)
         case rule(CGRect)
     }
 
@@ -337,15 +321,6 @@ enum AorusAIConversationPDF {
                 add(.rule(CGRect(x: left, y: y + 9.0, width: right - left, height: 1.0)))
                 y += 20.0
             case let .title(title, subtitle):
-                // The mark and the name head the first slide, the way a letterhead does, so the
-                // document is recognisably AorusAI's before a word of it is read.
-                if content.icon != nil {
-                    let side = Mark.header
-                    add(.icon(CGRect(x: left, y: y, width: side, height: side)))
-                    let nameSize = content.headerWordmark.size()
-                    add(.text(content.headerWordmark, CGPoint(x: left + side + 14.0, y: y + (side - nameSize.height) / 2.0)))
-                    y += side + 22.0
-                }
                 let titleHeight = ceil(title.boundingRect(with: CGSize(width: right - left, height: 200.0), options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height)
                 add(.text(title, CGPoint(x: left, y: y)))
                 y += titleHeight + 6.0
@@ -353,17 +328,6 @@ enum AorusAIConversationPDF {
                 y += 18.0 + 18.0
                 add(.rule(CGRect(x: left, y: y, width: right - left, height: 1.0)))
                 y += 8.0
-            case let .author(label):
-                // A name is never left alone at the foot of a slide: it goes over with the
-                // first lines of what it introduces.
-                let side = Mark.author
-                if y + side + 60.0 > bottom {
-                    newPage()
-                }
-                add(.icon(CGRect(x: left, y: y, width: side, height: side)))
-                let labelHeight = label.size().height
-                add(.text(label, CGPoint(x: left + side + 9.0, y: y + (side - labelHeight) / 2.0)))
-                y += side + 10.0
             case let .box(box):
                 let textWidth = max(10.0, box.maximumWidth - box.insets.left - box.insets.right)
                 let storage = NSTextStorage(attributedString: box.text)
@@ -438,10 +402,6 @@ enum AorusAIConversationPDF {
                 UIRectFill(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 1.0))
             case let .text(text, point):
                 text.draw(at: point)
-            case let .icon(rect):
-                if let icon = content.icon {
-                    icon.draw(in: rect)
-                }
             case let .glyphs(_, manager, container, range, origin):
                 manager.drawBackground(forGlyphRange: range, at: origin)
                 manager.drawGlyphs(forGlyphRange: range, at: origin)

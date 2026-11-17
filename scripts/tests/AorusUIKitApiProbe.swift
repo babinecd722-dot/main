@@ -105,15 +105,29 @@ final class AorusProbeTextViewDelegate: NSObject, UITextViewDelegate {
     }
 }
 
-// The work-trail sheet must keep a usable detent when medium becomes inactive.
+// The work-trail sheet: medium and large in portrait; in landscape, where medium is inactive,
+// a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+), re-applied when
+// the height class changes while the sheet is open.
 @available(iOS 15.0, *)
 func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
-    controller.sheetPresentationController?.detents = [.medium(), .large()]
-    controller.sheetPresentationController?.selectedDetentIdentifier = compact ? .large : .medium
-    controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = true
-    controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
-    controller.sheetPresentationController?.animateChanges {
-        controller.sheetPresentationController?.selectedDetentIdentifier = .large
+    guard let sheet = controller.sheetPresentationController else { return }
+    func apply(_ compactHeight: Bool) {
+        if compactHeight, #available(iOS 16.0, *) {
+            let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")
+            sheet.detents = [.custom(identifier: identifier) { context in
+                return floor(context.maximumDetentValue * 0.74)
+            }]
+            sheet.selectedDetentIdentifier = identifier
+        } else {
+            sheet.detents = [.medium(), .large()]
+            sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
+        }
+    }
+    apply(compact)
+    sheet.prefersEdgeAttachedInCompactHeight = true
+    sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+    sheet.animateChanges {
+        apply(!compact)
     }
 }
 

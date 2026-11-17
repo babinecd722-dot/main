@@ -57,13 +57,15 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
     guard let snapshot = source(), !snapshot.phases.isEmpty else { return nil }
     let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
     controller.modalPresentationStyle = .pageSheet
-    controller.sheetPresentationController?.detents = [.medium(), .large()]
-    controller.sheetPresentationController?.selectedDetentIdentifier = presenter.traitCollection.verticalSizeClass == .compact ? .large : .medium
-    // Medium is inactive in compact height. Keep a usable sheet on rotation too.
-    controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = true
-    controller.sheetPresentationController?.widthFollowsPreferredContentSizeWhenEdgeAttached = true
-    controller.sheetPresentationController?.prefersGrabberVisible = true
-    controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
+    if let sheet = controller.sheetPresentationController {
+        let isCompactHeight = presenter.traitCollection.verticalSizeClass == .compact
+        AorusAIWorkTrailController.applyDetents(to: sheet, compactHeight: isCompactHeight)
+        controller.appliedCompactHeight = isCompactHeight
+        sheet.prefersEdgeAttachedInCompactHeight = true
+        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+        sheet.prefersGrabberVisible = true
+        sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+    }
     controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
     // Opened from the chat while its composer may have the keyboard: the sheet goes over it.
     AorusKeyboardHold.keepBelow(controller, in: presenter.view.window)
@@ -92,10 +94,6 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
     private var finishedAt: Date? { return snapshot.finishedAt }
 
     private let titleLabel = UILabel()
-    /// Always present, so the sheet can be closed whatever the detent or the orientation. In
-    /// landscape the sheet sits at its large detent with no room to swipe it down, and there is
-    /// no dimmed area to tap outside it, so a grabber alone left no way out.
-    private let closeButton = UIButton(type: .system)
     private let tableView = UITableView(frame: .zero, style: .plain)
     /// Which phases the reader has opened. A phase with no renderable file never enters
     /// this set, because there is nothing to show and a row that opens onto nothing is
@@ -118,8 +116,6 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
             guard self.isViewLoaded else { return }
             self.view.backgroundColor = self.palette.background
             self.titleLabel.textColor = self.palette.label
-            self.closeButton.tintColor = self.palette.secondary
-            self.closeButton.backgroundColor = self.palette.fill
             self.tableView.reloadData()
         })
     }
@@ -141,19 +137,6 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
 
-        closeButton.setImage(
-            UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .semibold)),
-            for: .normal
-        )
-        closeButton.tintColor = palette.secondary
-        closeButton.backgroundColor = palette.fill
-        closeButton.layer.cornerRadius = 16.0
-        closeButton.layer.cornerCurve = .continuous
-        closeButton.accessibilityLabel = aorusAILocalized("Закрыть", "Close")
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(closeButton)
-
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
         tableView.dataSource = self
@@ -167,16 +150,10 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         view.addSubview(tableView)
 
         NSLayoutConstraint.activate([
-            closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14.0),
-            closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16.0),
-            closeButton.widthAnchor.constraint(equalToConstant: 32.0),
-            closeButton.heightAnchor.constraint(equalToConstant: 32.0),
-            titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
-            // The title stays centred in the sheet; the close button sits over its trailing
-            // margin, and the title's own margins keep it from running under the button.
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 52.0),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -52.0),
-            tableView.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 12.0),
+            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18.0),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20.0),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20.0),
+            tableView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14.0),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -186,8 +163,37 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         updateTicker()
     }
 
-    @objc private func closeTapped() {
-        dismiss(animated: true)
+    /// The detents the sheet was last given, by height class. Read again on every layout, so a
+    /// rotation while the sheet is open moves it to the other set.
+    fileprivate var appliedCompactHeight: Bool?
+
+    /// In portrait the sheet opens at half height and pulls up to full. In landscape on a
+    /// phone, where half height does not exist, it takes three quarters of the height rather
+    /// than all of it: the dimmed strip left above it closes it with a tap, and it swipes down
+    /// like any sheet. iOS 15, which has no custom heights, keeps the full-height sheet, which
+    /// also swipes down.
+    fileprivate static func applyDetents(to sheet: UISheetPresentationController, compactHeight: Bool) {
+        if compactHeight, #available(iOS 16.0, *) {
+            let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")
+            sheet.detents = [.custom(identifier: identifier) { context in
+                return floor(context.maximumDetentValue * 0.74)
+            }]
+            sheet.selectedDetentIdentifier = identifier
+        } else {
+            sheet.detents = [.medium(), .large()]
+            sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
+        }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let isCompactHeight = traitCollection.verticalSizeClass == .compact
+        if let sheet = sheetPresentationController, appliedCompactHeight != isCompactHeight {
+            appliedCompactHeight = isCompactHeight
+            sheet.animateChanges {
+                AorusAIWorkTrailController.applyDetents(to: sheet, compactHeight: isCompactHeight)
+            }
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {

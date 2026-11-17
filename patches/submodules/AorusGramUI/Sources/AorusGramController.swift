@@ -758,7 +758,7 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         // Always Online keeps the status up in front and in the background, where the app keeps
         // itself running for it (TelegramUI/AorusBackgroundPresence.swift). It is the opposite
         // of Ghost Mode's "Online Status", so switching it on switches that off (and vice versa).
-        b.toggle("alwaysOnline", icon("wifi"), aorusL("Всегда в сети", "Always Online"), aorusL("Ты в сети и в открытом, и в свёрнутом приложении — без скачков «в сети» / «был недавно». Не сочетается со скрытием статуса в Режиме призрака.", "You stay online whether the app is open or in the background, with no flicker to “last seen”. Can't be combined with hiding your status in Ghost Mode."), \.alwaysOnline, state)
+        b.toggle("alwaysOnline", icon("wifi"), aorusL("Всегда в сети", "Always Online"), aorusL("Ты в сети, даже когда приложение свёрнуто", "You stay online even when the app is in the background"), \.alwaysOnline, state)
         b.toggle("antiSpoofOnline", icon("eye.fill"), aorusL("Настоящий онлайн собеседника", "Contact's Real Activity"), aorusL("Показывает, когда человек был активен, даже если он скрыл время захода", "Shows when someone was active even if they hide their last seen"), \.antiSpoofOnline, state)
         b.block()
         b.screen("deviceSpoof", icon("iphone"), aorusL("Подмена устройства", "Device Spoofing"), aorusL("Какое устройство видят Telegram и твои сеансы", "Which device Telegram and your sessions see"), .deviceSpoof, isOn: state.spoofedDeviceName != nil, value: state.spoofedDeviceName)
@@ -927,8 +927,7 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         // Off by default: it keeps the app running in the background (AorusBackgroundPresence.swift),
         // and switching it on checks that this installation can (AorusBackgroundReadiness).
         b.block(aorusL("В ФОНЕ", "IN THE BACKGROUND"))
-        b.toggle("backgroundNotifications", icon("bell.badge.fill"), aorusL("Уведомления в фоне", "Background Notifications"), aorusL("Свёрнутый AorusGram сам получает сообщения и звонки и показывает их, как Telegram", "AorusGram receives messages and calls itself in the background and shows them the way Telegram does"), \.backgroundNotifications, state)
-        b.footer(aorusL("Для установок, до которых не доходят push от Telegram: AltStore, SideStore, Sideloadly, TrollStore, свой сертификат. Приложение остаётся на связи в свёрнутом виде, поэтому заряд расходуется немного быстрее. Смахнутое из списка приложений iOS не запускает.", "For installs Telegram's push can't reach: AltStore, SideStore, Sideloadly, TrollStore, your own certificate. The app stays connected in the background, so the battery drains a little faster. iOS won't run an app swiped away in the app switcher."))
+        b.toggle("backgroundNotifications", icon("bell.badge.fill"), aorusL("Уведомления в фоне", "Background Notifications"), aorusL("Сообщения и звонки приходят, даже когда приложение свёрнуто", "Messages and calls arrive even when the app is in the background"), \.backgroundNotifications, state)
 
     case .ghost:
         b.block()
@@ -1300,8 +1299,8 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                 updateState { current in var next = current; next.alwaysOnline = false; return next }
                 mgr.alwaysOnline = false
             }
-            // Both keep the app running in the background. Switching one on checks that this
-            // installation can, and says what to expect; notifications that cannot work at all
+            // Both keep the app running in the background. Switching one on checks what would
+            // stop it from working and says so only then; notifications that cannot work at all
             // (no background mode, notifications denied) switch back off.
             if keyPath == \AorusState.alwaysOnline, value {
                 AorusBackgroundReadiness.featureEnabled(.alwaysOnline, context: context, controller: weakController, revert: {})
