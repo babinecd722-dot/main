@@ -152,15 +152,15 @@ private enum AccountDetailEntry: ItemListNodeEntry {
         case let .accountHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .idRow(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: { args.copyId() })
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: { args.copyId() })
         case let .dcRow(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .regHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .regDateRow(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .ageRow(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .footer(_, text):
             return ItemListTextItem(
                 presentationData: presentationData,
@@ -173,6 +173,7 @@ private enum AccountDetailEntry: ItemListNodeEntry {
         case let .noteRow(_, title, value):
             return ItemListDisclosureItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 label: value,
                 labelStyle: value.isEmpty ? .text : .detailText,

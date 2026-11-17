@@ -93,7 +93,7 @@ private struct AorusTabEntry: ItemListNodeEntry, Equatable {
             let active = self.kind == .active
             return AorusLookSwatchesItem(presentationData: presentationData, title: self.title, palette: AorusLookPalette.accent.hexes(dark: dark), selected: active ? appearance.active : appearance.inactive, sectionId: self.section, picked: { args.color(active, $0) }, custom: { args.custom(active) })
         case .selectedTitle:
-            return ItemListSwitchItem(presentationData: presentationData, title: self.title, value: self.settings.selectedTitleOnly, sectionId: self.section, style: .blocks, updated: { value in AorusTabBarSettings.update { $0.selectedTitleOnly = value } })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: self.title, value: self.settings.selectedTitleOnly, sectionId: self.section, style: .blocks, updated: { value in AorusTabBarSettings.update { $0.selectedTitleOnly = value } })
         case .badges:
             return AorusLookSegmentItem(presentationData: presentationData, title: self.title, options: [aorusL("Число", "Number"), aorusL("Точка", "Dot"), aorusL("Скрыть", "Hide")].map { AorusLookSegmentOption(text: $0, font: Font.medium(15.0)) }, selected: AorusTabBarLayout.Badges.allCases.firstIndex(of: self.settings.badges) ?? 0, sectionId: self.section, changed: { index in
                 guard AorusTabBarLayout.Badges.allCases.indices.contains(index) else { return }
@@ -106,7 +106,7 @@ private struct AorusTabEntry: ItemListNodeEntry, Equatable {
                 AorusTabBarFeedback.selection()
             })
         case .reset:
-            return ItemListActionItem(presentationData: presentationData, title: self.title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: self.title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 args.reset()
             })
         }

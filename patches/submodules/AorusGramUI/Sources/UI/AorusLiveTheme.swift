@@ -98,8 +98,12 @@ func aorusConfigureTableLayout(_ table: AorusGroupedTableView, layout: Container
 
 func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: PresentationTheme, isCapsule: Bool = false, legacyCornerRadius: CGFloat = 22, legacyBorderWidth: CGFloat = 0) {
     let panes: AorusGroupedTableView.NativePanes?
-    if AorusGlassPane.isEnabled {
-        panes = isCapsule ? aorusNativeCapsulePanes(theme: theme) : aorusNativeListPanes(theme: theme)
+    if isCapsule {
+        panes = AorusGlassPane.isEnabled ? aorusNativeCapsulePanes(theme: theme) : nil
+    } else if AorusGlassPane.isEnabled || legacyBorderWidth == 0.0 {
+        // A plain card is a block, and a block is Telegram's card in every interface -- its
+        // colour and its corners -- not a radius of this screen's own.
+        panes = aorusNativeListPanes(theme: theme)
     } else {
         panes = nil
     }
@@ -107,14 +111,17 @@ func aorusConfigureSurface(_ surface: AorusUIKitSurfaceView, theme: Presentation
                       nativePanes: panes, isCapsule: isCapsule)
 }
 
-/// Telegram's opaque card behind UIKit's own row geometry, in both interfaces. Interface 2.0 rounds
-/// it as Telegram's iOS 26 lists round theirs; the stock interface keeps the eleven points it
-/// always had. A section or a card is content, and Telegram draws content on a card.
+/// Telegram's opaque card behind UIKit's own row geometry, in every interface. Its corners are the
+/// ones Telegram 13 gives its own settings blocks -- 26 points, in Interface 2.0 and in the stock
+/// interface alike -- and 12.0's eleven under the old interface, as its native rows have. It used
+/// to keep eleven points whenever Interface 2.0 was off, so these sections stood next to native
+/// 26-point blocks with corners of another size. A section or a card is content, and Telegram
+/// draws content on a card.
 private func aorusNativeListPanes(theme: PresentationTheme) -> AorusGroupedTableView.NativePanes {
     let nativeTheme = theme.aorusGlassListTheme
     let cardColor = nativeTheme.list.itemBlocksBackgroundColor
     return AorusGroupedTableView.NativePanes(
-        cornerRadius: AorusGlassPane.isEnabled ? AorusGlassPane.blockCornerRadius : 11,
+        cornerRadius: AorusOldInterface.isEnabled ? 11.0 : AorusGlassPane.blockCornerRadius,
         isDark: nativeTheme.overallDarkAppearance,
         isWhitePage: false,
         cardColor: cardColor,

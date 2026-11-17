@@ -99,18 +99,73 @@ class AorusGroupedTableCell: UITableViewCell {
     }
 }
 
-/// Conventional ItemList sections use a solid card with the standard 11pt corners.
-/// This explicit renderer avoids depending on iOS-specific insetGrouped materials.
+/// Telegram's solid card behind UIKit rows, cornered exactly as Telegram's own rows are.
+///
+/// Telegram does not round a settings block with a layer radius. Every native row lays a 56-point
+/// image over its corners -- a rounded rect from `UIBezierPath(roundedRect:byRoundingCorners:
+/// cornerRadii:)`, stretched from its middle (`PresentationResourcesItemList.cornersImage`) -- and
+/// that image is the shape of every native section. A layer radius, circular or continuous, draws
+/// another curve at the same radius, which is why these sections did not look like the native
+/// ones beside them. The card here is that same image, filled, so the two cannot differ.
 final class AorusUIKitOpaqueListPane: UIView, AorusListGlassPane {
+    private let card = UIImageView()
+    private let color: UIColor
+    private var radius: CGFloat?
+
+    /// The block's radius, its fill and the image drawn for it, as they are now.
+    var cornerRadius: CGFloat { return radius ?? 0.0 }
+    var fillColor: UIColor { return color }
+    var cardImage: UIImage? { return card.image }
+
     init(color: UIColor) {
+        self.color = color
         super.init(frame: .zero)
-        backgroundColor = color
-        layer.cornerCurve = .circular
+        backgroundColor = .clear
+        card.isUserInteractionEnabled = false
+        addSubview(card)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func updateListPane(size: CGSize, cornerRadius: CGFloat, isDark: Bool, isVisible: Bool) {
-        layer.cornerRadius = cornerRadius
+        if radius != cornerRadius {
+            radius = cornerRadius
+            card.image = AorusNativeBlockImage.filled(color: color, cornerRadius: cornerRadius)
+        }
+        card.frame = CGRect(origin: .zero, size: size)
         isHidden = !isVisible
+    }
+}
+
+/// A block filled the way `PresentationResourcesItemList.cornersImage` cuts one: the same canvas,
+/// the same path call, the same stretch. One image per colour and radius, made on first use.
+enum AorusNativeBlockImage {
+    private static var cache: [String: UIImage] = [:]
+
+    static func filled(color: UIColor, cornerRadius: CGFloat) -> UIImage? {
+        // Telegram's canvas is 56 points with the stretch in its middle; a radius larger than
+        // that canvas allows (a capsule) gets a canvas just big enough for it.
+        let side = max(56.0, ceil(cornerRadius * 2.0) + 4.0)
+        var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+        _ = color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let key = "\(red)-\(green)-\(blue)-\(alpha)-\(cornerRadius)-\(side)"
+        if let image = cache[key] {
+            return image
+        }
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        let canvas = CGRect(origin: .zero, size: CGSize(width: side, height: side))
+        let image = UIGraphicsImageRenderer(size: canvas.size, format: format).image { _ in
+            color.setFill()
+            UIBezierPath(roundedRect: canvas, byRoundingCorners: .allCorners, cornerRadii: CGSize(width: cornerRadius, height: cornerRadius)).fill()
+        }
+        // `stretchableImage(withLeftCapWidth: 28, topCapHeight: 28)`, as Telegram cuts it: the
+        // middle point of the canvas is the one that stretches.
+        let cap = floor(side / 2.0)
+        let stretched = image.resizableImage(withCapInsets: UIEdgeInsets(top: cap, left: cap, bottom: side - cap - 1.0, right: side - cap - 1.0), resizingMode: .stretch)
+        if cache.count > 32 {
+            cache.removeAll()
+        }
+        cache[key] = stretched
+        return stretched
     }
 }
 

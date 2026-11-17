@@ -18,6 +18,16 @@ import AppBundle
 /// it without one and a text field all line up.
 let aorusSettingsTextColumn: CGFloat = 16.0 + 28.0 + 12.0
 
+/// The gap Telegram's own rows leave between a separator and the right edge of their block.
+///
+/// Telegram 13 lists are its glass style: 26-point blocks whose separators stop 16 points short
+/// of the block's right edge. AorusGram's own rows drew the separator to the edge and rounded
+/// their block by the old 11 points, so a section of them looked unlike every native one next to
+/// it. The old interface keeps 12.0's flat, full-width separators, as its native rows do.
+var aorusItemListSeparatorRightInset: CGFloat {
+    return AorusOldInterface.isEnabled ? 0.0 : 16.0
+}
+
 private func aorusRowNodeLayout<Item: ListViewItem & ItemListItem, Node: ListViewItemNode>(
     item: Item,
     async: @escaping (@escaping () -> Void) -> Void,
@@ -582,13 +592,13 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                     hasBottomCorners = true
                     strongSelf.bottomStripeNode.isHidden = hasCorners
                 }
-                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
 
                 let backgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
                 transition.updateFrame(node: strongSelf.backgroundNode, frame: backgroundFrame)
                 transition.updateFrame(node: strongSelf.maskNode, frame: backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0))
                 transition.updateFrame(node: strongSelf.topStripeNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight)))
-                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight)))
+                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: max(0.0, params.width - params.rightInset - bottomStripeInset - aorusItemListSeparatorRightInset), height: separatorHeight)))
                 transition.updateFrame(node: strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -separatorHeight), size: CGSize(width: params.width, height: contentHeight + separatorHeight * 2.0)))
 
                 strongSelf.iconNode.image = iconImage
@@ -909,13 +919,13 @@ final class AorusSettingsInputItemNode: ListViewItemNode, ItemListItemNode, UITe
                     hasBottomCorners = true
                     strongSelf.bottomStripeNode.isHidden = hasCorners
                 }
-                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
                 let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.4, curve: .spring) : .immediate
                 let backgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
                 transition.updateFrame(node: strongSelf.backgroundNode, frame: backgroundFrame)
                 transition.updateFrame(node: strongSelf.maskNode, frame: backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0))
                 transition.updateFrame(node: strongSelf.topStripeNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight)))
-                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: params.width - bottomStripeInset, height: separatorHeight)))
+                transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: max(0.0, params.width - params.rightInset - bottomStripeInset - aorusItemListSeparatorRightInset), height: separatorHeight)))
 
                 strongSelf.fieldFrame = CGRect(x: textLeft, y: 0.0, width: max(40.0, params.width - params.rightInset - 16.0 - textLeft), height: contentHeight)
                 strongSelf.applyItem(item)

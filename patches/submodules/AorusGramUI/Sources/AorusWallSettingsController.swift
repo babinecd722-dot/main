@@ -530,6 +530,7 @@ private enum WallSettingsEntry: ItemListNodeEntry {
         case let .recommendations(_, title, value):
             return ItemListSwitchItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 value: value,
                 sectionId: section,
@@ -543,6 +544,7 @@ private enum WallSettingsEntry: ItemListNodeEntry {
         case let .addChannel(theme, title):
             return ItemListPeerActionItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 icon: PresentationResourcesItemList.addPersonIcon(theme),
                 title: title,
                 sectionId: section,
@@ -552,6 +554,7 @@ private enum WallSettingsEntry: ItemListNodeEntry {
         case let .peer(_, _, peer, revealed):
             return ItemListPeerItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 dateTimeFormat: presentationData.dateTimeFormat,
                 nameDisplayOrder: presentationData.nameDisplayOrder,
                 context: arguments.context,
@@ -573,6 +576,7 @@ private enum WallSettingsEntry: ItemListNodeEntry {
         case let .archive(_, title, value):
             return ItemListSwitchItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 value: value,
                 sectionId: section,

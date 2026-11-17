@@ -129,21 +129,21 @@ private enum ManageEntry: ItemListNodeEntry {
         case let .senderHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .sender(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, action: { args.pickSender() })
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: section, style: .blocks, action: { args.pickSender() })
         case let .makeAnonymous(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: section, style: .blocks, action: { if enabled { args.makeAnonymous() } })
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: section, style: .blocks, action: { if enabled { args.makeAnonymous() } })
         case let .dateHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .date(_, title, date, displayingDate, displayingTime):
-            return ItemListDatePickerItem(presentationData: presentationData, dateTimeFormat: presentationData.dateTimeFormat, date: date, title: title, displayingDateSelection: displayingDate, displayingTimeSelection: displayingTime, sectionId: section, style: .blocks, toggleDateSelection: { args.toggleDateSelection() }, toggleTimeSelection: { args.toggleTimeSelection() }, updated: { value in args.setDate(value) })
+            return ItemListDatePickerItem(presentationData: presentationData, systemStyle: .glass, dateTimeFormat: presentationData.dateTimeFormat, date: date, title: title, displayingDateSelection: displayingDate, displayingTimeSelection: displayingTime, sectionId: section, style: .blocks, toggleDateSelection: { args.toggleDateSelection() }, toggleTimeSelection: { args.toggleTimeSelection() }, updated: { value in args.setDate(value) })
         case let .commentHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .comment(_, placeholder, value):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, sectionId: section, textUpdated: { text in args.setComment(text) }, action: {})
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, sectionId: section, textUpdated: { text in args.setComment(text) }, action: {})
         case let .visibility(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowInProfile($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowInProfile($0) })
         case let .delete(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.delete() })
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.delete() })
         }
     }
 }

@@ -247,7 +247,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
                 self.maskNode.image = hasCorners
                     ? PresentationResourcesItemList.cornersImage(item.theme,
                                                                   top: topCorners,
-                                                                  bottom: bottomCorners)
+                                                                  bottom: bottomCorners, glass: true)
                     : nil
 
                 let bgY = -min(insets.top, sep)
@@ -257,7 +257,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
                 self.topStripeNode.frame    = CGRect(x: 0, y: bgY, width: params.width, height: sep)
                 self.bottomStripeNode.frame = CGRect(x: bInset,
                                                      y: contentSize.height + bOff,
-                                                     width: params.width - bInset, height: sep)
+                                                     width: max(0, params.width - params.rightInset - bInset - aorusItemListSeparatorRightInset), height: sep)
 
                 self.applyItem(item)
                 self.layoutSubviews()
@@ -426,6 +426,7 @@ private struct AorusState: Equatable {
     var performanceShowGraph: Bool
     var ramAutoClean: Bool
     var ramCleanInterval: Int
+    var backgroundNotifications: Bool
     var cacheAutoClean: Bool
     var cacheCleanInterval: Int
     var editLocally: Bool
@@ -754,9 +755,10 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         // Ghost Mode has a screen of its own: what it hides is chosen there, item by item, and
         // the ghost in chats with it (`.ghost` below).
         b.screen("ghostMode", .ghost, l10n.ghostMode, AorusPage.ghost.subtitle, .page(.ghost), isOn: state.ghostMode)
-        // Always Online broadcasts "online" whenever the app can; it is the opposite of Ghost
-        // Mode's "Online Status", so switching it on switches that off (and vice versa).
-        b.toggle("alwaysOnline", icon("wifi"), aorusL("Всегда в сети", "Always Online"), aorusL("Постоянно показывает твой статус «в сети». Нельзя включить вместе с его скрытием в Режиме призрака.", "Keeps your online status showing. Can't be on together with hiding it in Ghost Mode."), \.alwaysOnline, state)
+        // Always Online keeps the status up in front and in the background, where the app keeps
+        // itself running for it (TelegramUI/AorusBackgroundPresence.swift). It is the opposite
+        // of Ghost Mode's "Online Status", so switching it on switches that off (and vice versa).
+        b.toggle("alwaysOnline", icon("wifi"), aorusL("Всегда в сети", "Always Online"), aorusL("Ты в сети и в открытом, и в свёрнутом приложении — без скачков «в сети» / «был недавно». Не сочетается со скрытием статуса в Режиме призрака.", "You stay online whether the app is open or in the background, with no flicker to “last seen”. Can't be combined with hiding your status in Ghost Mode."), \.alwaysOnline, state)
         b.toggle("antiSpoofOnline", icon("eye.fill"), aorusL("Настоящий онлайн собеседника", "Contact's Real Activity"), aorusL("Показывает, когда человек был активен, даже если он скрыл время захода", "Shows when someone was active even if they hide their last seen"), \.antiSpoofOnline, state)
         b.block()
         b.screen("deviceSpoof", icon("iphone"), aorusL("Подмена устройства", "Device Spoofing"), aorusL("Какое устройство видят Telegram и твои сеансы", "Which device Telegram and your sessions see"), .deviceSpoof, isOn: state.spoofedDeviceName != nil, value: state.spoofedDeviceName)
@@ -922,6 +924,11 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         if state.cacheAutoClean {
             b.slider("cacheInterval", l10n.cacheInterval, state.cacheCleanInterval, isRAM: false)
         }
+        // Off by default: it keeps the app running in the background (AorusBackgroundPresence.swift),
+        // and switching it on checks that this installation can (AorusBackgroundReadiness).
+        b.block(aorusL("В ФОНЕ", "IN THE BACKGROUND"))
+        b.toggle("backgroundNotifications", icon("bell.badge.fill"), aorusL("Уведомления в фоне", "Background Notifications"), aorusL("Свёрнутый AorusGram сам получает сообщения и звонки и показывает их, как Telegram", "AorusGram receives messages and calls itself in the background and shows them the way Telegram does"), \.backgroundNotifications, state)
+        b.footer(aorusL("Для установок, до которых не доходят push от Telegram: AltStore, SideStore, Sideloadly, TrollStore, свой сертификат. Приложение остаётся на связи в свёрнутом виде, поэтому заряд расходуется немного быстрее. Смахнутое из списка приложений iOS не запускает.", "For installs Telegram's push can't reach: AltStore, SideStore, Sideloadly, TrollStore, your own certificate. The app stays connected in the background, so the battery drains a little faster. iOS won't run an app swiped away in the app switcher."))
 
     case .ghost:
         b.block()
@@ -1095,6 +1102,7 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
         performanceShowGraph:    mgr.performanceShowGraph,
         ramAutoClean:       mgr.ramAutoClean,
         ramCleanInterval:   mgr.ramCleanInterval,
+        backgroundNotifications: mgr.backgroundNotifications,
         cacheAutoClean:     mgr.cacheAutoClean,
         cacheCleanInterval: mgr.cacheCleanInterval,
         editLocally:        mgr.editLocally,
@@ -1219,6 +1227,7 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
         \.performanceShowThermal: { mgr.performanceShowThermal = $0 },
         \.performanceShowGraph: { mgr.performanceShowGraph = $0 },
         \.ramAutoClean: { mgr.ramAutoClean = $0 },
+        \.backgroundNotifications: { mgr.backgroundNotifications = $0 },
         \.cacheAutoClean: { mgr.cacheAutoClean = $0 },
         \.editLocally: { mgr.editLocally = $0 },
         \.userMessages: { mgr.userMessagesInGroup = $0 },
@@ -1290,6 +1299,18 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             if keyPath == \AorusState.ghostHideOnline, value, s.alwaysOnline {
                 updateState { current in var next = current; next.alwaysOnline = false; return next }
                 mgr.alwaysOnline = false
+            }
+            // Both keep the app running in the background. Switching one on checks that this
+            // installation can, and says what to expect; notifications that cannot work at all
+            // (no background mode, notifications denied) switch back off.
+            if keyPath == \AorusState.alwaysOnline, value {
+                AorusBackgroundReadiness.featureEnabled(.alwaysOnline, context: context, controller: weakController, revert: {})
+            }
+            if keyPath == \AorusState.backgroundNotifications, value {
+                AorusBackgroundReadiness.featureEnabled(.notifications, context: context, controller: weakController, revert: {
+                    updateState { current in var next = current; next.backgroundNotifications = false; return next }
+                    mgr.backgroundNotifications = false
+                })
             }
             // Glass effects are read once when the nav bar / input panel / HUD build
             // their layers, so toggling only fully applies (everywhere) after a restart.

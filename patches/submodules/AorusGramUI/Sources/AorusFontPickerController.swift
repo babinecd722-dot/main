@@ -454,7 +454,7 @@ private enum AorusFontEntry: ItemListNodeEntry {
                 args.select(choice)
             })
         case let .importFont(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.importFont)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: section, style: .blocks, action: args.importFont)
         case let .footer(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
@@ -652,13 +652,13 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
                     bottomCorners = true
                     self.bottomStripeNode.isHidden = hasCorners
                 }
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners, glass: true) : nil
                 let bgY = -min(insets.top, UIScreenPixel)
                 let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
                 self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
                 self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
                 self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: max(0.0, params.width - params.rightInset - bottomInset - aorusItemListSeparatorRightInset), height: UIScreenPixel)
                 self.applyItem(item)
                 self.layoutSubviews()
                 self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)

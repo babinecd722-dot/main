@@ -85,13 +85,13 @@ private enum VTEntry: ItemListNodeEntry {
         let section = self.section
         switch self {
         case let .toggle(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setEnabled($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setEnabled($0) })
         case let .toggleFooter(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .presetsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .preset(_, _, key, title, selected):
-            return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .right, checked: selected, zeroSeparatorInsets: false, sectionId: section, action: { args.selectPreset(key) })
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, style: .right, checked: selected, zeroSeparatorInsets: false, sectionId: section, action: { args.selectPreset(key) })
         }
     }
 }

@@ -173,6 +173,7 @@ private enum AorusDeviceSpoofEntry: ItemListNodeEntry {
         case let .toggle(_, title, value):
             return ItemListSwitchItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 value: value,
                 sectionId: self.section,
@@ -203,6 +204,7 @@ private enum AorusDeviceSpoofEntry: ItemListNodeEntry {
             } else {
                 return ItemListCheckboxItem(
                     presentationData: presentationData,
+                    systemStyle: .glass,
                     title: device.model,
                     style: .right,
                     checked: selected,
@@ -216,6 +218,7 @@ private enum AorusDeviceSpoofEntry: ItemListNodeEntry {
         case let .addCustom(_, title):
             return ItemListActionItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 kind: .generic,
                 alignment: .natural,
@@ -480,8 +483,7 @@ private final class AorusSpoofDeviceItemNode: ItemListRevealOptionsItemNode {
                     ? PresentationResourcesItemList.cornersImage(
                         item.theme,
                         top: topCorners,
-                        bottom: bottomCorners
-                    )
+                        bottom: bottomCorners, glass: true)
                     : nil
                 let backgroundY = -min(insets.top, UIScreenPixel)
                 let backgroundHeight = contentSize.height
@@ -506,7 +508,7 @@ private final class AorusSpoofDeviceItemNode: ItemListRevealOptionsItemNode {
                 self.bottomStripeNode.frame = CGRect(
                     x: bottomInset,
                     y: contentSize.height + bottomOffset,
-                    width: params.width - bottomInset,
+                    width: max(0.0, params.width - params.rightInset - bottomInset - aorusItemListSeparatorRightInset),
                     height: UIScreenPixel
                 )
 
@@ -679,6 +681,7 @@ private enum AorusCustomDeviceEntry: ItemListNodeEntry {
         case let .model(_, placeholder, value):
             return ItemListSingleLineInputItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: NSAttributedString(string: ""),
                 text: value,
                 placeholder: placeholder,
@@ -693,6 +696,7 @@ private enum AorusCustomDeviceEntry: ItemListNodeEntry {
         case let .platform(_, title, value):
             return ItemListDisclosureItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: title,
                 label: value,
                 sectionId: self.section,
@@ -702,6 +706,7 @@ private enum AorusCustomDeviceEntry: ItemListNodeEntry {
         case let .version(_, placeholder, value):
             return ItemListSingleLineInputItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 title: NSAttributedString(string: ""),
                 text: value,
                 placeholder: placeholder,

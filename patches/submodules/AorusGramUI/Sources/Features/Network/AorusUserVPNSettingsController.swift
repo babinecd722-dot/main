@@ -232,21 +232,21 @@ private enum AorusUserVPNSettingsEntry: ItemListNodeEntry {
         case let .name(_, placeholder, value):
             // 64 is the store's own cap, enforced here too so the field stops instead of silently
             // dropping what was typed past it.
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, maxLength: 64, sectionId: self.section, textUpdated: { text in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, maxLength: 64, sectionId: self.section, textUpdated: { text in
                 args.setName(text)
             }, action: {})
         case let .connectionHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .udp(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 args.setUdpEnabled(value)
             })
         case let .calls(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 args.setCallsEnabled(value)
             })
         case let .mux(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 args.setMuxEnabled(value)
             })
         case let .connectionInfo(_, text):
@@ -254,17 +254,17 @@ private enum AorusUserVPNSettingsEntry: ItemListNodeEntry {
         case let .subscriptionHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .autoUpdate(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 args.setAutoUpdate(value)
             })
         case let .updateNow(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 if enabled {
                     args.updateNow()
                 }
             })
         case let .source(_, title, url):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: url, labelStyle: .detailText, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: url, labelStyle: .detailText, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {
                 args.copySource()
             })
         case let .subscriptionInfo(_, text):
@@ -272,11 +272,11 @@ private enum AorusUserVPNSettingsEntry: ItemListNodeEntry {
         case let .selectionHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .autoFastest(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 args.setAutoSelectFastest(value)
             })
         case let .probe(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 if enabled {
                     args.probeServers()
                 }
@@ -286,23 +286,23 @@ private enum AorusUserVPNSettingsEntry: ItemListNodeEntry {
         case let .trafficHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .traffic(_, used, total):
-            return AorusUserVPNTrafficItem(presentationData: presentationData, used: used, total: total, systemStyle: .legacy, sectionId: self.section)
+            return AorusUserVPNTrafficItem(presentationData: presentationData, used: used, total: total, systemStyle: .glass, sectionId: self.section)
         case let .expires(_, title, value):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {})
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: value, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: {})
         case let .serversHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .server(_, _, serverId, name, detail, checked):
-            return ItemListCheckboxItem(presentationData: presentationData, title: name, subtitle: detail, style: .left, checked: checked, zeroSeparatorInsets: false, sectionId: self.section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: name, subtitle: detail, style: .left, checked: checked, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 args.selectServer(serverId)
             }, deleteAction: {
                 args.removeServer(serverId)
             })
         case let .copyKey(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 args.copyKey()
             })
         case let .delete(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 args.deleteConfig()
             })
         }

@@ -104,19 +104,19 @@ private struct UsernameListEntry: ItemListNodeEntry {
         let args = arguments as! UsernameArguments
         switch content {
         case let .toggle(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: args.toggle)
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: args.toggle)
         case let .input(placeholder, text, price):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: text, placeholder: placeholder, label: price ? "GRAM" : nil, type: price ? .decimal : .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: section, textUpdated: args.input, updatedFocus: { focused in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: ""), text: text, placeholder: placeholder, label: price ? "GRAM" : nil, type: price ? .decimal : .regular(capitalization: false, autocorrection: false), returnKeyType: .done, sectionId: section, textUpdated: args.input, updatedFocus: { focused in
                 if !focused { args.inputEnded?() }
             }, action: args.submit)
         case let .button(title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.submit)
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.submit)
         case let .header(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .info(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .delete(title, name):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.remove(name) })
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.remove(name) })
         case let .username(name):
             return AorusRevealTextItem(theme: presentationData.theme, title: "@" + name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, action: { args.open(name) }, deleteAction: { args.remove(name) })
         }

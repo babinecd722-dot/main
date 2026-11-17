@@ -881,14 +881,19 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
                 hasBottomCorners = true
                 strongSelf.bottomStripeNode.isHidden = hasCorners
             }
-            strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+            strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
             strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
             strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width, height: separatorHeight))
             let cardRect = CGRect(x: hasCorners ? params.leftInset : 0.0, y: 0.0, width: hasCorners ? max(0.0, params.width - params.leftInset - params.rightInset) : params.width, height: contentSize.height)
             strongSelf.cardNode.frame = cardRect
             strongSelf.cardNode.bounds = cardRect
-            strongSelf.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
-            strongSelf.cardNode.layer.cornerCurve = .continuous
+            // The card is rounded where the row's own block is -- the top of a section, its bottom --
+            // and by the block's radius, under the same native corner mask every other row has.
+            // It used to round all four corners on a continuous curve, so a preview in the middle
+            // of a section showed corners no native block has and the edges never met the mask's.
+            strongSelf.cardNode.cornerRadius = hasCorners && (hasTopCorners || hasBottomCorners) ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
+            strongSelf.cardNode.layer.maskedCorners = aorusPreviewCardCorners(top: hasTopCorners, bottom: hasBottomCorners)
+            strongSelf.cardNode.layer.cornerCurve = .circular
             // The rounded card is exactly the row. The list gives a row its final size at once and
             // only slides the rows around it, so the edges are placed there, not at a height that
             // is still on its way.
@@ -1247,13 +1252,13 @@ class AorusLookRowNode: ListViewItemNode {
             hasBottomCorners = true
             self.bottomStripeNode.isHidden = hasCorners
         }
-        self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+        self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
 
         let backgroundFrame = CGRect(x: 0.0, y: -min(insets.top, separatorHeight), width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight))
         self.backgroundNode.frame = backgroundFrame
         self.maskNode.frame = backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0)
         self.topStripeNode.frame = CGRect(x: 0.0, y: -min(insets.top, separatorHeight), width: params.width, height: separatorHeight)
-        self.bottomStripeNode.frame = CGRect(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset, width: params.width - bottomStripeInset, height: separatorHeight)
+        self.bottomStripeNode.frame = CGRect(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset, width: max(0.0, params.width - params.rightInset - bottomStripeInset - (AorusOldInterface.isEnabled ? 0.0 : 16.0)), height: separatorHeight)
     }
 
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
@@ -2258,11 +2263,11 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
         case let .shapeFooter(text), let .colorsFooter(text), let .titlesFooter(text), let .resetFooter(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .tails(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.tails", value)
             })
         case let .hideTime(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("message.hideTime", value)
             })
         case let .radius(title, value):
@@ -2271,7 +2276,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setShape("bubble.radius", Double(value))
             })
         case let .merge(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.mergeCorners", value)
             })
         case let .radiusSmall(title, value, maximum):
@@ -2309,7 +2314,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.pickColor(row)
             })
         case let .showNames(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setChoice("message.hideName", !value, false)
             })
         case let .nameWeight(title, index):
@@ -2318,15 +2323,15 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setChoice("message.nameWeight", aorusLookNameWeights[index], "semibold")
             })
         case let .showAvatars(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setChoice("message.hideAvatar", !value, false)
             })
         case let .showTitles(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setChoice("message.hideRank", !value, false)
             })
         case let .titlePlate(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setChoice("message.rankPlate", value, true)
             })
         case let .titleCase(title, index):
@@ -2349,11 +2354,11 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             })
         case let .style(_, row):
             let icon = AorusMessageLook.presets.first(where: { $0.id == row.id }).map { aorusLookStyleIcon($0, dark: row.dark) }
-            return ItemListCheckboxItem(presentationData: presentationData, icon: icon, iconSize: CGSize(width: 30.0, height: 30.0), title: row.title, subtitle: row.subtitle, style: .right, checked: row.chosen, zeroSeparatorInsets: false, sectionId: self.section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, icon: icon, iconSize: CGSize(width: 30.0, height: 30.0), title: row.title, subtitle: row.subtitle, style: .right, checked: row.chosen, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 arguments.applyStyle(row.id)
             })
         case let .reset(title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.resetAll()
             })
         }
@@ -2866,4 +2871,17 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
     let controller = ItemListController(context: context, state: signal)
     weakController = controller
     return controller
+}
+
+/// The corners of a preview card that a native block rounds: the top two at a section's start,
+/// the bottom two at its end.
+func aorusPreviewCardCorners(top: Bool, bottom: Bool) -> CACornerMask {
+    var corners: CACornerMask = []
+    if top {
+        corners.formUnion([.layerMinXMinYCorner, .layerMaxXMinYCorner])
+    }
+    if bottom {
+        corners.formUnion([.layerMinXMaxYCorner, .layerMaxXMaxYCorner])
+    }
+    return corners
 }

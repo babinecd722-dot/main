@@ -117,13 +117,13 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
         let args = arguments as! AorusAutoFormatArguments
         switch self {
         case let .enabledSwitch(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { value in
                 args.setEnabled(value)
             })
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .style(_, _, key, title, checked):
-            return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .right, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, style: .right, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
                 args.select(key)
             })
         case let .footer(_, text):

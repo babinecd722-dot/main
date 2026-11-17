@@ -60,10 +60,11 @@ public final class AorusGramManager {
     // What Ghost Mode hides, each on its own (docs/ghost-mode.md). All of it by default, as
     // Ghost Mode always did; listening to voice and video messages is new and hidden too.
     public var ghostHideOnline: Bool   = true  { didSet { save() } }
-    // Always Online: the account keeps broadcasting "online" whenever the app has an execution
-    // window — in front, and during every background wake (push, fetch). It cannot be on with
-    // Ghost Mode's "Online Status", which does the opposite, so the two settings turn each
-    // other off; the native presence manager reads the flat key `aorusgram_always_online`.
+    // Always Online: the account keeps broadcasting "online" in front and in the background,
+    // where the app keeps itself running for it (TelegramUI/AorusBackgroundPresence.swift). It
+    // cannot be on with Ghost Mode's "Online Status", which does the opposite, so the two
+    // settings turn each other off; the native presence manager reads the flat key
+    // `aorusgram_always_online`.
     public var alwaysOnline: Bool      = false { didSet { save() } }
     public var blockReadReceipts: Bool = true  { didSet { save() } }
     public var hideTyping: Bool        = true  { didSet { save() } }
@@ -126,6 +127,10 @@ public final class AorusGramManager {
     public var performanceShowGraph: Bool    = true  { didSet { save() } }
     public var ramAutoClean: Bool            = false { didSet { save() } }
     public var ramCleanInterval: Int         = 60    { didSet { save() } }   // seconds
+    // Background Notifications: the app stays connected once it is in the background and
+    // shows each message itself (TelegramUI/AorusBackgroundPresence.swift reads the flat key
+    // `aorusgram_background_notifications`). Opt-in: it keeps the app running.
+    public var backgroundNotifications: Bool = false { didSet { save() } }
 
     // Voice Twin — pitch/character transform applied to OUTGOING voice messages.
     // preset ∈ {"anonymous","male","female","robot","child"}; "high" is accepted as legacy child.
@@ -165,6 +170,7 @@ public final class AorusGramManager {
         ud.set(ghostHideOnline,                forKey: "aorusgram_ghost_conceal_online")
         // A feature of its own, so it follows the licence like the other features do.
         ud.set(effective(alwaysOnline),        forKey: "aorusgram_always_online")
+        ud.set(effective(backgroundNotifications), forKey: "aorusgram_background_notifications")
         ud.set(blockReadReceipts,              forKey: "aorusgram_ghost_conceal_read")
         ud.set(hideTyping,                     forKey: "aorusgram_ghost_conceal_typing")
         ud.set(ghostHideStories,               forKey: "aorusgram_ghost_conceal_stories")
@@ -269,6 +275,7 @@ public final class AorusGramManager {
         performanceShowGraph    = d["performanceShowGraph"]    as? Bool ?? true
         ramAutoClean            = d["ramAutoClean"]            as? Bool ?? false
         ramCleanInterval        = d["ramCleanInterval"]        as? Int  ?? 60
+        backgroundNotifications = d["backgroundNotifications"] as? Bool ?? false
         voiceTwinEnabled    = d["voiceTwinEnabled"]    as? Bool   ?? false
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"
         // Preset names that shipped in older builds, migrated in place. The value now lives
@@ -335,6 +342,7 @@ public final class AorusGramManager {
             "performanceShowGraph":    performanceShowGraph,
             "ramAutoClean":            ramAutoClean,
             "ramCleanInterval":        ramCleanInterval,
+            "backgroundNotifications": backgroundNotifications,
             "voiceTwinEnabled":    voiceTwinEnabled,
             "voiceTwinPreset":     voiceTwinPreset,
         ], forKey: key)

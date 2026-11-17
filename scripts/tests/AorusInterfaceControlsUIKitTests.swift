@@ -240,8 +240,12 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     expect(groups.backgroundView?.subviews.compactMap { $0 as? AorusUIKitOpaqueListPane }.count == 1, "one native card per UIKit section")
     expect(groups.backgroundView?.subviews.compactMap { $0 as? InterfaceNativePane }.isEmpty == true, "a section is a card, never glass, under Interface 2.0")
     expect(emptyBackdrop.superview === groups.backgroundView, "the card never removes the plugin empty-state view")
-    expect(glassPane().layer.cornerRadius == InterfaceGlassPane.blockCornerRadius && InterfaceGlassPane.blockCornerRadius == InterfaceItemListReference.glassRadius, "the card is rounded at Telegram's own iOS 26 list radius")
-    expect(glassPane().backgroundColor?.isEqual(UIColor.purple) == true && !glassPane().isHidden, "the card is Telegram's opaque block colour and is visible")
+    expect(glassPane().cornerRadius == InterfaceGlassPane.blockCornerRadius && InterfaceGlassPane.blockCornerRadius == InterfaceItemListReference.glassRadius, "the card is rounded at Telegram's own iOS 26 list radius")
+    expect(glassPane().fillColor.isEqual(UIColor.purple) && glassPane().cardImage != nil && !glassPane().isHidden, "the card is Telegram's opaque block colour and is visible")
+    expect(glassPane().layer.cornerRadius == 0 && (glassPane().backgroundColor?.cgColor.alpha ?? 0) == 0, "the corners are the native block image, not a layer radius of another curve")
+    if let image = glassPane().cardImage {
+        expect(image.size.width == 56 && image.capInsets == UIEdgeInsets(top: 28, left: 28, bottom: 27, right: 27), "cut as Telegram cuts its own block corners: a 56-point canvas stretched from its middle")
+    }
     expect(groups.separatorStyle == .none && separators().count == 2, "only interior joins are drawn, without UIKit section-edge rules")
     for line in separators() {
         expect(line.frame.minX == 16 && line.frame.maxX == groups.bounds.width, "row join stays inside native card gutters")
@@ -380,12 +384,12 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     aorusConfigureTable(groups, theme: whiteTheme)
     stage("theme switch and standalone panes")
     groups.layoutIfNeeded()
-    expect(!glassPane().isHidden && glassPane().backgroundColor?.isEqual(UIColor.purple) == true, "the light page keeps Telegram's visible white-style card, as its own lists do")
+    expect(!glassPane().isHidden && glassPane().fillColor.isEqual(UIColor.purple), "the light page keeps Telegram's visible white-style card, as its own lists do")
     let surface = AorusUIKitSurfaceView(frame: CGRect(x: 0, y: 0, width: 280, height: 90))
     aorusConfigureSurface(surface, theme: nativeTheme)
     surface.layoutIfNeeded()
     let surfacePane = surface.subviews.compactMap { $0 as? AorusUIKitOpaqueListPane }.first!
-    expect(surfacePane.layer.cornerRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0 && surface.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty, "standalone plugin cards are one native card, never glass and never a second hand-rounded plate")
+    expect(surfacePane.cornerRadius == InterfaceGlassPane.blockCornerRadius && surface.layer.cornerRadius == 0 && surface.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty, "standalone plugin cards are one native card, never glass and never a second hand-rounded plate")
     expect(surface.isUserInteractionEnabled, "a field container never disables its text view or send button")
     stage("live install completion and UIKit state changes")
     guard let liveCell = groups.visibleCells.first as? AorusGroupedTableCell else { fail("live card missing") }
@@ -428,7 +432,14 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
     guard let opaquePane = groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first else { fail("conventional section missing") }
-    expect(opaquePane.layer.cornerRadius == InterfaceItemListReference.plainRadius && opaquePane.layer.cornerCurve == .circular && opaquePane.backgroundColor?.isEqual(UIColor.purple) == true, "ordinary groups have the native solid fill and rounded corners")
+    expect(opaquePane.cornerRadius == InterfaceItemListReference.glassRadius && opaquePane.fillColor.isEqual(UIColor.purple), "outside Interface 2.0 a group is still Telegram 13's block: its solid fill and its 26-point corners")
+    InterfaceOldInterface.isEnabled = true
+    aorusConfigureTable(groups, theme: nativeTheme)
+    groups.layoutIfNeeded()
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.cornerRadius == InterfaceItemListReference.plainRadius, "the old interface keeps 12.0's eleven points, as its native rows do")
+    InterfaceOldInterface.isEnabled = false
+    aorusConfigureTable(groups, theme: nativeTheme)
+    groups.layoutIfNeeded()
     expect(groups.backgroundView?.subviews.compactMap({ $0 as? InterfaceNativePane }).isEmpty == true, "ordinary groups do not retain a glass renderer")
     liveCell.backgroundColor = .gray
     liveCell.setHighlighted(true, animated: false)
@@ -437,7 +448,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     let changedTheme = InterfaceSurfaceTheme(list: .init(itemBlocksBackgroundColor: .orange, blocksBackgroundColor: .lightGray), overallDarkAppearance: false)
     aorusConfigureTable(groups, theme: changedTheme)
     groups.layoutIfNeeded()
-    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.backgroundColor?.isEqual(UIColor.orange) == true, "live theme changes replace the conventional pane colour")
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.fillColor.isEqual(UIColor.orange) == true, "live theme changes replace the conventional pane colour")
     for width in [CGFloat(320), 390, 768, 1024] {
         aorusConfigureTableLayout(groups, layout: InterfaceNativeLayout(size: CGSize(width: width, height: 600)))
         groups.frame = groups.frameForLayout(CGRect(x: 0, y: 80, width: width, height: 200))
@@ -448,7 +459,7 @@ private final class InterfaceGroupDataSource: NSObject, UITableViewDataSource {
     InterfaceGlassPane.isEnabled = true
     aorusConfigureTable(groups, theme: nativeTheme)
     groups.layoutIfNeeded()
-    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.layer.cornerRadius == InterfaceGlassPane.blockCornerRadius, "returning to Interface 2.0 rounds the card as Telegram's iOS 26 lists")
+    expect(groups.backgroundView?.subviews.compactMap({ $0 as? AorusUIKitOpaqueListPane }).first?.cornerRadius == InterfaceGlassPane.blockCornerRadius, "returning to Interface 2.0 rounds the card as Telegram's iOS 26 lists")
 
     stage("search and filter palette")
     let search = AorusPluginMarketSearchField(theme: nativeTheme, placeholder: "Search")

@@ -34,7 +34,7 @@ def interface_controls_source(repo: Path, tg: Path) -> str:
     radius = re.search(r'public static let blockCornerRadius: CGFloat = ([0-9.]+)', native).group(1)
     policy = '\n'.join(declaration(bridge, marker) for marker in (
         'func aorusPluginPageColor(', 'func aorusPluginFilterInk(', 'func aorusPluginTableStyle(', 'func aorusConfigureTable(', 'func aorusConfigureTableLayout(', 'func aorusConfigureSurface(', 'private func aorusNativeListPanes(', 'private func aorusNativeCapsulePanes('))
-    policy = policy.replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('AorusGlassPane', 'InterfaceGlassPane').replace('AorusUIKitListGlassPane', 'InterfaceNativePane')
+    policy = policy.replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('AorusGlassPane', 'InterfaceGlassPane').replace('AorusUIKitListGlassPane', 'InterfaceNativePane').replace('AorusOldInterface', 'InterfaceOldInterface')
     policy = policy.replace('ContainerViewLayout', 'InterfaceNativeLayout')
     # The reference calculation comes from the installed Telegram tree, not
     # another copy of the adapter's formula. Only device strip presence is fake.
@@ -68,6 +68,9 @@ enum InterfaceGlassPane {
     static let marker = UIColor(white: 0, alpha: 1.0 / 255.0)
     static func isBlockMarker(_ color: UIColor) -> Bool { color.isEqual(marker) }
     static func isWhitePage(_ color: UIColor?) -> Bool { color?.isEqual(UIColor.white) ?? false }
+}
+enum InterfaceOldInterface {
+    static var isEnabled = false
 }
 '''.replace('RADIUS', radius)
     search = declaration(source, 'final class AorusPluginMarketSearchField: UIView').replace('PresentationTheme', 'InterfaceSurfaceTheme').replace('aorusUIFont(', 'UIFont.systemFont(ofSize:')

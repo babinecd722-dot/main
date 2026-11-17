@@ -181,7 +181,7 @@ private enum QREntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .addButton(_, text):
             let plusIcon = generateTintedImage(image: UIImage(systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .medium)), color: presentationData.theme.list.itemAccentColor)
-            return ItemListPeerActionItem(presentationData: presentationData, icon: plusIcon, title: text, sectionId: section, action: { args.beginAdding() })
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: plusIcon, title: text, sectionId: section, action: { args.beginAdding() })
         case let .input(_, placeholder, value):
             return QRInputItem(theme: presentationData.theme, text: value, placeholder: placeholder, sectionId: section, textUpdated: { args.setDraft($0) }, action: { args.commitDraft() })
         case let .reply(_, id, text):
@@ -377,13 +377,13 @@ private final class QRInputItemNode: ListViewItemNode, UITextFieldDelegate {
                     self.bottomStripeNode.isHidden = hasCorners
                 }
 
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners, glass: true) : nil
                 let bgY = -min(insets.top, UIScreenPixel)
                 let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
                 self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
                 self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
                 self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: max(0.0, params.width - params.rightInset - bottomInset - aorusItemListSeparatorRightInset), height: UIScreenPixel)
 
                 self.applyItem(item)
                 self.layoutTextField()

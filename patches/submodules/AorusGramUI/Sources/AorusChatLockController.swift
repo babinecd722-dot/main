@@ -117,16 +117,17 @@ private enum ChatLockEntry: ItemListNodeEntry {
         let args = arguments as! ChatLockArguments
         switch self {
         case let .toggle(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { args.setEnabled($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { args.setEnabled($0) })
         case let .toggleInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .chatsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .addChats(theme, title):
-            return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.addPersonIcon(theme), title: title, sectionId: self.section, editing: false, action: { args.addChats() })
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesItemList.addPersonIcon(theme), title: title, sectionId: self.section, editing: false, action: { args.addChats() })
         case let .peer(_, _, peer, revealed):
             return ItemListPeerItem(
                 presentationData: presentationData,
+                systemStyle: .glass,
                 dateTimeFormat: presentationData.dateTimeFormat,
                 nameDisplayOrder: presentationData.nameDisplayOrder,
                 context: args.context,

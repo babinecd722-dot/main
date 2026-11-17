@@ -113,11 +113,11 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
         let args = arguments as! FakeGiftsArguments
         switch self {
         case let .enable(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setEnabled($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setEnabled($0) })
         case let .enableInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .showAll(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowsAllGifts($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowsAllGifts($0) })
         case let .showAllInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .listHeader(_, text):
@@ -125,7 +125,7 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
         case let .empty(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .gift(_, _, stored, title, label):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: { args.openGift(stored) })
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: label, sectionId: section, style: .blocks, action: { args.openGift(stored) })
         }
     }
 }

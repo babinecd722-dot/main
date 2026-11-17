@@ -191,17 +191,17 @@ private enum ASEntry: ItemListNodeEntry {
         case let .protectionHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .threatProtection(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setThreatProtection($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setThreatProtection($0) })
         case let .spamProtection(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setSpamProtection($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setSpamProtection($0) })
         case let .stopWordsProtection(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setStopWordsProtection($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setStopWordsProtection($0) })
         case let .autoBlock(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoBlock($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoBlock($0) })
         case let .textCleanup(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setTextCleanup($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setTextCleanup($0) })
         case let .autoReport(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoReport($0) })
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoReport($0) })
         case let .protectionInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .blockedHeader(_, text):
@@ -223,7 +223,7 @@ private enum ASEntry: ItemListNodeEntry {
         case let .exceptionPeer(_, _, peerId, name):
             return AorusRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeException(peerId) })
         case let .addException(_, text):
-            return ItemListActionItem(presentationData: presentationData, title: text, kind: .neutral, alignment: .natural, sectionId: section, style: .blocks, action: { args.addException() })
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: text, kind: .neutral, alignment: .natural, sectionId: section, style: .blocks, action: { args.addException() })
         case let .exceptionsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
@@ -386,13 +386,13 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
                     self.bottomStripeNode.isHidden = hasCorners
                 }
 
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners, glass: true) : nil
                 let bgY = -min(insets.top, UIScreenPixel)
                 let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
                 self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
                 self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
                 self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: max(0.0, params.width - params.rightInset - bottomInset - aorusItemListSeparatorRightInset), height: UIScreenPixel)
 
                 self.applyItem(item)
                 self.layoutTextField()

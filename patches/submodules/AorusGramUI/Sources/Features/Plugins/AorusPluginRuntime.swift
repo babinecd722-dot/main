@@ -3520,6 +3520,7 @@ private enum AorusPluginFeatureBroker {
         Definition("performanceShowNetwork", "performance"), Definition("performanceShowDisk", "performance"),
         Definition("performanceShowThermal", "performance"), Definition("performanceShowGraph", "performance"),
         Definition("ramAutoClean", "performance"), Definition("ramCleanInterval", "performance", "number", minimum: 10, maximum: 3600),
+        Definition("backgroundNotifications", "performance"),
     ]
 
     static func snapshot() -> [[String: Any]] {
@@ -3603,6 +3604,7 @@ private enum AorusPluginFeatureBroker {
         case "performanceShowThermal": guard let bool else { return typeError() }; manager.performanceShowThermal = bool
         case "performanceShowGraph": guard let bool else { return typeError() }; manager.performanceShowGraph = bool
         case "ramAutoClean": guard let bool else { return typeError() }; manager.ramAutoClean = bool
+        case "backgroundNotifications": guard let bool else { return typeError() }; manager.backgroundNotifications = bool
         case "cacheCleanInterval":
             guard let number = strictInt(value), (1...720).contains(number) else { return typeError() }
             manager.cacheCleanInterval = number
@@ -3687,6 +3689,7 @@ private enum AorusPluginFeatureBroker {
         case "performanceShowThermal": return manager.performanceShowThermal
         case "performanceShowGraph": return manager.performanceShowGraph
         case "ramAutoClean": return manager.ramAutoClean
+        case "backgroundNotifications": return manager.backgroundNotifications
         case "ramCleanInterval": return manager.ramCleanInterval
         default: return nil
         }

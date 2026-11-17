@@ -236,13 +236,13 @@ private enum BackupEntry: ItemListNodeEntry {
         switch self {
         case let .backupAction(theme, title, enabled):
             let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
-            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("key.fill", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.backup() } })
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: aorusBackupActionIcon("key.fill", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.backup() } })
         case let .restoreAction(theme, title, enabled):
             let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
-            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("arrow.clockwise", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.restore() } })
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: aorusBackupActionIcon("arrow.clockwise", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.restore() } })
         case let .deleteAction(theme, title, enabled):
             let iconColor = enabled ? theme.list.itemDestructiveColor : theme.list.itemDisabledTextColor
-            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("trash", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .destructive : .disabled, action: { if enabled { args.delete() } })
+            return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: aorusBackupActionIcon("trash", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .destructive : .disabled, action: { if enabled { args.delete() } })
         case let .info(_, text):
             return AorusBackupInfoCardItem(presentationData: presentationData, text: text, sectionId: section)
         case let .statusHeader(_, text):

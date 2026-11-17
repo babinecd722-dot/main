@@ -387,14 +387,16 @@ private final class AorusBubblePreviewItemNode: ListViewItemNode {
             hasBottomCorners = true
             self.bottomStripeNode.isHidden = hasCorners
         }
-        self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+        self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
         self.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: contentSize.width, height: separatorHeight))
         self.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: contentSize.width, height: separatorHeight))
         let cardRect = CGRect(x: hasCorners ? params.leftInset : 0.0, y: 0.0, width: hasCorners ? max(0.0, params.width - params.leftInset - params.rightInset) : params.width, height: contentSize.height)
         self.cardNode.frame = cardRect
         self.cardNode.bounds = cardRect
-        self.cardNode.cornerRadius = hasCorners ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
-        self.cardNode.layer.cornerCurve = .continuous
+        // Rounded where the row's block is, by its radius, under the native corner mask.
+        self.cardNode.cornerRadius = hasCorners && (hasTopCorners || hasBottomCorners) ? (AorusOldInterface.isEnabled ? 11.0 : 26.0) : 0.0
+        self.cardNode.layer.maskedCorners = aorusPreviewCardCorners(top: hasTopCorners, bottom: hasBottomCorners)
+        self.cardNode.layer.cornerCurve = .circular
         self.maskNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset * 2.0), height: contentSize.height)
     }
 
@@ -1010,7 +1012,7 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
         case let .materialFooter(text), let .colorsFooter(text), let .outlineFooter(text), let .lightFooter(text), let .iconsFooter(text), let .resetFooter(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .exactOnline(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 UserDefaults.standard.set(value, forKey: "aorusgram_presence_seconds")
                 NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
             })
@@ -1029,7 +1031,7 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setNumber("glass.pixelSize", value == 4.0 ? nil : Int(value))
             })
         case let .pixelIcons(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setPixelIcons(value)
             })
         case let .pixelIconSize(title, value):
@@ -1073,7 +1075,7 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setChoice("glass.borderStyle", aorusGlassLines[max(0, min(aorusGlassLines.count - 1, index))], "solid")
             })
         case let .outlineMotion(title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setNumber("glass.borderMotion", value ? true : nil)
             })
         case let .shadow(title, value):
@@ -1090,11 +1092,11 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             })
         case let .style(_, row):
             let icon = AorusGlassLook.presets.first(where: { $0.id == row.id }).map { aorusGlassStyleIcon($0, dark: row.dark) }
-            return ItemListCheckboxItem(presentationData: presentationData, icon: icon, iconSize: CGSize(width: 30.0, height: 30.0), title: row.title, subtitle: row.subtitle, style: .right, checked: row.chosen, zeroSeparatorInsets: false, sectionId: self.section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, icon: icon, iconSize: CGSize(width: 30.0, height: 30.0), title: row.title, subtitle: row.subtitle, style: .right, checked: row.chosen, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 arguments.applyStyle(row.id)
             })
         case let .reset(title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .destructive, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                 arguments.resetAll()
             })
         }

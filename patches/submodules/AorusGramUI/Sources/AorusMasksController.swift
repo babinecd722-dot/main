@@ -116,7 +116,7 @@ private enum MasksEntry: ItemListNodeEntry {
         let arguments = arguments as! MasksArguments
         switch self {
         case let .toggle(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: arguments.setEnabled)
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: arguments.setEnabled)
         case let .footer(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .header(_, text):
@@ -133,12 +133,12 @@ private enum MasksEntry: ItemListNodeEntry {
                     action: { arguments.selectPreset(key) }
                 )
             } else {
-                return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .right, checked: selected, zeroSeparatorInsets: false, sectionId: self.section, action: {
+                return ItemListCheckboxItem(presentationData: presentationData, systemStyle: .glass, title: title, style: .right, checked: selected, zeroSeparatorInsets: false, sectionId: self.section, action: {
                     arguments.selectPreset(key)
                 })
             }
         case let .editor(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: self.section, style: .blocks, action: arguments.openEditor)
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: arguments.openEditor)
         }
     }
 }
@@ -315,13 +315,13 @@ private final class AorusMaskPresetItemNode: ItemListRevealOptionsItemNode {
                     self.bottomStripeNode.isHidden = hasCorners
                 }
 
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners, glass: true) : nil
                 let backgroundY = -min(insets.top, UIScreenPixel)
                 let backgroundHeight = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
                 self.backgroundNode.frame = CGRect(x: 0.0, y: backgroundY, width: params.width, height: backgroundHeight)
                 self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
                 self.topStripeNode.frame = CGRect(x: 0.0, y: backgroundY, width: params.width, height: UIScreenPixel)
-                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: max(0.0, params.width - params.rightInset - bottomInset - aorusItemListSeparatorRightInset), height: UIScreenPixel)
                 self.applyItem(item)
                 self.layoutContent()
                 self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)

@@ -272,12 +272,12 @@ final class AorusBackupSessionItemNode: ListViewItemNode, ItemListItemNode {
                     strongSelf.bottomStripeNode.isHidden = hasCorners
                 }
 
-                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
 
                 strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
                 strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
                 strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
-                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: layoutSize.width - bottomStripeInset, height: separatorHeight))
+                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight - separatorHeight), size: CGSize(width: max(0.0, layoutSize.width - params.rightInset - bottomStripeInset - aorusItemListSeparatorRightInset), height: separatorHeight))
                 strongSelf.highlightedBackgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -separatorHeight), size: CGSize(width: params.width, height: contentHeight + separatorHeight + separatorHeight))
 
                 strongSelf.avatarNode.image = item.avatar
