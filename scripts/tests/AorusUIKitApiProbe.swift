@@ -154,6 +154,32 @@ func aorusProbeAccountImportPicker(urls: [URL], from controller: UIViewControlle
     }
 }
 
+// Telegram Desktop's folder, or its .zip, picked in place (a folder cannot be copied by the
+// picker); the files at the folder's top level are copied out through a file coordinator under
+// the access the picker gave.
+func aorusProbeTDataPicker(folder: URL, into staging: URL, from controller: UIViewController) {
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder, .zip], asCopy: false)
+    picker.allowsMultipleSelection = false
+    picker.shouldShowFileExtensions = true
+    controller.present(picker, animated: true)
+    let scoped = folder.startAccessingSecurityScopedResource()
+    defer {
+        if scoped {
+            folder.stopAccessingSecurityScopedResource()
+        }
+    }
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+    for name in names where !name.hasPrefix(".") {
+        let source = folder.appendingPathComponent(name)
+        let values = try? source.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+        guard values?.isDirectory != true else { continue }
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { readable in
+            try? FileManager.default.copyItem(at: readable, to: staging.appendingPathComponent(name))
+        }
+    }
+}
+
 // A downloaded artifact is shown on the controller on top of the window, after any
 // presentation that is still leaving.
 func aorusProbeArtifactPreview(_ preview: UIViewController, from controller: UIViewController) {

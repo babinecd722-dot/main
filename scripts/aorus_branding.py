@@ -689,8 +689,11 @@ def patch_background_presence(tg: Path) -> None:
     active, while it is still in front (where iOS always lets audio start), with either feature
     on, and stops it the moment the app is active again. A session another sound still holds
     without playing — a video paused on the way out — keeps it out for a second and a half at
-    most, so the app is never suspended waiting for it; Telegram's own music and calls keep the
-    app running by themselves and are never pushed aside. While the silence plays, the manager
+    most, so the app is never suspended waiting for it; Telegram's own music keeps the app
+    running by itself and is never pushed aside, and a call — from its first ring to its end —
+    has the audio session to itself: the keep-alive lets go entirely and comes back after it.
+    Switching either feature, from the settings, a plugin or Siri, takes effect at once. While
+    the silence plays, the manager
     stays in its active branch: transactions stay open, the primary account keeps its online
     status (30-second pings, no drop to offline in between) and, for notifications, every
     account keeps its connection, so `AorusBackgroundNotifier` sees each message as it arrives.
@@ -726,7 +729,8 @@ def patch_background_presence(tg: Path) -> None:
         "    private var aorusIsActive: Bool = true\n"
         "    private var aorusActiveObservers: [NSObjectProtocol] = []\n"
         "    private var aorusSessionBusySince: Double?\n"
-        "    private var aorusSessionWaitTimer: SwiftSignalKit.Timer?\n",
+        "    private var aorusSessionWaitTimer: SwiftSignalKit.Timer?\n"
+        "    private var aorusBackgroundSettings: [Bool] = []\n",
         "properties",
     )
     sub(
@@ -746,6 +750,9 @@ def patch_background_presence(tg: Path) -> None:
         "            NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main, using: { [weak self] _ in\n"
         "                self?.aorusIsActive = true\n"
         "                self?.checkTasks()\n"
+        "            }),\n"
+        "            NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram_settings_changed\"), object: nil, queue: .main, using: { [weak self] _ in\n"
+        "                self?.aorusBackgroundSettingsChanged()\n"
         "            })\n"
         "        ]\n",
         "init",
@@ -788,7 +795,14 @@ def patch_background_presence(tg: Path) -> None:
         "    // or background notifications on, and stops it as soon as the app is active again.\n"
         "    private func aorusUpdateBackgroundWork() {\n"
         "        let isAway = !self.inForeground || !self.aorusIsActive\n"
-        "        guard isAway && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted else {\n"
+        "        // A call, ringing or answered, one to one or in a group, has the audio session to\n"
+        "        // itself from its first ring to its end, as in Telegram, and keeps the app running by\n"
+        "        // itself meanwhile (CallKit, or the call's own session). The keep-alive lets go of the\n"
+        "        // session entirely and comes back once the call is over: left underneath the call, it\n"
+        "        // would take the session again in the middle of it, as an interruption ended or its\n"
+        "        // check found the silence stopped, and set the session up for playback under the call.\n"
+        "        let hasCall = self.accountsAndTasks.contains(where: { $0.2.activeCalls })\n"
+        "        guard isAway && !hasCall && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted else {\n"
         "            self.aorusSessionWaitTimer?.invalidate()\n"
         "            self.aorusSessionWaitTimer = nil\n"
         "            self.aorusSessionBusySince = nil\n"
@@ -801,9 +815,9 @@ def patch_background_presence(tg: Path) -> None:
         "        if self.aorusKeepAlive != nil {\n"
         "            return\n"
         "        }\n"
-        "        // Telegram's own music or a call keeps the app running by itself, and a session pushed\n"
-        "        // over it would pause it: the keep-alive starts once it is over, which runs this again.\n"
-        "        if self.accountsAndTasks.contains(where: { $0.2.backgroundAudio || $0.2.activeCalls }) {\n"
+        "        // Telegram's own music keeps the app running by itself, and a session pushed over it\n"
+        "        // would pause it: the keep-alive starts once it is over, which runs this again.\n"
+        "        if self.accountsAndTasks.contains(where: { $0.2.backgroundAudio }) {\n"
         "            return\n"
         "        }\n"
         "        if self.hasActiveAudioSession {\n"
@@ -839,6 +853,17 @@ def patch_background_presence(tg: Path) -> None:
         "        self.aorusKeepAlive = keepAlive\n"
         "        // Should iOS unload the app to free memory, a refresh brings it back.\n"
         "        AorusBackgroundRefresh.schedule()\n"
+        "    }\n"
+        "    \n"
+        "    // AorusGram: Always Online and background notifications take effect the moment they\n"
+        "    // change, from these settings, a plugin or Siri alike: the keep-alive starts or stops and\n"
+        "    // the online status is kept or let go at once, not with the next change of the app's tasks.\n"
+        "    private func aorusBackgroundSettingsChanged() {\n"
+        "        let settings = [AorusBackgroundWork.keepsOnline, AorusBackgroundWork.showsNotifications, UserDefaults.standard.bool(forKey: \"aorusgram_always_online\")]\n"
+        "        if settings != self.aorusBackgroundSettings {\n"
+        "            self.aorusBackgroundSettings = settings\n"
+        "            self.checkTasks()\n"
+        "        }\n"
         "    }\n"
         "    \n"
         "    // AorusGram: while the app is kept running in the background, every account stays\n"
@@ -2462,20 +2487,30 @@ def patch_ghost_mode_proactive_offline(tg: Path) -> None:
         "        \n"
         "        " + sentinel + "\n"
         "        let aorusQueue = queue\n"
+        "        let aorusConcealsOnline: () -> Bool = {\n"
+        "            return UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true)\n"
+        "        }\n"
         "        let aorusAlwaysOnline = Atomic<Bool>(value: UserDefaults.standard.bool(forKey: \"aorusgram_always_online\"))\n"
-        "        NotificationCenter.default.addObserver(\n"
+        "        let aorusConceals = Atomic<Bool>(value: aorusConcealsOnline())\n"
+        "        self.aorusSettingsObserver = NotificationCenter.default.addObserver(\n"
         "            forName: NSNotification.Name(\"aorusgram_settings_changed\"),\n"
         "            object: nil, queue: nil\n"
         "        ) { [weak self] _ in\n"
-        "            // While the online status is hidden, the override in updatePresence tells the\n"
-        "            // server \"offline\" at once. When Always Online has just been switched on and the\n"
-        "            // account is being kept online, \"online\" goes at once rather than with the next\n"
-        "            // 30-second ping. Otherwise nothing is sent from here: a settings change, from a\n"
-        "            // plugin or Siri in the background too, must not mark the account online.\n"
-        "            let conceals = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true)\n"
+        "            // The status follows a settings change at once, not with the next 30-second\n"
+        "            // ping. While the online status is hidden, the override in updatePresence tells\n"
+        "            // the server \"offline\". When it has just stopped being hidden, or Always Online\n"
+        "            // has just been switched on, an account that is being kept online says \"online\"\n"
+        "            // again. Nothing else is sent from here: a settings change, from a plugin or Siri\n"
+        "            // in the background too, must not mark an account online that is not kept online.\n"
+        "            // Both swaps always run, so each switch is remembered as it is now: the next time\n"
+        "            // Always Online is switched on counts as switched on, however often it went off.\n"
+        "            let conceals = aorusConcealsOnline()\n"
         "            let alwaysOnline = UserDefaults.standard.bool(forKey: \"aorusgram_always_online\")\n"
-        "            let switchedOn = alwaysOnline && !aorusAlwaysOnline.swap(alwaysOnline)\n"
-        "            guard conceals || switchedOn else { return }\n"
+        "            let wasConcealing = aorusConceals.swap(conceals)\n"
+        "            let wasAlwaysOnline = aorusAlwaysOnline.swap(alwaysOnline)\n"
+        "            let revealed = wasConcealing && !conceals\n"
+        "            let switchedOn = alwaysOnline && !wasAlwaysOnline\n"
+        "            guard conceals || revealed || switchedOn else { return }\n"
         "            aorusQueue.async {\n"
         "                guard let strongSelf = self, conceals || strongSelf.wasOnline else { return }\n"
         "                // The next ping is scheduled again by updatePresence: one chain, not two.\n"
@@ -2487,6 +2522,21 @@ def patch_ghost_mode_proactive_offline(tg: Path) -> None:
         "        self.shouldKeepOnlinePresenceDisposable"
     )
     t = t.replace(anchor, injection, 1)
+    property_anchor = "    private var wasOnline: Bool = false\n"
+    if t.count(property_anchor) != 1:
+        raise RuntimeError("ProactiveOffline: wasOnline property anchor not found")
+    t = t.replace(property_anchor, property_anchor + "    private var aorusSettingsObserver: NSObjectProtocol?\n", 1)
+    deinit_anchor = (
+        "        self.shouldKeepOnlinePresenceDisposable?.dispose()\n"
+        "        self.currentRequestDisposable.dispose()\n"
+    )
+    if t.count(deinit_anchor) != 1:
+        raise RuntimeError("ProactiveOffline: deinit anchor not found")
+    t = t.replace(deinit_anchor, deinit_anchor + (
+        "        if let aorusSettingsObserver = self.aorusSettingsObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusSettingsObserver)\n"
+        "        }\n"
+    ), 1)
     path.write_text(t, encoding="utf-8")
     print("ProactiveOffline: injected ghost-mode-change observer in init")
 
@@ -7068,53 +7118,63 @@ def patch_app_bundle_name(tg: Path) -> None:
 
 
 def patch_call_proxy(tg: Path) -> None:
-    """Route voice/video calls through the AorusGram SOCKS5 call proxy.
+    """Route voice/video calls through the AorusGram call proxy.
 
-    PresentationCallManager creates each OngoingCallContext with `proxyServer:
-    strongSelf.proxyServer` (sourced from the user's ProxySettings + useForCalls).
-    We prefer the server-provided SOCKS5 call proxy (decoded fresh at call start by
-    aorusCallProxyServerSettings(), copied into TelegramCallsUI), falling back to the
-    user's setting when none is configured. Telegram only supports SOCKS5 for the call
-    media leg — this keeps calls working where direct voice traffic is blocked.
-    Reading at call start (not caching) means a freshly-fetched proxy is used
-    immediately. Idempotent.
+    The proxy a call's media uses is read as that media starts — once the call has been
+    answered and its keys exchanged — by aorusCallProxyServerSettings() (AorusCallProxy.swift,
+    copied into TelegramCallsUI), falling back to the user's proxy setting when AorusGram's
+    tunnel has no say in calls. It used to be read as the call began to ring and kept: the
+    tunnel's local endpoint can come up, or move to another port, between the first ring and
+    the answer, and a call that rang while the tunnel was still (re)connecting carried the
+    closed port with it and failed the moment it was answered. Read at the start of the media,
+    a call takes the endpoint as it is then; while the tunnel is required and not up, calls
+    stay closed exactly as before.
+
+    Also forces the user's active proxy to be used for calls whenever the proxy is enabled,
+    whatever the "Use proxy for calls" toggle says. Idempotent.
     """
-    path = tg / "submodules/TelegramCallsUI/Sources/PresentationCallManager.swift"
-    if not path.is_file():
-        print("PresentationCallManager.swift not found, skip call proxy")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "aorusCallProxyServerSettings()" in t:
-        print("Call proxy: already patched")
-        return
-    old = "proxyServer: strongSelf.proxyServer,"
-    new = "proxyServer: aorusCallProxyServerSettings() ?? strongSelf.proxyServer,"
-    count = t.count(old)
-    if count > 0:
-        t = t.replace(old, new)
-        print(f"Call proxy: routed {count} call-start site(s) through SOCKS5 when configured")
-    else:
-        print("WARNING: PresentationCallManager proxyServer sites not found — call proxy NOT applied")
+    manager_path = tg / "submodules/TelegramCallsUI/Sources/PresentationCallManager.swift"
+    call_path = tg / "submodules/TelegramCallsUI/Sources/PresentationCall.swift"
+    if not manager_path.is_file() or not call_path.is_file():
+        raise RuntimeError("Call proxy: PresentationCallManager.swift or PresentationCall.swift not found")
 
     # Force the active proxy to be used for calls whenever the proxy is enabled, even if
     # the user never flipped the "Use proxy for calls" toggle. Without this, proxyServer
     # is nil for calls on a proxied connection, so the call media has no path on networks
     # where direct voice is blocked → the call "connects" forever. Messages already work
     # because they always ride the proxied MTProto link; only the call leg was opting out.
-    cond_old = ("                if settings.enabled && settings.useForCalls {\n"
-                "                    strongSelf.proxyServer = settings.activeServer\n")
-    cond_new = ("                if settings.enabled {\n"
-                "                    // AorusGram: always route calls through the active proxy when the\n"
-                "                    // proxy is enabled (ignore the per-user useForCalls toggle), so call\n"
-                "                    // media has a working path wherever direct voice traffic is blocked.\n"
-                "                    strongSelf.proxyServer = settings.activeServer\n")
-    if cond_old in t:
+    t = manager_path.read_text(encoding="utf-8")
+    if "ignore the per-user useForCalls toggle" not in t:
+        cond_old = ("                if settings.enabled && settings.useForCalls {\n"
+                    "                    strongSelf.proxyServer = settings.activeServer\n")
+        cond_new = ("                if settings.enabled {\n"
+                    "                    // AorusGram: always route calls through the active proxy when the\n"
+                    "                    // proxy is enabled (ignore the per-user useForCalls toggle), so call\n"
+                    "                    // media has a working path wherever direct voice traffic is blocked.\n"
+                    "                    strongSelf.proxyServer = settings.activeServer\n")
+        if t.count(cond_old) != 1:
+            raise RuntimeError("Call proxy: PresentationCallManager useForCalls condition not found")
         t = t.replace(cond_old, cond_new, 1)
+        manager_path.write_text(t, encoding="utf-8")
         print("Call proxy: forced active proxy for calls (ignore useForCalls toggle)")
-    else:
-        print("WARNING: PresentationCallManager useForCalls condition not found — call proxy force NOT applied")
 
-    path.write_text(t, encoding="utf-8")
+    c = call_path.read_text(encoding="utf-8")
+    marker = "// AorusGram: the call's media takes the call proxy as it is now"
+    if marker not in c:
+        media_old = ("                            let ongoingContext = OngoingCallContext(account: self.context.account, "
+                     "callSessionManager: self.callSessionManager, callId: id, internalId: self.internalId, "
+                     "proxyServer: proxyServer, ")
+        media_new = ("                            " + marker + ", not as it was\n"
+                     "                            // when the call began to ring: the tunnel's endpoint may have come up or\n"
+                     "                            // moved to another port since (AorusCallProxy.swift).\n"
+                     "                            let ongoingContext = OngoingCallContext(account: self.context.account, "
+                     "callSessionManager: self.callSessionManager, callId: id, internalId: self.internalId, "
+                     "proxyServer: aorusCallProxyServerSettings() ?? proxyServer, ")
+        if c.count(media_old) != 1:
+            raise RuntimeError(f"Call proxy: call media start found {c.count(media_old)} times")
+        c = c.replace(media_old, media_new, 1)
+        call_path.write_text(c, encoding="utf-8")
+        print("Call proxy: call media reads the call proxy as it starts")
 
 
 def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
@@ -32237,6 +32297,8 @@ def main() -> None:
     patch_info_plist_speech_usage(tg)
     patch_info_plist_file_sharing(tg)
     patch_session_file_type(tg)
+    from aorus_settings_file_type import patch_settings_file_type
+    patch_settings_file_type(tg)
     patch_info_plist_face_id(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)

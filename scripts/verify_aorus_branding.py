@@ -1560,6 +1560,40 @@ def main() -> None:
         if marker not in call_proxy_text:
             err.append(f"CallProxyREALITY: provisioning invariant is missing {marker}")
 
+    # A call's media takes the call proxy as it is when the media starts, not as it was when the
+    # call began to ring: the tunnel's endpoint may have come up or moved since.
+    presentation_call_file = tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCall.swift"
+    presentation_call_file_text = presentation_call_file.read_text(encoding="utf-8") if presentation_call_file.is_file() else ""
+    if "proxyServer: aorusCallProxyServerSettings() ?? proxyServer, " not in presentation_call_file_text:
+        err.append("CallProxy: the call's media no longer reads the call proxy as it starts")
+
+    # Background work (docs/background-work.md): a call has the audio session to itself from its
+    # first ring to its end, both features take effect as they are switched, and each presence
+    # switch is remembered as it is now, so switching Always Online on again, or showing the
+    # online status again, says "online" at once.
+    wakeup_manager = tg / "submodules" / "TelegramUI" / "Sources" / "SharedWakeupManager.swift"
+    wakeup_manager_text = wakeup_manager.read_text(encoding="utf-8") if wakeup_manager.is_file() else ""
+    if "$0.2.backgroundAudio || $0.2.activeCalls" in wakeup_manager_text:
+        err.append("BackgroundWork: the keep-alive still waits underneath a call instead of letting go")
+    for relative, markers in (
+        ("submodules/TelegramUI/Sources/SharedWakeupManager.swift", (
+            "let hasCall = self.accountsAndTasks.contains(where: { $0.2.activeCalls })",
+            "guard isAway && !hasCall && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted else {",
+            "private func aorusBackgroundSettingsChanged() {",
+            "self?.aorusBackgroundSettingsChanged()",
+        )),
+        ("submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift", (
+            "let wasAlwaysOnline = aorusAlwaysOnline.swap(alwaysOnline)",
+            "let revealed = wasConcealing && !conceals",
+            "NotificationCenter.default.removeObserver(aorusSettingsObserver)",
+        )),
+    ):
+        source = tg / relative
+        source_text = source.read_text(encoding="utf-8") if source.is_file() else ""
+        for marker in markers:
+            if marker not in source_text:
+                err.append(f"BackgroundWork: {relative} is missing {marker}")
+
     web_tunnel = tg / "submodules" / "WebUI" / "Sources" / "AorusWebTunnel.swift"
     web_tunnel_text = web_tunnel.read_text(encoding="utf-8") if web_tunnel.is_file() else ""
     for marker in (
@@ -2791,10 +2825,23 @@ def main() -> None:
     ):
         if marker not in transfer_text:
             err.append(f"SettingsTransfer: the save and load card is missing {marker}")
-    # The client keeps the saves itself: nobody is asked for a folder.
-    for stale in ("UIDocumentPickerViewController", "startAccessingSecurityScopedResource", "bookmarkData("):
+    # The client keeps the saves itself: nobody is asked for a folder. A save is brought in from
+    # another device as a copy of the file, with the picker offering save files alone, and one is
+    # sent out through the share sheet.
+    for stale in ("startAccessingSecurityScopedResource", "bookmarkData(", "UTType.folder", "[.folder"):
         if stale in transfer_text:
             err.append(f"SettingsTransfer: the card still asks for a folder — {stale}")
+    for marker in (
+        "UIActivityViewController(activityItems: [summary.url], applicationActivities: nil)",
+        "forOpeningContentTypes: [AorusSettingsTransferSheet.saveType], asCopy: true",
+        "try AorusSettingsVault.importSave(from: url)",
+        "UTType(AorusSettingsArchive.typeIdentifier)",
+    ):
+        if marker not in transfer_text:
+            err.append(f"SettingsTransfer: moving saves between devices is missing {marker}")
+    telegram_build_text = (tg / "Telegram" / "BUILD").read_text(encoding="utf-8") if (tg / "Telegram" / "BUILD").is_file() else ""
+    if "org.aorusgram.settings" not in telegram_build_text or "UTExportedTypeDeclarations" not in telegram_build_text:
+        err.append("SettingsTransfer: the app no longer declares the settings file type")
     settings_vault = here.parent / "AorusGram" / "Sources" / "Features" / "Settings" / "AorusSettingsVault.swift"
     settings_vault_text = settings_vault.read_text(encoding="utf-8") if settings_vault.is_file() else ""
     for marker in (
@@ -2805,6 +2852,8 @@ def main() -> None:
         "restoreMissing(into: directory)",
         "guard data.count == header.size, digest(data) == header.digest else { return nil }",
         "for (fileName, header) in headers() where isSaveFileName(fileName) {",
+        "public static func importSave(from source: URL) throws -> AorusSettingsArchive.Summary {",
+        "_ = try AorusSettingsArchive.prepare(from: source)",
     ):
         if marker not in settings_vault_text:
             err.append(f"SettingsTransfer: the saves' store is missing {marker}")

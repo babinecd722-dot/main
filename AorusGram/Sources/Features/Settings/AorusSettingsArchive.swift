@@ -20,6 +20,9 @@ import Security
 /// read them again: nothing waits for a restart.
 public enum AorusSettingsArchive {
     public static let fileExtension = "aorusgram"
+    /// The type the app declares for its save files (`UTExportedTypeDeclarations`), so a picker
+    /// offers them alone and a share sheet hands them on as what they are.
+    public static let typeIdentifier = "org.aorusgram.settings"
 
     public struct Summary: Equatable {
         public let url: URL
@@ -125,6 +128,32 @@ public enum AorusSettingsArchive {
                 return result
             }
             .sorted { $0.date > $1.date }
+    }
+
+    /// What a save file says of itself — its name and when it was made — read as a save: a file
+    /// that is not one, or a damaged one, throws `unreadable`, and one written by a newer
+    /// AorusGram `newerFormat`. Off the main thread.
+    public static func savedName(of url: URL) throws -> (name: String, date: Date) {
+        var meta: Meta?
+        var failure: Error?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: [], error: &coordinationError) { readable in
+            do {
+                meta = try readMeta(readable)
+            } catch {
+                failure = error
+            }
+        }
+        if coordinationError != nil {
+            throw Failure.io
+        }
+        guard let meta else {
+            throw (failure as? Failure) ?? Failure.unreadable
+        }
+        guard meta.format <= Meta.currentFormat else {
+            throw Failure.newerFormat
+        }
+        return (meta.name, Date(timeIntervalSince1970: meta.date))
     }
 
     /// Deletes a save. Off the main thread, with the folder open.

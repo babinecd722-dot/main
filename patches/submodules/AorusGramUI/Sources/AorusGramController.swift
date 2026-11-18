@@ -550,7 +550,9 @@ private struct AorusEntry: ItemListNodeEntry {
 
     let id: String
     let section: ItemListSectionId
-    let order: Int
+    /// The row's place on its page, the same for the row whichever rows around it come and go
+    /// (`AorusRowOrdering`): the list's diff reads it to tell a row that went from one that moved.
+    let order: Double
     let kind: Kind
 
     var stableId: String {
@@ -1040,7 +1042,7 @@ private func aorusSearchEntries(query: String, state: AorusState, l10n: AorusL10
 
 /// Everything a page shows, in order. While the search is open the main screen shows the
 /// sections until something is typed, and what matches from then on.
-private func aorusEntries(page: AorusPage, query: String, searching: Bool, state: AorusState, l10n: AorusL10n, strings: PresentationStrings) -> [AorusEntry] {
+private func aorusEntries(page: AorusPage, query: String, searching: Bool, state: AorusState, l10n: AorusL10n, strings: PresentationStrings, ordering: AorusRowOrdering) -> [AorusEntry] {
     var entries: [AorusEntry] = []
     if page == .root {
         if searching && !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1054,8 +1056,60 @@ private func aorusEntries(page: AorusPage, query: String, searching: Bool, state
     } else {
         entries += aorusPageEntries(page, state: state, l10n: l10n, strings: strings)
     }
-    return entries.enumerated().map { index, entry in
-        AorusEntry(id: entry.id, section: entry.section, order: index, kind: entry.kind)
+    let orders = ordering.orders(for: entries.map { $0.id })
+    return zip(entries, orders).map { entry, order in
+        AorusEntry(id: entry.id, section: entry.section, order: order, kind: entry.kind)
+    }
+}
+
+/// A stable place for every row a page has shown, so that a row keeps its order whatever appears
+/// or disappears around it.
+///
+/// Telegram's list diff walks the old and the new rows side by side and decides by `<` whether a
+/// row was taken away or only moved. A row's index in the list it was built in is no such order:
+/// with nine rows gone above them, every row below compared as "not less" than the one now in its
+/// place, and the diff deleted all of them and inserted them again — Performance's blocks under
+/// the statistics switch faded out and in and jumped each time it was switched off. A row seen
+/// before keeps its key; a new row gets a key between the rows around it, so old and new lists
+/// always compare by where the rows really are.
+private final class AorusRowOrdering {
+    private var keys: [String: Double] = [:]
+
+    func orders(for ids: [String]) -> [Double] {
+        var result: [Double] = []
+        result.reserveCapacity(ids.count)
+        var previous: Double?
+        for (index, id) in ids.enumerated() {
+            if let key = self.keys[id], previous.map({ key > $0 }) ?? true {
+                result.append(key)
+                previous = key
+                continue
+            }
+            // New here, or seen before on the other side of a row it now follows: placed after the
+            // row before it and ahead of the next known row that is still after that one.
+            var next: Double?
+            for laterId in ids[(index + 1)...] {
+                if let key = self.keys[laterId], previous.map({ key > $0 }) ?? true {
+                    next = key
+                    break
+                }
+            }
+            let key: Double
+            switch (previous, next) {
+            case let (lower?, upper?):
+                key = (lower + upper) / 2.0
+            case let (lower?, nil):
+                key = lower + 1024.0
+            case let (nil, upper?):
+                key = upper - 1024.0
+            case (nil, nil):
+                key = 0.0
+            }
+            self.keys[id] = key
+            result.append(key)
+            previous = key
+        }
+        return result
     }
 }
 
@@ -1710,10 +1764,9 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
     // crossfaded rather than animated row by row (see below).
     final class ShownSearch {
         var value: (query: String, searching: Bool)?
-        /// The rows the list showed last, by id.
-        var rowIds: Set<String> = []
     }
     let shownSearch = ShownSearch()
+    let rowOrdering = AorusRowOrdering()
     let signal = combineLatest(statePromise.get(), searchSignal, aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
         |> deliverOnMainQueue
         |> map { state, search, presentationData, _, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
@@ -1728,16 +1781,7 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             }
             shownSearch.value = (query, searching)
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            let entries = aorusEntries(page: page, query: query, searching: searching, state: state, l10n: l10n, strings: presentationData.strings)
-            // A switch that takes several rows away at once (Performance's nine metrics) crossfades
-            // too. The list slides a few rows out cleanly, but with a whole group gone the blocks
-            // below sprang up while the rows above them were still fading out and closing, and
-            // jumped. Rows coming in still slide in, as do one or two going.
-            let rowIds = Set(entries.map { $0.stableId })
-            if !shownSearch.rowIds.isEmpty, shownSearch.rowIds.subtracting(rowIds).count >= 4, rowIds.count < shownSearch.rowIds.count {
-                crossfade = true
-            }
-            shownSearch.rowIds = rowIds
+            let entries = aorusEntries(page: page, query: query, searching: searching, state: state, l10n: l10n, strings: presentationData.strings, ordering: rowOrdering)
             // The main screen's search: Telegram's glass search button on the right of the bar,
             // across from Back. It opens Telegram's own list search over this list.
             var rightNavigationButton: ItemListNavigationButton?

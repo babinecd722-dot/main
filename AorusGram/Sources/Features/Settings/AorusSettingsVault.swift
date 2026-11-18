@@ -78,6 +78,48 @@ public enum AorusSettingsVault {
         return url
     }
 
+    /// Adds a save made elsewhere — exported from this device or another — to the folder, keeps
+    /// its copy like any other save, and answers it as the list shows it. The file is read whole
+    /// first, as a load would read it, so a damaged one is refused here rather than listed. A save
+    /// that is already here, byte for byte, is answered as it is; another save of the same name is
+    /// not replaced — the new one is filed as "Name (2)". Off the main thread.
+    public static func importSave(from source: URL) throws -> AorusSettingsArchive.Summary {
+        let info = try AorusSettingsArchive.savedName(of: source)
+        _ = try AorusSettingsArchive.prepare(from: source)
+        let directory = try directory()
+        var data: Data?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: source, options: [], error: &coordinationError) { readable in
+            data = try? Data(contentsOf: readable)
+        }
+        guard coordinationError == nil, let data else {
+            throw AorusSettingsArchive.Failure.io
+        }
+        let fm = FileManager.default
+        for existing in AorusSettingsArchive.saves(in: directory) {
+            if let existingData = try? Data(contentsOf: existing.url, options: .mappedIfSafe), existingData == data {
+                return existing
+            }
+        }
+        let fileName = AorusSettingsArchive.fileName(for: info.name)
+        let base = (fileName as NSString).deletingPathExtension
+        var target = directory.appendingPathComponent(fileName)
+        var number = 2
+        while fm.fileExists(atPath: target.path) {
+            target = directory.appendingPathComponent("\(base) (\(number)).\(AorusSettingsArchive.fileExtension)")
+            number += 1
+        }
+        do {
+            try data.write(to: target, options: .atomic)
+        } catch {
+            throw AorusSettingsArchive.Failure.io
+        }
+        queue.sync {
+            keep(target)
+        }
+        return AorusSettingsArchive.Summary(url: target, name: info.name, date: info.date)
+    }
+
     /// Deletes a save and its copy. Off the main thread.
     public static func delete(_ summary: AorusSettingsArchive.Summary) throws {
         try AorusSettingsArchive.delete(summary)

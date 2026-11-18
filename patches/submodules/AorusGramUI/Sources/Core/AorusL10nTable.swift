@@ -53,6 +53,10 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Export File": "Esporta file",
+        "Import a Save": "Importa un salvataggio",
+        "Added: “%@”": "Aggiunto: «%@»",
+        "Saves added: %@": "Salvataggi aggiunti: %@",
         "ADD AN ACCOUNT": "AGGIUNGI UN ACCOUNT",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "File di sessione (.session)",
@@ -1268,6 +1272,10 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Export File": "Eksportuj plik",
+        "Import a Save": "Importuj zapis",
+        "Added: “%@”": "Dodano: „%@”",
+        "Saves added: %@": "Dodane zapisy: %@",
         "ADD AN ACCOUNT": "DODAJ KONTO",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Plik sesji (.session)",
@@ -2483,6 +2491,10 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Export File": "Bestand exporteren",
+        "Import a Save": "Opslag importeren",
+        "Added: “%@”": "Toegevoegd: ‘%@’",
+        "Saves added: %@": "Opslagen toegevoegd: %@",
         "ADD AN ACCOUNT": "ACCOUNT TOEVOEGEN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Sessiebestand (.session)",
@@ -3698,6 +3710,10 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Export File": "Exporta el fitxer",
+        "Import a Save": "Importa una còpia",
+        "Added: “%@”": "Afegida: «%@»",
+        "Saves added: %@": "Còpies afegides: %@",
         "ADD AN ACCOUNT": "AFEGEIX UN COMPTE",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Fitxer de sessió (.session)",
@@ -4913,6 +4929,10 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Export File": "Ekspor file",
+        "Import a Save": "Impor simpanan",
+        "Added: “%@”": "Ditambahkan: “%@”",
+        "Saves added: %@": "Simpanan ditambahkan: %@",
         "ADD AN ACCOUNT": "TAMBAH AKUN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Berkas sesi (.session)",
@@ -6128,6 +6148,10 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Export File": "Eksport fail",
+        "Import a Save": "Import simpanan",
+        "Added: “%@”": "Ditambah: “%@”",
+        "Saves added: %@": "Simpanan ditambah: %@",
         "ADD AN ACCOUNT": "TAMBAH AKAUN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Fail sesi (.session)",
@@ -7343,6 +7367,10 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Export File": "Экспартаваць файл",
+        "Import a Save": "Імпартаваць захаванне",
+        "Added: “%@”": "Дададзена: «%@»",
+        "Saves added: %@": "Дададзена захаванняў: %@",
         "ADD AN ACCOUNT": "ДАДАЦЬ АКАЎНТ",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Файл сесіі (.session)",
@@ -8558,6 +8586,10 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Export File": "Faylni eksport qilish",
+        "Import a Save": "Saqlanmani import qilish",
+        "Added: “%@”": "Qo‘shildi: “%@”",
+        "Saves added: %@": "Qo‘shilgan saqlanmalar: %@",
         "ADD AN ACCOUNT": "AKKAUNT QO'SHISH",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Sessiya fayli (.session)",
@@ -9773,6 +9805,10 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Export File": "파일 내보내기",
+        "Import a Save": "저장본 가져오기",
+        "Added: “%@”": "추가됨: “%@”",
+        "Saves added: %@": "추가된 저장본: %@",
         "ADD AN ACCOUNT": "계정 추가",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "세션 파일 (.session)",
@@ -10988,6 +11024,10 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Export File": "تصدير الملف",
+        "Import a Save": "استيراد نسخة محفوظة",
+        "Added: “%@”": "تمت الإضافة: «%@»",
+        "Saves added: %@": "النسخ المضافة: %@",
         "ADD AN ACCOUNT": "إضافة حساب",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "ملف الجلسة (.session)",
@@ -12203,6 +12243,10 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Export File": "خروجی گرفتن فایل",
+        "Import a Save": "وارد کردن ذخیره",
+        "Added: “%@”": "افزوده شد: «%@»",
+        "Saves added: %@": "ذخیره‌های افزوده‌شده: %@",
         "ADD AN ACCOUNT": "افزودن حساب",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "فایل نشست (.session)",
@@ -13418,6 +13462,10 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Export File": "Файлды экспорттау",
+        "Import a Save": "Сақтауды импорттау",
+        "Added: “%@”": "Қосылды: «%@»",
+        "Saves added: %@": "Қосылған сақтаулар: %@",
         "ADD AN ACCOUNT": "АККАУНТ ҚОСУ",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Сессия файлы (.session)",
@@ -14633,6 +14681,10 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Export File": "导出文件",
+        "Import a Save": "导入存档",
+        "Added: “%@”": "已添加：“%@”",
+        "Saves added: %@": "已添加存档：%@",
         "ADD AN ACCOUNT": "添加账号",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "会话文件 (.session)",
@@ -15849,6 +15901,10 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Export File": "匯出檔案",
+        "Import a Save": "匯入存檔",
+        "Added: “%@”": "已加入：「%@」",
+        "Saves added: %@": "已加入存檔：%@",
         "ADD AN ACCOUNT": "新增帳號",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "工作階段檔案 (.session)",
@@ -17064,6 +17120,10 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Export File": "ファイルを書き出す",
+        "Import a Save": "保存データを読み込む",
+        "Added: “%@”": "追加しました：「%@」",
+        "Saves added: %@": "追加した保存データ：%@",
         "ADD AN ACCOUNT": "アカウントを追加",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "セッションファイル (.session)",
@@ -18279,6 +18339,10 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Export File": "Vie tiedosto",
+        "Import a Save": "Tuo tallennus",
+        "Added: “%@”": "Lisätty: ”%@”",
+        "Saves added: %@": "Tallennuksia lisätty: %@",
         "ADD AN ACCOUNT": "LISÄÄ TILI",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Istuntotiedosto (.session)",
@@ -19494,6 +19558,10 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Export File": "ייצוא קובץ",
+        "Import a Save": "ייבוא שמירה",
+        "Added: “%@”": "נוספה: „%@”",
+        "Saves added: %@": "שמירות שנוספו: %@",
         "ADD AN ACCOUNT": "הוספת חשבון",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "קובץ סשן (.session)",
@@ -20709,6 +20777,10 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Export File": "Izvezi datoteku",
+        "Import a Save": "Uvezi spremanje",
+        "Added: “%@”": "Dodano: „%@”",
+        "Saves added: %@": "Dodana spremanja: %@",
         "ADD AN ACCOUNT": "DODAJ RAČUN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Datoteka sesije (.session)",
@@ -21924,6 +21996,10 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Export File": "Извези датотеку",
+        "Import a Save": "Увези чување",
+        "Added: “%@”": "Додато: „%@”",
+        "Saves added: %@": "Додата чувања: %@",
         "ADD AN ACCOUNT": "ДОДАЈ НАЛОГ",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Фајл сесије (.session)",
@@ -23139,6 +23215,10 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Export File": "Exportovat soubor",
+        "Import a Save": "Importovat uložení",
+        "Added: “%@”": "Přidáno: „%@“",
+        "Saves added: %@": "Přidaná uložení: %@",
         "ADD AN ACCOUNT": "PŘIDAT ÚČET",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Soubor relace (.session)",
@@ -24354,6 +24434,10 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Export File": "Exportovať súbor",
+        "Import a Save": "Importovať uloženie",
+        "Added: “%@”": "Pridané: „%@“",
+        "Saves added: %@": "Pridané uloženia: %@",
         "ADD AN ACCOUNT": "PRIDAŤ ÚČET",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Súbor relácie (.session)",
@@ -25569,6 +25653,10 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Export File": "Exportă fișierul",
+        "Import a Save": "Importă o salvare",
+        "Added: “%@”": "Adăugată: „%@”",
+        "Saves added: %@": "Salvări adăugate: %@",
         "ADD AN ACCOUNT": "ADAUGĂ UN CONT",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Fișier de sesiune (.session)",
@@ -26784,6 +26872,10 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Export File": "Fájl exportálása",
+        "Import a Save": "Mentés importálása",
+        "Added: “%@”": "Hozzáadva: „%@”",
+        "Saves added: %@": "Hozzáadott mentések: %@",
         "ADD AN ACCOUNT": "FIÓK HOZZÁADÁSA",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Munkamenetfájl (.session)",
@@ -27999,6 +28091,10 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Export File": "Eksporter fil",
+        "Import a Save": "Importer en lagring",
+        "Added: “%@”": "Lagt til: «%@»",
+        "Saves added: %@": "Lagringer lagt til: %@",
         "ADD AN ACCOUNT": "LEGG TIL KONTO",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Øktfil (.session)",
@@ -29214,6 +29310,10 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Export File": "Exportera fil",
+        "Import a Save": "Importera en sparning",
+        "Added: “%@”": "Tillagd: ”%@”",
+        "Saves added: %@": "Sparningar tillagda: %@",
         "ADD AN ACCOUNT": "LÄGG TILL KONTO",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Sessionsfil (.session)",
@@ -30429,6 +30529,10 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Export File": "Xuất tệp",
+        "Import a Save": "Nhập bản lưu",
+        "Added: “%@”": "Đã thêm: “%@”",
+        "Saves added: %@": "Đã thêm bản lưu: %@",
         "ADD AN ACCOUNT": "THÊM TÀI KHOẢN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Tệp phiên (.session)",
@@ -31644,6 +31748,10 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Export File": "Експортувати файл",
+        "Import a Save": "Імпортувати збереження",
+        "Added: “%@”": "Додано: «%@»",
+        "Saves added: %@": "Додано збережень: %@",
         "ADD AN ACCOUNT": "ДОДАТИ АКАУНТ",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Файл сесії (.session)",
@@ -32868,6 +32976,10 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Export File": "Exportar archivo",
+        "Import a Save": "Importar un guardado",
+        "Added: “%@”": "Añadido: «%@»",
+        "Saves added: %@": "Guardados añadidos: %@",
         "ADD AN ACCOUNT": "AÑADIR UNA CUENTA",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Archivo de sesión (.session)",
@@ -34092,6 +34204,10 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Export File": "Exportar ficheiro",
+        "Import a Save": "Importar uma gravação",
+        "Added: “%@”": "Adicionada: «%@»",
+        "Saves added: %@": "Gravações adicionadas: %@",
         "ADD AN ACCOUNT": "ADICIONAR CONTA",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Arquivo de sessão (.session)",
@@ -35316,6 +35432,10 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Export File": "Datei exportieren",
+        "Import a Save": "Sicherung importieren",
+        "Added: “%@”": "Hinzugefügt: „%@“",
+        "Saves added: %@": "Sicherungen hinzugefügt: %@",
         "ADD AN ACCOUNT": "KONTO HINZUFÜGEN",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Sitzungsdatei (.session)",
@@ -36540,6 +36660,10 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Export File": "Exporter le fichier",
+        "Import a Save": "Importer une sauvegarde",
+        "Added: “%@”": "Ajoutée : « %@ »",
+        "Saves added: %@": "Sauvegardes ajoutées : %@",
         "ADD AN ACCOUNT": "AJOUTER UN COMPTE",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Fichier de session (.session)",
@@ -37764,6 +37888,10 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Export File": "Dosyayı dışa aktar",
+        "Import a Save": "Kaydı içe aktar",
+        "Added: “%@”": "Eklendi: “%@”",
+        "Saves added: %@": "Eklenen kayıtlar: %@",
         "ADD AN ACCOUNT": "HESAP EKLE",
         "Telegram Desktop (.tdata)": "Telegram Desktop (.tdata)",
         "Session File (.session)": "Oturum dosyası (.session)",

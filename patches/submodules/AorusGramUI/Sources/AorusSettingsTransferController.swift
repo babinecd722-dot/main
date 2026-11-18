@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 import Display
 import SwiftSignalKit
 import TelegramCore
@@ -140,7 +141,7 @@ enum AorusSettingsTransfer {
 
 /// The card both rows open, in the middle of the screen, as tall as what it holds, light or
 /// dark with the theme.
-final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, UIContextMenuInteractionDelegate {
+final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, UIContextMenuInteractionDelegate, UIDocumentPickerDelegate {
     enum Mode {
         case save
         case load
@@ -170,6 +171,10 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
     private var rows: [AorusSettingsSaveRow] = []
     private let emptyLabel = UILabel()
     private let listSpinner = UIActivityIndicatorView(style: .medium)
+    /// Load only: brings a save exported from this device or another into the list.
+    private let importButton = UIButton(type: .system)
+    /// The save just imported, chosen once the list is read again.
+    private var pendingSelection: String?
 
     private let noteLabel = UILabel()
     private let primaryButton = AorusSettingsFilledButton()
@@ -277,6 +282,12 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
             listPanel.addSubview(emptyLabel)
             listSpinner.hidesWhenStopped = true
             listPanel.addSubview(listSpinner)
+
+            importButton.setImage(UIImage(systemName: "square.and.arrow.down", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)), for: .normal)
+            importButton.layer.cornerRadius = 18.0
+            importButton.accessibilityLabel = aorusL("Импортировать сохранение", "Import a Save")
+            importButton.addTarget(self, action: #selector(importTapped), for: .touchUpInside)
+            card.addSubview(importButton)
         }
 
         noteLabel.font = aorusUIFont(13.0)
@@ -329,6 +340,8 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
             attributes: [.foregroundColor: palette.tertiary]
         )
         listPanel.backgroundColor = palette.fill
+        importButton.backgroundColor = palette.fill
+        importButton.tintColor = palette.label
         emptyLabel.textColor = palette.secondary
         listSpinner.color = palette.secondary
         // The main button in the ink of the text, its title in the card's colour.
@@ -421,6 +434,12 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
                 if found == nil && self.mode == .load {
                     self.note = (aorusL("Не удалось прочитать сохранения.", "Couldn't read the saves."), true)
                 }
+                if let pending = self.pendingSelection {
+                    self.pendingSelection = nil
+                    if let imported = self.saves.first(where: { $0.url.lastPathComponent == pending }) {
+                        self.selectedURL = imported.url
+                    }
+                }
                 self.rebuildRows()
             }
         }
@@ -473,11 +492,87 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
         guard !isBusy, let row = interaction.view as? AorusSettingsSaveRow, let summary = row.summary else { return nil }
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self, weak row] _ in
+            let export = UIAction(title: aorusL("Экспортировать файл", "Export File"), image: UIImage(systemName: "square.and.arrow.up")) { _ in
+                self?.export(summary, from: row)
+            }
             let delete = UIAction(title: aorusL("Удалить", "Delete"), image: UIImage(systemName: "trash"), attributes: .destructive) { _ in
                 self?.confirmDelete(summary)
             }
-            return UIMenu(title: "", children: [delete])
+            return UIMenu(title: "", children: [export, delete])
+        }
+    }
+
+    // MARK: Moving saves between devices
+
+    /// The save's file, through the system share sheet: to Files, AirDrop, a chat. The file is
+    /// sealed with a key every AorusGram carries, so it loads on any device; on another it is
+    /// brought in with the button at the top of this card.
+    private func export(_ summary: AorusSettingsArchive.Summary, from row: UIView?) {
+        guard !isBusy else { return }
+        let activity = UIActivityViewController(activityItems: [summary.url], applicationActivities: nil)
+        activity.overrideUserInterfaceStyle = palette.isDark ? .dark : .light
+        if let popover = activity.popoverPresentationController {
+            popover.sourceView = row ?? card
+            popover.sourceRect = (row ?? card).bounds
+        }
+        present(activity, animated: true)
+    }
+
+    /// The type of a save file, which the app declares; by its extension where the declaration is
+    /// not there.
+    private static var saveType: UTType {
+        return UTType(AorusSettingsArchive.typeIdentifier) ?? UTType(filenameExtension: AorusSettingsArchive.fileExtension, conformingTo: .data) ?? .data
+    }
+
+    /// Picks exported saves, several at once, as copies the app can read; nothing but save files
+    /// can be chosen.
+    @objc private func importTapped() {
+        guard !isBusy else { return }
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [AorusSettingsTransferSheet.saveType], asCopy: true)
+        picker.allowsMultipleSelection = true
+        picker.shouldShowFileExtensions = true
+        picker.delegate = self
+        picker.overrideUserInterfaceStyle = palette.isDark ? .dark : .light
+        present(picker, animated: true)
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        importSaves(urls)
+    }
+
+    private func importSaves(_ urls: [URL]) {
+        setBusy(true)
+        note = nil
+        worker.async { [weak self] in
+            var imported: [AorusSettingsArchive.Summary] = []
+            var failure: Error?
+            for url in urls {
+                do {
+                    imported.append(try AorusSettingsVault.importSave(from: url))
+                } catch {
+                    failure = failure ?? error
+                }
+                // The picker's copy; the save is in the folder now.
+                try? FileManager.default.removeItem(at: url)
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.setBusy(false)
+                guard let first = imported.first else {
+                    self.fail(AorusSettingsTransferSheet.message(for: failure, saving: false))
+                    return
+                }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                if imported.count == 1 {
+                    self.note = (String(format: aorusL("Добавлено: «%@»", "Added: “%@”"), first.name), false)
+                } else {
+                    self.note = (String(format: aorusL("Добавлено сохранений: %@", "Saves added: %@"), "\(imported.count)"), false)
+                }
+                self.pendingSelection = first.url.lastPathComponent
+                self.refreshSaves()
+            }
         }
     }
 
@@ -610,6 +705,7 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
         cancelButton.isEnabled = !busy
         nameField.isEnabled = !busy
         listScroll.isUserInteractionEnabled = !busy
+        importButton.isEnabled = !busy
         primaryButton.setTitleColor(busy ? .clear : palette.elevated, for: .disabled)
         if busy {
             primarySpinner.startAnimating()
@@ -715,8 +811,13 @@ final class AorusSettingsTransferSheet: UIViewController, UITextFieldDelegate, U
             y += 56.0 + 14.0
         }
 
-        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: inner, height: .greatestFiniteMagnitude)).height)
-        titleLabel.frame = CGRect(x: side, y: y, width: inner, height: titleHeight)
+        if mode == .load {
+            importButton.frame = CGRect(x: width - 14.0 - 36.0, y: 14.0, width: 36.0, height: 36.0)
+        }
+        // Beside the import button when there is no icon above the title: kept clear of it.
+        let titleInset: CGFloat = (mode == .load && !showsIcon) ? 44.0 : 0.0
+        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: inner - titleInset * 2.0, height: .greatestFiniteMagnitude)).height)
+        titleLabel.frame = CGRect(x: side + titleInset, y: y, width: inner - titleInset * 2.0, height: titleHeight)
         y += titleHeight
 
         captionLabel.isHidden = !showsCaption
