@@ -363,16 +363,40 @@ enum AorusPluginMarketDrawing {
 // MARK: - The Plugins | Market switch
 
 /// The two-segment glass switch that stands where the screen's title was: Telegram's own glass
-/// capsule, the same height as the buttons beside it, with a lens that slides to the segment
-/// that is on.
+/// capsule, the same height as the buttons beside it, with a lens on the segment that is on.
+///
+/// It is held and dragged the way Telegram's tab bar is: a finger on the switch lifts the lens
+/// over the segment under it, the lens follows the finger with a selection tick on every segment it
+/// reaches, and letting go picks the segment under the lens, which settles there with a spring.
+/// A tap is the same gesture without the drag.
 final class AorusPluginModeSwitch: UIControl {
     private static let height: CGFloat = 40
     private static let inset: CGFloat = 4
+    /// How much the lens and the segment under it grow while held.
+    private static let liftedLensScale: CGFloat = 1.1
+    private static let liftedContentScale: CGFloat = 1.08
+
+    private struct Segment {
+        let container: UIView
+        let icon: UIImageView
+        let label: UILabel
+    }
+
+    /// A held finger: where the lens and the finger started, where the lens is now, and the
+    /// segment under it.
+    private struct Drag {
+        var startCenter: CGFloat
+        var startLocation: CGFloat
+        var center: CGFloat
+        var hovered: Int
+    }
 
     private let glass: UIView & AorusPluginGlassBackground
     private let lens = UIView()
-    private var segments: [(icon: UIImageView, label: UILabel)] = []
+    private var segments: [Segment] = []
     private var theme: PresentationTheme
+    private var drag: Drag?
+    private let feedback = UISelectionFeedbackGenerator()
     private(set) var selectedIndex = 0
     var onChange: ((Int) -> Void)?
 
@@ -383,19 +407,29 @@ final class AorusPluginModeSwitch: UIControl {
         glass.isUserInteractionEnabled = false
         addSubview(glass)
         lens.isUserInteractionEnabled = false
+        lens.layer.shadowColor = UIColor.black.cgColor
+        lens.layer.shadowOffset = CGSize(width: 0, height: 2)
+        lens.layer.shadowRadius = 8
+        lens.layer.shadowOpacity = 0
         addSubview(lens)
         for item in items {
+            let container = UIView()
+            container.isUserInteractionEnabled = false
             let icon = UIImageView(image: UIImage(systemName: item.symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)))
             icon.contentMode = .center
             let label = UILabel()
             label.text = item.title
             label.font = aorusUIFont(15, .semibold)
-            addSubview(icon)
-            addSubview(label)
-            segments.append((icon, label))
+            container.addSubview(icon)
+            container.addSubview(label)
+            addSubview(container)
+            segments.append(Segment(container: container, icon: icon, label: label))
         }
         isAccessibilityElement = false
-        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
+        let press = UILongPressGestureRecognizer(target: self, action: #selector(pressed(_:)))
+        press.minimumPressDuration = 0
+        press.allowableMovement = .greatestFiniteMagnitude
+        addGestureRecognizer(press)
         applyColors()
     }
 
@@ -415,26 +449,62 @@ final class AorusPluginModeSwitch: UIControl {
         return intrinsicContentSize
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
+    /// The capsule, and each segment's frame in it.
+    private func layoutFrames() -> (capsule: CGRect, segments: [CGRect]) {
         let size = intrinsicContentSize
-        let origin = CGPoint(x: floor((bounds.width - size.width) / 2), y: floor((bounds.height - size.height) / 2))
-        glass.frame = CGRect(origin: origin, size: size)
-        glass.updateGlass(size: size, cornerRadius: size.height / 2, isDark: theme.aorusGlassListTheme.overallDarkAppearance)
-        var x = origin.x + Self.inset
-        for (index, segment) in segments.enumerated() {
+        let capsule = CGRect(origin: CGPoint(x: floor((bounds.width - size.width) / 2), y: floor((bounds.height - size.height) / 2)), size: size)
+        var frames: [CGRect] = []
+        var x = capsule.minX + Self.inset
+        for index in segments.indices {
             let width = segmentWidth(index)
-            let labelWidth = ceil(segment.label.intrinsicContentSize.width)
-            let contentWidth = 18 + 6 + labelWidth
-            let start = x + (width - contentWidth) / 2
-            segment.icon.frame = CGRect(x: start, y: origin.y, width: 18, height: size.height)
-            segment.label.frame = CGRect(x: start + 24, y: origin.y, width: labelWidth, height: size.height)
-            if index == selectedIndex {
-                lens.frame = CGRect(x: x, y: origin.y + Self.inset, width: width, height: size.height - Self.inset * 2)
-                lens.layer.cornerRadius = lens.frame.height / 2
-            }
+            frames.append(CGRect(x: x, y: capsule.minY, width: width, height: size.height))
             x += width
         }
+        return (capsule, frames)
+    }
+
+    /// The segment whose span holds `x`; past either end, the one at that end.
+    private func segmentIndex(at x: CGFloat, in frames: [CGRect]) -> Int {
+        for (index, frame) in frames.enumerated() where x < frame.maxX {
+            return index
+        }
+        return max(0, frames.count - 1)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let (capsule, frames) = layoutFrames()
+        glass.frame = capsule
+        glass.updateGlass(size: capsule.size, cornerRadius: capsule.height / 2, isDark: theme.aorusGlassListTheme.overallDarkAppearance)
+        let lifted = drag?.hovered
+        for (index, segment) in segments.enumerated() {
+            let frame = frames[index]
+            // Bounds and center, not frame: the segment under a held lens is scaled.
+            segment.container.bounds = CGRect(origin: .zero, size: frame.size)
+            segment.container.center = CGPoint(x: frame.midX, y: frame.midY)
+            let labelWidth = ceil(segment.label.intrinsicContentSize.width)
+            let contentWidth = 18 + 6 + labelWidth
+            let start = (frame.width - contentWidth) / 2
+            segment.icon.frame = CGRect(x: start, y: 0, width: 18, height: frame.height)
+            segment.label.frame = CGRect(x: start + 24, y: 0, width: labelWidth, height: frame.height)
+            segment.container.transform = index == lifted ? CGAffineTransform(scaleX: Self.liftedContentScale, y: Self.liftedContentScale) : .identity
+        }
+        guard frames.indices.contains(selectedIndex) else { return }
+        let lensIndex = drag?.hovered ?? selectedIndex
+        let lensWidth = frames[lensIndex].width
+        let lensHeight = capsule.height - Self.inset * 2
+        var centerX = frames[lensIndex].midX
+        if let drag {
+            // The lens stays inside the capsule however far the finger goes.
+            let minCenter = capsule.minX + Self.inset + lensWidth / 2
+            let maxCenter = capsule.maxX - Self.inset - lensWidth / 2
+            centerX = min(max(drag.center, minCenter), maxCenter)
+        }
+        lens.bounds = CGRect(origin: .zero, size: CGSize(width: lensWidth, height: lensHeight))
+        lens.center = CGPoint(x: centerX, y: capsule.midY)
+        lens.layer.cornerRadius = lensHeight / 2
+        lens.transform = drag != nil ? CGAffineTransform(scaleX: Self.liftedLensScale, y: Self.liftedLensScale) : .identity
+        lens.layer.shadowOpacity = drag != nil ? (theme.aorusGlassListTheme.overallDarkAppearance ? 0.32 : 0.14) : 0
     }
 
     func update(theme: PresentationTheme) {
@@ -446,13 +516,18 @@ final class AorusPluginModeSwitch: UIControl {
     private func applyColors() {
         let dark = theme.aorusGlassListTheme.overallDarkAppearance
         lens.backgroundColor = theme.aorusGlassListTheme.list.itemPrimaryTextColor.withAlphaComponent(dark ? 0.14 : 0.08)
+        let highlighted = drag?.hovered ?? selectedIndex
         for (index, segment) in segments.enumerated() {
-            let color = index == selectedIndex ? theme.aorusGlassListTheme.list.itemAccentColor : theme.aorusGlassListTheme.list.itemPrimaryTextColor
+            let color = index == highlighted ? theme.aorusGlassListTheme.list.itemAccentColor : theme.aorusGlassListTheme.list.itemPrimaryTextColor
             segment.icon.tintColor = color
             segment.label.textColor = color
             segment.label.accessibilityTraits = index == selectedIndex ? [.button, .selected] : [.button]
             segment.label.isAccessibilityElement = true
         }
+    }
+
+    private func animateChanges(_ changes: @escaping () -> Void) {
+        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0.4, options: [.beginFromCurrentState, .allowUserInteraction], animations: changes)
     }
 
     func setSelectedIndex(_ index: Int, animated: Bool) {
@@ -464,28 +539,74 @@ final class AorusPluginModeSwitch: UIControl {
             self.layoutIfNeeded()
         }
         if animated {
-            UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0.4, options: [.beginFromCurrentState, .allowUserInteraction], animations: changes)
+            animateChanges(changes)
         } else {
             changes()
         }
     }
 
-    @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
-        let point = recognizer.location(in: self)
-        let size = intrinsicContentSize
-        var x = floor((bounds.width - size.width) / 2) + Self.inset
-        for index in segments.indices {
-            let width = segmentWidth(index)
-            if point.x >= x && point.x < x + width {
-                if index != selectedIndex {
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    setSelectedIndex(index, animated: true)
-                    onChange?(index)
-                    sendActions(for: .valueChanged)
-                }
-                return
+    @objc private func pressed(_ recognizer: UILongPressGestureRecognizer) {
+        let frames = layoutFrames().segments
+        guard !frames.isEmpty else { return }
+        let x = recognizer.location(in: self).x
+        switch recognizer.state {
+        case .began:
+            let index = segmentIndex(at: x, in: frames)
+            feedback.prepare()
+            if index != selectedIndex {
+                feedback.selectionChanged()
             }
-            x += width
+            drag = Drag(startCenter: frames[index].midX, startLocation: x, center: frames[index].midX, hovered: index)
+            animateChanges {
+                self.applyColors()
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
+            }
+        case .changed:
+            guard var current = drag else { return }
+            current.center = current.startCenter + (x - current.startLocation)
+            let hovered = segmentIndex(at: current.center, in: frames)
+            let reachedAnother = hovered != current.hovered
+            current.hovered = hovered
+            drag = current
+            if reachedAnother {
+                feedback.selectionChanged()
+                feedback.prepare()
+                // The lens takes the new segment's width and the colours follow, briefly.
+                UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut]) {
+                    self.applyColors()
+                    self.setNeedsLayout()
+                    self.layoutIfNeeded()
+                }
+            } else {
+                // The lens follows the finger as it moves, without lagging behind.
+                setNeedsLayout()
+                layoutIfNeeded()
+            }
+        case .ended:
+            guard let current = drag else { return }
+            drag = nil
+            let changed = current.hovered != selectedIndex
+            selectedIndex = current.hovered
+            animateChanges {
+                self.applyColors()
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
+            }
+            if changed {
+                onChange?(selectedIndex)
+                sendActions(for: .valueChanged)
+            }
+        case .cancelled, .failed:
+            guard drag != nil else { return }
+            drag = nil
+            animateChanges {
+                self.applyColors()
+                self.setNeedsLayout()
+                self.layoutIfNeeded()
+            }
+        default:
+            break
         }
     }
 }

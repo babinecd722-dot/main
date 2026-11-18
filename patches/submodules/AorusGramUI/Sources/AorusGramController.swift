@@ -1710,6 +1710,8 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
     // crossfaded rather than animated row by row (see below).
     final class ShownSearch {
         var value: (query: String, searching: Bool)?
+        /// The rows the list showed last, by id.
+        var rowIds: Set<String> = []
     }
     let shownSearch = ShownSearch()
     let signal = combineLatest(statePromise.get(), searchSignal, aorusSettingsPresentationData(context), pluginIntegrationSignal, storedStateSignal)
@@ -1727,6 +1729,15 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             shownSearch.value = (query, searching)
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
             let entries = aorusEntries(page: page, query: query, searching: searching, state: state, l10n: l10n, strings: presentationData.strings)
+            // A switch that takes several rows away at once (Performance's nine metrics) crossfades
+            // too. The list slides a few rows out cleanly, but with a whole group gone the blocks
+            // below sprang up while the rows above them were still fading out and closing, and
+            // jumped. Rows coming in still slide in, as do one or two going.
+            let rowIds = Set(entries.map { $0.stableId })
+            if !shownSearch.rowIds.isEmpty, shownSearch.rowIds.subtracting(rowIds).count >= 4, rowIds.count < shownSearch.rowIds.count {
+                crossfade = true
+            }
+            shownSearch.rowIds = rowIds
             // The main screen's search: Telegram's glass search button on the right of the bar,
             // across from Back. It opens Telegram's own list search over this list.
             var rightNavigationButton: ItemListNavigationButton?

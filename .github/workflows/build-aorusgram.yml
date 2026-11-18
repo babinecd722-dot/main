@@ -1120,6 +1120,7 @@ jobs:
           # Always Online and background notifications: the silent keep-alive and the local
           # notifications, run by SharedWakeupManager (patch_background_presence in aorus_branding.py).
           cp $PATCHES/submodules/TelegramUI/Sources/AorusBackgroundPresence.swift $TG/submodules/TelegramUI/Sources/
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift $TG/submodules/TelegramUI/Sources/
 
           # 8. The chat controller's half of the plugin chat surface. `aorus.chat.*` means
           #    the chat on screen, and only the controller knows which one that is; the

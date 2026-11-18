@@ -872,6 +872,13 @@ def patch_background_presence(tg: Path) -> None:
         if delegate_text.count(anchor) != 1:
             raise RuntimeError(f"BackgroundPresence: AppDelegate anchor found {delegate_text.count(anchor)} times")
         delegate_text = delegate_text.replace(anchor, "            AorusBackgroundRefresh.register()\n            \n" + anchor, 1)
+    # The account import's file picker is Telegram's chat file picker, which AorusGramUI cannot
+    # reach on its own (AorusAccountImportPicker.swift).
+    if "AorusAccountImportPicker.install()" not in delegate_text:
+        anchor = "            AorusBackgroundRefresh.register()\n"
+        if delegate_text.count(anchor) != 1:
+            raise RuntimeError(f"AccountImportPicker: AppDelegate anchor found {delegate_text.count(anchor)} times")
+        delegate_text = delegate_text.replace(anchor, anchor + "            AorusAccountImportPicker.install()\n", 1)
     if delegate_text != original_delegate_text:
         delegate.write_text(delegate_text, encoding="utf-8")
 
@@ -2455,17 +2462,25 @@ def patch_ghost_mode_proactive_offline(tg: Path) -> None:
         "        \n"
         "        " + sentinel + "\n"
         "        let aorusQueue = queue\n"
+        "        let aorusAlwaysOnline = Atomic<Bool>(value: UserDefaults.standard.bool(forKey: \"aorusgram_always_online\"))\n"
         "        NotificationCenter.default.addObserver(\n"
         "            forName: NSNotification.Name(\"aorusgram_settings_changed\"),\n"
         "            object: nil, queue: nil\n"
         "        ) { [weak self] _ in\n"
-        "            // Only while online status is hidden: the override in updatePresence then tells\n"
-        "            // the server \"offline\" at once. With online shown, nothing is sent from here --\n"
-        "            // a settings change, from a plugin or Siri in the background too, must not mark\n"
-        "            // the account online; the presence timer brings the normal status back.\n"
-        "            guard UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true) else { return }\n"
+        "            // While the online status is hidden, the override in updatePresence tells the\n"
+        "            // server \"offline\" at once. When Always Online has just been switched on and the\n"
+        "            // account is being kept online, \"online\" goes at once rather than with the next\n"
+        "            // 30-second ping. Otherwise nothing is sent from here: a settings change, from a\n"
+        "            // plugin or Siri in the background too, must not mark the account online.\n"
+        "            let conceals = UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") && ((UserDefaults.standard.object(forKey: \"aorusgram_ghost_conceal_online\") as? Bool) ?? true)\n"
+        "            let alwaysOnline = UserDefaults.standard.bool(forKey: \"aorusgram_always_online\")\n"
+        "            let switchedOn = alwaysOnline && !aorusAlwaysOnline.swap(alwaysOnline)\n"
+        "            guard conceals || switchedOn else { return }\n"
         "            aorusQueue.async {\n"
-        "                self?.updatePresence(true)\n"
+        "                guard let strongSelf = self, conceals || strongSelf.wasOnline else { return }\n"
+        "                // The next ping is scheduled again by updatePresence: one chain, not two.\n"
+        "                strongSelf.onlineTimer?.invalidate()\n"
+        "                strongSelf.updatePresence(true)\n"
         "            }\n"
         "        }\n"
         "        \n"
@@ -32244,6 +32259,9 @@ def main() -> None:
     patch_posts_page_ink(tg)
     from aorus_qr_scan_light import patch_qr_scan_light
     patch_qr_scan_light(tg)
+    from aorus_qr_studio import patch_qr_photo_scan, patch_qr_studio_fake_gifts
+    patch_qr_photo_scan(tg)
+    patch_qr_studio_fake_gifts(tg)
     from aorus_bot_button_ink import patch_bot_button_ink
     patch_bot_button_ink(tg)
     from aorus_live_theme import patch_live_theme

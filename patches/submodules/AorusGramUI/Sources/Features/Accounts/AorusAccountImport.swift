@@ -31,22 +31,33 @@ public enum AorusAccountImport {
     private static var pickerDelegate: AorusImportPickerDelegate?
     private static var isReading = false
 
+    /// Telegram's own file picker, the one a file is sent to a chat with, installed by TelegramUI
+    /// (`AorusAccountImportPicker`), which holds it.
+    ///
+    /// It hands over a copy of each chosen file, moved into the app's temporary storage, which
+    /// the app reads like any file of its own. A file opened in place instead needs a security
+    /// scope the system does not give a re-signed build for most locations — the same reason files
+    /// sent to a chat failed until that picker was switched to copies — and the import read
+    /// nothing: a session file or a Telegram Desktop folder chosen in Files did not open.
+    public static var documentPicker: ((_ context: AccountContext, _ documentTypes: [String], _ completion: @escaping ([URL]) -> Void) -> ViewController)?
+
     public static func present(_ kind: AorusAccountImportKind, context: AccountContext, from controller: ViewController?) {
         guard let controller else {
             return
         }
         switch kind {
         case .tdata:
-            // A `tdata` is a folder, so the folder itself is what is chosen — or a `.zip`
-            // holding one, which is unpacked and searched.
-            self.presentPicker(types: self.tdataTypes, context: context, controller: controller) { url in
-                self.readTData(url: url, extracted: nil, passcode: nil, context: context, controller: controller)
+            // Telegram Desktop's folder: its archive (.zip), the folder itself where Files lets it
+            // be chosen, or the files inside it — "Select", then key_datas and the account files
+            // beside it (Desktop keeps everything the import reads at the folder's top level).
+            self.pickFiles(context: context, controller: controller) { urls in
+                self.readTData(picked: urls, context: context, controller: controller)
             }
         case .sessionFile:
-            // `.session` files (the app declares the extension) and archives; a `.zip` is
-            // searched for a session inside. The reader validates the contents either way.
-            self.presentPicker(types: self.sessionTypes, context: context, controller: controller) { url in
-                self.readSessionFile(url: url, context: context, controller: controller)
+            // One session file or several, or an archive holding them; the reader, not the
+            // extension, decides what holds a session.
+            self.pickFiles(context: context, controller: controller) { urls in
+                self.readSessionFiles(urls: urls, context: context, controller: controller)
             }
         case .sessionString:
             self.presentStringPrompt(context: context, controller: controller)
@@ -55,56 +66,36 @@ public enum AorusAccountImport {
 
     // MARK: - Picking
 
-    /// The folder itself, plus archives that may hold one.
-    private static var tdataTypes: [UTType] {
-        var types: [UTType] = [.folder, .zip]
-        if let archive = UTType("public.archive") { types.append(archive) }
-        return types
-    }
-
-    /// The type the app declares for `.session` (Telethon, Pyrogram), plus archives.
-    ///
-    /// It used to be `public.item`, because the system registers nothing for `.session` —
-    /// which enabled every file in Files and gave no hint of what to choose. The app now
-    /// declares the extension itself (`UTImportedTypeDeclarations`), so the picker greys out
-    /// everything that is not a session or an archive.
-    private static var sessionTypes: [UTType] {
-        var types: [UTType] = []
-        if let declared = UTType(self.sessionTypeIdentifier) {
-            types.append(declared)
-        } else if let byExtension = UTType(filenameExtension: "session", conformingTo: .data) {
-            types.append(byExtension)
-        } else {
-            // Nothing resolves the extension on this system: every file stays selectable and
-            // the reader decides, rather than nothing being selectable at all.
-            types.append(.item)
+    /// Every file can be chosen, several at once, as in a chat's file picker.
+    private static func pickFiles(context: AccountContext, controller: ViewController, completion: @escaping ([URL]) -> Void) {
+        let deliver: ([URL]) -> Void = { urls in
+            guard !urls.isEmpty else {
+                return
+            }
+            // After the picker's host has gone: a passcode prompt presented while it is still
+            // leaving would be dropped.
+            DispatchQueue.main.async {
+                completion(urls)
+            }
         }
-        types.append(.zip)
-        if let archive = UTType("public.archive") { types.append(archive) }
-        return types
-    }
-
-    /// Declared in the app's Info.plist for the `session` extension.
-    static let sessionTypeIdentifier = "org.aorusgram.telegram-session"
-
-    private static func presentPicker(types: [UTType], context: AccountContext, controller: ViewController, completion: @escaping (URL) -> Void) {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
-        picker.allowsMultipleSelection = false
+        if let documentPicker = self.documentPicker {
+            controller.present(documentPicker(context, ["public.item"], deliver), in: .window(.root))
+            return
+        }
+        // Only where TelegramUI has not installed its picker: the system picker in the same
+        // copy mode.
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = true
         picker.shouldShowFileExtensions = true
         // Deliberately no `modalPresentationStyle` override: a document picker lays out its own
         // navigation chrome, and forcing `.fullScreen` on it dropped the toolbar that carries the
-        // "Open" button — the row then opened a picker with no way to confirm a choice.
-        let delegate = AorusImportPickerDelegate(completion: { url in
+        // "Open" button.
+        let delegate = AorusImportPickerDelegate(completion: { urls in
             self.pickerDelegate = nil
-            guard let url else {
-                return
-            }
-            completion(url)
+            deliver(urls)
         })
         self.pickerDelegate = delegate
         picker.delegate = delegate
-        // Present from whatever is actually on top of this window: the settings screen can sit
-        // under its own modal, and presenting blindly from the window root would then do nothing.
         if let presenter = self.topmostController(from: controller) {
             presenter.present(picker, animated: true)
         } else {
@@ -122,12 +113,55 @@ public enum AorusAccountImport {
         return top
     }
 
+    /// The picked copies are the app's own: they go once read.
+    private static func removePicked(_ urls: [URL]) {
+        for url in urls {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// What was picked for Telegram Desktop, as one thing to read: an archive as it is, otherwise
+    /// a folder holding everything picked (a picked folder inside it is found by the reader).
+    private static func readTData(picked urls: [URL], context: AccountContext, controller: ViewController) {
+        if let archive = urls.first(where: { AorusImportArchive.looksLikeZip(url: $0) }) {
+            let staging = AorusImportArchive.temporaryUnpackDirectory()
+            let staged = staging.appendingPathComponent(archive.lastPathComponent)
+            do {
+                try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true, attributes: nil)
+                try FileManager.default.moveItem(at: archive, to: staged)
+            } catch {
+                self.removePicked(urls)
+                try? FileManager.default.removeItem(at: staging)
+                self.presentError(.tdata(.noTData), context: context, controller: controller)
+                return
+            }
+            self.removePicked(urls.filter { $0 != archive })
+            // The archive is read where it now lies, and its folder goes with whatever is
+            // unpacked from it.
+            self.readTData(url: staged, extracted: nil, passcode: nil, cleanup: staging, context: context, controller: controller)
+            return
+        }
+        let staging = AorusImportArchive.temporaryUnpackDirectory()
+        do {
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true, attributes: nil)
+            for url in urls {
+                try FileManager.default.moveItem(at: url, to: staging.appendingPathComponent(url.lastPathComponent))
+            }
+        } catch {
+            self.removePicked(urls)
+            try? FileManager.default.removeItem(at: staging)
+            self.presentError(.tdata(.noTData), context: context, controller: controller)
+            return
+        }
+        self.readTData(url: staging, extracted: staging, passcode: nil, context: context, controller: controller)
+    }
+
     // MARK: - Reading
 
     /// Reads a Telegram Desktop folder, whether it was picked as a folder or as a `.zip` that
     /// holds one. `extracted`, when set, is a directory the app unpacked and must remove once
     /// the read (and any passcode retry) is finished.
-    private static func readTData(url: URL, extracted: URL?, passcode: String?, context: AccountContext, controller: ViewController) {
+    private static func readTData(url: URL, extracted: URL?, passcode: String?, cleanup staging: URL? = nil, context: AccountContext, controller: ViewController) {
         guard let progress = self.beginReading(context: context, controller: controller) else { return }
         // PBKDF2 (100000 rounds), unpacking and provider I/O must not block Files or the UI.
         DispatchQueue.global(qos: .userInitiated).async {
@@ -177,6 +211,11 @@ public enum AorusAccountImport {
             DispatchQueue.main.async {
                 self.isReading = false
                 progress.dismiss()
+                // A staged archive's folder goes now: what a passcode retry reads is the folder
+                // unpacked from it, which is kept until then.
+                if let staging {
+                    try? FileManager.default.removeItem(at: staging)
+                }
                 let removeUnpacked = { if let cleanup { try? FileManager.default.removeItem(at: cleanup) } }
                 switch outcome {
                 case let .success(sessions):
@@ -205,44 +244,48 @@ public enum AorusAccountImport {
         }
     }
 
-    private static func readSessionFile(url: URL, context: AccountContext, controller: ViewController) {
-        guard let progress = self.beginReading(context: context, controller: controller) else { return }
+    /// Reads every picked file — a session store, a session string saved as text, or an archive
+    /// holding sessions — and adds each account found, once.
+    private static func readSessionFiles(urls: [URL], context: AccountContext, controller: ViewController) {
+        guard let progress = self.beginReading(context: context, controller: controller) else {
+            self.removePicked(urls)
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-session-\(UUID().uuidString).session")
-            defer { try? FileManager.default.removeItem(at: temporary) }
-            var result: Result<AorusImportedSession, Error> = .failure(AorusSessionFileFailure.unreadable)
-            var coordinationError: NSError?
-            NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinationError) { readableURL in
-                result = Result {
-                    if AorusImportArchive.looksLikeZip(url: readableURL) {
-                        // A picked archive: unpack only its session stores and read the first
-                        // that holds a session.
-                        let directory = try AorusImportArchive.extractFile(at: readableURL, including: { name in
+            var sessions: [AorusImportedSession] = []
+            var firstFailure: AorusSessionFileFailure?
+            for url in urls {
+                do {
+                    if AorusImportArchive.looksLikeZip(url: url) {
+                        // An archive: unpack only its session stores and read the first that
+                        // holds a session.
+                        let directory = try AorusImportArchive.extractFile(at: url, including: { name in
                             !self.isArchiveMetadata(name) && name.lowercased().hasSuffix(".session")
                         })
                         defer { try? FileManager.default.removeItem(at: directory) }
-                        return try self.sessionFromArchive(at: directory)
+                        sessions.append(try self.sessionFromArchive(at: directory))
+                    } else {
+                        // The picked copy is the app's own and writable: SQLite can open its
+                        // journal beside it.
+                        sessions.append(try AorusSessionFileReader.readSessionFile(url: url))
                     }
-                    // Read from a copy in the app's own directory: SQLite opens journals beside
-                    // the file and the picked location is read-only.
-                    try FileManager.default.copyItem(at: readableURL, to: temporary)
-                    return try AorusSessionFileReader.readSessionFile(url: temporary)
+                } catch let error as AorusSessionFileFailure {
+                    firstFailure = firstFailure ?? error
+                } catch {
+                    firstFailure = firstFailure ?? .unreadable
                 }
             }
-            if let coordinationError { result = .failure(coordinationError) }
-            let outcome = result
+            self.removePicked(urls)
+            // The same account picked twice (a file and its archive, say) is added once.
+            var seen = Set<Data>()
+            let unique = sessions.filter { seen.insert($0.authKey).inserted }
             DispatchQueue.main.async {
                 self.isReading = false
                 progress.dismiss()
-                switch outcome {
-                case let .success(session):
-                    self.add(sessions: [session], context: context, controller: controller)
-                case let .failure(error as AorusSessionFileFailure):
-                    self.presentError(.sessionFile(error), context: context, controller: controller)
-                case .failure:
-                    self.presentError(.sessionFile(.unreadable), context: context, controller: controller)
+                if !unique.isEmpty {
+                    self.add(sessions: unique, context: context, controller: controller)
+                } else {
+                    self.presentError(.sessionFile(firstFailure ?? .unreadable), context: context, controller: controller)
                 }
             }
         }
@@ -550,19 +593,19 @@ public enum AorusAccountImport {
 }
 
 private final class AorusImportPickerDelegate: NSObject, UIDocumentPickerDelegate {
-    private let completion: (URL?) -> Void
+    private let completion: ([URL]) -> Void
     private var finished = false
 
-    init(completion: @escaping (URL?) -> Void) {
+    init(completion: @escaping ([URL]) -> Void) {
         self.completion = completion
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        self.finish(controller, url: urls.first)
+        self.finish(controller, urls: urls)
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        self.finish(controller, url: nil)
+        self.finish(controller, urls: [])
     }
 
     /// Hands the choice on once the picker is off screen.
@@ -575,31 +618,31 @@ private final class AorusImportPickerDelegate: NSObject, UIDocumentPickerDelegat
     ///
     /// The choice is still not handed on while the picker is leaving, because a passcode
     /// prompt presented then is dropped as well; it waits for the picker's own transition.
-    private func finish(_ controller: UIDocumentPickerViewController, url: URL?) {
+    private func finish(_ controller: UIDocumentPickerViewController, urls: [URL]) {
         guard !self.finished else { return }
         self.finished = true
-        self.deliver(url, after: controller, attempt: 0)
+        self.deliver(urls, after: controller, attempt: 0)
     }
 
-    private func deliver(_ url: URL?, after picker: UIViewController, attempt: Int) {
+    private func deliver(_ urls: [URL], after picker: UIViewController, attempt: Int) {
         if let coordinator = picker.transitionCoordinator,
-           coordinator.animate(alongsideTransition: nil, completion: { _ in self.completion(url) }) {
+           coordinator.animate(alongsideTransition: nil, completion: { _ in self.completion(urls) }) {
             return
         }
         guard picker.presentingViewController != nil else {
             // Already gone: nothing to wait for.
-            self.completion(url)
+            self.completion(urls)
             return
         }
         if attempt < 10 {
             // Reported a choice but not yet leaving: give UIKit a moment to start.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.deliver(url, after: picker, attempt: attempt + 1)
+                self.deliver(urls, after: picker, attempt: attempt + 1)
             }
         } else {
             // A picker that never dismisses itself is dismissed here, once.
             picker.dismiss(animated: true) {
-                self.completion(url)
+                self.completion(urls)
             }
         }
     }

@@ -610,10 +610,11 @@ final class AorusSettingsRowItemNode: ListViewItemNode, ItemListItemNode {
                 transition.updateFrame(node: strongSelf.titleNode, frame: CGRect(origin: CGPoint(x: textLeft, y: textTop), size: titleLayout.size))
                 strongSelf.subtitleNode.isHidden = subtitleString == nil
                 transition.updateFrame(node: strongSelf.subtitleNode, frame: CGRect(origin: CGPoint(x: textLeft, y: textTop + titleLayout.size.height + subtitleSpacing), size: subtitleLayout.size))
+                // A row greyed out or back in by its parent switch fades with the list's change.
                 let contentAlpha: CGFloat = isEnabled ? 1.0 : 0.45
-                strongSelf.titleNode.alpha = contentAlpha
-                strongSelf.subtitleNode.alpha = contentAlpha
-                strongSelf.iconNode.alpha = contentAlpha
+                transition.updateAlpha(node: strongSelf.titleNode, alpha: contentAlpha)
+                transition.updateAlpha(node: strongSelf.subtitleNode, alpha: contentAlpha)
+                transition.updateAlpha(node: strongSelf.iconNode, alpha: contentAlpha)
 
                 strongSelf.arrowNode.isHidden = !showsArrow
                 var trailing = rightEdge

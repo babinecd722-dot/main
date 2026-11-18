@@ -106,8 +106,8 @@ final class AorusProbeTextViewDelegate: NSObject, UITextViewDelegate {
 }
 
 // The work-trail sheet: medium and large in portrait; in landscape, where medium is inactive,
-// a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+), re-applied when
-// the height class changes while the sheet is open.
+// the full width and a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+),
+// re-applied when the height class changes while the sheet is open.
 @available(iOS 15.0, *)
 func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
     guard let sheet = controller.sheetPresentationController else { return }
@@ -124,62 +124,33 @@ func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
         }
     }
     apply(compact)
-    sheet.prefersEdgeAttachedInCompactHeight = true
-    sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+    sheet.prefersEdgeAttachedInCompactHeight = false
     sheet.animateChanges {
         apply(!compact)
     }
 }
 
-// The account import picker: a folder or an item, and in either case a ZIP that holds one. Its
-// presentation style is left to the picker -- forcing `.fullScreen` dropped the toolbar that
-// carries the Open button -- and it goes on whatever is on top of the window.
-func aorusProbeAccountImportPicker(folder: Bool, url: URL, from controller: UIViewController) {
-    var types: [UTType] = folder ? [.folder, .zip] : [.zip]
-    if !folder {
-        if let declared = UTType("org.aorusgram.telegram-session") {
-            types.append(declared)
-        } else if let byExtension = UTType(filenameExtension: "session", conformingTo: .data) {
-            types.append(byExtension)
-        } else {
-            types.append(.item)
-        }
-    }
-    if let archive = UTType("public.archive") { types.append(archive) }
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
-    picker.allowsMultipleSelection = false
+// The account import picker's fallback: the system picker in copy mode, every file, several at
+// once, as Telegram's chat file picker is; a picked copy is read and moved like any file of the
+// app's own. Its presentation style is left to the picker -- forcing `.fullScreen` dropped the
+// toolbar that carries the Open button -- and it goes on whatever is on top of the window.
+func aorusProbeAccountImportPicker(urls: [URL], from controller: UIViewController) {
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+    picker.allowsMultipleSelection = true
     picker.shouldShowFileExtensions = true
     var top: UIViewController? = controller.view.window?.rootViewController
     while let presented = top?.presentedViewController, !presented.isBeingDismissed {
         top = presented
     }
     top?.present(picker, animated: true)
-    var error: NSError?
-    NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: url, options: .withoutChanges, error: &error) { readableURL in
-        let isDirectory = (try? readableURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-        _ = isDirectory
-        if let handle = try? FileHandle(forReadingFrom: readableURL) {
+    let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try? FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true, attributes: nil)
+    for url in urls {
+        if let handle = try? FileHandle(forReadingFrom: url) {
             _ = try? handle.read(upToCount: 4)
-            _ = try? handle.close()
+            try? handle.close()
         }
-        _ = try? Data(contentsOf: readableURL, options: .alwaysMapped)
-    }
-    let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
-    for case let fileURL as URL in enumerator! {
-        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        _ = (values?.isRegularFile, values?.fileSize)
-    }
-    // The delegate hands a choice on after the picker's own dismissal, never by dismissing
-    // it a second time.
-    let deliver: () -> Void = {}
-    if let coordinator = picker.transitionCoordinator,
-       coordinator.animate(alongsideTransition: nil, completion: { _ in deliver() }) {
-        return
-    }
-    if picker.presentingViewController == nil {
-        deliver()
-    } else {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { deliver() }
+        try? FileManager.default.moveItem(at: url, to: staging.appendingPathComponent(url.lastPathComponent))
     }
 }
 

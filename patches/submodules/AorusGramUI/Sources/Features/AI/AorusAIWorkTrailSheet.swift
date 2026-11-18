@@ -61,12 +61,12 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
         let isCompactHeight = presenter.traitCollection.verticalSizeClass == .compact
         AorusAIWorkTrailController.applyDetents(to: sheet, compactHeight: isCompactHeight)
         controller.appliedCompactHeight = isCompactHeight
-        sheet.prefersEdgeAttachedInCompactHeight = true
-        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+        // In landscape the sheet spans the screen from edge to edge, not a 420-point card in the
+        // middle; portrait is not affected by this setting.
+        sheet.prefersEdgeAttachedInCompactHeight = false
         sheet.prefersGrabberVisible = true
         sheet.prefersScrollingExpandsWhenScrolledToEdge = true
     }
-    controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
     // Opened from the chat while its composer may have the keyboard: the sheet goes over it.
     AorusKeyboardHold.keepBelow(controller, in: presenter.view.window)
     presenter.present(controller, animated: true)
@@ -168,10 +168,10 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
     fileprivate var appliedCompactHeight: Bool?
 
     /// In portrait the sheet opens at half height and pulls up to full. In landscape on a
-    /// phone, where half height does not exist, it takes three quarters of the height rather
-    /// than all of it: the dimmed strip left above it closes it with a tap, and it swipes down
-    /// like any sheet. iOS 15, which has no custom heights, keeps the full-height sheet, which
-    /// also swipes down.
+    /// phone, where half height does not exist, it takes the full width and three quarters of
+    /// the height rather than all of it: the dimmed strip left above it closes it with a tap,
+    /// and it swipes down like any sheet. iOS 15, which has no custom heights, keeps the
+    /// full-height sheet, which also swipes down.
     fileprivate static func applyDetents(to sheet: UISheetPresentationController, compactHeight: Bool) {
         if compactHeight, #available(iOS 16.0, *) {
             let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")

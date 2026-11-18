@@ -152,11 +152,23 @@ def check(repo: Path) -> list[str]:
         finish = finish[:finish.find("\n    }\n")]
         if "dismiss(" in finish:
             err.append("AorusAccountImport: the delegate dismisses the picker again on a choice; UIKit drops that and the choice is lost")
-    # `.session` is declared by the app so the picker can filter for it.
-    identifier = "org.aorusgram.telegram-session"
-    if identifier not in ui_body:
-        err.append("AorusAccountImport: the session picker no longer asks for the declared .session type")
+    # Files are picked with Telegram's chat file picker, which hands over copies the app can read.
+    # Opened in place, a file needs a security scope a re-signed build does not get, and nothing
+    # chosen in Files was read.
+    if "documentPicker(context, [\"public.item\"]" not in ui_body:
+        err.append("AorusAccountImport: files are no longer picked with Telegram's chat file picker")
+    if "asCopy: false" in ui_body or "forOpeningContentTypes: [.item], asCopy: true" not in ui_body:
+        err.append("AorusAccountImport: the fallback picker must hand over copies (asCopy: true)")
+    installer = repo / "patches/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift"
+    if not installer.is_file() or "legacyICloudFilePicker(" not in installer.read_text(encoding="utf-8"):
+        err.append("AorusAccountImportPicker.swift no longer installs Telegram's chat file picker")
+    if "cp $PATCHES/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift" not in workflow_body:
+        err.append("build-aorusgram.yml: AorusAccountImportPicker.swift is no longer copied into telegram-ios")
     branding = (repo / "scripts/aorus_branding.py").read_text(encoding="utf-8")
+    if "AorusAccountImportPicker.install()" not in branding:
+        err.append("aorus_branding: the account import picker is no longer installed at launch")
+    # `.session` stays declared by the app, so Files shows the type by name.
+    identifier = "org.aorusgram.telegram-session"
     if identifier not in branding or "patch_session_file_type(tg)" not in branding:
         err.append("aorus_branding: the .session type is no longer declared in the app's Info.plist")
 
