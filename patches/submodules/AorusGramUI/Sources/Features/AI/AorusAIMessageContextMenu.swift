@@ -38,16 +38,16 @@ public func aorusAIPresentMessageActions(
             reference: reference
         )
         controller.modalPresentationStyle = .pageSheet
-        controller.sheetPresentationController?.detents = [.medium(), .large()]
         let presenter = navigationController.topViewController
             ?? navigationController.view.window?.rootViewController
-        // Medium is inactive in compact height (landscape on a phone): open at large there,
-        // across the whole width of the screen, with its own close button to leave.
-        let isCompactHeight = presenter?.traitCollection.verticalSizeClass == .compact
-        controller.sheetPresentationController?.selectedDetentIdentifier = isCompactHeight ? .large : .medium
-        controller.sheetPresentationController?.prefersEdgeAttachedInCompactHeight = false
-        controller.sheetPresentationController?.prefersGrabberVisible = true
-        controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
+        // Half height in portrait, pulled up to full; in landscape across the whole width of the
+        // screen and three quarters of its height, not all of it (`AorusAISheetLayout`).
+        if let sheet = controller.sheetPresentationController {
+            let container: UIView = presenter?.view.window ?? navigationController.view.window ?? presenter?.view ?? navigationController.view
+            controller.appliedSheetLayout = AorusAISheetLayout.apply(to: controller, sheet: sheet, in: container, landscapeDetent: "aorus.ai.messageActions.landscape")
+            sheet.prefersGrabberVisible = true
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        }
         // The chat focuses its input again as the message menu closes; without this the
         // keyboard came back over the sheet and hid its lower rows.
         AorusKeyboardHold.keepBelow(controller, in: presenter?.view.window ?? navigationController.view.window)
@@ -72,6 +72,8 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let newChatButton = AorusInsetButton(type: .system)
     private var selectedItems: [AorusAIMessageMenu.Item] = []
+    /// How the sheet was last laid out; checked on every layout, so a rotation lays it out again.
+    fileprivate var appliedSheetLayout: AorusAISheetLayout.Applied?
 
     init(context: AccountContext, navigationController: NavigationController, reference: AorusAIReferencedMessage) {
         self.context = context
@@ -182,15 +184,23 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if let changed = AorusAISheetLayout.change(for: self, from: appliedSheetLayout) {
+            let previous = appliedSheetLayout
+            appliedSheetLayout = changed
+            AorusAISheetLayout.relayout(self, from: previous, to: changed, landscapeDetent: "aorus.ai.messageActions.landscape")
+        }
         let safe = view.safeAreaInsets
-        let width = view.bounds.width
-        headerView.frame = CGRect(x: 0.0, y: safe.top + 4.0, width: width, height: 48.0)
+        // Across the whole width in landscape, the rows keep clear of the notch and the rounded
+        // corners on either side; the list's own cells already do.
+        let left = safe.left
+        let width = max(0.0, view.bounds.width - safe.left - safe.right)
+        headerView.frame = CGRect(x: left, y: safe.top + 4.0, width: width, height: 48.0)
         titleLabel.frame = CGRect(x: 56.0, y: 7.0, width: max(0.0, width - 112.0), height: 28.0)
         closeButton.frame = CGRect(x: width - 48.0, y: 7.0, width: 32.0, height: 32.0)
-        segments.frame = CGRect(x: 16.0, y: headerView.frame.maxY + 4.0, width: max(0.0, width - 32.0), height: 34.0)
+        segments.frame = CGRect(x: left + 16.0, y: headerView.frame.maxY + 4.0, width: max(0.0, width - 32.0), height: 34.0)
         let buttonHeight: CGFloat = 40.0
-        newChatButton.frame = CGRect(x: 16.0, y: view.bounds.height - safe.bottom - buttonHeight - 10.0, width: max(0.0, width - 32.0), height: buttonHeight)
-        tableView.frame = CGRect(x: 0.0, y: segments.frame.maxY + 8.0, width: width, height: max(0.0, newChatButton.frame.minY - segments.frame.maxY - 14.0))
+        newChatButton.frame = CGRect(x: left + 16.0, y: view.bounds.height - safe.bottom - buttonHeight - 10.0, width: max(0.0, width - 32.0), height: buttonHeight)
+        tableView.frame = CGRect(x: 0.0, y: segments.frame.maxY + 8.0, width: view.bounds.width, height: max(0.0, newChatButton.frame.minY - segments.frame.maxY - 14.0))
     }
 
     private func updateSelectedItems() {

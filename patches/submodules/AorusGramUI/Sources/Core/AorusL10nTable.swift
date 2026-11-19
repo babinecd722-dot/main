@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "These aren't Telegram Desktop files": "Questi non sono file di Telegram Desktop",
         "Export File": "Esporta file",
         "Import a Save": "Importa un salvataggio",
         "Added: “%@”": "Aggiunto: «%@»",
@@ -1272,6 +1273,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "These aren't Telegram Desktop files": "To nie są pliki Telegram Desktop",
         "Export File": "Eksportuj plik",
         "Import a Save": "Importuj zapis",
         "Added: “%@”": "Dodano: „%@”",
@@ -2491,6 +2493,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "These aren't Telegram Desktop files": "Dit zijn geen Telegram Desktop-bestanden",
         "Export File": "Bestand exporteren",
         "Import a Save": "Opslag importeren",
         "Added: “%@”": "Toegevoegd: ‘%@’",
@@ -3710,6 +3713,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "These aren't Telegram Desktop files": "Aquests no són fitxers de Telegram Desktop",
         "Export File": "Exporta el fitxer",
         "Import a Save": "Importa una còpia",
         "Added: “%@”": "Afegida: «%@»",
@@ -4929,6 +4933,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "These aren't Telegram Desktop files": "Ini bukan file Telegram Desktop",
         "Export File": "Ekspor file",
         "Import a Save": "Impor simpanan",
         "Added: “%@”": "Ditambahkan: “%@”",
@@ -6148,6 +6153,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "These aren't Telegram Desktop files": "Ini bukan fail Telegram Desktop",
         "Export File": "Eksport fail",
         "Import a Save": "Import simpanan",
         "Added: “%@”": "Ditambah: “%@”",
@@ -7367,6 +7373,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "These aren't Telegram Desktop files": "Гэта не файлы Telegram Desktop",
         "Export File": "Экспартаваць файл",
         "Import a Save": "Імпартаваць захаванне",
         "Added: “%@”": "Дададзена: «%@»",
@@ -8586,6 +8593,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "These aren't Telegram Desktop files": "Bular Telegram Desktop fayllari emas",
         "Export File": "Faylni eksport qilish",
         "Import a Save": "Saqlanmani import qilish",
         "Added: “%@”": "Qo‘shildi: “%@”",
@@ -9805,6 +9813,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "These aren't Telegram Desktop files": "Telegram Desktop 파일이 아닙니다",
         "Export File": "파일 내보내기",
         "Import a Save": "저장본 가져오기",
         "Added: “%@”": "추가됨: “%@”",
@@ -11024,6 +11033,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "These aren't Telegram Desktop files": "هذه ليست ملفات Telegram Desktop",
         "Export File": "تصدير الملف",
         "Import a Save": "استيراد نسخة محفوظة",
         "Added: “%@”": "تمت الإضافة: «%@»",
@@ -12243,6 +12253,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "These aren't Telegram Desktop files": "این‌ها فایل‌های Telegram Desktop نیستند",
         "Export File": "خروجی گرفتن فایل",
         "Import a Save": "وارد کردن ذخیره",
         "Added: “%@”": "افزوده شد: «%@»",
@@ -13462,6 +13473,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "These aren't Telegram Desktop files": "Бұл Telegram Desktop файлдары емес",
         "Export File": "Файлды экспорттау",
         "Import a Save": "Сақтауды импорттау",
         "Added: “%@”": "Қосылды: «%@»",
@@ -14681,6 +14693,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "These aren't Telegram Desktop files": "这些不是 Telegram Desktop 文件",
         "Export File": "导出文件",
         "Import a Save": "导入存档",
         "Added: “%@”": "已添加：“%@”",
@@ -15901,6 +15914,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "These aren't Telegram Desktop files": "這些不是 Telegram Desktop 檔案",
         "Export File": "匯出檔案",
         "Import a Save": "匯入存檔",
         "Added: “%@”": "已加入：「%@」",
@@ -17120,6 +17134,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "These aren't Telegram Desktop files": "Telegram Desktop のファイルではありません",
         "Export File": "ファイルを書き出す",
         "Import a Save": "保存データを読み込む",
         "Added: “%@”": "追加しました：「%@」",
@@ -18339,6 +18354,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "These aren't Telegram Desktop files": "Nämä eivät ole Telegram Desktopin tiedostoja",
         "Export File": "Vie tiedosto",
         "Import a Save": "Tuo tallennus",
         "Added: “%@”": "Lisätty: ”%@”",
@@ -19558,6 +19574,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "These aren't Telegram Desktop files": "אלה אינם קבצים של Telegram Desktop",
         "Export File": "ייצוא קובץ",
         "Import a Save": "ייבוא שמירה",
         "Added: “%@”": "נוספה: „%@”",
@@ -20777,6 +20794,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "These aren't Telegram Desktop files": "Ovo nisu datoteke Telegram Desktopa",
         "Export File": "Izvezi datoteku",
         "Import a Save": "Uvezi spremanje",
         "Added: “%@”": "Dodano: „%@”",
@@ -21996,6 +22014,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "These aren't Telegram Desktop files": "Ово нису датотеке Telegram Desktop-а",
         "Export File": "Извези датотеку",
         "Import a Save": "Увези чување",
         "Added: “%@”": "Додато: „%@”",
@@ -23215,6 +23234,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "These aren't Telegram Desktop files": "Toto nejsou soubory Telegram Desktop",
         "Export File": "Exportovat soubor",
         "Import a Save": "Importovat uložení",
         "Added: “%@”": "Přidáno: „%@“",
@@ -24434,6 +24454,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "These aren't Telegram Desktop files": "Toto nie sú súbory Telegram Desktop",
         "Export File": "Exportovať súbor",
         "Import a Save": "Importovať uloženie",
         "Added: “%@”": "Pridané: „%@“",
@@ -25653,6 +25674,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "These aren't Telegram Desktop files": "Acestea nu sunt fișiere Telegram Desktop",
         "Export File": "Exportă fișierul",
         "Import a Save": "Importă o salvare",
         "Added: “%@”": "Adăugată: „%@”",
@@ -26872,6 +26894,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "These aren't Telegram Desktop files": "Ezek nem Telegram Desktop-fájlok",
         "Export File": "Fájl exportálása",
         "Import a Save": "Mentés importálása",
         "Added: “%@”": "Hozzáadva: „%@”",
@@ -28091,6 +28114,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "These aren't Telegram Desktop files": "Dette er ikke Telegram Desktop-filer",
         "Export File": "Eksporter fil",
         "Import a Save": "Importer en lagring",
         "Added: “%@”": "Lagt til: «%@»",
@@ -29310,6 +29334,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "These aren't Telegram Desktop files": "Det här är inte Telegram Desktop-filer",
         "Export File": "Exportera fil",
         "Import a Save": "Importera en sparning",
         "Added: “%@”": "Tillagd: ”%@”",
@@ -30529,6 +30554,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "These aren't Telegram Desktop files": "Đây không phải tệp của Telegram Desktop",
         "Export File": "Xuất tệp",
         "Import a Save": "Nhập bản lưu",
         "Added: “%@”": "Đã thêm: “%@”",
@@ -31748,6 +31774,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "These aren't Telegram Desktop files": "Це не файли Telegram Desktop",
         "Export File": "Експортувати файл",
         "Import a Save": "Імпортувати збереження",
         "Added: “%@”": "Додано: «%@»",
@@ -32976,6 +33003,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "These aren't Telegram Desktop files": "Estos no son archivos de Telegram Desktop",
         "Export File": "Exportar archivo",
         "Import a Save": "Importar un guardado",
         "Added: “%@”": "Añadido: «%@»",
@@ -34204,6 +34232,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "These aren't Telegram Desktop files": "Estes não são ficheiros do Telegram Desktop",
         "Export File": "Exportar ficheiro",
         "Import a Save": "Importar uma gravação",
         "Added: “%@”": "Adicionada: «%@»",
@@ -35432,6 +35461,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "These aren't Telegram Desktop files": "Das sind keine Telegram-Desktop-Dateien",
         "Export File": "Datei exportieren",
         "Import a Save": "Sicherung importieren",
         "Added: “%@”": "Hinzugefügt: „%@“",
@@ -36660,6 +36690,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "These aren't Telegram Desktop files": "Ce ne sont pas des fichiers de Telegram Desktop",
         "Export File": "Exporter le fichier",
         "Import a Save": "Importer une sauvegarde",
         "Added: “%@”": "Ajoutée : « %@ »",
@@ -37888,6 +37919,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "These aren't Telegram Desktop files": "Bunlar Telegram Desktop dosyaları değil",
         "Export File": "Dosyayı dışa aktar",
         "Import a Save": "Kaydı içe aktar",
         "Added: “%@”": "Eklendi: “%@”",

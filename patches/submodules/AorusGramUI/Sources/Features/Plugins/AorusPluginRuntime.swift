@@ -3555,8 +3555,8 @@ private enum AorusPluginFeatureBroker {
         switch id {
         case "ghostMode": guard let bool else { return typeError() }; manager.ghostMode = bool
         case "ghostChatButton": guard let bool else { return typeError() }; manager.ghostChatButton = bool
-        case "ghostHideOnline": guard let bool else { return typeError() }; manager.ghostHideOnline = bool; if bool { manager.alwaysOnline = false }
-        case "alwaysOnline": guard let bool else { return typeError() }; manager.alwaysOnline = bool; if bool { manager.ghostHideOnline = false }
+        case "ghostHideOnline": guard let bool else { return typeError() }; manager.ghostHideOnline = bool; if bool && manager.ghostMode { manager.alwaysOnline = false }
+        case "alwaysOnline": guard let bool else { return typeError() }; manager.alwaysOnline = bool; if bool && manager.ghostMode { manager.ghostHideOnline = false }
         case "blockReadReceipts": guard let bool else { return typeError() }; manager.blockReadReceipts = bool
         case "hideTyping": guard let bool else { return typeError() }; manager.hideTyping = bool
         case "ghostHideStories": guard let bool else { return typeError() }; manager.ghostHideStories = bool

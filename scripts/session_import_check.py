@@ -152,22 +152,32 @@ def check(repo: Path) -> list[str]:
         finish = finish[:finish.find("\n    }\n")]
         if "dismiss(" in finish:
             err.append("AorusAccountImport: the delegate dismisses the picker again on a choice; UIKit drops that and the choice is lost")
-    # Files are picked with Telegram's chat file picker, which hands over copies the app can read.
-    # Opened in place, a file needs a security scope a re-signed build does not get, and nothing
-    # chosen in Files was read.
-    if "documentPicker(context, types, deliver)" not in ui_body or "pickFiles(types: self.sessionTypeIdentifiers" not in ui_body:
-        err.append("AorusAccountImport: session files are no longer picked with Telegram's chat file picker")
-    if "UTType($0) ?? UTType(importedAs: $0) }, asCopy: true)" not in ui_body:
-        err.append("AorusAccountImport: the fallback picker must hand over copies (asCopy: true)")
-    # Telegram Desktop's folder can only be picked in place: the folder or its .zip, nothing else,
-    # and what is read is copied out under the picker's access at once.
-    if "forOpeningContentTypes: [.folder, .zip], asCopy: false" not in ui_body or "func stageTData(" not in ui_body:
-        err.append("AorusAccountImport: the tdata picker no longer offers the folder and its archive alone")
+    # Both are picked with Telegram's chat file picker — its presentation, and its handling of a
+    # picker cancelled or lost behind a lock: session files as copies, Telegram Desktop's tdata in
+    # place, the only way a folder can be chosen.
+    if "documentPicker(context, types, inPlace, deliver)" not in ui_body:
+        err.append("AorusAccountImport: account files are no longer picked with Telegram's chat file picker")
+    if "pickFiles(types: self.sessionTypeIdentifiers, inPlace: false" not in ui_body:
+        err.append("AorusAccountImport: session files are no longer picked as copies")
+    if "UTType($0) ?? UTType(importedAs: $0) }, asCopy: !inPlace)" not in ui_body:
+        err.append("AorusAccountImport: the fallback picker must use the mode it was asked for")
+    # Telegram Desktop's tdata as it comes: the folder, its .zip, or the files in it (Desktop's
+    # have no extension, so any data file can be chosen), and what is read is copied out under
+    # the picker's access at once.
+    if "pickFiles(types: self.tdataTypeIdentifiers, inPlace: true" not in ui_body:
+        err.append("AorusAccountImport: the tdata picker no longer picks in place")
+    if "[UTType.folder.identifier, UTType.zip.identifier, UTType.data.identifier]" not in ui_body:
+        err.append("AorusAccountImport: the tdata picker no longer offers the folder, its archive and Desktop's files")
+    if "func stageTData(from urls: [URL], into staging: URL)" not in ui_body:
+        err.append("AorusAccountImport: picked tdata items are no longer copied out before reading")
     if "coordinate(readingItemAt: source" not in ui_body:
         err.append("AorusAccountImport: tdata files are no longer copied through a file coordinator")
+    if "forOpeningContentTypes: [.folder, .zip], asCopy: false" in ui_body:
+        err.append("AorusAccountImport: the tdata picker is shown on its own again instead of through Telegram's picker")
     installer = repo / "patches/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift"
-    if not installer.is_file() or "legacyICloudFilePicker(" not in installer.read_text(encoding="utf-8"):
-        err.append("AorusAccountImportPicker.swift no longer installs Telegram's chat file picker")
+    installer_text = installer.read_text(encoding="utf-8") if installer.is_file() else ""
+    if "legacyICloudFilePicker(" not in installer_text or "mode: inPlace ? .inPlace : .default" not in installer_text:
+        err.append("AorusAccountImportPicker.swift no longer installs Telegram's chat file picker in both modes")
     if "cp $PATCHES/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift" not in workflow_body:
         err.append("build-aorusgram.yml: AorusAccountImportPicker.swift is no longer copied into telegram-ios")
     branding = (repo / "scripts/aorus_branding.py").read_text(encoding="utf-8")

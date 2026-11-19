@@ -105,13 +105,18 @@ final class AorusProbeTextViewDelegate: NSObject, UITextViewDelegate {
     }
 }
 
-// The work-trail sheet: medium and large in portrait; in landscape, where medium is inactive,
-// the full width and a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+),
-// re-applied when the height class changes while the sheet is open.
+// AorusAI's sheets (the work trail, the message actions): medium and large in portrait; in
+// landscape, where medium is inactive, attached to the bottom edge across the window's width
+// with a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+), laid out again
+// when the window turns while the sheet is open. Not attached, a landscape sheet covers the
+// screen whole.
 @available(iOS 15.0, *)
 func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
     guard let sheet = controller.sheetPresentationController else { return }
-    func apply(_ compactHeight: Bool) {
+    func apply(_ compactHeight: Bool, width: CGFloat) {
+        sheet.prefersEdgeAttachedInCompactHeight = true
+        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+        controller.preferredContentSize = compactHeight ? CGSize(width: width, height: 0.0) : .zero
         if compactHeight, #available(iOS 16.0, *) {
             let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")
             sheet.detents = [.custom(identifier: identifier) { context in
@@ -123,10 +128,10 @@ func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
             sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
         }
     }
-    apply(compact)
-    sheet.prefersEdgeAttachedInCompactHeight = false
+    let width = controller.view.window?.bounds.width ?? 0.0
+    apply(compact, width: width)
     sheet.animateChanges {
-        apply(!compact)
+        apply(!compact, width: width)
     }
 }
 
@@ -158,8 +163,8 @@ func aorusProbeAccountImportPicker(urls: [URL], from controller: UIViewControlle
 // picker); the files at the folder's top level are copied out through a file coordinator under
 // the access the picker gave.
 func aorusProbeTDataPicker(folder: URL, into staging: URL, from controller: UIViewController) {
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder, .zip], asCopy: false)
-    picker.allowsMultipleSelection = false
+    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder, .zip, .data], asCopy: false)
+    picker.allowsMultipleSelection = true
     picker.shouldShowFileExtensions = true
     controller.present(picker, animated: true)
     let scoped = folder.startAccessingSecurityScopedResource()

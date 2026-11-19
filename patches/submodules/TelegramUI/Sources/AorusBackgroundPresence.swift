@@ -407,7 +407,7 @@ final class AorusBackgroundNotifier {
         let category: String
         let threadIdentifier: String
         let userInfo: [AnyHashable: Any]
-        let tone: Tone
+        var tone: Tone
     }
 
     /// The sound a notification plays, picked the way Telegram's notification service picks it.
@@ -548,19 +548,18 @@ final class AorusBackgroundNotifier {
             let contentSettings = getContentSettings(transaction: transaction)
             let recipientName = namesRecipient ? AorusBackgroundNotifier.recipientAccountName(transaction: transaction, account: account) : nil
             var drafts: [Draft] = []
-            for (index, item) in items.enumerated() {
+            var newestSound: PeerMessageSound?
+            for item in items {
                 // Read again: the message may have been read elsewhere in the meantime, and this
                 // also gives the sound and preview setting that apply to it.
                 let resolved = messagesForNotification(transaction: transaction, id: item.messageId, alwaysReturnMessage: false)
                 guard resolved.notify, let message = resolved.messages.first else {
                     continue
                 }
-                // One sound for a delivery: the newest message.
-                let playsSound = index == items.count - 1
                 if let draft = AorusBackgroundNotifier.messageDraft(
                     message: message,
                     threadData: resolved.threadData ?? item.threadData,
-                    tone: playsSound ? AorusBackgroundNotifier.tone(resolved.sound, transaction: transaction) : .none,
+                    tone: .none,
                     displayContents: resolved.displayContents,
                     contentSettings: contentSettings,
                     account: account,
@@ -570,7 +569,13 @@ final class AorusBackgroundNotifier {
                     recipientName: recipientName
                 ) {
                     drafts.append(draft)
+                    newestSound = resolved.sound
                 }
+            }
+            // One sound for a delivery: the newest message that is shown, chosen once the rest
+            // are left out (a muted chat, a stop word), so a delivery never comes in silent.
+            if let newestSound, !drafts.isEmpty {
+                drafts[drafts.count - 1].tone = AorusBackgroundNotifier.tone(newestSound, transaction: transaction)
             }
             return drafts
         }
@@ -715,7 +720,10 @@ final class AorusBackgroundNotifier {
             threadIdentifier += ":\(threadId)"
         }
         return Draft(
-            identifier: "m\(peerId.toInt64()):\(message.id.namespace):\(message.id.id)",
+            // The account goes after the message, where Telegram's clearing reads past it: a group
+            // two signed-in accounts are in gets a notification for each, as Telegram's pushes
+            // give, rather than the second one replacing the first.
+            identifier: "m\(peerId.toInt64()):\(message.id.namespace):\(message.id.id)_\(account.id.int64)",
             title: AorusBackgroundNotifier.decoratedTitle(title, recipientName: recipientName, silent: isSilent),
             body: body,
             category: category,
@@ -740,7 +748,7 @@ final class AorusBackgroundNotifier {
             let settings = globalSettings.effective.reactionSettings
             let recipientName = namesRecipient ? AorusBackgroundNotifier.recipientAccountName(transaction: transaction, account: account) : nil
             var drafts: [Draft] = []
-            for (index, item) in items.enumerated() {
+            for item in items {
                 let author = item.reactionAuthor
                 if author.id == account.peerId {
                     continue
@@ -755,13 +763,12 @@ final class AorusBackgroundNotifier {
                 case .everyone:
                     break
                 }
-                let playsSound = index == items.count - 1
                 if let draft = AorusBackgroundNotifier.reactionDraft(
                     author: author,
                     reaction: item.reaction,
                     message: item.message,
                     hidesSender: settings.hideSender == .hide || isAppLocked || !showsNames,
-                    tone: playsSound ? AorusBackgroundNotifier.tone(settings.sound, transaction: transaction) : .none,
+                    tone: .none,
                     transaction: transaction,
                     account: account,
                     presentationData: presentationData,
@@ -769,6 +776,10 @@ final class AorusBackgroundNotifier {
                 ) {
                     drafts.append(draft)
                 }
+            }
+            // One sound, on the newest reaction that is shown.
+            if !drafts.isEmpty {
+                drafts[drafts.count - 1].tone = AorusBackgroundNotifier.tone(settings.sound, transaction: transaction)
             }
             return drafts
         }
@@ -826,7 +837,7 @@ final class AorusBackgroundNotifier {
             body = strings.PUSH_REACT_HIDDEN
         }
         return Draft(
-            identifier: "aorus-reaction:\(peerId.toInt64()):\(message.id.id):\(author.id.toInt64())",
+            identifier: "aorus-reaction:\(account.id.int64):\(peerId.toInt64()):\(message.id.id):\(author.id.toInt64())",
             title: AorusBackgroundNotifier.decoratedTitle(title, recipientName: recipientName, silent: false),
             body: body,
             category: "t",

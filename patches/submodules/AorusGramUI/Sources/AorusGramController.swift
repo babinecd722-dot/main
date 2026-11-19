@@ -552,7 +552,7 @@ private struct AorusEntry: ItemListNodeEntry {
     let section: ItemListSectionId
     /// The row's place on its page, the same for the row whichever rows around it come and go
     /// (`AorusRowOrdering`): the list's diff reads it to tell a row that went from one that moved.
-    let order: Double
+    let order: AorusRowKey
     let kind: Kind
 
     var stableId: String {
@@ -1073,12 +1073,12 @@ private func aorusEntries(page: AorusPage, query: String, searching: Bool, state
 /// before keeps its key; a new row gets a key between the rows around it, so old and new lists
 /// always compare by where the rows really are.
 private final class AorusRowOrdering {
-    private var keys: [String: Double] = [:]
+    private var keys: [String: AorusRowKey] = [:]
 
-    func orders(for ids: [String]) -> [Double] {
-        var result: [Double] = []
+    func orders(for ids: [String]) -> [AorusRowKey] {
+        var result: [AorusRowKey] = []
         result.reserveCapacity(ids.count)
-        var previous: Double?
+        var previous: AorusRowKey?
         for (index, id) in ids.enumerated() {
             if let key = self.keys[id], previous.map({ key > $0 }) ?? true {
                 result.append(key)
@@ -1087,29 +1087,80 @@ private final class AorusRowOrdering {
             }
             // New here, or seen before on the other side of a row it now follows: placed after the
             // row before it and ahead of the next known row that is still after that one.
-            var next: Double?
+            var next: AorusRowKey?
             for laterId in ids[(index + 1)...] {
                 if let key = self.keys[laterId], previous.map({ key > $0 }) ?? true {
                     next = key
                     break
                 }
             }
-            let key: Double
-            switch (previous, next) {
-            case let (lower?, upper?):
-                key = (lower + upper) / 2.0
-            case let (lower?, nil):
-                key = lower + 1024.0
-            case let (nil, upper?):
-                key = upper - 1024.0
-            case (nil, nil):
-                key = 0.0
-            }
+            let key = AorusRowKey.between(previous, next)
             self.keys[id] = key
             result.append(key)
             previous = key
         }
         return result
+    }
+}
+
+/// A place in a page's order that another can always be put between, however many times: whole
+/// numbers compared one after another, a key that is the start of another coming first. Between
+/// two neighbours that leave no whole number free, the key just grows by one more number, so a
+/// key is never moved and old and new lists always compare (a fraction halved again and again
+/// runs out of precision after some fifty times).
+struct AorusRowKey: Comparable, ExpressibleByIntegerLiteral {
+    private let digits: [Int]
+
+    private init(digits: [Int]) {
+        self.digits = digits
+    }
+
+    init(integerLiteral value: Int) {
+        self.digits = [value]
+    }
+
+    static func < (lhs: AorusRowKey, rhs: AorusRowKey) -> Bool {
+        return lhs.digits.lexicographicallyPrecedes(rhs.digits)
+    }
+
+    /// A key after `lower` and before `upper`, either of which may be missing.
+    static func between(_ lower: AorusRowKey?, _ upper: AorusRowKey?) -> AorusRowKey {
+        guard let lower else {
+            return AorusRowKey(digits: [(upper?.digits.first ?? 1024) - 1024])
+        }
+        guard let upper else {
+            return AorusRowKey(digits: [(lower.digits.first ?? 0) + 1024])
+        }
+        var result: [Int] = []
+        var index = 0
+        while index < lower.digits.count || index < upper.digits.count {
+            let low: Int? = index < lower.digits.count ? lower.digits[index] : nil
+            guard let high: Int = index < upper.digits.count ? upper.digits[index] : nil else {
+                break
+            }
+            guard let low else {
+                // `lower` ends here: any number below `upper`'s comes after it.
+                result.append(high - 1024)
+                return AorusRowKey(digits: result)
+            }
+            if low == high {
+                result.append(low)
+                index += 1
+                continue
+            }
+            if high - low > 1 {
+                result.append(low + (high - low) / 2)
+                return AorusRowKey(digits: result)
+            }
+            // Neighbours at this number: already before `upper` here, so anything after the rest
+            // of `lower`.
+            result.append(low)
+            let rest = lower.digits.dropFirst(index + 1)
+            result.append((rest.first ?? -1024) + 1024)
+            return AorusRowKey(digits: result)
+        }
+        // Not reached for `lower` < `upper`; still a key after `lower`.
+        return AorusRowKey(digits: lower.digits + [0])
     }
 }
 
@@ -1343,13 +1394,15 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             let s = stateValue.with { $0 }
             // Always Online and Ghost Mode's "Online Status" are opposites — one keeps the
             // account broadcasting online, the other broadcasting offline — so turning either on
-            // turns the other off. The list uses animateChanges, so the other switch flips with
-            // a visible animation.
-            if keyPath == \AorusState.alwaysOnline, value, s.ghostHideOnline {
+            // turns the other off. They meet only while Ghost Mode is on: with it off neither
+            // touches the other, and "Online Status" stays as it was chosen for the next time
+            // Ghost Mode is turned on, when Ghost Mode wins (AorusBackgroundWork). The list uses
+            // animateChanges, so the other switch flips with a visible animation.
+            if keyPath == \AorusState.alwaysOnline, value, s.ghostHideOnline, s.ghostMode {
                 updateState { current in var next = current; next.ghostHideOnline = false; return next }
                 mgr.ghostHideOnline = false
             }
-            if keyPath == \AorusState.ghostHideOnline, value, s.alwaysOnline {
+            if keyPath == \AorusState.ghostHideOnline, value, s.alwaysOnline, s.ghostMode {
                 updateState { current in var next = current; next.alwaysOnline = false; return next }
                 mgr.alwaysOnline = false
             }

@@ -58,12 +58,7 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
     let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
     controller.modalPresentationStyle = .pageSheet
     if let sheet = controller.sheetPresentationController {
-        let isCompactHeight = presenter.traitCollection.verticalSizeClass == .compact
-        AorusAIWorkTrailController.applyDetents(to: sheet, compactHeight: isCompactHeight)
-        controller.appliedCompactHeight = isCompactHeight
-        // In landscape the sheet spans the screen from edge to edge, not a 420-point card in the
-        // middle; portrait is not affected by this setting.
-        sheet.prefersEdgeAttachedInCompactHeight = false
+        controller.appliedSheetLayout = AorusAISheetLayout.apply(to: controller, sheet: sheet, in: presenter.view.window ?? presenter.view, landscapeDetent: "aorus.ai.workTrail.landscape")
         sheet.prefersGrabberVisible = true
         sheet.prefersScrollingExpandsWhenScrolledToEdge = true
     }
@@ -151,8 +146,8 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 18.0),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20.0),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20.0),
+            titleLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20.0),
+            titleLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20.0),
             tableView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 14.0),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -163,36 +158,16 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         updateTicker()
     }
 
-    /// The detents the sheet was last given, by height class. Read again on every layout, so a
-    /// rotation while the sheet is open moves it to the other set.
-    fileprivate var appliedCompactHeight: Bool?
-
-    /// In portrait the sheet opens at half height and pulls up to full. In landscape on a
-    /// phone, where half height does not exist, it takes the full width and three quarters of
-    /// the height rather than all of it: the dimmed strip left above it closes it with a tap,
-    /// and it swipes down like any sheet. iOS 15, which has no custom heights, keeps the
-    /// full-height sheet, which also swipes down.
-    fileprivate static func applyDetents(to sheet: UISheetPresentationController, compactHeight: Bool) {
-        if compactHeight, #available(iOS 16.0, *) {
-            let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")
-            sheet.detents = [.custom(identifier: identifier) { context in
-                return floor(context.maximumDetentValue * 0.74)
-            }]
-            sheet.selectedDetentIdentifier = identifier
-        } else {
-            sheet.detents = [.medium(), .large()]
-            sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
-        }
-    }
+    /// How the sheet was last laid out (`AorusAISheetLayout`). Checked on every layout, so a
+    /// rotation while the sheet is open lays it out for the other orientation.
+    fileprivate var appliedSheetLayout: AorusAISheetLayout.Applied?
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let isCompactHeight = traitCollection.verticalSizeClass == .compact
-        if let sheet = sheetPresentationController, appliedCompactHeight != isCompactHeight {
-            appliedCompactHeight = isCompactHeight
-            sheet.animateChanges {
-                AorusAIWorkTrailController.applyDetents(to: sheet, compactHeight: isCompactHeight)
-            }
+        if let changed = AorusAISheetLayout.change(for: self, from: appliedSheetLayout) {
+            let previous = appliedSheetLayout
+            appliedSheetLayout = changed
+            AorusAISheetLayout.relayout(self, from: previous, to: changed, landscapeDetent: "aorus.ai.workTrail.landscape")
         }
     }
 
@@ -207,15 +182,6 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         super.viewDidDisappear(animated)
         ticker?.invalidate()
         ticker = nil
-    }
-
-    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        super.viewWillTransition(to: size, with: coordinator)
-        if size.width > size.height {
-            sheetPresentationController?.animateChanges {
-                self.sheetPresentationController?.selectedDetentIdentifier = .large
-            }
-        }
     }
 
     /// While the turn runs: its cost keeps climbing in the heading, and the list is read again
@@ -664,5 +630,82 @@ private final class AorusAIWorkTrailSpinner: UIView {
         // Linear: a ring that eases is a ring that looks like it is struggling.
         spin.timingFunction = CAMediaTimingFunction(name: .linear)
         ring.add(spin, forKey: "aorusTrailSpin")
+    }
+}
+
+// MARK: - Sheet layout
+
+/// How AorusAI's page sheets sit on the screen: the message actions and the work trail.
+///
+/// In portrait a sheet opens at half height and pulls up to full. In landscape on a phone, where
+/// half height does not exist, it stays attached to the bottom edge, spans the whole width of the
+/// screen and takes three quarters of its height: the dimmed strip left above it closes it with a
+/// tap, and it swipes down like any sheet. A sheet that is not attached to the edge covers the
+/// whole screen in landscape, whatever its detents say; attached, its width is the width it asks
+/// for — the window's. iOS 15, which has no custom heights, keeps the full-height sheet there,
+/// which also swipes down.
+enum AorusAISheetLayout {
+    /// What a layout was made for: the height class, and the window's width where the sheet
+    /// spans it (landscape on a phone) — elsewhere the width does not matter and is left at 0.
+    struct Applied: Equatable {
+        let compactHeight: Bool
+        let width: CGFloat
+    }
+
+    private static func applied(for container: UIView) -> Applied {
+        let compactHeight = container.traitCollection.verticalSizeClass == .compact
+        return Applied(compactHeight: compactHeight, width: compactHeight ? container.bounds.width : 0.0)
+    }
+
+    @discardableResult
+    static func apply(to controller: UIViewController, sheet: UISheetPresentationController, in container: UIView, landscapeDetent: String) -> Applied {
+        let applied = self.applied(for: container)
+        sheet.prefersEdgeAttachedInCompactHeight = true
+        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
+        self.applyWidth(applied, to: controller)
+        if applied.compactHeight, #available(iOS 16.0, *) {
+            let identifier = UISheetPresentationController.Detent.Identifier(landscapeDetent)
+            sheet.detents = [.custom(identifier: identifier) { context in
+                return floor(context.maximumDetentValue * 0.74)
+            }]
+            sheet.selectedDetentIdentifier = identifier
+        } else {
+            sheet.detents = [.medium(), .large()]
+            sheet.selectedDetentIdentifier = applied.compactHeight ? .large : .medium
+        }
+        return applied
+    }
+
+    /// Only edge-attached sheets read it, and only in landscape on a phone; elsewhere (an iPad's
+    /// sheet) nothing is asked for.
+    private static func applyWidth(_ applied: Applied, to controller: UIViewController) {
+        controller.preferredContentSize = applied.compactHeight ? CGSize(width: applied.width, height: 0.0) : .zero
+    }
+
+    /// What the sheet's window asks for now, when it is not what the sheet was last laid out for.
+    /// Nil while nothing changed, or before the sheet is in a window.
+    static func change(for controller: UIViewController, from applied: Applied?) -> Applied? {
+        guard controller.sheetPresentationController != nil, let window = controller.view.window else {
+            return nil
+        }
+        let current = self.applied(for: window)
+        return current == applied ? nil : current
+    }
+
+    /// Lays the sheet out again for `applied`, animated. Turned to the other height class it gets
+    /// that class's heights; still in landscape on a wider or narrower window, only its width
+    /// changes, and the height the reader pulled it to stays. The caller records `applied` first,
+    /// so the layout pass this starts finds nothing more to change.
+    static func relayout(_ controller: UIViewController, from previous: Applied?, to applied: Applied, landscapeDetent: String) {
+        guard let sheet = controller.sheetPresentationController, let window = controller.view.window else {
+            return
+        }
+        if previous?.compactHeight == applied.compactHeight {
+            self.applyWidth(applied, to: controller)
+            return
+        }
+        sheet.animateChanges {
+            _ = self.apply(to: controller, sheet: sheet, in: window, landscapeDetent: landscapeDetent)
+        }
     }
 }

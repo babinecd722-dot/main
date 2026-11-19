@@ -117,6 +117,25 @@ public enum AorusImportArchive {
         return (start, end, count)
     }
 
+    /// The DOS code page Windows Explorer writes entry names in on a Russian system (CP866).
+    private static let dosNameEncoding = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.dosRussian.rawValue)))
+
+    /// An entry's name: UTF-8 when the bytes read as UTF-8, which every archiver writes for a
+    /// name that is not plain ASCII when it says so (flag bit 11). Otherwise the archive is one
+    /// Windows Explorer made, which writes names in the system's DOS code page and does not say
+    /// so: a "Телеграм/tdata" zipped on a Russian Windows is read in CP866, which maps every byte,
+    /// instead of the whole archive being refused for one folder's name. A name flagged UTF-8
+    /// that is not is damaged.
+    private static func entryName(_ bytes: Data, flags: Int) -> String? {
+        if let name = String(data: bytes, encoding: .utf8) {
+            return name
+        }
+        guard flags & 0x0800 == 0 else {
+            return nil
+        }
+        return String(data: bytes, encoding: dosNameEncoding)
+    }
+
     private static func records(_ data: Data) throws -> [Record] {
         let bounds = try directoryBounds(data)
         let base = data.startIndex
@@ -132,7 +151,7 @@ public enum AorusImportArchive {
             let nameSize = Int(try number(data, cursor + 28, 2))
             let length = 46 + nameSize + Int(try number(data, cursor + 30, 2)) + Int(try number(data, cursor + 32, 2))
             guard length <= bounds.end - cursor else { throw fail("Truncated directory entry") }
-            guard let name = String(data: data.subdata(in: base + cursor + 46..<base + cursor + 46 + nameSize), encoding: .utf8) else { throw fail("Entry names must be UTF-8") }
+            guard let name = entryName(data.subdata(in: base + cursor + 46..<base + cursor + 46 + nameSize), flags: flags) else { throw fail("Damaged entry name") }
             let mode = try number(data, cursor + 38, 4) >> 16
             result.append(Record(
                 name: name,

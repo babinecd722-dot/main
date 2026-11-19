@@ -91,6 +91,13 @@ private func decodesProductionPayload() {
     require(fromData.downloadPath == "/download/77777777-8888-9999-aaaa-bbbbbbbbbbbb", "its download path survives nesting")
     let nestedArtifact = "{\"event\":\"artifact.ready\",\"data\":{\"artifact\":{\"artifact_id\":\"77777777-8888-9999-aaaa-cccccccccccc\",\"filename\":\"doc.pdf\",\"size\":10}}}"
     require(AorusAIArtifactFlow.decode(object(nestedArtifact))?.filename == "doc.pdf", "an artifact under data.artifact decodes")
+    // A `data` object of another kind beside the top-level fields does not hide them.
+    let besideData = "{\"artifact_id\":\"77777777-8888-9999-aaaa-dddddddddddd\",\"filename\":\"a.pdf\",\"download\":\"/download/77777777-8888-9999-aaaa-dddddddddddd\",\"data\":{\"progress\":1}}"
+    require(AorusAIArtifactFlow.decode(object(besideData))?.filename == "a.pdf", "top-level fields win over an unrelated data object")
+    // An `artifact` object is the artifact: one without a filename is not taken for the event's
+    // own id and filename.
+    let eventBesideArtifact = "{\"id\":\"evt_42\",\"filename\":\"report.pdf\",\"artifact\":{\"artifact_id\":\"art_9\",\"name\":\"report.pdf\"}}"
+    require(AorusAIArtifactFlow.decode(object(eventBesideArtifact)) == nil, "an event id is never taken for an artifact's")
 
     // Formats we must icon natively.
     let families: [(String, String, String)] = [

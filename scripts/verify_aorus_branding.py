@@ -4385,6 +4385,9 @@ def main() -> None:
             err.append("DocumentPicker: default picker copy mode was not integrated")
         if "case .default:\n            return .open" in document_picker_text:
             err.append("DocumentPicker: default picker still opens security-scoped URLs in place")
+        # The account import picks Telegram Desktop's tdata folder in place through this picker.
+        if "    case inPlace\n" not in document_picker_text or "        case .inPlace:\n            return false\n" not in document_picker_text:
+            err.append("DocumentPicker: the in-place mode the tdata import picks a folder with is missing")
 
     document_resources = tg / "submodules" / "ICloudResources" / "Sources" / "ICloudResources.swift"
     document_resources_text = document_resources.read_text(encoding="utf-8") if document_resources.is_file() else ""
@@ -4641,15 +4644,32 @@ def main() -> None:
         # this property is left alone, and a substring check would fail on that comment.
         if ".selectedSegmentTintColor =" in ai_context_menu_text:
             err.append("AorusAI: the category selector paints over the system's selection indicator")
+        # Its heights come from AorusAISheetLayout, shared with the work trail: half height in
+        # portrait; in landscape attached to the bottom edge across the window's width at three
+        # quarters of the height. A sheet that is not edge-attached covers the whole screen in
+        # landscape whatever its detents.
         for marker in (
             "UISegmentedControl",
             "UITableViewDataSource",
             "modalPresentationStyle = .pageSheet",
-            "sheetPresentationController?.detents",
+            "AorusAISheetLayout.apply(to: controller, sheet: sheet",
+            "AorusAISheetLayout.change(for: self, from: appliedSheetLayout)",
             "AorusAIMessageMenu.run(",
         ):
             if marker not in ai_context_menu_text:
                 err.append(f"AorusAI: single-sheet message actions lost {marker}")
+        ai_work_trail = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIWorkTrailSheet.swift"
+        ai_work_trail_text = ai_work_trail.read_text(encoding="utf-8") if ai_work_trail.is_file() else ""
+        for marker in (
+            "enum AorusAISheetLayout {",
+            "sheet.prefersEdgeAttachedInCompactHeight = true",
+            "sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true",
+            "floor(context.maximumDetentValue * 0.74)",
+        ):
+            if marker not in ai_work_trail_text:
+                err.append(f"AorusAI: the sheets' landscape layout lost {marker}")
+        if "prefersEdgeAttachedInCompactHeight = false" in ai_work_trail_text + ai_context_menu_text:
+            err.append("AorusAI: a sheet is detached from the bottom edge again, which covers the whole screen in landscape")
         if "pushItems(" in ai_context_menu_text:
             err.append("AorusAI: message actions brought back overlapping ContextUI push levels")
 

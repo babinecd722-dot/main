@@ -31865,6 +31865,28 @@ def patch_document_picker_copy_mode(tg: Path) -> None:
             picker.write_text(text, encoding="utf-8")
             print("DocumentPickerCopy: picker uses local copy mode")
 
+        # A folder cannot be handed over as a copy: the account import picks Telegram Desktop's
+        # tdata folder in place, through this same picker and its handling of a lost or cancelled
+        # presentation. Its own step, so a tree patched before it gets it too.
+        text = picker.read_text(encoding="utf-8")
+        if "    case inPlace\n" not in text:
+            in_place_anchors = (
+                ("    case `export`\n",
+                 "    case `export`\n"
+                 "    /// AorusGram: the chosen items as they are, in place (`asCopy: false`): the only mode\n"
+                 "    /// a folder can be chosen in. The caller reads them under their security scope.\n"
+                 "    case inPlace\n"),
+                ("        case .import, .export:\n            return true\n",
+                 "        case .inPlace:\n            return false\n"
+                 "        case .import, .export:\n            return true\n"),
+            )
+            for anchor, replacement in in_place_anchors:
+                if text.count(anchor) != 1:
+                    raise RuntimeError("DocumentPickerCopy: in-place mode anchor not found")
+                text = text.replace(anchor, replacement, 1)
+            picker.write_text(text, encoding="utf-8")
+            print("DocumentPickerCopy: picker can pick in place (folders)")
+
     resources = tg / "submodules/ICloudResources/Sources/ICloudResources.swift"
     if not resources.is_file():
         print("DocumentPickerCopy: ICloudResources.swift not found — skip")

@@ -23,8 +23,18 @@ public enum AorusAIArtifactFlow {
         // `data.artifact`), was dropped here — the whole payload read as "no id, no
         // filename" and the user's file was silently lost. Unwrap `data` the same way the
         // top level is unwrapped so every shape the gateway sends reaches the decoder.
-        let nested = (object["data"] as? [String: Any]).map { ($0["artifact"] as? [String: Any]) ?? $0 }
-        let source = (object["artifact"] as? [String: Any]) ?? nested ?? object
+        // An `artifact` object, at the top or under `data`, is the artifact, whatever else the
+        // payload carries; a plain `data` object only when it describes a file, so one of
+        // another kind (progress, say) beside top-level fields does not hide them.
+        let data = object["data"] as? [String: Any]
+        let source: [String: Any]
+        if let artifact = (object["artifact"] as? [String: Any]) ?? (data?["artifact"] as? [String: Any]) {
+            source = artifact
+        } else if let data, (data["artifact_id"] is String || data["id"] is String), data["filename"] is String {
+            source = data
+        } else {
+            source = object
+        }
         guard let artifactId = source["artifact_id"] as? String ?? source["id"] as? String,
               isSafeArtifactId(artifactId) else { return nil }
         guard let rawFilename = source["filename"] as? String else { return nil }
