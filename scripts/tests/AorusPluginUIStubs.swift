@@ -340,6 +340,7 @@ public final class AorusPluginRuntimeManager {
     public func stop(id: String, completion: (() -> Void)? = nil) {}
     public func restart(id: String, completion: ((AorusPluginRunError?) -> Void)? = nil) {}
     public func sandbox(id: String) -> AorusPluginSandbox? { return nil }
+    public func startFailure(id: String) -> String? { return nil }
     public func settingsSchema(id: String) -> [AorusPluginSettingField] { return [] }
     public func page(pluginId: String, pageId: String) -> AorusPluginUIPage? { return nil }
     public func pluginSettingsShortcuts() -> [(pluginId: String, shortcut: AorusPluginSettingsShortcut)] { return [] }

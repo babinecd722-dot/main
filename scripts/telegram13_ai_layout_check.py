@@ -33,8 +33,10 @@ class Controller {
         return (CGRect(x: 0, y: 0, width: layout.size.width, height: layout.navigationHeight), true)
     }
 }
+class InsetView: View { var sideSafeInsets: (left: CGFloat, right: CGFloat) = (0, 0) }
 class Companion: Controller {
     let searchField = View(), tableView = Table(), topBar = AorusAITopBar()
+    let listHeader = InsetView(), emptyView = InsetView()
     var listWidth: CGFloat = 0, measurements = 0
     func updateTableAccessories() { measurements += 1 }
 ''' + method + '''
@@ -43,10 +45,10 @@ var checks = 0
 func expect(_ value: Bool, _ label: String) { checks += 1; if !value { fatalError(label) } }
 let owner = Companion()
 for old in [false, true] { for width: CGFloat in [320, 390, 844] { for height: CGFloat in [300, 844] {
-    for nav: CGFloat in [44, 88, 96] { for bottom: CGFloat in [0, 34] {
+    for nav: CGFloat in [44, 88, 96] { for bottom: CGFloat in [0, 34] { for side: CGFloat in [0, 47] {
         AorusOldInterface.isEnabled = old
         let statusBar: CGFloat = nav - 44
-        let layout = ContainerViewLayout(size: CGSize(width: width, height: height), intrinsicInsets: UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0), safeInsets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0), statusBarHeight: statusBar, navigationHeight: nav)
+        let layout = ContainerViewLayout(size: CGSize(width: width, height: height), intrinsicInsets: UIEdgeInsets(top: 0, left: 0, bottom: bottom, right: 0), safeInsets: UIEdgeInsets(top: 0, left: side, bottom: 0, right: side), statusBarHeight: statusBar, navigationHeight: nav)
         let previous = owner.measurements
         let previousBarUpdates = owner.topBar.updates
         owner.containerLayoutUpdated(layout, transition: ContainedViewLayoutTransition())
@@ -58,9 +60,11 @@ for old in [false, true] { for width: CGFloat in [320, 390, 844] { for height: C
             expect(owner.topBar.updates == previousBarUpdates + 1 && owner.topBar.frame.width == width, "the glass bar is laid out with the screen")
         }
         expect(owner.tableView.frame.minY - owner.searchField.frame.maxY == 12 && owner.tableView.frame.maxY == height, "list never overlays search and reaches the available bottom")
-        expect(owner.searchField.frame.width == width - 32 && owner.searchField.frame.height == 38 && owner.listWidth == width, "rotation retains search dimensions and remeasures rows")
+        expect(owner.searchField.frame.minX == 16 + side && owner.searchField.frame.width == max(0, width - 32 - 2 * side) && owner.searchField.frame.height == 38 && owner.listWidth == width, "rotation retains search dimensions inside the safe area and remeasures rows")
+        expect(owner.listHeader.sideSafeInsets.left == side && owner.listHeader.sideSafeInsets.right == side && owner.emptyView.sideSafeInsets.left == side && owner.emptyView.sideSafeInsets.right == side, "the greeting and the starters keep clear of the notch")
+        expect(owner.tableView.frame.minX == 0 && owner.tableView.frame.width == width, "the list itself still runs from edge to edge")
         expect(owner.tableView.contentInset.bottom == bottom + 12 && owner.measurements == previous + 1, "safe area and table accessories update on each layout")
-    } }
+    } } }
 } } }
 print("Telegram 13 companion search layout passed: \\(checks) assertions")
 '''
