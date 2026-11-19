@@ -845,7 +845,14 @@ if AorusPluginSandbox.watchdogAvailable {
     slow.dispatch(event: "uiAction", payload: ["pageId": "p", "rowId": "r"])
     Thread.sleep(forTimeInterval: 0.6)
     expect(slowActions == 1, "events are still delivered while the outgoing hook is cooling down")
-    expect(slow.registration().commands.isEmpty, "a send handler is not a command")
+    expect(slow.lastKnownRegistration?.commands.isEmpty == true, "a send handler is not a command")
+    var askedRegistration: AorusPluginSandbox.Registration?
+    slow.registration { askedRegistration = $0 }
+    let askedBy = Date().addingTimeInterval(2)
+    while askedRegistration == nil && Date() < askedBy {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    expect(askedRegistration?.commands.isEmpty == true, "the registration is read on the plugin's queue and handed back")
     slow.stop()
 
     // A command the chat cannot wait for is never posted as typed. It is held back, goes on

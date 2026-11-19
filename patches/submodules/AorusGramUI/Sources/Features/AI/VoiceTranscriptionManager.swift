@@ -27,8 +27,30 @@ final class VoiceTranscriptionManager {
     private static let cacheLimit = 64
     private var cache: [CacheKey: String] = [:]
     private var cacheOrder: [CacheKey] = []
-    /// Requests waiting on a recognition already under way for the same key.
-    private var waiting: [CacheKey: [(Result<String, TranscriptionError>) -> Void]] = [:]
+
+    /// A recognition under way, and the requests waiting on it. On `queue`.
+    ///
+    /// Each has a generation of its own: Speech can answer a task long after it was given up on —
+    /// timed out, cancelled — and a late answer must not finish the recognition started after
+    /// it for the same file. And each has a deadline: Speech gives no promise to answer at all
+    /// after an interruption or a suspension, and the requests used to wait on such a task for
+    /// as long as the app ran, every later request for the same file joining them.
+    private final class Running {
+        let generation = UUID()
+        var task: SFSpeechRecognitionTask?
+        var completions: [(Result<String, TranscriptionError>) -> Void]
+        var deadline: DispatchWorkItem?
+
+        init(completion: @escaping (Result<String, TranscriptionError>) -> Void) {
+            self.completions = [completion]
+        }
+    }
+    private var running: [CacheKey: Running] = [:]
+    /// Recognitions run at once, and requests that may wait on one.
+    private static let concurrentLimit = 2
+    private static let waiterLimit = 16
+    /// How long a recognition is given before it is cancelled.
+    private static let deadline: TimeInterval = 120
     private let queue = DispatchQueue(label: "aorusgram.transcription", qos: .userInitiated)
 
     private static func key(for url: URL, locale: Locale) -> CacheKey {
@@ -97,16 +119,31 @@ final class VoiceTranscriptionManager {
             return
         }
 
-        // One recognition per file and language at a time: a second request joins the first.
-        let isFirst: Bool = queue.sync {
-            if waiting[key] != nil {
-                waiting[key]?.append(completion)
-                return false
+        // One recognition per file and language at a time: a second request joins the first,
+        // up to a limit; and only a few at once in all.
+        enum Admission { case joined, started(Running), busy }
+        let admission: Admission = queue.sync {
+            if let current = running[key] {
+                guard current.completions.count < Self.waiterLimit else { return .busy }
+                current.completions.append(completion)
+                return .joined
             }
-            waiting[key] = [completion]
-            return true
+            guard running.count < Self.concurrentLimit else { return .busy }
+            let started = Running(completion: completion)
+            running[key] = started
+            return .started(started)
         }
-        guard isFirst else { return }
+        let recognition: Running
+        switch admission {
+        case .joined:
+            return
+        case .busy:
+            DispatchQueue.main.async { completion(.failure(.busy)) }
+            return
+        case let .started(started):
+            recognition = started
+        }
+        let generation = recognition.generation
 
         let request = SFSpeechURLRecognitionRequest(url: fileURL)
         request.shouldReportPartialResults = false
@@ -118,24 +155,60 @@ final class VoiceTranscriptionManager {
         }
 
         let finish: (Result<String, TranscriptionError>) -> Void = { [weak self] outcome in
-            guard let self else { return }
-            self.queue.async {
-                if case let .success(text) = outcome {
-                    self.store(text, for: key)
-                }
-                let completions = self.waiting.removeValue(forKey: key) ?? []
-                DispatchQueue.main.async {
-                    for completion in completions { completion(outcome) }
-                }
+            self?.queue.async {
+                self?.finish(key: key, generation: generation, outcome: outcome)
             }
         }
-        recognizer.recognitionTask(with: request) { result, error in
+        let task = recognizer.recognitionTask(with: request) { result, error in
             if let error {
                 finish(.failure(.recognition(error.localizedDescription)))
                 return
             }
             guard let result, result.isFinal else { return }
             finish(.success(result.bestTranscription.formattedString))
+        }
+        queue.async {
+            guard self.running[key]?.generation == generation else {
+                // Finished already, before its task was even handed back.
+                task.cancel()
+                return
+            }
+            recognition.task = task
+            let deadline = DispatchWorkItem { [weak self] in
+                guard self?.running[key]?.generation == generation else { return }
+                task.cancel()
+                self?.finish(key: key, generation: generation, outcome: .failure(.timedOut))
+            }
+            recognition.deadline = deadline
+            // Wall time: a phone asleep in the meantime still counts.
+            self.queue.asyncAfter(wallDeadline: .now() + Self.deadline, execute: deadline)
+        }
+    }
+
+    /// Ends the recognition of `generation`, once: every request waiting on it is answered and
+    /// the key is free for the next. An answer for a recognition already ended is dropped.
+    /// On `queue`.
+    private func finish(key: CacheKey, generation: UUID, outcome: Result<String, TranscriptionError>) {
+        guard let current = running[key], current.generation == generation else { return }
+        running.removeValue(forKey: key)
+        current.deadline?.cancel()
+        if case let .success(text) = outcome {
+            store(text, for: key)
+        }
+        let completions = current.completions
+        DispatchQueue.main.async {
+            for completion in completions { completion(outcome) }
+        }
+    }
+
+    /// Stops the recognition of a file, if one is under way; its requests are answered with
+    /// `.cancelled`.
+    func cancel(fileURL: URL, locale: Locale = Locale.current) {
+        let key = Self.key(for: fileURL, locale: locale)
+        queue.async {
+            guard let current = self.running[key] else { return }
+            current.task?.cancel()
+            self.finish(key: key, generation: current.generation, outcome: .failure(.cancelled))
         }
     }
 
@@ -152,6 +225,11 @@ enum TranscriptionError: LocalizedError {
     case notAuthorized
     case recognizerUnavailable
     case recognition(String)
+    /// Speech did not answer in time, and the recognition was cancelled.
+    case timedOut
+    /// Too many recognitions at once; the request was not started.
+    case busy
+    case cancelled
 
     var errorDescription: String? {
         switch self {
@@ -159,6 +237,9 @@ enum TranscriptionError: LocalizedError {
         case .notAuthorized:          return "Нет разрешения на распознавание речи"
         case .recognizerUnavailable:  return "Распознаватель недоступен для данного языка"
         case .recognition(let msg):   return msg
+        case .timedOut:               return "Распознавание заняло слишком много времени"
+        case .busy:                   return "Сейчас распознаются другие сообщения, попробуйте чуть позже"
+        case .cancelled:              return "Распознавание остановлено"
         }
     }
 }

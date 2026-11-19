@@ -61,9 +61,22 @@ public final class AorusCacheManager {
 
     // MARK: - Scheduling
 
+    /// When the last clean finished, or — before the first — when the countdown began. Kept on
+    /// disk: the timer lives only as long as the process, and with the countdown starting over
+    /// at every launch a clean every six hours never came for anyone whose phone closed the app
+    /// sooner than that.
+    private static let lastCleanupKey = "aorusgram_cache_last_cleanup"
+
     private func _applyAutoClean(enabled: Bool, intervalHours: Int) {
         let hours = max(1, intervalHours)
-        guard AorusLicenseAccess.isAllowed, enabled else {
+        guard enabled else {
+            // Switched off: the next time it is on, its countdown starts then.
+            UserDefaults.standard.removeObject(forKey: Self.lastCleanupKey)
+            cleanTimer?.invalidate(); cleanTimer = nil
+            cleanTimerHours = nil
+            return
+        }
+        guard AorusLicenseAccess.isAllowed else {
             cleanTimer?.invalidate(); cleanTimer = nil
             cleanTimerHours = nil
             return
@@ -73,7 +86,18 @@ public final class AorusCacheManager {
         // came for anyone who opened the app more often than that.
         if let timer = cleanTimer, timer.isValid, cleanTimerHours == hours { return }
         cleanTimer?.invalidate()
-        let t = Timer(timeInterval: TimeInterval(hours * 3600), repeats: true) { [weak self] _ in self?.performCleanup() }
+        let interval = TimeInterval(hours * 3600)
+        let now = Date()
+        let defaults = UserDefaults.standard
+        var last = defaults.double(forKey: Self.lastCleanupKey)
+        if last <= 0 || last > now.timeIntervalSince1970 {
+            last = now.timeIntervalSince1970
+            defaults.set(last, forKey: Self.lastCleanupKey)
+        }
+        // Due by the date kept, not by when this process started. One that came due while the
+        // app was closed runs shortly after it opens, clear of its first frames.
+        let due = max(Date(timeIntervalSince1970: last + interval), now.addingTimeInterval(15))
+        let t = Timer(fire: due, interval: interval, repeats: true) { [weak self] _ in self?.performCleanup() }
         t.tolerance = 60
         cleanTimer = t
         cleanTimerHours = hours
@@ -94,6 +118,7 @@ public final class AorusCacheManager {
 
     private func _performCleanup() {
         guard AorusLicenseAccess.isAllowed else { return }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastCleanupKey)
         DeletedMessagesCache.shared.clearAll()
         URLCache.shared.removeAllCachedResponses()
         URLSession.shared.configuration.urlCache?.removeAllCachedResponses()

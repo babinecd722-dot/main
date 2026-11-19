@@ -4196,6 +4196,13 @@ private struct AorusPluginStatus {
             detail = AorusPluginUIString.running.text
             color = .systemGreen
             isFailure = false
+        } else if record.manifest.isEnabled, let failure = AorusPluginRuntimeManager.shared.startFailure(id: pluginId) {
+            // On and not running because its start failed: said so, with why, instead of the
+            // plain "Stopped" of a plugin nobody switched on.
+            badge = AorusPluginUIString.failed.text
+            detail = failure.isEmpty ? AorusPluginUIString.failed.text : failure
+            color = .systemRed
+            isFailure = true
         } else if !record.manifest.isEnabled && !outgrewGrant {
             badge = AorusPluginUIString.stopped.text
             detail = AorusPluginUIString.stopped.text
@@ -4252,12 +4259,16 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     private var themeSubscription: AorusLiveThemeSubscription?
     private let tableView = AorusGroupedTableView(frame: .zero, style: aorusPluginTableStyle())
     private var rows: [(String, String, Bool)] = []
+    /// What the running plugin registered: the last known at first, then the plugin's own
+    /// answer, read off the main thread.
+    private var registration: AorusPluginSandbox.Registration?
 
     init(context: AccountContext, record: AorusPluginRecord) {
         self.record = record
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         title = AorusPluginUIString.diagnostics.text
+        self.registration = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.lastKnownRegistration
         themeSubscription = AorusLiveTheme.follow({ [weak self] in self?.presentationData.theme }, { [weak self] presentationData in
             self?.updatePresentationData(presentationData)
         })
@@ -4285,6 +4296,11 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         displayNode.view.addSubview(tableView)
         rebuild()
         displayNodeDidLoad()
+        AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.registration { [weak self] value in
+            guard let self, value != self.registration else { return }
+            self.registration = value
+            self.rebuild()
+        }
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -4301,7 +4317,9 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         let state = AorusPluginStatus(pluginId: pluginId, record: record)
         let granted = AorusPluginStore.shared.permissionState(for: pluginId).granted
         let requested = AorusPluginPermission.requestedBySource(record.source)
-        let registration = sandbox?.registration() ?? AorusPluginSandbox.Registration()
+        // "…" while a running plugin has not been asked yet, not "no commands".
+        let pending = sandbox != nil && self.registration == nil
+        let registration = sandbox == nil ? AorusPluginSandbox.Registration() : (self.registration ?? AorusPluginSandbox.Registration())
 
         var result: [(String, String, Bool)] = []
         result.append((AorusPluginUIString.status.text, state.detail, state.isFailure))
@@ -4318,12 +4336,12 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
         let commands = registration.commands.map { registration.prefix + $0 }
         result.append((
             AorusPluginUIString.commands.text,
-            commands.isEmpty ? AorusPluginUIString.noCommands.text : commands.joined(separator: "  "),
-            commands.isEmpty
+            pending ? "…" : (commands.isEmpty ? AorusPluginUIString.noCommands.text : commands.joined(separator: "  ")),
+            !pending && commands.isEmpty
         ))
         result.append((
             AorusPluginUIString.events.text,
-            registration.events.isEmpty ? "-" : registration.events.joined(separator: "  "),
+            pending ? "…" : (registration.events.isEmpty ? "-" : registration.events.joined(separator: "  ")),
             false
         ))
         let grantedNames = granted.sorted { $0.rawValue < $1.rawValue }.map { permissionTitle($0) }

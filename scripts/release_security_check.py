@@ -973,7 +973,12 @@ def main() -> int:
     if "data.first == 0x7B" not in user_vpn_store:
         fail(errors, "the user VPN v1 repair must check the payload really is that JSON")
     user_vpn_manager = (root / "AorusGram/Sources/Features/Network/AorusUserVPNManager.swift").read_text(encoding="utf-8")
-    for marker in ("refreshWaiters", "AorusUserVPNRedirectDelegate", "addingReportingOverflow"):
+    # The subscription is read through a delegate that keeps redirects on HTTPS and counts the
+    # body against its ceiling as it arrives, cancelling at the limit: a completion-handler
+    # task took the whole body into memory before anything measured it.
+    for marker in ("refreshWaiters", "AorusUserVPNSubscriptionDelegate", "addingReportingOverflow",
+                   "subscriptionByteLimit", "guard body.count + data.count <= limit else {",
+                   "guard request.url?.scheme?.lowercased() == \"https\" else {"):
         if marker not in user_vpn_manager:
             fail(errors, f"user VPN runtime hardening is missing {marker}")
     hybrid_route = (root / "AorusGram/Sources/Features/Network/AorusHybridRoute.swift").read_text(encoding="utf-8")

@@ -53,6 +53,10 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversazione non è ancora salvata: l'archivio non è disponibile. Il salvataggio verrà ritentato automaticamente.",
+        "The answer is too large to show": "La risposta è troppo grande per essere mostrata",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Impossibile caricare le impostazioni. Non è stato modificato nulla. Riprova.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "La protezione completa non è disponibile su questa versione di iOS: una copertura nasconde le chat durante la registrazione e nel selettore app, gli screenshot non vengono bloccati",
         "This archive holds no Telegram Desktop data": "Questo archivio non contiene dati di Telegram Desktop",
         "Export File": "Esporta file",
         "Import a Save": "Importa un salvataggio",
@@ -111,7 +115,6 @@ enum AorusL10nTable {
         "Load Settings": "Carica impostazioni",
         "Settings saved": "Impostazioni salvate",
         "Settings loaded": "Impostazioni caricate",
-        "Some settings couldn't be loaded. Try again.": "Non è stato possibile caricare alcune impostazioni. Riprova.",
         "Save name": "Nome del salvataggio",
         "Replace": "Sostituisci",
         "Load": "Carica",
@@ -1272,6 +1275,10 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Rozmowa nie jest jeszcze zapisana: pamięć jest niedostępna. Zapis zostanie ponowiony automatycznie.",
+        "The answer is too large to show": "Odpowiedź jest zbyt duża, by ją wyświetlić",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Nie udało się wczytać ustawień. Nic nie zostało zmienione. Spróbuj ponownie.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Pełna ochrona jest niedostępna w tej wersji iOS: podczas nagrywania i w przełączniku aplikacji czaty zakrywa plansza, zrzuty ekranu nie są blokowane",
         "This archive holds no Telegram Desktop data": "To archiwum nie zawiera danych Telegram Desktop",
         "Export File": "Eksportuj plik",
         "Import a Save": "Importuj zapis",
@@ -1330,7 +1337,6 @@ enum AorusL10nTable {
         "Load Settings": "Wczytaj ustawienia",
         "Settings saved": "Ustawienia zapisane",
         "Settings loaded": "Ustawienia wczytane",
-        "Some settings couldn't be loaded. Try again.": "Nie udało się wczytać części ustawień. Spróbuj ponownie.",
         "Save name": "Nazwa zapisu",
         "Replace": "Zastąp",
         "Load": "Wczytaj",
@@ -2491,6 +2497,10 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Het gesprek is nog niet opgeslagen: de opslag is niet beschikbaar. Opslaan wordt automatisch opnieuw geprobeerd.",
+        "The answer is too large to show": "Het antwoord is te groot om te tonen",
+        "Couldn't load the settings. Nothing was changed. Try again.": "De instellingen konden niet worden geladen. Er is niets gewijzigd. Probeer het opnieuw.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Volledige bescherming is niet beschikbaar op deze iOS-versie: tijdens opnemen en in de appkiezer verbergt een afdekking je chats, schermafbeeldingen worden niet geblokkeerd",
         "This archive holds no Telegram Desktop data": "Dit archief bevat geen Telegram Desktop-gegevens",
         "Export File": "Bestand exporteren",
         "Import a Save": "Opslag importeren",
@@ -2549,7 +2559,6 @@ enum AorusL10nTable {
         "Load Settings": "Instellingen laden",
         "Settings saved": "Instellingen bewaard",
         "Settings loaded": "Instellingen geladen",
-        "Some settings couldn't be loaded. Try again.": "Sommige instellingen konden niet worden geladen. Probeer het opnieuw.",
         "Save name": "Naam van opslag",
         "Replace": "Vervang",
         "Load": "Laad",
@@ -3710,6 +3719,10 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversa encara no s'ha desat: l'emmagatzematge no està disponible. Es tornarà a provar de desar automàticament.",
+        "The answer is too large to show": "La resposta és massa gran per mostrar-la",
+        "Couldn't load the settings. Nothing was changed. Try again.": "No s'ha pogut carregar la configuració. No s'ha canviat res. Torna-ho a provar.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "La protecció completa no està disponible en aquesta versió d'iOS: una coberta amaga els xats mentre es grava i al selector d'apps, les captures de pantalla no es bloquegen",
         "This archive holds no Telegram Desktop data": "Aquest arxiu no conté dades de Telegram Desktop",
         "Export File": "Exporta el fitxer",
         "Import a Save": "Importa una còpia",
@@ -3768,7 +3781,6 @@ enum AorusL10nTable {
         "Load Settings": "Carrega la configuració",
         "Settings saved": "Configuració desada",
         "Settings loaded": "Configuració carregada",
-        "Some settings couldn't be loaded. Try again.": "No s'ha pogut carregar part de la configuració. Torna-ho a provar.",
         "Save name": "Nom del desament",
         "Replace": "Substitueix",
         "Load": "Carrega",
@@ -4929,6 +4941,10 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Percakapan belum tersimpan: penyimpanan tidak tersedia. Penyimpanan akan dicoba lagi secara otomatis.",
+        "The answer is too large to show": "Jawaban terlalu besar untuk ditampilkan",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Pengaturan tidak dapat dimuat. Tidak ada yang diubah. Coba lagi.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Perlindungan penuh tidak tersedia di versi iOS ini: penutup menyembunyikan chat saat perekaman dan di pengalih aplikasi, tangkapan layar tidak diblokir",
         "This archive holds no Telegram Desktop data": "Arsip ini tidak berisi data Telegram Desktop",
         "Export File": "Ekspor file",
         "Import a Save": "Impor simpanan",
@@ -4987,7 +5003,6 @@ enum AorusL10nTable {
         "Load Settings": "Muat Pengaturan",
         "Settings saved": "Pengaturan disimpan",
         "Settings loaded": "Pengaturan dimuat",
-        "Some settings couldn't be loaded. Try again.": "Beberapa pengaturan tidak dapat dimuat. Coba lagi.",
         "Save name": "Nama simpanan",
         "Replace": "Ganti",
         "Load": "Muat",
@@ -6148,6 +6163,10 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Perbualan belum disimpan: storan tidak tersedia. Penyimpanan akan dicuba semula secara automatik.",
+        "The answer is too large to show": "Jawapan terlalu besar untuk dipaparkan",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Tetapan tidak dapat dimuatkan. Tiada apa-apa yang diubah. Cuba lagi.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Perlindungan penuh tidak tersedia pada versi iOS ini: penutup menyembunyikan sembang semasa rakaman dan dalam penukar apl, tangkapan skrin tidak disekat",
         "This archive holds no Telegram Desktop data": "Arkib ini tidak mengandungi data Telegram Desktop",
         "Export File": "Eksport fail",
         "Import a Save": "Import simpanan",
@@ -6206,7 +6225,6 @@ enum AorusL10nTable {
         "Load Settings": "Muatkan Tetapan",
         "Settings saved": "Tetapan disimpan",
         "Settings loaded": "Tetapan dimuatkan",
-        "Some settings couldn't be loaded. Try again.": "Sesetengah tetapan tidak dapat dimuatkan. Cuba lagi.",
         "Save name": "Nama simpanan",
         "Replace": "Ganti",
         "Load": "Muatkan",
@@ -7367,6 +7385,10 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Размова яшчэ не захавана: сховішча недаступнае. Захаванне паўторыцца само.",
+        "The answer is too large to show": "Адказ занадта вялікі, каб яго паказаць",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Не ўдалося загрузіць налады. Нічога не змянілася. Паспрабуйце яшчэ раз.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Поўная абарона недаступная ў гэтай версіі iOS: падчас запісу і ў пераключальніку праграм перапіску закрывае застаўка, здымкі экрана не блакуюцца",
         "This archive holds no Telegram Desktop data": "У гэтым архіве няма даных Telegram Desktop",
         "Export File": "Экспартаваць файл",
         "Import a Save": "Імпартаваць захаванне",
@@ -7425,7 +7447,6 @@ enum AorusL10nTable {
         "Load Settings": "Загрузіць налады",
         "Settings saved": "Налады захаваны",
         "Settings loaded": "Налады загружаны",
-        "Some settings couldn't be loaded. Try again.": "Не ўсе налады ўдалося загрузіць. Паспрабуйце яшчэ раз.",
         "Save name": "Назва захавання",
         "Replace": "Замяніць",
         "Load": "Загрузіць",
@@ -8586,6 +8607,10 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Suhbat hali saqlanmadi: xotira mavjud emas. Saqlash avtomatik ravishda qayta urinib ko‘riladi.",
+        "The answer is too large to show": "Javob ko‘rsatish uchun juda katta",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Sozlamalarni yuklab bo‘lmadi. Hech narsa o‘zgarmadi. Qaytadan urinib ko‘ring.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Ushbu iOS versiyasida to‘liq himoya mavjud emas: yozib olish paytida va ilovalar almashtirgichida suhbatlarni parda yopadi, skrinshotlar bloklanmaydi",
         "This archive holds no Telegram Desktop data": "Bu arxivda Telegram Desktop ma’lumotlari yo‘q",
         "Export File": "Faylni eksport qilish",
         "Import a Save": "Saqlanmani import qilish",
@@ -8644,7 +8669,6 @@ enum AorusL10nTable {
         "Load Settings": "Sozlamalarni yuklash",
         "Settings saved": "Sozlamalar saqlandi",
         "Settings loaded": "Sozlamalar yuklandi",
-        "Some settings couldn't be loaded. Try again.": "Ba'zi sozlamalarni yuklab bo'lmadi. Qaytadan urinib ko'ring.",
         "Save name": "Saqlama nomi",
         "Replace": "Almashtirish",
         "Load": "Yuklash",
@@ -9805,6 +9829,10 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "대화가 아직 저장되지 않았습니다. 저장소를 사용할 수 없습니다. 저장은 자동으로 다시 시도됩니다.",
+        "The answer is too large to show": "답변이 너무 커서 표시할 수 없습니다",
+        "Couldn't load the settings. Nothing was changed. Try again.": "설정을 불러오지 못했습니다. 변경된 내용은 없습니다. 다시 시도하세요.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "이 iOS 버전에서는 완전한 보호를 사용할 수 없습니다. 화면 녹화 중과 앱 전환기에서는 가림막이 대화를 가리지만 스크린샷은 차단되지 않습니다",
         "This archive holds no Telegram Desktop data": "이 압축 파일에는 Telegram Desktop 데이터가 없습니다",
         "Export File": "파일 내보내기",
         "Import a Save": "저장본 가져오기",
@@ -9863,7 +9891,6 @@ enum AorusL10nTable {
         "Load Settings": "설정 불러오기",
         "Settings saved": "설정이 저장되었습니다",
         "Settings loaded": "설정을 불러왔습니다",
-        "Some settings couldn't be loaded. Try again.": "일부 설정을 불러오지 못했습니다. 다시 시도하세요.",
         "Save name": "저장 이름",
         "Replace": "바꾸기",
         "Load": "불러오기",
@@ -11024,6 +11051,10 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "لم تُحفظ المحادثة بعد: التخزين غير متاح. ستُعاد محاولة الحفظ تلقائيًا.",
+        "The answer is too large to show": "الإجابة أكبر من أن تُعرض",
+        "Couldn't load the settings. Nothing was changed. Try again.": "تعذّر تحميل الإعدادات. لم يتغيّر شيء. حاول مرة أخرى.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "الحماية الكاملة غير متاحة في هذا الإصدار من iOS: يُخفي غطاء محادثاتك أثناء التسجيل وفي مبدّل التطبيقات، ولا تُحظر لقطات الشاشة",
         "This archive holds no Telegram Desktop data": "لا يحتوي هذا الأرشيف على بيانات Telegram Desktop",
         "Export File": "تصدير الملف",
         "Import a Save": "استيراد نسخة محفوظة",
@@ -11082,7 +11113,6 @@ enum AorusL10nTable {
         "Load Settings": "تحميل الإعدادات",
         "Settings saved": "تم حفظ الإعدادات",
         "Settings loaded": "تم تحميل الإعدادات",
-        "Some settings couldn't be loaded. Try again.": "تعذّر تحميل بعض الإعدادات. حاول مرة أخرى.",
         "Save name": "اسم الحفظ",
         "Replace": "استبدال",
         "Load": "تحميل",
@@ -12243,6 +12273,10 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "گفتگو هنوز ذخیره نشده است: فضای ذخیره‌سازی در دسترس نیست. ذخیره خودکار دوباره امتحان می‌شود.",
+        "The answer is too large to show": "پاسخ برای نمایش بیش از حد بزرگ است",
+        "Couldn't load the settings. Nothing was changed. Try again.": "بارگیری تنظیمات ممکن نشد. چیزی تغییر نکرد. دوباره تلاش کنید.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "محافظت کامل در این نسخه از iOS در دسترس نیست: هنگام ضبط و در جابه‌جاکننده برنامه‌ها پوششی گفتگوها را پنهان می‌کند، اما اسکرین‌شات مسدود نمی‌شود",
         "This archive holds no Telegram Desktop data": "این بایگانی داده‌ای از Telegram Desktop ندارد",
         "Export File": "خروجی گرفتن فایل",
         "Import a Save": "وارد کردن ذخیره",
@@ -12301,7 +12335,6 @@ enum AorusL10nTable {
         "Load Settings": "بارگذاری تنظیمات",
         "Settings saved": "تنظیمات ذخیره شد",
         "Settings loaded": "تنظیمات بارگذاری شد",
-        "Some settings couldn't be loaded. Try again.": "برخی از تنظیمات بارگذاری نشد. دوباره تلاش کنید.",
         "Save name": "نام ذخیره",
         "Replace": "جایگزینی",
         "Load": "بارگذاری",
@@ -13462,6 +13495,10 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Әңгіме әлі сақталмады: жад қолжетімсіз. Сақтау автоматты түрде қайталанады.",
+        "The answer is too large to show": "Жауап көрсету үшін тым үлкен",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Баптауларды жүктеу мүмкін болмады. Ештеңе өзгерген жоқ. Қайталап көріңіз.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "iOS-тың бұл нұсқасында толық қорғаныс қолжетімсіз: жазу кезінде және қолданбалар ауыстырғышында чаттарды жапқыш жасырады, скриншоттар бұғатталмайды",
         "This archive holds no Telegram Desktop data": "Бұл мұрағатта Telegram Desktop деректері жоқ",
         "Export File": "Файлды экспорттау",
         "Import a Save": "Сақтауды импорттау",
@@ -13520,7 +13557,6 @@ enum AorusL10nTable {
         "Load Settings": "Баптауларды жүктеу",
         "Settings saved": "Баптаулар сақталды",
         "Settings loaded": "Баптаулар жүктелді",
-        "Some settings couldn't be loaded. Try again.": "Кейбір баптауларды жүктеу мүмкін болмады. Қайталап көріңіз.",
         "Save name": "Сақтау атауы",
         "Replace": "Ауыстыру",
         "Load": "Жүктеу",
@@ -14681,6 +14717,10 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "对话尚未保存：存储不可用。将自动重试保存。",
+        "The answer is too large to show": "回答过大，无法显示",
+        "Couldn't load the settings. Nothing was changed. Try again.": "无法载入设置。未做任何更改。请重试。",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "此 iOS 版本无法提供完整保护：录屏时和在应用切换器中会以遮罩隐藏聊天，但无法阻止截图",
         "This archive holds no Telegram Desktop data": "此压缩包中没有 Telegram Desktop 数据",
         "Export File": "导出文件",
         "Import a Save": "导入存档",
@@ -14739,7 +14779,6 @@ enum AorusL10nTable {
         "Load Settings": "载入设置",
         "Settings saved": "设置已保存",
         "Settings loaded": "设置已载入",
-        "Some settings couldn't be loaded. Try again.": "部分设置无法载入，请重试。",
         "Save name": "存档名称",
         "Replace": "替换",
         "Load": "载入",
@@ -15901,6 +15940,10 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "對話尚未儲存：儲存空間無法使用。將自動重試儲存。",
+        "The answer is too large to show": "回答過大，無法顯示",
+        "Couldn't load the settings. Nothing was changed. Try again.": "無法載入設定。未做任何變更。請再試一次。",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "此 iOS 版本無法提供完整保護：錄影時和在 App 切換器中會以遮罩隱藏聊天，但無法阻止截圖",
         "This archive holds no Telegram Desktop data": "此壓縮檔中沒有 Telegram Desktop 資料",
         "Export File": "匯出檔案",
         "Import a Save": "匯入存檔",
@@ -15959,7 +16002,6 @@ enum AorusL10nTable {
         "Load Settings": "載入設定",
         "Settings saved": "設定已儲存",
         "Settings loaded": "設定已載入",
-        "Some settings couldn't be loaded. Try again.": "部分設定無法載入，請再試一次。",
         "Save name": "存檔名稱",
         "Replace": "取代",
         "Load": "載入",
@@ -17120,6 +17162,10 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "会話はまだ保存されていません。ストレージを利用できません。保存は自動的に再試行されます。",
+        "The answer is too large to show": "回答が大きすぎて表示できません",
+        "Couldn't load the settings. Nothing was changed. Try again.": "設定を読み込めませんでした。何も変更されていません。もう一度お試しください。",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "この iOS バージョンでは完全な保護を利用できません。録画中とアプリスイッチャーではカバーでチャットを隠しますが、スクリーンショットは防げません",
         "This archive holds no Telegram Desktop data": "このアーカイブには Telegram Desktop のデータがありません",
         "Export File": "ファイルを書き出す",
         "Import a Save": "保存データを読み込む",
@@ -17178,7 +17224,6 @@ enum AorusL10nTable {
         "Load Settings": "設定を読み込む",
         "Settings saved": "設定を保存しました",
         "Settings loaded": "設定を読み込みました",
-        "Some settings couldn't be loaded. Try again.": "一部の設定を読み込めませんでした。もう一度お試しください。",
         "Save name": "保存名",
         "Replace": "置き換える",
         "Load": "読み込む",
@@ -18339,6 +18384,10 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Keskustelua ei ole vielä tallennettu: tallennustila ei ole käytettävissä. Tallennusta yritetään automaattisesti uudelleen.",
+        "The answer is too large to show": "Vastaus on liian suuri näytettäväksi",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Asetuksia ei voitu ladata. Mitään ei muutettu. Yritä uudelleen.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Täysi suojaus ei ole käytettävissä tässä iOS-versiossa: tallennuksen aikana ja apinvaihtajassa peite piilottaa keskustelut, kuvakaappauksia ei estetä",
         "This archive holds no Telegram Desktop data": "Tässä arkistossa ei ole Telegram Desktopin tietoja",
         "Export File": "Vie tiedosto",
         "Import a Save": "Tuo tallennus",
@@ -18397,7 +18446,6 @@ enum AorusL10nTable {
         "Load Settings": "Lataa asetukset",
         "Settings saved": "Asetukset tallennettu",
         "Settings loaded": "Asetukset ladattu",
-        "Some settings couldn't be loaded. Try again.": "Kaikkia asetuksia ei voitu ladata. Yritä uudelleen.",
         "Save name": "Tallennuksen nimi",
         "Replace": "Korvaa",
         "Load": "Lataa",
@@ -19558,6 +19606,10 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "השיחה עדיין לא נשמרה: האחסון אינו זמין. השמירה תנוסה שוב באופן אוטומטי.",
+        "The answer is too large to show": "התשובה גדולה מכדי להציג אותה",
+        "Couldn't load the settings. Nothing was changed. Try again.": "לא ניתן לטעון את ההגדרות. דבר לא השתנה. נסו שוב.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "הגנה מלאה אינה זמינה בגרסת iOS זו: כיסוי מסתיר את הצ׳אטים בזמן הקלטה ובמחליף היישומים, צילומי מסך אינם נחסמים",
         "This archive holds no Telegram Desktop data": "בארכיון הזה אין נתונים של Telegram Desktop",
         "Export File": "ייצוא קובץ",
         "Import a Save": "ייבוא שמירה",
@@ -19616,7 +19668,6 @@ enum AorusL10nTable {
         "Load Settings": "טעינת הגדרות",
         "Settings saved": "ההגדרות נשמרו",
         "Settings loaded": "ההגדרות נטענו",
-        "Some settings couldn't be loaded. Try again.": "לא ניתן היה לטעון חלק מההגדרות. נסו שוב.",
         "Save name": "שם השמירה",
         "Replace": "החלפה",
         "Load": "טעינה",
@@ -20777,6 +20828,10 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Razgovor još nije spremljen: pohrana nije dostupna. Spremanje će se automatski ponoviti.",
+        "The answer is too large to show": "Odgovor je prevelik za prikaz",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Postavke nije moguće učitati. Ništa nije promijenjeno. Pokušajte ponovno.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Potpuna zaštita nije dostupna na ovoj verziji iOS-a: tijekom snimanja i u izmjenjivaču aplikacija razgovore skriva prekrivač, snimke zaslona nisu blokirane",
         "This archive holds no Telegram Desktop data": "Ova arhiva ne sadrži podatke Telegram Desktopa",
         "Export File": "Izvezi datoteku",
         "Import a Save": "Uvezi spremanje",
@@ -20835,7 +20890,6 @@ enum AorusL10nTable {
         "Load Settings": "Učitaj postavke",
         "Settings saved": "Postavke su spremljene",
         "Settings loaded": "Postavke su učitane",
-        "Some settings couldn't be loaded. Try again.": "Neke postavke nije bilo moguće učitati. Pokušajte ponovno.",
         "Save name": "Naziv kopije",
         "Replace": "Zamijeni",
         "Load": "Učitaj",
@@ -21996,6 +22050,10 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Разговор још није сачуван: складиште није доступно. Чување ће се аутоматски поновити.",
+        "The answer is too large to show": "Одговор је превелик за приказ",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Подешавања није могуће учитати. Ништа није промењено. Покушајте поново.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Потпуна заштита није доступна на овој верзији iOS-а: током снимања и у бирачу апликација ћаскања скрива прекривач, снимци екрана нису блокирани",
         "This archive holds no Telegram Desktop data": "Ова архива не садржи податке Telegram Desktop-а",
         "Export File": "Извези датотеку",
         "Import a Save": "Увези чување",
@@ -22054,7 +22112,6 @@ enum AorusL10nTable {
         "Load Settings": "Учитај подешавања",
         "Settings saved": "Подешавања су сачувана",
         "Settings loaded": "Подешавања су учитана",
-        "Some settings couldn't be loaded. Try again.": "Нека подешавања није било могуће учитати. Покушајте поново.",
         "Save name": "Назив копије",
         "Replace": "Замени",
         "Load": "Учитај",
@@ -23215,6 +23272,10 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konverzace ještě není uložena: úložiště není dostupné. Uložení se automaticky zopakuje.",
+        "The answer is too large to show": "Odpověď je příliš velká na zobrazení",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Nastavení se nepodařilo načíst. Nic se nezměnilo. Zkuste to znovu.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Plná ochrana není v této verzi iOS dostupná: během nahrávání a v přepínači aplikací chaty skryje překryv, snímky obrazovky blokovány nejsou",
         "This archive holds no Telegram Desktop data": "Tento archiv neobsahuje data Telegram Desktop",
         "Export File": "Exportovat soubor",
         "Import a Save": "Importovat uložení",
@@ -23273,7 +23334,6 @@ enum AorusL10nTable {
         "Load Settings": "Načíst nastavení",
         "Settings saved": "Nastavení uloženo",
         "Settings loaded": "Nastavení načteno",
-        "Some settings couldn't be loaded. Try again.": "Některá nastavení se nepodařilo načíst. Zkuste to znovu.",
         "Save name": "Název zálohy",
         "Replace": "Nahradit",
         "Load": "Načíst",
@@ -24434,6 +24494,10 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konverzácia ešte nie je uložená: úložisko nie je dostupné. Uloženie sa automaticky zopakuje.",
+        "The answer is too large to show": "Odpoveď je príliš veľká na zobrazenie",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Nastavenia sa nepodarilo načítať. Nič sa nezmenilo. Skúste to znova.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Úplná ochrana nie je v tejto verzii iOS dostupná: počas nahrávania a v prepínači aplikácií chaty skryje prekrytie, snímky obrazovky sa neblokujú",
         "This archive holds no Telegram Desktop data": "Tento archív neobsahuje údaje Telegram Desktop",
         "Export File": "Exportovať súbor",
         "Import a Save": "Importovať uloženie",
@@ -24492,7 +24556,6 @@ enum AorusL10nTable {
         "Load Settings": "Načítať nastavenia",
         "Settings saved": "Nastavenia uložené",
         "Settings loaded": "Nastavenia načítané",
-        "Some settings couldn't be loaded. Try again.": "Niektoré nastavenia sa nepodarilo načítať. Skúste to znova.",
         "Save name": "Názov zálohy",
         "Replace": "Nahradiť",
         "Load": "Načítať",
@@ -25653,6 +25716,10 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Conversația nu este încă salvată: spațiul de stocare nu este disponibil. Salvarea va fi reîncercată automat.",
+        "The answer is too large to show": "Răspunsul este prea mare pentru a fi afișat",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Setările nu au putut fi încărcate. Nu s-a schimbat nimic. Încercați din nou.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Protecția completă nu este disponibilă în această versiune de iOS: în timpul înregistrării și în comutatorul de aplicații, conversațiile sunt ascunse de o acoperire, capturile de ecran nu sunt blocate",
         "This archive holds no Telegram Desktop data": "Această arhivă nu conține date Telegram Desktop",
         "Export File": "Exportă fișierul",
         "Import a Save": "Importă o salvare",
@@ -25711,7 +25778,6 @@ enum AorusL10nTable {
         "Load Settings": "Încarcă setările",
         "Settings saved": "Setări salvate",
         "Settings loaded": "Setări încărcate",
-        "Some settings couldn't be loaded. Try again.": "Unele setări nu au putut fi încărcate. Încearcă din nou.",
         "Save name": "Numele salvării",
         "Replace": "Înlocuiește",
         "Load": "Încarcă",
@@ -26872,6 +26938,10 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "A beszélgetés még nincs mentve: a tárhely nem érhető el. A mentést automatikusan újrapróbálja.",
+        "The answer is too large to show": "A válasz túl nagy a megjelenítéshez",
+        "Couldn't load the settings. Nothing was changed. Try again.": "A beállításokat nem sikerült betölteni. Semmi sem változott. Próbálja újra.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "A teljes védelem nem érhető el ezen az iOS-verzión: felvétel közben és az alkalmazásváltóban takarás rejti el a csevegéseket, a képernyőképeket nem tiltja le",
         "This archive holds no Telegram Desktop data": "Ez az archívum nem tartalmaz Telegram Desktop-adatokat",
         "Export File": "Fájl exportálása",
         "Import a Save": "Mentés importálása",
@@ -26930,7 +27000,6 @@ enum AorusL10nTable {
         "Load Settings": "Beállítások betöltése",
         "Settings saved": "Beállítások elmentve",
         "Settings loaded": "Beállítások betöltve",
-        "Some settings couldn't be loaded. Try again.": "Néhány beállítást nem sikerült betölteni. Próbáld újra.",
         "Save name": "Mentés neve",
         "Replace": "Csere",
         "Load": "Betöltés",
@@ -28091,6 +28160,10 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Samtalen er ikke lagret ennå: lagringen er utilgjengelig. Lagringen prøves på nytt automatisk.",
+        "The answer is too large to show": "Svaret er for stort til å vises",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Kunne ikke laste inn innstillingene. Ingenting ble endret. Prøv igjen.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Full beskyttelse er ikke tilgjengelig på denne iOS-versjonen: under opptak og i appveksleren skjuler et dekke chattene, skjermbilder blokkeres ikke",
         "This archive holds no Telegram Desktop data": "Dette arkivet inneholder ingen Telegram Desktop-data",
         "Export File": "Eksporter fil",
         "Import a Save": "Importer en lagring",
@@ -28149,7 +28222,6 @@ enum AorusL10nTable {
         "Load Settings": "Last inn innstillinger",
         "Settings saved": "Innstillingene er lagret",
         "Settings loaded": "Innstillingene er lastet inn",
-        "Some settings couldn't be loaded. Try again.": "Noen innstillinger kunne ikke lastes inn. Prøv igjen.",
         "Save name": "Navn på lagringen",
         "Replace": "Erstatt",
         "Load": "Last inn",
@@ -29310,6 +29382,10 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konversationen är inte sparad än: lagringen är inte tillgänglig. Sparandet försöks igen automatiskt.",
+        "The answer is too large to show": "Svaret är för stort för att visas",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Det gick inte att läsa in inställningarna. Inget ändrades. Försök igen.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Fullt skydd är inte tillgängligt i den här iOS-versionen: under inspelning och i appväxlaren döljer ett skydd dina chattar, skärmavbilder blockeras inte",
         "This archive holds no Telegram Desktop data": "Det här arkivet innehåller inga Telegram Desktop-data",
         "Export File": "Exportera fil",
         "Import a Save": "Importera en sparning",
@@ -29368,7 +29444,6 @@ enum AorusL10nTable {
         "Load Settings": "Läs in inställningar",
         "Settings saved": "Inställningarna har sparats",
         "Settings loaded": "Inställningarna har lästs in",
-        "Some settings couldn't be loaded. Try again.": "Vissa inställningar kunde inte läsas in. Försök igen.",
         "Save name": "Namn på sparningen",
         "Replace": "Ersätt",
         "Load": "Läs in",
@@ -30529,6 +30604,10 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Cuộc trò chuyện chưa được lưu: bộ nhớ không khả dụng. Việc lưu sẽ tự động được thử lại.",
+        "The answer is too large to show": "Câu trả lời quá lớn để hiển thị",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Không thể tải cài đặt. Không có gì thay đổi. Hãy thử lại.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Phiên bản iOS này không hỗ trợ bảo vệ đầy đủ: khi quay màn hình và trong trình chuyển ứng dụng, một lớp che sẽ ẩn các cuộc trò chuyện, ảnh chụp màn hình không bị chặn",
         "This archive holds no Telegram Desktop data": "Tệp nén này không chứa dữ liệu Telegram Desktop",
         "Export File": "Xuất tệp",
         "Import a Save": "Nhập bản lưu",
@@ -30587,7 +30666,6 @@ enum AorusL10nTable {
         "Load Settings": "Tải cài đặt",
         "Settings saved": "Đã lưu cài đặt",
         "Settings loaded": "Đã tải cài đặt",
-        "Some settings couldn't be loaded. Try again.": "Không thể tải một số cài đặt. Hãy thử lại.",
         "Save name": "Tên bản lưu",
         "Replace": "Thay thế",
         "Load": "Tải",
@@ -31748,6 +31826,10 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Розмову ще не збережено: сховище недоступне. Збереження повториться автоматично.",
+        "The answer is too large to show": "Відповідь завелика, щоб її показати",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Не вдалося завантажити налаштування. Нічого не змінилося. Спробуйте ще раз.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Повний захист недоступний у цій версії iOS: під час запису і в перемикачі застосунків листування закриває заставка, знімки екрана не блокуються",
         "This archive holds no Telegram Desktop data": "У цьому архіві немає даних Telegram Desktop",
         "Export File": "Експортувати файл",
         "Import a Save": "Імпортувати збереження",
@@ -31806,7 +31888,6 @@ enum AorusL10nTable {
         "Load Settings": "Завантажити налаштування",
         "Settings saved": "Налаштування збережено",
         "Settings loaded": "Налаштування завантажено",
-        "Some settings couldn't be loaded. Try again.": "Не всі налаштування вдалося завантажити. Спробуйте ще раз.",
         "Save name": "Назва збереження",
         "Replace": "Замінити",
         "Load": "Завантажити",
@@ -32976,6 +33057,10 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversación aún no se ha guardado: el almacenamiento no está disponible. Se volverá a intentar guardar automáticamente.",
+        "The answer is too large to show": "La respuesta es demasiado grande para mostrarla",
+        "Couldn't load the settings. Nothing was changed. Try again.": "No se pudo cargar la configuración. No se cambió nada. Inténtalo de nuevo.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "La protección completa no está disponible en esta versión de iOS: una cubierta oculta tus chats al grabar la pantalla y en el selector de apps, las capturas de pantalla no se bloquean",
         "This archive holds no Telegram Desktop data": "Este archivo comprimido no contiene datos de Telegram Desktop",
         "Export File": "Exportar archivo",
         "Import a Save": "Importar un guardado",
@@ -33034,7 +33119,6 @@ enum AorusL10nTable {
         "Load Settings": "Cargar ajustes",
         "Settings saved": "Ajustes guardados",
         "Settings loaded": "Ajustes cargados",
-        "Some settings couldn't be loaded. Try again.": "No se pudieron cargar algunos ajustes. Inténtalo de nuevo.",
         "Save name": "Nombre del guardado",
         "Replace": "Reemplazar",
         "Load": "Cargar",
@@ -34204,6 +34288,10 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "A conversa ainda não foi salva: o armazenamento está indisponível. O salvamento será tentado novamente de forma automática.",
+        "The answer is too large to show": "A resposta é grande demais para ser exibida",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Não foi possível carregar as configurações. Nada foi alterado. Tente novamente.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "A proteção completa não está disponível nesta versão do iOS: uma cobertura oculta suas conversas durante a gravação e no seletor de apps, capturas de tela não são bloqueadas",
         "This archive holds no Telegram Desktop data": "Este arquivo não contém dados do Telegram Desktop",
         "Export File": "Exportar ficheiro",
         "Import a Save": "Importar uma gravação",
@@ -34262,7 +34350,6 @@ enum AorusL10nTable {
         "Load Settings": "Carregar configurações",
         "Settings saved": "Configurações salvas",
         "Settings loaded": "Configurações carregadas",
-        "Some settings couldn't be loaded. Try again.": "Não foi possível carregar algumas configurações. Tente novamente.",
         "Save name": "Nome do salvamento",
         "Replace": "Substituir",
         "Load": "Carregar",
@@ -35432,6 +35519,10 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Das Gespräch ist noch nicht gespeichert: Der Speicher ist nicht verfügbar. Das Speichern wird automatisch erneut versucht.",
+        "The answer is too large to show": "Die Antwort ist zu groß, um sie anzuzeigen",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Die Einstellungen konnten nicht geladen werden. Es wurde nichts geändert. Versuche es erneut.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Vollständiger Schutz ist in dieser iOS-Version nicht verfügbar: Bei der Bildschirmaufnahme und im App-Umschalter verdeckt eine Abdeckung deine Chats, Bildschirmfotos werden nicht blockiert",
         "This archive holds no Telegram Desktop data": "Dieses Archiv enthält keine Telegram-Desktop-Daten",
         "Export File": "Datei exportieren",
         "Import a Save": "Sicherung importieren",
@@ -35490,7 +35581,6 @@ enum AorusL10nTable {
         "Load Settings": "Einstellungen laden",
         "Settings saved": "Einstellungen gesichert",
         "Settings loaded": "Einstellungen geladen",
-        "Some settings couldn't be loaded. Try again.": "Einige Einstellungen konnten nicht geladen werden. Versuche es erneut.",
         "Save name": "Name der Sicherung",
         "Replace": "Ersetzen",
         "Load": "Laden",
@@ -36660,6 +36750,10 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversation n'est pas encore enregistrée : le stockage est indisponible. L'enregistrement sera retenté automatiquement.",
+        "The answer is too large to show": "La réponse est trop volumineuse pour être affichée",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Impossible de charger les réglages. Rien n'a été modifié. Réessayez.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "La protection complète n'est pas disponible sur cette version d'iOS : un cache masque vos discussions pendant l'enregistrement et dans le sélecteur d'apps, les captures d'écran ne sont pas bloquées",
         "This archive holds no Telegram Desktop data": "Cette archive ne contient aucune donnée de Telegram Desktop",
         "Export File": "Exporter le fichier",
         "Import a Save": "Importer une sauvegarde",
@@ -36718,7 +36812,6 @@ enum AorusL10nTable {
         "Load Settings": "Charger les réglages",
         "Settings saved": "Réglages enregistrés",
         "Settings loaded": "Réglages chargés",
-        "Some settings couldn't be loaded. Try again.": "Certains réglages n'ont pas pu être chargés. Réessayez.",
         "Save name": "Nom de la sauvegarde",
         "Replace": "Remplacer",
         "Load": "Charger",
@@ -37888,6 +37981,10 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Sohbet henüz kaydedilmedi: depolama kullanılamıyor. Kaydetme otomatik olarak yeniden denenecek.",
+        "The answer is too large to show": "Yanıt gösterilemeyecek kadar büyük",
+        "Couldn't load the settings. Nothing was changed. Try again.": "Ayarlar yüklenemedi. Hiçbir şey değişmedi. Tekrar deneyin.",
+        "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked": "Bu iOS sürümünde tam koruma kullanılamıyor: kayıt sırasında ve uygulama değiştiricide sohbetleri bir örtü gizler, ekran görüntüleri engellenmez",
         "This archive holds no Telegram Desktop data": "Bu arşivde Telegram Desktop verisi yok",
         "Export File": "Dosyayı dışa aktar",
         "Import a Save": "Kaydı içe aktar",
@@ -37946,7 +38043,6 @@ enum AorusL10nTable {
         "Load Settings": "Ayarları yükle",
         "Settings saved": "Ayarlar kaydedildi",
         "Settings loaded": "Ayarlar yüklendi",
-        "Some settings couldn't be loaded. Try again.": "Bazı ayarlar yüklenemedi. Tekrar deneyin.",
         "Save name": "Kayıt adı",
         "Replace": "Üzerine yaz",
         "Load": "Yükle",

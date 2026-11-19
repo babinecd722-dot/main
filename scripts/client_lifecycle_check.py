@@ -95,7 +95,8 @@ final class Manager {
     var sandboxes: [String: Sandbox] = [:]
     var appearanceLayers: [String: Int] = [:]
     var iconLayers: [String: Int] = [:]
-    var failedStarts: [String: String] = [:]
+    struct FailedStart { let digest: String; let message: String; let isFinal: Bool; let attempts: Int; var retryAt: TimeInterval }
+    var failedStarts: [String: FailedStart] = [:]
     var starts: [String] = []
     var stops = 0
     var releases: [String] = []
@@ -153,10 +154,17 @@ store.install([AorusPluginRecord(manifest: first.manifest, source: "invalid")])
 manager.reloadAutostart(); drain(manager)
 store.mutex.lock(); let disabled = !store.rows[0].manifest.isEnabled; store.mutex.unlock()
 expect(disabled, "stale permissions disable readable code")
-store.install([first]); manager.failedStarts["one"] = "first"
+store.install([first]); manager.failedStarts["one"] = Manager.FailedStart(digest: "first", message: "SyntaxError", isFinal: true, attempts: 1, retryAt: 0)
 let previousStarts = manager.starts.count
 manager.reloadAutostart(startingMissingOnly: true); drain(manager)
 expect(manager.starts.count == previousStarts, "failed unchanged source is not restarted on foreground")
+manager.failedStarts["one"] = Manager.FailedStart(digest: "first", message: "not ready", isFinal: false, attempts: 1, retryAt: Date.timeIntervalSinceReferenceDate + 600)
+manager.reloadAutostart(startingMissingOnly: true); drain(manager)
+expect(manager.starts.count == previousStarts, "a transient failure waits out its delay")
+manager.failedStarts["one"] = Manager.FailedStart(digest: "first", message: "not ready", isFinal: false, attempts: 1, retryAt: Date.timeIntervalSinceReferenceDate - 1)
+manager.reloadAutostart(startingMissingOnly: true); drain(manager)
+expect(manager.starts.count == previousStarts + 1, "a transient failure is retried on foreground once its delay is over")
+manager.sandboxes.removeAll()
 UIApplication.shared.isProtectedDataAvailable = false
 let previousReads = store.reads
 manager.reloadAutostart(); drain(manager)

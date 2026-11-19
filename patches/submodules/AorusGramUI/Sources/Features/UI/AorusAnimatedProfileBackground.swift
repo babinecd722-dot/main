@@ -491,9 +491,26 @@ private final class AorusVideoOnlyLoopRenderer {
 // MARK: - Animated background view
 
 public final class AorusAnimatedProfileBackgroundView: UIView {
-    private static let thumbnailCache: NSCache<NSString, UIImage> = {
-        let cache = NSCache<NSString, UIImage>()
+    /// A banner's first frame, decoded, with the colour field drawn behind it on overscroll.
+    private final class Poster {
+        let image: UIImage
+        let backdrop: UIImage
+        /// Bytes it holds decoded.
+        let cost: Int
+
+        init(image: UIImage, backdrop: UIImage) {
+            self.image = image
+            self.backdrop = backdrop
+            self.cost = Int(image.size.width * image.scale * image.size.height * image.scale * 4.0)
+        }
+    }
+
+    /// Kept by what the posters hold in memory decoded, not only by how many: a poster is up to
+    /// 1280×720, and a count alone said nothing of the memory it stood for.
+    private static let posterCache: NSCache<NSString, Poster> = {
+        let cache = NSCache<NSString, Poster>()
         cache.countLimit = 24
+        cache.totalCostLimit = 48 * 1024 * 1024
         return cache
     }()
 
@@ -837,33 +854,57 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.isHidden = !canPreserveCurrentVisual
         self.teardownRenderer(clearVisuals: !canPreserveCurrentVisual)
 
-        if let posterURL,
-           let image = UIImage(contentsOfFile: posterURL.path) {
-            Self.thumbnailCache.setObject(image, forKey: key as NSString)
-            self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
-        } else if let image = Self.thumbnailCache.object(forKey: key as NSString) {
-            self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
-        } else {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let image = Self.makePoster(url: mediaURL)
-                if let image {
-                    Self.thumbnailCache.setObject(image, forKey: key as NSString)
-                    if let posterURL,
-                       let data = image.jpegData(compressionQuality: 0.86) {
-                        try? data.write(to: posterURL, options: .atomic)
-                    }
+        // The memory first, and only then the disk: the poster file used to be read and
+        // decoded on the main thread every time a profile was opened, cached copy or not.
+        if let poster = Self.posterCache.object(forKey: key as NSString) {
+            self.setupRenderer(mediaURL: mediaURL, poster: poster, key: key)
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var image = posterURL.flatMap { UIImage(contentsOfFile: $0.path) }
+            var generated = false
+            if image == nil {
+                image = Self.makePoster(url: mediaURL)
+                generated = image != nil
+            }
+            let poster = image.map { Self.prepared($0) }
+            if let poster {
+                Self.posterCache.setObject(poster, forKey: key as NSString, cost: poster.cost)
+                if generated, let posterURL,
+                   let data = poster.image.jpegData(compressionQuality: 0.86) {
+                    try? data.write(to: posterURL, options: .atomic)
                 }
-                DispatchQueue.main.async {
-                    guard let self, self.representedAssetKey == key, let image else { return }
-                    self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
-                }
+            }
+            DispatchQueue.main.async {
+                // Only for the banner still asked for: a profile left meanwhile, or another
+                // banner since, is not given this one.
+                guard let self, self.representedAssetKey == key, let poster else { return }
+                self.setupRenderer(mediaURL: mediaURL, poster: poster, key: key)
             }
         }
     }
 
-    private func setupRenderer(mediaURL: URL, poster: UIImage, key: String) {
+    /// The poster decoded now, off the main thread, rather than the first time it is drawn,
+    /// on it; the overscroll backdrop is drawn from it here too.
+    private static func prepared(_ image: UIImage) -> Poster {
+        let decoded: UIImage
+        if #available(iOS 15.0, *), let ready = image.preparingForDisplay() {
+            decoded = ready
+        } else {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = image.scale
+            format.opaque = true
+            decoded = UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+                image.draw(at: .zero)
+            }
+        }
+        return Poster(image: decoded, backdrop: Self.makeOverscrollBackdrop(from: decoded))
+    }
+
+    private func setupRenderer(mediaURL: URL, poster entry: Poster, key: String) {
         guard self.representedAssetKey == key else { return }
-        self.backdropView.image = Self.makeOverscrollBackdrop(from: poster)
+        let poster = entry.image
+        self.backdropView.image = entry.backdrop
         self.posterView.image = poster
         self.posterView.alpha = 1.0
         let renderer = AorusVideoOnlyLoopRenderer()

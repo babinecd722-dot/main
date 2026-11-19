@@ -60,6 +60,10 @@ public final class AorusBannerService {
     private static let maximumCacheBytes = 64 * 1024 * 1024
 
     private let session: URLSession
+    /// Banner media, written to disk as it arrives and counted against its limit.
+    private let downloads: AorusBannerDownloads
+    private let downloadSession: URLSession
+    private var removedLeftovers = false
     private let stateQueue = DispatchQueue(label: "com.aorusgram.banner-service.state", qos: .userInitiated)
     private let mediaQueue = DispatchQueue(label: "com.aorusgram.banner-service.media", qos: .utility)
     private var lookupCompletions: [Int64: [(Result<AorusBannerAsset?, AorusBannerServiceError>) -> Void]] = [:]
@@ -85,6 +89,20 @@ public final class AorusBannerService {
         self.session = URLSession(
             configuration: configuration,
             delegate: AorusPinnedSessionDelegate.shared,
+            delegateQueue: nil
+        )
+        let downloads = AorusBannerDownloads()
+        self.downloads = downloads
+        let downloadConfiguration = URLSessionConfiguration.ephemeral
+        downloadConfiguration.timeoutIntervalForRequest = 30.0
+        downloadConfiguration.timeoutIntervalForResource = 120.0
+        downloadConfiguration.waitsForConnectivity = false
+        downloadConfiguration.httpShouldSetCookies = false
+        downloadConfiguration.urlCache = nil
+        downloadConfiguration.httpMaximumConnectionsPerHost = 2
+        self.downloadSession = URLSession(
+            configuration: downloadConfiguration,
+            delegate: downloads,
             delegateQueue: nil
         )
     }
@@ -273,6 +291,13 @@ public final class AorusBannerService {
 
     public func prewarm(accountId: Int64) {
         self.resolveBanner(targetId: accountId, preferredCallerId: accountId) { _ in }
+        // Once a launch, off the way of anything on screen: what an earlier process left in the
+        // cache when it ended in the middle of a download or an install.
+        self.mediaQueue.async {
+            guard !self.removedLeftovers else { return }
+            self.removedLeftovers = true
+            self.pruneCache(keepingTargetId: nil)
+        }
     }
 
     // MARK: - Signed transport
@@ -518,30 +543,24 @@ public final class AorusBannerService {
         from url: URL,
         completion: @escaping (Result<AorusBannerAsset, AorusBannerServiceError>) -> Void
     ) {
-        self.session.downloadTask(with: url) { temporaryURL, response, error in
-            guard error == nil,
-                  let temporaryURL,
-                  let http = response as? HTTPURLResponse,
-                  http.statusCode == 200,
-                  http.mimeType?.lowercased() == "video/mp4" else {
+        // A file of this service's own, written as the body arrives (`AorusBannerDownloads`),
+        // then moved into the cache by the install below rather than copied there once more.
+        let retainedURL: URL
+        do {
+            retainedURL = try self.cacheDirectoryURL().appendingPathComponent(".download-\(UUID().uuidString).mp4")
+        } catch {
+            completion(.failure(.invalidMedia))
+            return
+        }
+        let task = self.downloadSession.dataTask(with: url)
+        self.downloads.start(task, writingTo: retainedURL, limit: Self.maximumDownloadBytes) { [weak self] result in
+            guard let self else {
+                try? FileManager.default.removeItem(at: retainedURL)
                 completion(.failure(.network))
                 return
             }
-            if http.expectedContentLength > Int64(Self.maximumDownloadBytes) {
-                completion(.failure(.invalidMedia))
-                return
-            }
-
-            // URLSession owns temporaryURL and may remove it as soon as this
-            // completion handler returns. Retain a private copy synchronously
-            // before handing validation and poster generation to mediaQueue.
-            let retainedURL: URL
-            do {
-                let directory = try self.cacheDirectoryURL()
-                retainedURL = directory.appendingPathComponent(".download-\(UUID().uuidString).mp4")
-                try FileManager.default.copyItem(at: temporaryURL, to: retainedURL)
-            } catch {
-                completion(.failure(.invalidMedia))
+            if case let .failure(error) = result {
+                completion(.failure(error))
                 return
             }
             self.mediaQueue.async {
@@ -549,16 +568,19 @@ public final class AorusBannerService {
                     try? FileManager.default.removeItem(at: retainedURL)
                 }
                 do {
-                    let asset = try self.installCacheCopy(sourceURL: retainedURL, metadata: metadata)
+                    let asset = try self.installCacheCopy(sourceURL: retainedURL, metadata: metadata, consumingSource: true)
                     completion(.success(asset))
                 } catch {
                     completion(.failure(.invalidMedia))
                 }
             }
-        }.resume()
+        }
+        task.resume()
     }
 
-    private func installCacheCopy(sourceURL: URL, metadata: BannerMetadata) throws -> AorusBannerAsset {
+    /// `consumingSource`: the source is this service's own download and is moved into the
+    /// cache; anything else — the person's own banner, being published — is copied.
+    private func installCacheCopy(sourceURL: URL, metadata: BannerMetadata, consumingSource: Bool = false) throws -> AorusBannerAsset {
         let attributes = try FileManager.default.attributesOfItem(atPath: sourceURL.path)
         guard let size = attributes[.size] as? NSNumber,
               size.intValue > 0,
@@ -576,7 +598,13 @@ public final class AorusBannerService {
         let stagingMediaURL = directory.appendingPathComponent(".\(UUID().uuidString).mp4")
         let stagingPosterURL = directory.appendingPathComponent(".\(UUID().uuidString).jpg")
 
-        try FileManager.default.copyItem(at: sourceURL, to: stagingMediaURL)
+        // A download is this service's own file and is moved, not copied: a copy was a second
+        // full write of every banner fetched.
+        if consumingSource {
+            try FileManager.default.moveItem(at: sourceURL, to: stagingMediaURL)
+        } else {
+            try FileManager.default.copyItem(at: sourceURL, to: stagingMediaURL)
+        }
         do {
             try self.writePoster(videoURL: stagingMediaURL, destinationURL: stagingPosterURL)
             try self.replaceAtomically(stagingURL: stagingMediaURL, destinationURL: mediaURL)
@@ -719,12 +747,26 @@ public final class AorusBannerService {
         }
     }
 
-    private func pruneCache(keepingTargetId: Int64) {
+    /// How long a file no record names is left alone: one younger may be a download or an
+    /// install still under way.
+    private static let leftoverGracePeriod: TimeInterval = 15.0 * 60.0
+
+    /// Keeps the cache within its budget, counting everything in the folder. A file no record
+    /// names — a download or a staging copy a process left behind when it ended, the media of a
+    /// record that was never written — went uncounted and stayed for good, and interrupted
+    /// installs could grow the folder far past the budget. Those go first, once they are old
+    /// enough not to be in flight; then the least recently written banners, until it fits.
+    private func pruneCache(keepingTargetId: Int64?) {
         guard let directory = try? self.cacheDirectoryURL(),
               let filenames = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
             return
         }
+        let fm = FileManager.default
+        func size(_ url: URL) -> Int64 {
+            return ((try? fm.attributesOfItem(atPath: url.path)[.size]) as? NSNumber)?.int64Value ?? 0
+        }
         var entries: [(record: CachedRecord, recordURL: URL, size: Int64, date: Date)] = []
+        var referenced = Set<String>()
         var totalSize: Int64 = 0
         for filename in filenames where filename.hasPrefix("target-") && filename.hasSuffix(".json") {
             let recordURL = directory.appendingPathComponent(filename)
@@ -732,19 +774,25 @@ public final class AorusBannerService {
                   let record = try? JSONDecoder().decode(CachedRecord.self, from: data) else {
                 continue
             }
-            let mediaURL = directory.appendingPathComponent(record.mediaFilename)
-            let posterURL = record.posterFilename.map { directory.appendingPathComponent($0) }
-            var entrySize: Int64 = 0
-            if let value = (try? FileManager.default.attributesOfItem(atPath: mediaURL.path)[.size]) as? NSNumber {
-                entrySize += value.int64Value
+            referenced.insert(filename)
+            referenced.insert(record.mediaFilename)
+            var entrySize = size(directory.appendingPathComponent(record.mediaFilename)) + size(recordURL)
+            if let posterFilename = record.posterFilename {
+                referenced.insert(posterFilename)
+                entrySize += size(directory.appendingPathComponent(posterFilename))
             }
-            if let posterURL,
-               let value = (try? FileManager.default.attributesOfItem(atPath: posterURL.path)[.size]) as? NSNumber {
-                entrySize += value.int64Value
-            }
-            let date = ((try? FileManager.default.attributesOfItem(atPath: recordURL.path)[.modificationDate]) as? Date) ?? .distantPast
+            let date = ((try? fm.attributesOfItem(atPath: recordURL.path)[.modificationDate]) as? Date) ?? .distantPast
             totalSize += entrySize
             entries.append((record, recordURL, entrySize, date))
+        }
+        let now = Date()
+        for filename in filenames where !referenced.contains(filename) {
+            let url = directory.appendingPathComponent(filename)
+            let date = ((try? fm.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date) ?? .distantPast
+            if now.timeIntervalSince(date) > Self.leftoverGracePeriod, (try? fm.removeItem(at: url)) != nil {
+                continue
+            }
+            totalSize += size(url)
         }
         guard totalSize > Int64(Self.maximumCacheBytes) else { return }
         for entry in entries.sorted(by: { $0.date < $1.date }) {
@@ -752,11 +800,11 @@ public final class AorusBannerService {
                   entry.record.telegramUserId != keepingTargetId else {
                 continue
             }
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(entry.record.mediaFilename))
+            try? fm.removeItem(at: directory.appendingPathComponent(entry.record.mediaFilename))
             if let posterFilename = entry.record.posterFilename {
-                try? FileManager.default.removeItem(at: directory.appendingPathComponent(posterFilename))
+                try? fm.removeItem(at: directory.appendingPathComponent(posterFilename))
             }
-            try? FileManager.default.removeItem(at: entry.recordURL)
+            try? fm.removeItem(at: entry.recordURL)
             totalSize -= entry.size
             self.stateQueue.sync {
                 self.memoryCache[entry.record.telegramUserId] = nil
@@ -875,6 +923,121 @@ public final class AorusBannerService {
             DispatchQueue.main.async {
                 completion(result)
             }
+        }
+    }
+}
+
+/// Banner downloads, each written to its file as it arrives and counted against its limit. The
+/// response is checked — status, type, announced length — before any of the body is taken, and
+/// the transfer is cancelled the moment it would pass the limit. The download task it replaces
+/// kept the whole body, however large, before its size was looked at, and with no length
+/// announced nothing stopped it short of the disk; it was then copied once more before the
+/// copy was measured.
+///
+/// Trust and redirects are decided as for every other banner request (AorusPinnedSessionDelegate).
+private final class AorusBannerDownloads: NSObject, URLSessionDataDelegate {
+    private final class Download {
+        let destination: URL
+        let limit: Int
+        let completion: (Result<Void, AorusBannerServiceError>) -> Void
+        var handle: FileHandle?
+        var written = 0
+        var failure: AorusBannerServiceError?
+
+        init(destination: URL, limit: Int, completion: @escaping (Result<Void, AorusBannerServiceError>) -> Void) {
+            self.destination = destination
+            self.limit = limit
+            self.completion = completion
+        }
+    }
+
+    private let lock = NSLock()
+    private var downloads: [Int: Download] = [:]
+
+    /// Before the task is resumed.
+    func start(_ task: URLSessionDataTask, writingTo destination: URL, limit: Int, completion: @escaping (Result<Void, AorusBannerServiceError>) -> Void) {
+        lock.lock()
+        downloads[task.taskIdentifier] = Download(destination: destination, limit: limit, completion: completion)
+        lock.unlock()
+    }
+
+    private func download(for task: URLSessionTask) -> Download? {
+        lock.lock()
+        defer { lock.unlock() }
+        return downloads[task.taskIdentifier]
+    }
+
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        AorusPinnedSessionDelegate.shared.urlSession(session, didReceive: challenge, completionHandler: completionHandler)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        AorusPinnedSessionDelegate.shared.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request, completionHandler: completionHandler)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let download = download(for: dataTask) else {
+            completionHandler(.cancel)
+            return
+        }
+        guard let http = response as? HTTPURLResponse,
+              http.statusCode == 200,
+              http.mimeType?.lowercased() == "video/mp4" else {
+            download.failure = .network
+            completionHandler(.cancel)
+            return
+        }
+        guard http.expectedContentLength <= Int64(download.limit) else {
+            download.failure = .invalidMedia
+            completionHandler(.cancel)
+            return
+        }
+        guard FileManager.default.createFile(atPath: download.destination.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: download.destination) else {
+            download.failure = .invalidMedia
+            completionHandler(.cancel)
+            return
+        }
+        download.handle = handle
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let download = download(for: dataTask), download.failure == nil, let handle = download.handle else { return }
+        guard download.written + data.count <= download.limit else {
+            download.failure = .invalidMedia
+            dataTask.cancel()
+            return
+        }
+        do {
+            try handle.write(contentsOf: data)
+            download.written += data.count
+        } catch {
+            download.failure = .invalidMedia
+            dataTask.cancel()
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        let download = downloads.removeValue(forKey: task.taskIdentifier)
+        lock.unlock()
+        guard let download else { return }
+        var failure = download.failure
+        if let handle = download.handle, (try? handle.close()) == nil, failure == nil {
+            failure = .invalidMedia
+        }
+        if failure == nil, error != nil {
+            failure = .network
+        }
+        if failure == nil, download.written == 0 {
+            failure = .invalidMedia
+        }
+        if let failure {
+            try? FileManager.default.removeItem(at: download.destination)
+            download.completion(.failure(failure))
+        } else {
+            download.completion(.success(()))
         }
     }
 }

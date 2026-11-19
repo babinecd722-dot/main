@@ -148,16 +148,12 @@ enum AorusBackupArchive {
         guard fm.createFile(atPath: url.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: url) else { throw Failure.io }
         var closed = false
-        func closeHandle() {
-            if !closed {
-                closed = true
-                handle.closeFile()
-            }
+        defer {
+            if !closed { try? handle.close() }
         }
-        defer { closeHandle() }
 
-        handle.write(Data(magicV2))
-        handle.write(archiveId)
+        try writeAll(handle, Data(magicV2))
+        try writeAll(handle, archiveId)
         var sealedBytes = UInt64(magicV2.count + archiveIdSize)
         var manifestEntries: [ManifestEntry] = []
         var seenPaths = Set<String>()
@@ -196,10 +192,10 @@ enum AorusBackupArchive {
             }
             sealedBytes = nextBytes
 
-            handle.write(uint32LE(UInt32(sealedPath.count)))
-            handle.write(sealedPath)
-            handle.write(uint64LE(UInt64(sealedBody.count)))
-            handle.write(sealedBody)
+            try writeAll(handle, uint32LE(UInt32(sealedPath.count)))
+            try writeAll(handle, sealedPath)
+            try writeAll(handle, uint64LE(UInt64(sealedBody.count)))
+            try writeAll(handle, sealedBody)
             manifestEntries.append(ManifestEntry(path: entry.path,
                                                  size: Int64(entry.body.count),
                                                  digest: digest(of: entry.body)))
@@ -221,10 +217,18 @@ enum AorusBackupArchive {
         }
         guard UInt64(sealedManifest.count) <= limits.maxSealedManifestSize else { throw Failure.tooLarge }
 
-        handle.write(uint32LE(0))
-        handle.write(uint32LE(UInt32(sealedManifest.count)))
-        handle.write(sealedManifest)
-        closeHandle()
+        try writeAll(handle, uint32LE(0))
+        try writeAll(handle, uint32LE(UInt32(sealedManifest.count)))
+        try writeAll(handle, sealedManifest)
+        // On the disk before the caller swaps it in, and closed with its error seen: a close
+        // that fails can be the write that did not make it.
+        do {
+            try handle.synchronize()
+            closed = true
+            try handle.close()
+        } catch {
+            throw Failure.io
+        }
         return manifest
     }
 
@@ -242,11 +246,11 @@ enum AorusBackupArchive {
                      limits: Limits,
                      accept: (Entry) throws -> Void) throws -> Manifest {
         guard let handle = try? FileHandle(forReadingFrom: url) else { throw Failure.io }
-        defer { handle.closeFile() }
+        defer { try? handle.close() }
 
-        let head = handle.readData(ofLength: magicV2.count)
+        let head = try readUpTo(handle, magicV2.count)
         guard Array(head) == magicV2 else { throw Failure.corrupt }
-        let archiveId = handle.readData(ofLength: archiveIdSize)
+        let archiveId = try readUpTo(handle, archiveIdSize)
         guard archiveId.count == archiveIdSize else { throw Failure.truncated }
 
         var sealedBytes = UInt64(magicV2.count + archiveIdSize)
@@ -258,7 +262,7 @@ enum AorusBackupArchive {
         var reachedEndMarker = false
 
         while !reachedEndMarker {
-            let pathLenData = handle.readData(ofLength: 4)
+            let pathLenData = try readUpTo(handle, 4)
             guard pathLenData.count == 4 else { throw Failure.truncated }
             let sealedPathLen = readUInt32LE(pathLenData)
             if sealedPathLen == 0 {
@@ -268,9 +272,9 @@ enum AorusBackupArchive {
             guard sealedPathLen <= limits.maxSealedPathSize else { throw Failure.corrupt }
             guard observed.count < limits.maxEntryCount else { throw Failure.corrupt }
 
-            let sealedPath = handle.readData(ofLength: Int(sealedPathLen))
+            let sealedPath = try readUpTo(handle, Int(sealedPathLen))
             guard sealedPath.count == Int(sealedPathLen) else { throw Failure.truncated }
-            let bodyLenData = handle.readData(ofLength: 8)
+            let bodyLenData = try readUpTo(handle, 8)
             guard bodyLenData.count == 8 else { throw Failure.truncated }
             let sealedBodyLen = readUInt64LE(bodyLenData)
             guard sealedBodyLen <= limits.maxSealedEntrySize,
@@ -280,7 +284,7 @@ enum AorusBackupArchive {
             )
             guard !overflow, nextBytes <= limits.maxSealedArchiveSize else { throw Failure.corrupt }
             sealedBytes = nextBytes
-            let sealedBody = handle.readData(ofLength: Int(sealedBodyLen))
+            let sealedBody = try readUpTo(handle, Int(sealedBodyLen))
             guard sealedBody.count == Int(sealedBodyLen) else { throw Failure.truncated }
 
             guard let pathBox = try? AES.GCM.SealedBox(combined: sealedPath),
@@ -310,14 +314,14 @@ enum AorusBackupArchive {
             index += 1
         }
 
-        let manifestLenData = handle.readData(ofLength: 4)
+        let manifestLenData = try readUpTo(handle, 4)
         guard manifestLenData.count == 4 else { throw Failure.truncated }
         let sealedManifestLen = readUInt32LE(manifestLenData)
         guard sealedManifestLen > 0,
               UInt64(sealedManifestLen) <= limits.maxSealedManifestSize else { throw Failure.corrupt }
-        let sealedManifest = handle.readData(ofLength: Int(sealedManifestLen))
+        let sealedManifest = try readUpTo(handle, Int(sealedManifestLen))
         guard sealedManifest.count == Int(sealedManifestLen) else { throw Failure.truncated }
-        guard handle.readData(ofLength: 1).isEmpty else { throw Failure.corrupt }
+        guard try readUpTo(handle, 1).isEmpty else { throw Failure.corrupt }
 
         guard let manifestBox = try? AES.GCM.SealedBox(combined: sealedManifest),
               let manifestData = try? AES.GCM.open(
@@ -354,9 +358,15 @@ enum AorusBackupArchive {
             guard let handle = try? FileHandle(forReadingFrom: url) else {
                 throw Failure.io
             }
-            let head = handle.readData(ofLength: AorusBackupArchive.magicV1.count)
+            let head: Data
+            do {
+                head = try AorusBackupArchive.readUpTo(handle, AorusBackupArchive.magicV1.count)
+            } catch {
+                try? handle.close()
+                throw error
+            }
             guard Array(head) == AorusBackupArchive.magicV1 else {
-                handle.closeFile()
+                try? handle.close()
                 throw Failure.corrupt
             }
             self.handle = handle
@@ -366,13 +376,13 @@ enum AorusBackupArchive {
         }
 
         deinit {
-            handle.closeFile()
+            try? handle.close()
         }
 
         /// The next entry, or nil once the end marker is reached.
         func next() throws -> Entry? {
             if reachedEndMarker { return nil }
-            let pathLenData = handle.readData(ofLength: 4)
+            let pathLenData = try AorusBackupArchive.readUpTo(handle, 4)
             guard pathLenData.count == 4 else { throw Failure.truncated }
             let sealedPathLen = AorusBackupArchive.readUInt32LE(pathLenData)
             if sealedPathLen == 0 {
@@ -383,9 +393,9 @@ enum AorusBackupArchive {
             entryCount += 1
             guard entryCount <= limits.maxEntryCount else { throw Failure.corrupt }
 
-            let sealedPath = handle.readData(ofLength: Int(sealedPathLen))
+            let sealedPath = try AorusBackupArchive.readUpTo(handle, Int(sealedPathLen))
             guard sealedPath.count == Int(sealedPathLen) else { throw Failure.truncated }
-            let bodyLenData = handle.readData(ofLength: 8)
+            let bodyLenData = try AorusBackupArchive.readUpTo(handle, 8)
             guard bodyLenData.count == 8 else { throw Failure.truncated }
             let sealedBodyLen = AorusBackupArchive.readUInt64LE(bodyLenData)
             guard sealedBodyLen <= limits.maxSealedEntrySize,
@@ -395,7 +405,7 @@ enum AorusBackupArchive {
             )
             guard !overflow, nextBytes <= limits.maxSealedArchiveSize else { throw Failure.corrupt }
             sealedBytes = nextBytes
-            let sealedBody = handle.readData(ofLength: Int(sealedBodyLen))
+            let sealedBody = try AorusBackupArchive.readUpTo(handle, Int(sealedBodyLen))
             guard sealedBody.count == Int(sealedBodyLen) else { throw Failure.truncated }
 
             guard let pathBox = try? AES.GCM.SealedBox(combined: sealedPath),
@@ -412,10 +422,44 @@ enum AorusBackupArchive {
 
         /// Verifies the end marker was reached and that nothing trails it.
         func finish() throws {
-            guard reachedEndMarker, handle.readData(ofLength: 1).isEmpty else {
+            guard reachedEndMarker, try AorusBackupArchive.readUpTo(handle, 1).isEmpty else {
                 throw Failure.corrupt
             }
         }
+    }
+
+    // MARK: - File I/O that throws
+
+    // `FileHandle.write(_:)` and `readData(ofLength:)` report a failed write or read — a full
+    // disk, an I/O error — as an Objective-C exception, which no Swift `catch` stops: the
+    // `throws` on the functions above did not make them recoverable, and a backup made on a
+    // full phone ended the app. These are the throwing calls in their place.
+
+    /// All of `data`, or `Failure.io`.
+    static func writeAll(_ handle: FileHandle, _ data: Data) throws {
+        do {
+            try handle.write(contentsOf: data)
+        } catch {
+            throw Failure.io
+        }
+    }
+
+    /// Up to `count` bytes — fewer only where the file ends, which the caller reads as
+    /// `truncated` — or `Failure.io` when the file cannot be read.
+    static func readUpTo(_ handle: FileHandle, _ count: Int) throws -> Data {
+        guard count > 0 else { return Data() }
+        var result = Data()
+        while result.count < count {
+            let chunk: Data?
+            do {
+                chunk = try handle.read(upToCount: count - result.count)
+            } catch {
+                throw Failure.io
+            }
+            guard let chunk, !chunk.isEmpty else { break }
+            result.append(chunk)
+        }
+        return result
     }
 
     // MARK: - Byte helpers (little-endian, version-safe)

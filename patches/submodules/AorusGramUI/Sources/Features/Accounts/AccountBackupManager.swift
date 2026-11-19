@@ -16,7 +16,9 @@ import Security
 //      raises the pending-restore flag (runs while the user is in the app).
 //   2. applyPendingRestoreIfNeeded(rootPath:) — runs at the very start of the
 //      next cold launch, BEFORE any postbox is opened, snapshots the current
-//      account data for safety, then swaps the staged data into place.
+//      account data for safety, then swaps the staged data into place, under a
+//      journal on disk: a launch cut short in the middle is finished or undone
+//      by the next one, never left half old and half new.
 public final class AccountBackupManager {
     public static let shared = AccountBackupManager()
     private init() {}
@@ -444,6 +446,10 @@ public final class AccountBackupManager {
 
     public func prepareRestore(selectedAccountId: String? = nil, mergeIntoExisting: Bool = false) -> BackupOutcome {
         guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
+        // Its staging is what the unfinished one needs to be finished or undone at launch.
+        guard !hasUnfinishedRestore else {
+            return .failure(localized("Предыдущее восстановление ещё не завершено. Перезапустите приложение", "The previous restore has not finished yet. Restart the app"))
+        }
         let defaults = UserDefaults.standard
         defaults.set(false, forKey: Self.pendingFlagKey)
         defaults.set(false, forKey: Self.pendingMergeFlagKey)
@@ -530,6 +536,9 @@ public final class AccountBackupManager {
     }
 
     public func cancelPendingRestore() {
+        // A restore already under way on disk is not cancelled from here: its staging is what
+        // finishing or undoing it at launch needs.
+        guard !hasUnfinishedRestore else { return }
         UserDefaults.standard.set(false, forKey: pendingRestoreKey)
         UserDefaults.standard.set(false, forKey: Self.pendingMergeFlagKey)
         UserDefaults.standard.removeObject(forKey: Self.pendingSelectedAccountKey)
@@ -556,8 +565,8 @@ public final class AccountBackupManager {
     private func migrateLegacyArchive(key: SymmetricKey) -> LegacyMigration {
         let fm = FileManager.default
         guard let probe = try? FileHandle(forReadingFrom: archiveURL) else { return .failed }
-        let head = probe.readData(ofLength: AorusBackupArchive.magicV2.count)
-        probe.closeFile()
+        let head = (try? AorusBackupArchive.readUpTo(probe, AorusBackupArchive.magicV2.count)) ?? Data()
+        try? probe.close()
         if Array(head) == AorusBackupArchive.magicV2 { return .notNeeded }
         guard Array(head) == AorusBackupArchive.magicV1 else { return .failed }
 
@@ -600,98 +609,333 @@ public final class AccountBackupManager {
 
     // MARK: - Restore phase 2: apply at launch
 
+    /// How the launch's restore ended, for whoever asks after it.
+    public enum RestoreOutcome: String {
+        /// There was none to apply.
+        case none
+        /// The backup's accounts are in place.
+        case restored
+        /// It could not be finished, and everything is as it was before it.
+        case rolledBack
+        /// It could not be finished nor yet undone: nothing was deleted, and the next launch
+        /// tries again before anything opens the accounts.
+        case failed
+    }
+
+    /// What a restore under way has done, written to disk before each of its steps, so a
+    /// process that dies between two moves — jetsam, the watchdog, a flat battery — is finished
+    /// or undone at the next launch, before Telegram opens anything. The pending flag alone
+    /// could not: it was cleared before the first move, and a restore cut short left the
+    /// accounts half old and half new with nothing on disk to say so.
+    private struct RestoreJournal: Codable {
+        enum Phase: String, Codable {
+            /// Replace: the live slots the backup brings are moved into the snapshot.
+            case settingAside
+            /// Replace: every live slot is in the snapshot; the backup's are moved in.
+            case placing
+            /// Add one account beside the others.
+            case merging
+            /// Undoing; `afterPlacing` says whether anything of the backup's may be in place.
+            case rollingBack
+            case committed
+        }
+        var phase: Phase
+        /// The top-level slots the backup brings (`accounts-metadata`, `account-*`).
+        var names: [String]
+        /// The folder the slots it replaces were moved to, by name in the root.
+        var snapshot: String
+        /// The account a merge adds.
+        var accountId: String?
+        /// Whether the backup's data may have been put in place already.
+        var afterPlacing: Bool
+        /// Launches that have tried it; past a few it is undone instead of tried again.
+        var attempts: Int
+    }
+
+    private static let journalName = ".aorus-restore-journal"
+    private static let restoreOutcomeKey = "aorusgram_pending_restore_outcome"
+    private static let maxRestoreAttempts = 3
+
+    private static func journalURL(_ root: URL) -> URL {
+        return root.appendingPathComponent(journalName)
+    }
+
+    private static func readJournal(_ root: URL) -> RestoreJournal? {
+        guard let data = try? Data(contentsOf: journalURL(root)) else { return nil }
+        return try? JSONDecoder().decode(RestoreJournal.self, from: data)
+    }
+
+    private static func writeJournal(_ journal: RestoreJournal, _ root: URL) throws {
+        let data = try JSONEncoder().encode(journal)
+        try data.write(to: journalURL(root), options: .atomic)
+    }
+
+    /// Whether a restore is still under way on disk: one the last launch neither finished nor
+    /// undone. A new one is not prepared over it, since its staging is what it needs.
+    private var hasUnfinishedRestore: Bool {
+        guard !rootPath.isEmpty else { return false }
+        return FileManager.default.fileExists(atPath: Self.journalURL(URL(fileURLWithPath: rootPath)).path)
+    }
+
     // Called from AppDelegate immediately after `rootPath` is known and BEFORE
     // any postbox / account context is created.
-    public static func applyPendingRestoreIfNeeded(rootPath: String) {
+    @discardableResult
+    public static func applyPendingRestoreIfNeeded(rootPath: String) -> RestoreOutcome {
+        guard !rootPath.isEmpty else { return .none }
+        let root = URL(fileURLWithPath: rootPath)
         let ud = UserDefaults.standard
-        guard ud.bool(forKey: pendingFlagKey), !rootPath.isEmpty else { return }
+        let outcome: RestoreOutcome
+        if let journal = readJournal(root) {
+            // A restore the last launch did not finish comes first, whatever the flags say.
+            outcome = resume(journal, root: root)
+        } else if ud.bool(forKey: pendingFlagKey) {
+            outcome = beginPendingRestore(root: root)
+        } else {
+            return .none
+        }
+        ud.set(outcome.rawValue, forKey: restoreOutcomeKey)
+        return outcome
+    }
+
+    private static func beginPendingRestore(root: URL) -> RestoreOutcome {
+        let ud = UserDefaults.standard
         let mergeIntoExisting = ud.bool(forKey: pendingMergeFlagKey)
         let selectedAccountId = ud.string(forKey: pendingSelectedAccountKey)
-        // Clear the flag up-front — a restore must never loop and brick every launch.
-        ud.set(false, forKey: pendingFlagKey)
-        ud.set(false, forKey: pendingMergeFlagKey)
-        ud.removeObject(forKey: pendingSelectedAccountKey)
+        let clearFlags = {
+            // A restore must never loop and brick every launch: once the journal holds it, or it
+            // cannot be begun at all, the flags that asked for it go.
+            ud.set(false, forKey: pendingFlagKey)
+            ud.set(false, forKey: pendingMergeFlagKey)
+            ud.removeObject(forKey: pendingSelectedAccountKey)
+        }
 
         let fm = FileManager.default
-        let staging = URL(fileURLWithPath: rootPath).appendingPathComponent(stagingName)
+        let staging = root.appendingPathComponent(stagingName)
         guard fm.fileExists(atPath: staging.path),
               let staged = try? fm.contentsOfDirectory(atPath: staging.path),
               !staged.isEmpty else {
+            clearFlags()
             try? fm.removeItem(at: staging)
-            return
+            return .none
         }
-
-        // Drop snapshots from earlier restores — keep only the one we make now,
-        // otherwise old account data (incl. media caches) accumulates forever.
-        if let rootEntries = try? fm.contentsOfDirectory(atPath: rootPath) {
-            for name in rootEntries where name.hasPrefix(snapshotPrefix) {
-                try? fm.removeItem(at: URL(fileURLWithPath: rootPath).appendingPathComponent(name))
-            }
-        }
-
-        if mergeIntoExisting, let selectedAccountId {
-            _ = applyPendingAccountMerge(
-                rootPath: rootPath,
-                staging: staging,
-                accountId: selectedAccountId
-            )
-            return
-        }
-
-        // Snapshot whatever currently occupies those top-level slots, so a failed
-        // or unwanted restore stays recoverable. Everything goes aside before anything new
-        // comes in; if any of it cannot, the restore does not happen and what was moved goes
-        // back -- an unrecorded failure here used to leave a restore with no way back.
-        let root = URL(fileURLWithPath: rootPath)
-        let snapshot = root.appendingPathComponent(snapshotPrefix + String(Int(Date().timeIntervalSince1970)))
+        let merging = mergeIntoExisting && selectedAccountId != nil
+        let journal = RestoreJournal(
+            phase: merging ? .merging : .settingAside,
+            names: staged.sorted(),
+            snapshot: snapshotPrefix + String(Int(Date().timeIntervalSince1970)),
+            accountId: merging ? selectedAccountId : nil,
+            afterPlacing: false,
+            attempts: 0
+        )
         do {
-            try fm.createDirectory(at: snapshot, withIntermediateDirectories: true)
+            try writeJournal(journal, root)
         } catch {
+            // Without a journal nothing is moved: a restore that could not be undone after a
+            // crash is not begun.
+            clearFlags()
             try? fm.removeItem(at: staging)
-            return
+            return .failed
         }
-        var setAside: [String] = []
-        for name in staged {
-            let current = root.appendingPathComponent(name)
-            guard fm.fileExists(atPath: current.path) else { continue }
+        clearFlags()
+        return resume(journal, root: root)
+    }
+
+    private static func resume(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
+        var journal = journal
+        switch journal.phase {
+        case .committed:
+            finishRestore(journal, root: root)
+            return .restored
+        case .rollingBack:
+            return rollBackRestore(journal, root: root)
+        case .settingAside, .placing, .merging:
+            journal.attempts += 1
+            guard journal.attempts <= maxRestoreAttempts, (try? writeJournal(journal, root)) != nil else {
+                return rollBackRestore(journal, root: root)
+            }
+            return journal.phase == .merging
+                ? continueMerge(journal, root: root)
+                : continueReplace(journal, root: root)
+        }
+    }
+
+    /// Replace: the live slots go into the snapshot, all of them, and only then do the
+    /// backup's come in. Each step is skipped when an earlier launch already took it.
+    private static func continueReplace(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
+        var journal = journal
+        let fm = FileManager.default
+        let staging = root.appendingPathComponent(stagingName)
+        let snapshot = root.appendingPathComponent(journal.snapshot)
+
+        if journal.phase == .settingAside {
             do {
-                try fm.moveItem(at: current, to: snapshot.appendingPathComponent(name))
-                setAside.append(name)
-            } catch {
-                for moved in setAside.reversed() {
-                    try? fm.moveItem(at: snapshot.appendingPathComponent(moved), to: root.appendingPathComponent(moved))
+                try fm.createDirectory(at: snapshot, withIntermediateDirectories: true)
+                for name in journal.names {
+                    let current = root.appendingPathComponent(name)
+                    let aside = snapshot.appendingPathComponent(name)
+                    guard fm.fileExists(atPath: current.path), !fm.fileExists(atPath: aside.path) else { continue }
+                    try fm.moveItem(at: current, to: aside)
                 }
-                try? fm.removeItem(at: staging)
-                return
-            }
-        }
-
-        var placed: [String] = []
-        var allMoved = true
-        for name in staged {
-            let src = staging.appendingPathComponent(name)
-            let dst = root.appendingPathComponent(name)
-            do {
-                try fm.moveItem(at: src, to: dst)
-                placed.append(name)
+                journal.phase = .placing
+                journal.afterPlacing = true
+                try writeJournal(journal, root)
             } catch {
-                allMoved = false
-                break
+                return rollBackRestore(journal, root: root)
             }
         }
-        try? fm.removeItem(at: staging)
 
-        if !allMoved {
-            // Roll back: everything the restore put in goes, including slots that were empty
-            // before (they have no snapshot, and used to be left behind), and what was set
-            // aside comes back.
-            for name in placed {
+        // Every live slot is in the snapshot now, so whatever of these names is in the root is
+        // the backup's, put there by this launch or the one before.
+        for name in journal.names {
+            let incoming = staging.appendingPathComponent(name)
+            let target = root.appendingPathComponent(name)
+            guard fm.fileExists(atPath: incoming.path) else { continue }
+            guard !fm.fileExists(atPath: target.path), (try? fm.moveItem(at: incoming, to: target)) != nil else {
+                return rollBackRestore(journal, root: root)
+            }
+        }
+        guard journal.names.allSatisfy({ fm.fileExists(atPath: root.appendingPathComponent($0).path) }) else {
+            return rollBackRestore(journal, root: root)
+        }
+        journal.phase = .committed
+        try? writeJournal(journal, root)
+        finishRestore(journal, root: root)
+        return .restored
+    }
+
+    /// Merge: one account beside the others. The live account list is copied into the snapshot,
+    /// the account's folder is moved in, and the list that names it is written last, in one
+    /// atomic write: until then Telegram does not know the folder is there.
+    private static func continueMerge(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
+        var journal = journal
+        let fm = FileManager.default
+        guard let accountId = journal.accountId, Int64(accountId) != nil else {
+            return rollBackRestore(journal, root: root)
+        }
+        let staging = root.appendingPathComponent(stagingName)
+        let liveAtomic = root.appendingPathComponent("accounts-metadata/atomic-state")
+        let stagedAtomic = staging.appendingPathComponent("accounts-metadata/atomic-state")
+        let stagedAccount = staging.appendingPathComponent("account-" + accountId, isDirectory: true)
+        let liveAccount = root.appendingPathComponent("account-" + accountId, isDirectory: true)
+        let snapshotAtomic = root.appendingPathComponent(journal.snapshot).appendingPathComponent("accounts-metadata/atomic-state")
+
+        // Done but for the clean-up: the list names the account and its folder is in place.
+        if liveListNames(accountId, atomicState: liveAtomic), fm.fileExists(atPath: liveAccount.path) {
+            journal.phase = .committed
+            try? writeJournal(journal, root)
+            finishRestore(journal, root: root)
+            return .restored
+        }
+        guard let mergedState = mergedAtomicStateData(live: liveAtomic, staged: stagedAtomic, accountId: accountId) else {
+            return rollBackRestore(journal, root: root)
+        }
+        do {
+            if !fm.fileExists(atPath: snapshotAtomic.path) {
+                try fm.createDirectory(at: snapshotAtomic.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: liveAtomic, to: snapshotAtomic)
+            }
+            if !fm.fileExists(atPath: liveAccount.path) {
+                guard fm.fileExists(atPath: stagedAccount.path) else {
+                    return rollBackRestore(journal, root: root)
+                }
+                journal.afterPlacing = true
+                try writeJournal(journal, root)
+                try fm.moveItem(at: stagedAccount, to: liveAccount)
+            }
+            try mergedState.write(to: liveAtomic, options: .atomic)
+        } catch {
+            return rollBackRestore(journal, root: root)
+        }
+        journal.phase = .committed
+        try? writeJournal(journal, root)
+        finishRestore(journal, root: root)
+        return .restored
+    }
+
+    private static func liveListNames(_ accountId: String, atomicState: URL) -> Bool {
+        guard let data = try? Data(contentsOf: atomicState),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return false
+        }
+        return record(in: object["records"], accountId: accountId) != nil
+    }
+
+    /// Back to what was there before the restore, all of it, without deleting anything until it
+    /// is: what the backup brought goes back into the staging folder, where nothing reads it,
+    /// and what was set aside comes back. If any of that fails, everything stays as it is, the
+    /// journal included, and the next launch tries again.
+    private static func rollBackRestore(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
+        var journal = journal
+        if journal.phase != .rollingBack {
+            journal.phase = .rollingBack
+            try? writeJournal(journal, root)
+        }
+        let fm = FileManager.default
+        let staging = root.appendingPathComponent(stagingName)
+        let snapshot = root.appendingPathComponent(journal.snapshot)
+        var complete = true
+
+        if let accountId = journal.accountId {
+            // A merge never replaced the list: until its last write the account was not on it,
+            // and a folder it moved in is the only thing to take back out.
+            let liveAccount = root.appendingPathComponent("account-" + accountId, isDirectory: true)
+            let stagedAccount = staging.appendingPathComponent("account-" + accountId, isDirectory: true)
+            let liveAtomic = root.appendingPathComponent("accounts-metadata/atomic-state")
+            if journal.afterPlacing, !fm.fileExists(atPath: stagedAccount.path),
+               fm.fileExists(atPath: liveAccount.path), !liveListNames(accountId, atomicState: liveAtomic) {
+                do {
+                    try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+                    try fm.moveItem(at: liveAccount, to: stagedAccount)
+                } catch {
+                    complete = false
+                }
+            }
+        } else {
+            for name in journal.names {
+                let current = root.appendingPathComponent(name)
+                let aside = snapshot.appendingPathComponent(name)
+                let incoming = staging.appendingPathComponent(name)
+                // In the root and the backup's: put there after every live slot was set aside,
+                // which a slot that had no live one before shows only through `afterPlacing`.
+                if journal.afterPlacing, fm.fileExists(atPath: current.path), !fm.fileExists(atPath: incoming.path) {
+                    do {
+                        try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+                        try fm.moveItem(at: current, to: incoming)
+                    } catch {
+                        complete = false
+                        continue
+                    }
+                }
+                guard fm.fileExists(atPath: aside.path) else { continue }
+                guard !fm.fileExists(atPath: current.path), (try? fm.moveItem(at: aside, to: current)) != nil else {
+                    complete = false
+                    continue
+                }
+            }
+        }
+        guard complete else { return .failed }
+        try? fm.removeItem(at: staging)
+        // A replace has moved everything back out of the snapshot; a merge only ever copied the
+        // account list into it. Either way it holds nothing that is not in place again.
+        let left = (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? []
+        if left.isEmpty || journal.accountId != nil {
+            try? fm.removeItem(at: snapshot)
+        }
+        try? fm.removeItem(at: journalURL(root))
+        return .rolledBack
+    }
+
+    /// After the restore is in place: the staging goes, and so do the snapshots of earlier
+    /// restores — only now, so a restore that fails never takes the last way back with it.
+    private static func finishRestore(_ journal: RestoreJournal, root: URL) {
+        let fm = FileManager.default
+        try? fm.removeItem(at: root.appendingPathComponent(stagingName))
+        if let entries = try? fm.contentsOfDirectory(atPath: root.path) {
+            for name in entries where name.hasPrefix(snapshotPrefix) && name != journal.snapshot {
                 try? fm.removeItem(at: root.appendingPathComponent(name))
             }
-            for name in setAside {
-                try? fm.moveItem(at: snapshot.appendingPathComponent(name), to: root.appendingPathComponent(name))
-            }
         }
+        try? fm.removeItem(at: journalURL(root))
     }
 
     private static func selectCurrentAccount(in root: URL, accountId: String) -> Bool {
@@ -765,55 +1009,6 @@ public final class AccountBackupManager {
         liveObject.removeValue(forKey: "currentAuthRecord")
         guard JSONSerialization.isValidJSONObject(liveObject) else { return nil }
         return try? JSONSerialization.data(withJSONObject: liveObject)
-    }
-
-    @discardableResult
-    private static func applyPendingAccountMerge(rootPath: String, staging: URL, accountId: String) -> Bool {
-        guard Int64(accountId) != nil else {
-            try? FileManager.default.removeItem(at: staging)
-            return false
-        }
-        let fm = FileManager.default
-        let liveAtomic = URL(fileURLWithPath: rootPath).appendingPathComponent("accounts-metadata/atomic-state")
-        let stagedAtomic = staging.appendingPathComponent("accounts-metadata/atomic-state")
-        let stagedAccount = staging.appendingPathComponent("account-" + accountId, isDirectory: true)
-        let liveAccount = URL(fileURLWithPath: rootPath).appendingPathComponent("account-" + accountId, isDirectory: true)
-        guard let mergedState = mergedAtomicStateData(live: liveAtomic, staged: stagedAtomic, accountId: accountId),
-              fm.fileExists(atPath: stagedAccount.path) else {
-            try? fm.removeItem(at: staging)
-            return false
-        }
-
-        let snapshot = URL(fileURLWithPath: rootPath)
-            .appendingPathComponent(snapshotPrefix + String(Int(Date().timeIntervalSince1970)))
-        let snapshotAtomic = snapshot.appendingPathComponent("accounts-metadata/atomic-state")
-        do {
-            try fm.createDirectory(at: snapshotAtomic.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try fm.copyItem(at: liveAtomic, to: snapshotAtomic)
-        } catch {
-            try? fm.removeItem(at: staging)
-            try? fm.removeItem(at: snapshot)
-            return false
-        }
-
-        var movedAccount = false
-        do {
-            if !fm.fileExists(atPath: liveAccount.path) {
-                try fm.moveItem(at: stagedAccount, to: liveAccount)
-                movedAccount = true
-            }
-            try mergedState.write(to: liveAtomic, options: .atomic)
-            try? fm.removeItem(at: staging)
-            return true
-        } catch {
-            if movedAccount {
-                try? fm.removeItem(at: liveAccount)
-            }
-            try? fm.removeItem(at: liveAtomic)
-            try? fm.copyItem(at: snapshotAtomic, to: liveAtomic)
-            try? fm.removeItem(at: staging)
-            return false
-        }
     }
 
     // MARK: - Delete
@@ -923,7 +1118,10 @@ public final class AccountBackupManager {
         var index = 0
         var total: Int64 = 0
         while true {
-            let chunk = handle.readData(ofLength: keychainChunkSize)
+            guard let chunk = try? AorusBackupArchive.readUpTo(handle, keychainChunkSize) else {
+                deleteKeychainChunks(generation: generation, count: index)
+                return false
+            }
             if chunk.isEmpty { break }
             total += Int64(chunk.count)
             guard total <= Int64(maxEncryptedArchiveSize),
@@ -971,8 +1169,7 @@ public final class AccountBackupManager {
                   !chunk.isEmpty,
                   chunk.count <= keychainChunkSize else { ok = false; break }
             written += Int64(chunk.count)
-            guard written <= meta.sizeBytes else { ok = false; break }
-            handle.write(chunk)
+            guard written <= meta.sizeBytes, (try? AorusBackupArchive.writeAll(handle, chunk)) != nil else { ok = false; break }
         }
         if written != meta.sizeBytes { ok = false }
         try? handle.close()
@@ -1077,6 +1274,7 @@ public final class AccountBackupManager {
 private enum AccountBackupL10n {
     static let tables: [String: [String: String]] = [
         "it": [
+            "The previous restore has not finished yet. Restart the app": "Il ripristino precedente non è ancora terminato. Riavvia l'app",
             "Account data path is unavailable": "Il percorso dei dati degli account non è disponibile",
             "No account data available for backup": "Nessun dato account da salvare",
             "Backup is too large": "Il backup è troppo grande",
@@ -1095,6 +1293,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Mancano i dati dell'account selezionato",
         ],
         "pl": [
+            "The previous restore has not finished yet. Restart the app": "Poprzednie przywracanie jeszcze się nie zakończyło. Uruchom aplikację ponownie",
             "Account data path is unavailable": "Ścieżka do danych kont jest niedostępna",
             "No account data available for backup": "Brak danych kont do kopii",
             "Backup is too large": "Kopia jest za duża",
@@ -1113,6 +1312,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Brakuje danych wybranego konta",
         ],
         "nl": [
+            "The previous restore has not finished yet. Restart the app": "Het vorige herstel is nog niet voltooid. Start de app opnieuw",
             "Account data path is unavailable": "Het pad naar de accountgegevens is niet beschikbaar",
             "No account data available for backup": "Geen accountgegevens om te back-uppen",
             "Backup is too large": "De back-up is te groot",
@@ -1131,6 +1331,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "De gegevens van het gekozen account ontbreken",
         ],
         "ca": [
+            "The previous restore has not finished yet. Restart the app": "La restauració anterior encara no ha acabat. Reinicia l'app",
             "Account data path is unavailable": "El camí de les dades dels comptes no està disponible",
             "No account data available for backup": "No hi ha dades de comptes per desar",
             "Backup is too large": "La còpia és massa gran",
@@ -1149,6 +1350,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Falten les dades del compte triat",
         ],
         "id": [
+            "The previous restore has not finished yet. Restart the app": "Pemulihan sebelumnya belum selesai. Mulai ulang aplikasi",
             "Account data path is unavailable": "Jalur data akun tidak tersedia",
             "No account data available for backup": "Tidak ada data akun untuk dicadangkan",
             "Backup is too large": "Cadangan terlalu besar",
@@ -1167,6 +1369,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Data akun yang dipilih tidak ada",
         ],
         "ms": [
+            "The previous restore has not finished yet. Restart the app": "Pemulihan sebelumnya belum selesai. Mulakan semula aplikasi",
             "Account data path is unavailable": "Laluan data akaun tidak tersedia",
             "No account data available for backup": "Tiada data akaun untuk disandarkan",
             "Backup is too large": "Sandaran terlalu besar",
@@ -1185,6 +1388,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Data akaun yang dipilih tiada",
         ],
         "be": [
+            "The previous restore has not finished yet. Restart the app": "Папярэдняе аднаўленне яшчэ не завершана. Перазапусціце праграму",
             "Account data path is unavailable": "Шлях да даных акаўнтаў недаступны",
             "No account data available for backup": "Няма даных акаўнтаў для рэзервовай копіі",
             "Backup is too large": "Рэзервовая копія занадта вялікая",
@@ -1203,6 +1407,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Даныя выбранага акаўнта адсутнічаюць",
         ],
         "uz": [
+            "The previous restore has not finished yet. Restart the app": "Oldingi tiklash hali tugamagan. Ilovani qayta ishga tushiring",
             "Account data path is unavailable": "Hisob ma’lumotlari yo‘li mavjud emas",
             "No account data available for backup": "Zaxiralash uchun hisob ma’lumotlari yo‘q",
             "Backup is too large": "Zaxira juda katta",
@@ -1221,6 +1426,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Tanlangan hisob ma’lumotlari yo‘q",
         ],
         "ko": [
+            "The previous restore has not finished yet. Restart the app": "이전 복원이 아직 끝나지 않았습니다. 앱을 다시 시작하세요",
             "Account data path is unavailable": "계정 데이터 경로를 사용할 수 없습니다",
             "No account data available for backup": "백업할 계정 데이터가 없습니다",
             "Backup is too large": "백업이 너무 큽니다",
@@ -1239,6 +1445,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "선택한 계정의 데이터가 없습니다",
         ],
         "ar": [
+            "The previous restore has not finished yet. Restart the app": "لم تنتهِ الاستعادة السابقة بعد. أعد تشغيل التطبيق",
             "Account data path is unavailable": "مسار بيانات الحسابات غير متاح",
             "No account data available for backup": "لا توجد بيانات حسابات للنسخ الاحتياطي",
             "Backup is too large": "النسخة الاحتياطية كبيرة جدًا",
@@ -1257,6 +1464,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "بيانات الحساب المحدد غير موجودة",
         ],
         "fa": [
+            "The previous restore has not finished yet. Restart the app": "بازیابی قبلی هنوز تمام نشده است. برنامه را دوباره باز کنید",
             "Account data path is unavailable": "مسیر داده‌های حساب‌ها در دسترس نیست",
             "No account data available for backup": "داده‌ای از حساب‌ها برای پشتیبان‌گیری نیست",
             "Backup is too large": "پشتیبان خیلی بزرگ است",
@@ -1275,6 +1483,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "داده‌های حساب انتخاب‌شده موجود نیست",
         ],
         "kk": [
+            "The previous restore has not finished yet. Restart the app": "Алдыңғы қалпына келтіру әлі аяқталған жоқ. Қолданбаны қайта іске қосыңыз",
             "Account data path is unavailable": "Аккаунт деректерінің жолы қолжетімсіз",
             "No account data available for backup": "Көшірме жасауға аккаунт деректері жоқ",
             "Backup is too large": "Көшірме тым үлкен",
@@ -1293,6 +1502,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Таңдалған аккаунт деректері жоқ",
         ],
         "zh-hans": [
+            "The previous restore has not finished yet. Restart the app": "上一次恢复尚未完成。请重新启动应用",
             "Account data path is unavailable": "账号数据路径不可用",
             "No account data available for backup": "没有可备份的账号数据",
             "Backup is too large": "备份文件过大",
@@ -1311,6 +1521,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "所选账号的数据缺失",
         ],
         "zh-hant": [
+            "The previous restore has not finished yet. Restart the app": "上一次還原尚未完成。請重新啟動 App",
             "Account data path is unavailable": "帳號資料路徑不可用",
             "No account data available for backup": "沒有可備份的帳號資料",
             "Backup is too large": "備份檔案過大",
@@ -1329,6 +1540,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "所選帳號的資料缺失",
         ],
         "ja": [
+            "The previous restore has not finished yet. Restart the app": "前回の復元がまだ完了していません。アプリを再起動してください",
             "Account data path is unavailable": "アカウントデータのパスを利用できません",
             "No account data available for backup": "バックアップできるアカウントデータがありません",
             "Backup is too large": "バックアップが大きすぎます",
@@ -1347,6 +1559,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "選択したアカウントのデータがありません",
         ],
         "fi": [
+            "The previous restore has not finished yet. Restart the app": "Edellinen palautus ei ole vielä valmis. Käynnistä sovellus uudelleen",
             "Account data path is unavailable": "Tilin datapolku ei ole käytettävissä",
             "No account data available for backup": "Varmuuskopioitavaa tilidataa ei ole",
             "Backup is too large": "Varmuuskopio on liian suuri",
@@ -1365,6 +1578,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Valitun tilin tiedot puuttuvat",
         ],
         "he": [
+            "The previous restore has not finished yet. Restart the app": "השחזור הקודם עדיין לא הסתיים. הפעילו מחדש את האפליקציה",
             "Account data path is unavailable": "נתיב נתוני החשבון אינו זמין",
             "No account data available for backup": "אין נתוני חשבון זמינים לגיבוי",
             "Backup is too large": "הגיבוי גדול מדי",
@@ -1383,6 +1597,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "נתוני החשבון שנבחר חסרים",
         ],
         "hr": [
+            "The previous restore has not finished yet. Restart the app": "Prethodno vraćanje još nije završeno. Ponovno pokrenite aplikaciju",
             "Account data path is unavailable": "Putanja podataka računa nije dostupna",
             "No account data available for backup": "Nema podataka računa za sigurnosnu kopiju",
             "Backup is too large": "Sigurnosna kopija je prevelika",
@@ -1401,6 +1616,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Podaci odabranog računa nedostaju",
         ],
         "sr": [
+            "The previous restore has not finished yet. Restart the app": "Претходно враћање још није завршено. Поново покрените апликацију",
             "Account data path is unavailable": "Путања података налога није доступна",
             "No account data available for backup": "Нема података налога за резервну копију",
             "Backup is too large": "Резервна копија је превелика",
@@ -1419,6 +1635,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Подаци изабраног налога недостају",
         ],
         "cs": [
+            "The previous restore has not finished yet. Restart the app": "Předchozí obnova ještě neskončila. Restartujte aplikaci",
             "Account data path is unavailable": "Cesta k datům účtu není dostupná",
             "No account data available for backup": "K záloze nejsou k dispozici žádná data účtu",
             "Backup is too large": "Záloha je příliš velká",
@@ -1437,6 +1654,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Data vybraného účtu chybí",
         ],
         "sk": [
+            "The previous restore has not finished yet. Restart the app": "Predchádzajúca obnova ešte neskončila. Reštartujte aplikáciu",
             "Account data path is unavailable": "Cesta k údajom účtu nie je dostupná",
             "No account data available for backup": "Na zálohu nie sú k dispozícii žiadne údaje účtu",
             "Backup is too large": "Záloha je príliš veľká",
@@ -1455,6 +1673,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Údaje vybraného účtu chýbajú",
         ],
         "ro": [
+            "The previous restore has not finished yet. Restart the app": "Restaurarea anterioară nu s-a încheiat încă. Reporniți aplicația",
             "Account data path is unavailable": "Calea către datele contului nu este disponibilă",
             "No account data available for backup": "Nu există date de cont pentru copia de rezervă",
             "Backup is too large": "Copia de rezervă este prea mare",
@@ -1473,6 +1692,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Datele contului selectat lipsesc",
         ],
         "hu": [
+            "The previous restore has not finished yet. Restart the app": "Az előző visszaállítás még nem fejeződött be. Indítsa újra az alkalmazást",
             "Account data path is unavailable": "A fiókadatok elérési útja nem érhető el",
             "No account data available for backup": "Nincs menthető fiókadat",
             "Backup is too large": "A biztonsági mentés túl nagy",
@@ -1491,6 +1711,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "A kiválasztott fiók adatai hiányoznak",
         ],
         "nb": [
+            "The previous restore has not finished yet. Restart the app": "Den forrige gjenopprettingen er ikke ferdig ennå. Start appen på nytt",
             "Account data path is unavailable": "Banen til kontodataene er utilgjengelig",
             "No account data available for backup": "Ingen kontodata tilgjengelig for sikkerhetskopiering",
             "Backup is too large": "Sikkerhetskopien er for stor",
@@ -1509,6 +1730,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Dataene til den valgte kontoen mangler",
         ],
         "sv": [
+            "The previous restore has not finished yet. Restart the app": "Den förra återställningen är inte klar än. Starta om appen",
             "Account data path is unavailable": "Sökvägen till kontouppgifterna är inte tillgänglig",
             "No account data available for backup": "Det finns inga kontouppgifter att säkerhetskopiera",
             "Backup is too large": "Säkerhetskopian är för stor",
@@ -1527,6 +1749,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Uppgifterna för det valda kontot saknas",
         ],
         "vi": [
+            "The previous restore has not finished yet. Restart the app": "Lần khôi phục trước chưa hoàn tất. Hãy khởi động lại ứng dụng",
             "Account data path is unavailable": "Không truy cập được đường dẫn dữ liệu tài khoản",
             "No account data available for backup": "Không có dữ liệu tài khoản để sao lưu",
             "Backup is too large": "Bản sao lưu quá lớn",
@@ -1545,6 +1768,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Thiếu dữ liệu của tài khoản đã chọn",
         ],
         "uk": [
+            "The previous restore has not finished yet. Restart the app": "Попереднє відновлення ще не завершено. Перезапустіть застосунок",
             "Account data path is unavailable": "Шлях до даних акаунтів недоступний",
             "No account data available for backup": "Немає даних акаунтів для резервної копії",
             "Backup is too large": "Резервна копія завелика",
@@ -1563,6 +1787,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Дані вибраного акаунта відсутні",
         ],
         "es": [
+            "The previous restore has not finished yet. Restart the app": "La restauración anterior aún no ha terminado. Reinicia la app",
             "Account data path is unavailable": "La ruta de datos de las cuentas no está disponible",
             "No account data available for backup": "No hay datos de cuentas para la copia",
             "Backup is too large": "La copia es demasiado grande",
@@ -1581,6 +1806,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Faltan los datos de la cuenta elegida",
         ],
         "pt": [
+            "The previous restore has not finished yet. Restart the app": "A restauração anterior ainda não terminou. Reinicie o app",
             "Account data path is unavailable": "O caminho dos dados das contas está indisponível",
             "No account data available for backup": "Não há dados de contas para o backup",
             "Backup is too large": "O backup é grande demais",
@@ -1599,6 +1825,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Faltam os dados da conta escolhida",
         ],
         "de": [
+            "The previous restore has not finished yet. Restart the app": "Die vorherige Wiederherstellung ist noch nicht abgeschlossen. Starte die App neu",
             "Account data path is unavailable": "Der Pfad zu den Kontodaten ist nicht verfügbar",
             "No account data available for backup": "Keine Kontodaten für ein Backup vorhanden",
             "Backup is too large": "Das Backup ist zu groß",
@@ -1617,6 +1844,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Die Daten des gewählten Kontos fehlen",
         ],
         "fr": [
+            "The previous restore has not finished yet. Restart the app": "La restauration précédente n'est pas encore terminée. Redémarrez l'app",
             "Account data path is unavailable": "Le chemin des données des comptes est indisponible",
             "No account data available for backup": "Aucune donnée de compte à sauvegarder",
             "Backup is too large": "La sauvegarde est trop volumineuse",
@@ -1635,6 +1863,7 @@ private enum AccountBackupL10n {
             "The selected account data is missing": "Les données du compte sélectionné sont absentes",
         ],
         "tr": [
+            "The previous restore has not finished yet. Restart the app": "Önceki geri yükleme henüz bitmedi. Uygulamayı yeniden başlatın",
             "Account data path is unavailable": "Hesap verileri yolu kullanılamıyor",
             "No account data available for backup": "Yedeklenecek hesap verisi yok",
             "Backup is too large": "Yedek çok büyük",

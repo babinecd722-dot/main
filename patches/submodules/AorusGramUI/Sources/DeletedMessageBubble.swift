@@ -160,7 +160,8 @@ public final class DeletedMessagesInjector {
     /// and a reader that does not say which account it is would be asking for all of them.
     public func deletedMessages(accountStoragePath: String, for peerId: Int64) -> [DeletedChatMessage] {
         let accountKey = DeletedMessagesCache.accountKey(forStoragePath: accountStoragePath)
-        return DeletedMessagesCache.shared.deletedMessages(accountKey: accountKey, peerId: peerId)
+        // Nothing is drawn in the chat while the saved messages cannot be read.
+        return (DeletedMessagesCache.shared.deletedMessages(accountKey: accountKey, peerId: peerId) ?? [])
             .map { dm in
                 DeletedChatMessage(
                     id:          dm.id,

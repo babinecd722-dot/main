@@ -404,6 +404,8 @@ private struct AorusState: Equatable {
     var saveDeletedMessages: Bool
     var saveEditedMessages: Bool
     var antiScreenshot: Bool
+    /// The capture protection cannot work on this device (AntiScreenshotManager).
+    var antiScreenshotUnavailable: Bool
     var callRecording: Bool
     var voiceTranscription: Bool
     var translator: Bool
@@ -778,7 +780,11 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
     case .security:
         b.block()
         b.screen("chatLock", icon("lock.fill"), aorusL("Защита чатов", "Chat Protection"), aorusL("Код-пароль или Face ID на выбранные чаты", "A passcode or Face ID on the chats you choose"), .chatLock, isOn: state.chatLockEnabled)
-        b.toggle("antiScreenshot", icon("eye.slash.fill"), l10n.antiScreenshot, aorusL("Прячет переписку, когда идёт запись экрана или трансляция", "Hides your chats while the screen is being recorded or shared"), \.antiScreenshot, state)
+        // When iOS will not take the protection, the row says what is still done instead.
+        let antiScreenshotSubtitle = state.antiScreenshot && state.antiScreenshotUnavailable
+            ? aorusL("Полная защита недоступна на этой версии iOS: во время записи и в переключателе приложений переписку закрывает заставка, снимки экрана не блокируются", "Full protection is unavailable on this version of iOS: a cover hides your chats while recording and in the app switcher, screenshots are not blocked")
+            : aorusL("Прячет переписку, когда идёт запись экрана или трансляция", "Hides your chats while the screen is being recorded or shared")
+        b.toggle("antiScreenshot", icon("eye.slash.fill"), l10n.antiScreenshot, antiScreenshotSubtitle, \.antiScreenshot, state)
         b.block()
         b.toggle("linkProtection", icon("link.badge.plus"), aorusL("Защита ссылок", "Link Protection"), aorusL("Предупреждает о фишинге, подменённых адресах и опасных файлах", "Warns about phishing, spoofed addresses and dangerous files"), \.linkProtection, state)
         if state.linkProtection {
@@ -1184,6 +1190,7 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
         saveDeletedMessages: mgr.saveDeletedMessages,
         saveEditedMessages:  mgr.saveEditedMessages,
         antiScreenshot:     mgr.antiScreenshot,
+        antiScreenshotUnavailable: AorusGram.AntiScreenshotManager.shared.isProtectionUnavailable,
         callRecording:      mgr.callRecording,
         voiceTranscription: mgr.voiceTranscription,
         translator:         mgr.translator,
@@ -1798,6 +1805,9 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                 updateState { _ in aorusStoredState(accountId: accountId) }
             },
             NotificationCenter.default.addObserver(forName: AorusChatLock.changedNotification, object: nil, queue: .main) { _ in
+                updateState { _ in aorusStoredState(accountId: accountId) }
+            },
+            NotificationCenter.default.addObserver(forName: AorusGram.AntiScreenshotManager.protectionChangedNotification, object: nil, queue: .main) { _ in
                 updateState { _ in aorusStoredState(accountId: accountId) }
             },
         ]

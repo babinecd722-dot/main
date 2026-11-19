@@ -904,6 +904,12 @@ def patch_background_presence(tg: Path) -> None:
         if delegate_text.count(anchor) != 1:
             raise RuntimeError(f"AccountImportPicker: AppDelegate anchor found {delegate_text.count(anchor)} times")
         delegate_text = delegate_text.replace(anchor, anchor + "            AorusAccountImportPicker.install()\n", 1)
+    # The interface module's own services: the caches' auto-clean (AorusInterfaceLaunch.swift).
+    if "AorusInterfaceLaunch.start()" not in delegate_text:
+        anchor = "            AorusAccountImportPicker.install()\n"
+        if delegate_text.count(anchor) != 1:
+            raise RuntimeError(f"InterfaceLaunch: AppDelegate anchor found {delegate_text.count(anchor)} times")
+        delegate_text = delegate_text.replace(anchor, anchor + "            AorusInterfaceLaunch.start()\n", 1)
     if delegate_text != original_delegate_text:
         delegate.write_text(delegate_text, encoding="utf-8")
 
@@ -3747,16 +3753,24 @@ def patch_auto_reply_send_hook(tg: Path) -> None:
         "\n        " + sentinel + "\n"
         "        NotificationCenter.default.addObserver(forName: NSNotification.Name(\"aorusgram.sendAutoReply\"),\n"
         "            object: nil, queue: .main) { [weak self] note in\n"
+        "            guard let info = note.userInfo,\n"
+        "                  let peerIdNum = info[\"peerId\"] as? NSNumber,\n"
+        "                  let accountPath = info[\"accountPath\"] as? String, !accountPath.isEmpty else { return }\n"
+        "            // Every request is answered: the auto-reply starts its cooldown only for a reply\n"
+        "            // that was put in the account's outgoing queue, and lets the chat go otherwise.\n"
+        "            let report: (Bool) -> Void = { enqueued in\n"
+        "                NotificationCenter.default.post(name: NSNotification.Name(\"aorusgram.autoReplyResult\"), object: nil, userInfo: [\"peerId\": peerIdNum, \"accountPath\": accountPath, \"enqueued\": NSNumber(value: enqueued)])\n"
+        "            }\n"
         "            // The reply has to leave the account the message arrived on. `contextValue`\n"
         "            // is only the account currently on screen, so sending through it answered\n"
         "            // one account's chat from another one whenever more than one was signed in —\n"
         "            // visibly to the peer, and from an identity the user never chose.\n"
         "            guard AorusGramConfig.isEnabled(.autoReply),\n"
-        "                  let info = note.userInfo,\n"
-        "                  let peerIdNum = info[\"peerId\"] as? NSNumber,\n"
         "                  let text = info[\"text\"] as? String,\n"
-        "                  let accountPath = info[\"accountPath\"] as? String, !accountPath.isEmpty,\n"
-        "                  let app = self?.contextValue else { return }\n"
+        "                  let app = self?.contextValue else {\n"
+        "                report(false)\n"
+        "                return\n"
+        "            }\n"
         "            let peerId = PeerId(peerIdNum.int64Value)\n"
         "            let _ = (app.context.sharedContext.activeAccountContexts\n"
         "            |> take(1)\n"
@@ -3764,19 +3778,23 @@ def patch_auto_reply_send_hook(tg: Path) -> None:
         "                // `accountPath` is the postbox media path the incoming hook read off the\n"
         "                // very MediaBox the state manager was replaying into, so it matches\n"
         "                // exactly one signed-in account. If that account is gone, so is the reply.\n"
-        "                for (_, accountContext, _) in activeAccounts.accounts where accountContext.account.postbox.mediaBox.basePath == accountPath {\n"
-        "                    let _ = enqueueMessages(\n"
-        "                        account: accountContext.account,\n"
-        "                        peerId: peerId,\n"
-        "                        messages: [EnqueueMessage.message(\n"
-        "                            text: text, attributes: [], inlineStickers: [:],\n"
-        "                            mediaReference: nil, threadId: nil,\n"
-        "                            replyToMessageId: nil, replyToStoryId: nil,\n"
-        "                            localGroupingKey: nil, correlationId: nil,\n"
-        "                            bubbleUpEmojiOrStickersets: [])]\n"
-        "                    ).start()\n"
-        "                    break\n"
+        "                guard let accountContext = activeAccounts.accounts.first(where: { $0.1.account.postbox.mediaBox.basePath == accountPath })?.1 else {\n"
+        "                    report(false)\n"
+        "                    return\n"
         "                }\n"
+        "                let _ = (enqueueMessages(\n"
+        "                    account: accountContext.account,\n"
+        "                    peerId: peerId,\n"
+        "                    messages: [EnqueueMessage.message(\n"
+        "                        text: text, attributes: [], inlineStickers: [:],\n"
+        "                        mediaReference: nil, threadId: nil,\n"
+        "                        replyToMessageId: nil, replyToStoryId: nil,\n"
+        "                        localGroupingKey: nil, correlationId: nil,\n"
+        "                        bubbleUpEmojiOrStickersets: [])]\n"
+        "                )\n"
+        "                |> deliverOnMainQueue).start(next: { messageIds in\n"
+        "                    report(messageIds.contains(where: { $0 != nil }))\n"
+        "                })\n"
         "            })\n"
         "        }\n"
     )

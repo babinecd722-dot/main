@@ -1310,7 +1310,12 @@ def main() -> None:
             ("prepareRestore(selectedAccountId:", "selected-account restore is missing"),
             ("mergeIntoExisting", "add-account merge mode is missing"),
             ("mergedAtomicStateData", "Telegram account-state merge is missing"),
-            ("applyPendingAccountMerge", "pending add-account merge is not applied at launch"),
+            ("continueMerge(journal, root: root)", "pending add-account merge is not applied at launch"),
+            # A restore cut short between two moves is finished or undone at the next launch,
+            # before any postbox opens, never left half old and half new.
+            ("private static let journalName = \".aorus-restore-journal\"", "restore has no journal on disk"),
+            ("if let journal = readJournal(root) {", "an unfinished restore is not resumed at launch"),
+            ("private static func rollBackRestore(", "an unfinished restore cannot be undone"),
         ):
             if marker not in account_backup_text:
                 err.append(f"LoginBackupKey: {message}")
@@ -1598,6 +1603,14 @@ def main() -> None:
             "let wasAlwaysOnline = aorusAlwaysOnline.swap(alwaysOnline)",
             "let revealed = wasConcealing && !conceals",
             "NotificationCenter.default.removeObserver(aorusSettingsObserver)",
+        )),
+        # The caches' auto-clean is started at launch, from the module that sees AorusGramUI;
+        # its only call used to be in a bootstrap nothing runs.
+        ("submodules/TelegramUI/Sources/AppDelegate.swift", (
+            "AorusInterfaceLaunch.start()",
+        )),
+        ("submodules/TelegramUI/Sources/AorusInterfaceLaunch.swift", (
+            "AorusCacheManager.shared.refresh()",
         )),
     ):
         source = tg / relative

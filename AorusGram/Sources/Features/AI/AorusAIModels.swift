@@ -1165,6 +1165,8 @@ public enum AorusAIClientError: Error, Equatable {
     case quota(AorusAIQuota)
     case serverUnavailable
     case malformedResponse
+    /// The answer was larger than the client takes, and was refused rather than cut short.
+    case responseTooLarge
     /// The stored lifetime of the file or of its signed link has passed (HTTP 410).
     case artifactExpired
     /// The vault refused the file for this device (HTTP 403 `artifact_not_owned`).

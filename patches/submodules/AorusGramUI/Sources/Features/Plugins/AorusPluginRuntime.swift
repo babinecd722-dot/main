@@ -98,10 +98,24 @@ public final class AorusPluginRuntimeManager {
     private var tabBadges: [String: String] = [:]
     /// The tabs the bar was last told about, so it is rebuilt only when they change.
     private var publishedTabKeys: [String] = []
-    /// Plugins whose code failed to start, by the digest of that code, so the check made every
-    /// time the app comes to the front does not run a broken script again and again. A new
-    /// version, or a start someone asked for, tries again.
-    private var failedStarts: [String: String] = [:]
+    /// Plugins whose code failed to start, and on which code, so the check made every time the
+    /// app comes to the front does not run a broken script again and again. A new version, or a
+    /// start someone asked for, tries again.
+    ///
+    /// A syntax error is the code's own and stays until one of those. Anything else may have
+    /// been the moment — a service not up yet, a keychain still locked — and is tried again on
+    /// the app's returns, each time a while later than the last, and at once after the device
+    /// unlocks. Taking every failure as final left a plugin switched on and never running until
+    /// somebody opened it and pressed Run.
+    private struct FailedStart {
+        let digest: String
+        let message: String
+        let isFinal: Bool
+        let attempts: Int
+        var retryAt: TimeInterval
+    }
+    private var failedStarts: [String: FailedStart] = [:]
+    private static let startRetryDelays: [TimeInterval] = [30.0, 120.0, 600.0, 3600.0]
     private var observers: [NSObjectProtocol] = []
     private let reloadQueue = DispatchQueue(label: "aorusgram.pluginReload", qos: .utility)
     // Requests and application of their snapshots belong to main; disk reads do not.
@@ -264,7 +278,7 @@ public final class AorusPluginRuntimeManager {
             let id = record.manifest.id
             lock.lock()
             let exists = sandboxes[id] != nil
-            let failedDigest = failedStarts[id]
+            let failed = failedStarts[id]
             lock.unlock()
             if startingMissingOnly && exists { continue }
             let digest = item.digest
@@ -280,7 +294,10 @@ public final class AorusPluginRuntimeManager {
                 continue
             }
             if exists { continue }
-            if startingMissingOnly && failedDigest == digest { continue }
+            if startingMissingOnly, let failed, failed.digest == digest,
+               failed.isFinal || Date.timeIntervalSinceReferenceDate < failed.retryAt {
+                continue
+            }
             start(record: record, host: host, permissions: item.permissions)
         }
     }
@@ -357,6 +374,21 @@ public final class AorusPluginRuntimeManager {
     public func sandbox(id: String) -> AorusPluginSandbox? {
         lock.lock(); defer { lock.unlock() }
         return sandboxes[id]
+    }
+
+    /// Why the plugin's last start failed, while it has not started since.
+    public func startFailure(id: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return failedStarts[id]?.message
+    }
+
+    private func retryFailedStartsNow() {
+        lock.lock()
+        let now = Date.timeIntervalSinceReferenceDate
+        for (id, failed) in failedStarts where !failed.isFinal {
+            failedStarts[id]?.retryAt = now
+        }
+        lock.unlock()
     }
 
     public func settingsSchema(id: String) -> [AorusPluginSettingField] {
@@ -918,8 +950,19 @@ public final class AorusPluginRuntimeManager {
         if let previous { AorusPluginRuntimeManager.retire(previous) }
         sandbox.start { [weak self, weak sandbox] error in
             self?.lock.lock()
-            if error != nil {
-                self?.failedStarts[record.manifest.id] = digest
+            if let error {
+                let previous = self?.failedStarts[record.manifest.id]
+                let attempts = previous?.digest == digest ? (previous?.attempts ?? 0) + 1 : 1
+                let delays = AorusPluginRuntimeManager.startRetryDelays
+                var isFinal = false
+                if case .syntax = error { isFinal = true }
+                self?.failedStarts[record.manifest.id] = FailedStart(
+                    digest: digest,
+                    message: error.message,
+                    isFinal: isFinal,
+                    attempts: attempts,
+                    retryAt: Date.timeIntervalSinceReferenceDate + delays[min(attempts, delays.count) - 1]
+                )
                 if self?.sandboxes[record.manifest.id] === sandbox { self?.sandboxes[record.manifest.id] = nil }
                 self?.pages[record.manifest.id] = nil
                 self?.settingsShortcuts[record.manifest.id] = nil
@@ -975,6 +1018,10 @@ public final class AorusPluginRuntimeManager {
         for name in [UIApplication.didBecomeActiveNotification, UIApplication.protectedDataDidBecomeAvailableNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 AorusPluginEntitlement.invalidate()
+                if name == UIApplication.protectedDataDidBecomeAvailableNotification {
+                    // What a locked device kept from starting may start now, without its wait.
+                    self?.retryFailedStartsNow()
+                }
                 self?.scheduleForegroundReload()
             })
         }

@@ -271,19 +271,30 @@ public enum AorusSettingsArchive {
     /// read everything again after; the core ones are read again here, the interface module
     /// and Telegram's own stores by the caller.
     ///
-    /// The saved files and keychain items go in before anything is taken away, and a part
-    /// that cannot be written in full is put back as it was. Returns false when that happened,
-    /// so the caller does not report a load that did not fully take place.
+    /// All of it or none of it. The files go in first and the keychain items after them, each
+    /// keeping what it replaced; the settings and the VPN, which cannot fail, only once both
+    /// are in. If either cannot be written in full, both are put back as they were and nothing
+    /// else is touched. A failed load used to go on to the keychain, the settings and the VPN
+    /// all the same, and the app ran on a mix of the old files and the new keys and settings.
+    /// Returns false when nothing was loaded.
     @discardableResult
     public static func apply(_ prepared: Prepared) -> Bool {
         NotificationCenter.default.post(name: AorusSettingsLifecycle.willImport, object: nil)
 
-        var complete = replaceFiles(from: prepared.staging, saved: prepared.files)
-        complete = replaceKeychain(with: prepared.keychain) && complete
-        replaceDefaults(UserDefaults.standard, with: prepared.standard, own: isOwnStandardKey)
-        replaceDefaults(UserDefaults(suiteName: suiteName), with: prepared.suite, own: isOwnSuiteKey)
+        var complete = false
+        if let files = placeFiles(from: prepared.staging, saved: prepared.files) {
+            if let keychain = replaceKeychain(with: prepared.keychain) {
+                replaceDefaults(UserDefaults.standard, with: prepared.standard, own: isOwnStandardKey)
+                replaceDefaults(UserDefaults(suiteName: suiteName), with: prepared.suite, own: isOwnSuiteKey)
+                AorusUserVPNStore.shared.importState(prepared.vpn)
+                keychain.commit()
+                files.commit()
+                complete = true
+            } else {
+                files.rollBack()
+            }
+        }
         AorusPluginStore.shared.settingsDidLoad()
-        AorusUserVPNStore.shared.importState(prepared.vpn)
         AorusConnectionPreferences.shared.reloadFromStorage()
 
         NotificationCenter.default.post(name: AorusSettingsLifecycle.didImport, object: nil)
@@ -309,6 +320,8 @@ public enum AorusSettingsArchive {
         "aorusgram_peer_activity", "aorusgram_peer_last_seen_",
         // When the anti-spam last showed a notice for a sender.
         "aorusgram_antispam_last_toast_", "aorusgram_antispam_toast_clock",
+        // When the auto-reply last answered each chat: this device's sends, not a setting.
+        "aorus_ar_cooldowns",
     ]
     private static let deviceKeys: Set<String> = [
         "aorusgram_root_path", "aorusgram_login_backup_restore_requested", "aorusgram_local_edit_active_message",
@@ -461,13 +474,54 @@ public enum AorusSettingsArchive {
         return result
     }
 
+    /// Files a load put in place, and the ones it took away, kept until the rest of the load has
+    /// gone in too: one that stops half way puts every one of them back.
+    private final class FilesChange {
+        var placed: [(target: URL, backup: URL?)] = []
+        var held: [(original: URL, held: URL)] = []
+        let holding: URL
+
+        init(holding: URL) {
+            self.holding = holding
+        }
+
+        func rollBack() {
+            let fm = FileManager.default
+            for item in placed.reversed() {
+                if let backup = item.backup {
+                    _ = try? fm.replaceItemAt(item.target, withItemAt: backup)
+                } else {
+                    try? fm.removeItem(at: item.target)
+                }
+            }
+            for item in held.reversed() {
+                try? fm.createDirectory(at: item.original.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? fm.moveItem(at: item.held, to: item.original)
+            }
+            // Only once nothing is left in it: a file that could not be moved back stays there.
+            if let left = try? fm.contentsOfDirectory(atPath: holding.path), left.isEmpty {
+                try? fm.removeItem(at: holding)
+            }
+        }
+
+        func commit() {
+            let fm = FileManager.default
+            for item in placed {
+                if let backup = item.backup { try? fm.removeItem(at: backup) }
+            }
+            try? fm.removeItem(at: holding)
+        }
+    }
+
     /// The saved files in place of the current ones. Each saved file replaces its counterpart
-    /// in one step and the one it replaced is kept aside until all are in; if any cannot be put
-    /// in, every one already placed is put back and nothing is removed. Only then do the files
-    /// the save does not have go -- a whole unit the save lacks, or within a unit it has, what
-    /// is not in it. Returns whether all of it happened.
-    private static func replaceFiles(from staging: URL, saved: Set<String>) -> Bool {
+    /// in one step, the one it replaced kept aside; then what the save does not have — a whole
+    /// unit the save lacks, or within a unit it has, what is not in it — is moved aside too, not
+    /// deleted. Nil, with everything put back, when any of it could not be done; otherwise the
+    /// change, to be committed or put back once the rest of the load is known.
+    private static func placeFiles(from staging: URL, saved: Set<String>) -> FilesChange? {
         let fm = FileManager.default
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        let change = FilesChange(holding: support.appendingPathComponent(".aorus-settings-held-\(UUID().uuidString)", isDirectory: true))
         let savedEntries = saved.compactMap(FileEntry.init(entryPath:))
         var savedUnits = Set<Unit>()
         for entry in savedEntries {
@@ -477,11 +531,11 @@ public enum AorusSettingsArchive {
         }
         let current = capturedFiles()
 
-        // What was there before each placed file: its backup, or nothing.
-        var placed: [(target: URL, backup: URL?)] = []
-        var allPlaced = true
         for entry in savedEntries {
-            guard let base = entry.scope.base else { allPlaced = false; break }
+            guard let base = entry.scope.base else {
+                change.rollBack()
+                return nil
+            }
             let source = staging.appendingPathComponent(entry.scope.rawValue, isDirectory: true).appendingPathComponent(entry.relativePath)
             let target = base.appendingPathComponent(entry.relativePath)
             do {
@@ -489,61 +543,61 @@ public enum AorusSettingsArchive {
                 if fm.fileExists(atPath: target.path) {
                     let backupName = target.lastPathComponent + ".aorus-load-backup"
                     _ = try fm.replaceItemAt(target, withItemAt: source, backupItemName: backupName, options: [.withoutDeletingBackupItem])
-                    placed.append((target, target.deletingLastPathComponent().appendingPathComponent(backupName)))
+                    change.placed.append((target, target.deletingLastPathComponent().appendingPathComponent(backupName)))
                 } else {
                     try fm.moveItem(at: source, to: target)
-                    placed.append((target, nil))
+                    change.placed.append((target, nil))
                 }
             } catch {
-                allPlaced = false
-                break
+                change.rollBack()
+                return nil
             }
-        }
-        guard allPlaced else {
-            for item in placed.reversed() {
-                if let backup = item.backup {
-                    _ = try? fm.replaceItemAt(item.target, withItemAt: backup)
-                } else {
-                    try? fm.removeItem(at: item.target)
-                }
-            }
-            return false
-        }
-        for item in placed {
-            if let backup = item.backup { try? fm.removeItem(at: backup) }
         }
 
-        var complete = true
+        var heldCount = 0
+        func hold(_ url: URL) -> Bool {
+            guard fm.fileExists(atPath: url.path) else { return true }
+            do {
+                try fm.createDirectory(at: change.holding, withIntermediateDirectories: true)
+                let place = change.holding.appendingPathComponent(String(heldCount))
+                heldCount += 1
+                try fm.moveItem(at: url, to: place)
+                change.held.append((url, place))
+                return true
+            } catch {
+                return false
+            }
+        }
         let savedPaths = Set(savedEntries.map { $0.entryPath })
         for unit in Set(current.compactMap { file -> Unit? in
             guard let entry = FileEntry(entryPath: file.entryPath) else { return nil }
             return unit(scope: entry.scope, relativePath: entry.relativePath)
         }) where !savedUnits.contains(unit) && !unit.keptWhenAbsent {
             guard let base = unit.scope.base else { continue }
-            complete = removeUnit(unit, base: base) && complete
+            for url in unitPaths(unit, base: base) where !hold(url) {
+                change.rollBack()
+                return nil
+            }
         }
         for file in current where !savedPaths.contains(file.entryPath) {
             guard let entry = FileEntry(entryPath: file.entryPath),
                   let unit = unit(scope: entry.scope, relativePath: entry.relativePath),
-                  savedUnits.contains(unit), fm.fileExists(atPath: file.url.path) else { continue }
-            do { try fm.removeItem(at: file.url) } catch { complete = false }
+                  savedUnits.contains(unit) else { continue }
+            guard hold(file.url) else {
+                change.rollBack()
+                return nil
+            }
         }
-        return complete
+        return change
     }
 
-    private static func removeUnit(_ unit: Unit, base: URL) -> Bool {
-        let fm = FileManager.default
-        var removed = true
+    /// Where a unit lives on disk: its file or folder, and a database's journal beside it.
+    private static func unitPaths(_ unit: Unit, base: URL) -> [URL] {
         var paths = [unit.path]
         if unit.path.hasSuffix(".sqlite") {
             paths += ["-wal", "-shm", "-journal"].map { unit.path + $0 }
         }
-        for path in paths {
-            let url = base.appendingPathComponent(path)
-            guard fm.fileExists(atPath: url.path) else { continue }
-            do { try fm.removeItem(at: url) } catch { removed = false }
-        }
-        return removed
+        return paths.map { base.appendingPathComponent($0) }
     }
 
     // MARK: - Defaults
@@ -616,61 +670,90 @@ public enum AorusSettingsArchive {
         return result
     }
 
-    /// The saved items in place of the current ones, a service at a time. The saved items are
-    /// written first, over their counterparts; if one is refused, the service is put back as
-    /// it was. Only after all are in do the current items the save lacks go. Returns whether
-    /// every service was replaced.
-    private static func replaceKeychain(with saved: [[String: Any]]) -> Bool {
+    /// Keychain items a load wrote or deleted, with what each service held before it, until the
+    /// rest of the load has gone in.
+    private final class KeychainChange {
+        /// Each service the load replaces, with its items as they were.
+        var previous: [String: [[String: Any]]] = [:]
+        /// Every item the load wrote or deleted, in order.
+        var touched: [(service: String, account: String)] = []
+        var replacedAccountBackup = false
+
+        /// Every touched item back as it was. False when one could not be.
+        @discardableResult
+        func rollBack() -> Bool {
+            var restored = true
+            for item in touched.reversed() {
+                if let old = previous[item.service]?.first(where: { $0["account"] as? String == item.account }),
+                   let data = old["data"] as? Data {
+                    let accessible = old["accessible"] as? String
+                        ?? AorusSettingsArchive.importedAccessibility(nil, service: item.service)
+                    restored = AorusSettingsArchive.writeItem(service: item.service, account: item.account, data: data, accessible: accessible) && restored
+                } else {
+                    restored = AorusSettingsArchive.deleteItem(service: item.service, account: item.account) && restored
+                }
+            }
+            return restored
+        }
+
+        func commit() {
+            if replacedAccountBackup {
+                AorusSettingsArchive.discardAccountBackupFile()
+            }
+        }
+    }
+
+    /// The saved items in place of the current ones. Every service is read before anything is
+    /// written, since one that cannot be read cannot be put back; the saved items are written
+    /// over their counterparts, and only after all of them are in do the current items the save
+    /// lacks go. If any write or delete is refused, every service goes back as it was. Nil then;
+    /// otherwise the change, to be committed or put back once the rest of the load is known.
+    private static func replaceKeychain(with saved: [[String: Any]]) -> KeychainChange? {
         var byService: [String: [[String: Any]]] = [:]
         for item in saved {
             guard let service = item["service"] as? String, keychainServices.contains(service),
                   item["account"] is String, item["data"] is Data else { continue }
             byService[service, default: []].append(item)
         }
-        var complete = true
+        let change = KeychainChange()
+        var replaced: [String] = []
         for service in keychainServices {
             let items = byService[service] ?? []
             if items.isEmpty && keptWhenAbsent.contains(service) {
                 continue
             }
-            guard let previous = Self.items(in: service) else {
-                complete = false
-                continue
-            }
-            var written: [String] = []
-            var allWritten = true
-            for item in items {
+            guard let previous = Self.items(in: service) else { return nil }
+            change.previous[service] = previous
+            replaced.append(service)
+        }
+        for service in replaced {
+            for item in byService[service] ?? [] {
                 guard let account = item["account"] as? String, let data = item["data"] as? Data else { continue }
                 guard writeItem(service: service, account: account, data: data, accessible: importedAccessibility(item["accessible"] as? String, service: service)) else {
-                    allWritten = false
-                    break
+                    change.rollBack()
+                    return nil
                 }
-                written.append(account)
-            }
-            guard allWritten else {
-                for account in written {
-                    if let old = previous.first(where: { $0["account"] as? String == account }), let data = old["data"] as? Data {
-                        _ = writeItem(service: service, account: account, data: data, accessible: importedAccessibility(old["accessible"] as? String, service: service))
-                    } else {
-                        deleteItem(service: service, account: account)
-                    }
-                }
-                complete = false
-                continue
-            }
-            let savedAccounts = Set(items.compactMap { $0["account"] as? String })
-            for old in previous {
-                guard let account = old["account"] as? String, !savedAccounts.contains(account) else { continue }
-                deleteItem(service: service, account: account)
-            }
-            if service == accountBackupService {
-                discardAccountBackupFile()
+                change.touched.append((service, account))
             }
         }
-        return complete
+        for service in replaced {
+            let savedAccounts = Set((byService[service] ?? []).compactMap { $0["account"] as? String })
+            for old in change.previous[service] ?? [] {
+                guard let account = old["account"] as? String, !savedAccounts.contains(account) else { continue }
+                guard deleteItem(service: service, account: account) else {
+                    change.rollBack()
+                    return nil
+                }
+                change.touched.append((service, account))
+            }
+            if service == accountBackupService {
+                change.replacedAccountBackup = true
+            }
+        }
+        return change
     }
 
-    private static func writeItem(service: String, account: String, data: Data, accessible: String) -> Bool {
+    fileprivate static func writeItem(service: String, account: String, data: Data, accessible: String) -> Bool {
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -689,12 +772,15 @@ public enum AorusSettingsArchive {
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
-    private static func deleteItem(service: String, account: String) {
-        SecItemDelete([
+    /// Whether the item is gone: deleted now, or not there to begin with. Any other answer is a
+    /// delete that did not happen, and used to be reported as a load that did.
+    fileprivate static func deleteItem(service: String, account: String) -> Bool {
+        let status = SecItemDelete([
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ] as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
     }
 
     /// Items that are deliberately allowed to move to a new device with a restore: a pair of
@@ -704,7 +790,7 @@ public enum AorusSettingsArchive {
     /// The protection a loaded item gets is this device's policy for its service, not the
     /// file's: secrets never get a class that lets them travel to another device in a backup.
     /// A stricter class in the save is kept.
-    private static func importedAccessibility(_ value: String?, service: String) -> String {
+    fileprivate static func importedAccessibility(_ value: String?, service: String) -> String {
         let stricter: [CFString] = [kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly]
         if let value, stricter.map({ $0 as String }).contains(value) {
             return value
@@ -717,7 +803,7 @@ public enum AorusSettingsArchive {
 
     /// The account backup's file is a copy of what the keychain holds; with the keychain
     /// replaced, the copy is taken away and written again from it the next time it is needed.
-    private static func discardAccountBackupFile() {
+    fileprivate static func discardAccountBackupFile() {
         guard let root = UserDefaults.standard.string(forKey: "aorusgram_root_path") else { return }
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: root).appendingPathComponent("aorus-account-backup.enc"))
     }

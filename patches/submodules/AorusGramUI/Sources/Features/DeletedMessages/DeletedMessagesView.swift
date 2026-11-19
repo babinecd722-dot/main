@@ -12,6 +12,9 @@ struct DeletedMessagesView: View {
 
     @State private var messages: [DeletedMessage] = []
     @State private var isLoading = true
+    /// The saved messages could not be read — the device is still locked after a restart, or
+    /// the file is damaged. Not the same as having none.
+    @State private var isUnavailable = false
     @State private var searchText = ""
 
     private var filtered: [DeletedMessage] {
@@ -30,6 +33,8 @@ struct DeletedMessagesView: View {
             if isLoading {
                 ProgressView("Загрузка...")
                     .foregroundColor(.secondary)
+            } else if isUnavailable {
+                unavailableState
             } else if filtered.isEmpty {
                 emptyState
             } else {
@@ -84,6 +89,23 @@ struct DeletedMessagesView: View {
         }
     }
 
+    private var unavailableState: some View {
+        VStack(spacing: 16) {
+            AorusSystemSymbol("lock", pointSize: 56)
+                .font(.system(size: 56))
+                .foregroundColor(.secondary.opacity(0.5))
+            Text("Сохранённые сообщения сейчас недоступны")
+                .font(.headline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Text("Они появятся, когда устройство будет разблокировано.")
+                .font(.subheadline)
+                .foregroundColor(.secondary.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+    }
+
     // MARK: - Data
 
     private func reload() {
@@ -92,7 +114,8 @@ struct DeletedMessagesView: View {
             let accountKey = DeletedMessagesCache.accountKey(forStoragePath: accountStoragePath)
             let result = DeletedMessagesCache.shared.deletedMessages(accountKey: accountKey, peerId: peerId)
             DispatchQueue.main.async {
-                self.messages = result
+                self.messages = result ?? []
+                self.isUnavailable = result == nil
                 self.isLoading = false
             }
         }

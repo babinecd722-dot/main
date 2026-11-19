@@ -1098,6 +1098,7 @@ public final class AorusPluginSandbox {
             self.record(.info, "Started \(self.manifest.name) \(self.manifest.version)")
             self.record(.debug, granted.isEmpty ? "No permissions granted" : "Granted: " + granted.joined(separator: ", "))
             let registered = self.registrationSnapshot()
+            self.remember(registered)
             if registered.commands.isEmpty {
                 self.record(.debug, "No commands registered")
             } else {
@@ -1405,9 +1406,7 @@ public final class AorusPluginSandbox {
         }
     }
 
-    /// The same read, for a caller that is already on the plugin's queue. `registration`
-    /// dispatches and waits, which from inside the queue would wait on the queue itself and
-    /// answer nothing after the timeout.
+    /// The read itself, on the plugin's queue.
     private func registrationSnapshot() -> Registration {
         var value = Registration()
         // Read even during a cooldown: this is what the diagnostics screen shows, and
@@ -1427,23 +1426,35 @@ public final class AorusPluginSandbox {
         return value
     }
 
-    public func registration(timeout: TimeInterval = 0.3) -> Registration {
-        final class Box {
-            let lock = NSLock()
-            var value = Registration()
-        }
-        let box = Box()
-        let semaphore = DispatchSemaphore(value: 0)
+    private let registrationLock = NSLock()
+    private var knownRegistration: Registration?
+
+    /// What the plugin registered the last time it was read — at its start, or by the last
+    /// `registration(completion:)` — without asking the plugin. Nil before the first read.
+    public var lastKnownRegistration: Registration? {
+        registrationLock.lock(); defer { registrationLock.unlock() }
+        return knownRegistration
+    }
+
+    private func remember(_ registration: Registration) {
+        registrationLock.lock()
+        knownRegistration = registration
+        registrationLock.unlock()
+    }
+
+    /// Reads the registration on the plugin's own queue and hands it over on the main thread.
+    ///
+    /// Never waited for. The diagnostics card used to block the main thread on the plugin's
+    /// queue for up to 0.3 s, and a plugin busy that long gave it an empty registration, shown
+    /// as "no commands", rather than one still to come.
+    public func registration(completion: @escaping (Registration) -> Void) {
         queue.async {
             let value = self.registrationSnapshot()
-            box.lock.lock()
-            box.value = value
-            box.lock.unlock()
-            semaphore.signal()
+            self.remember(value)
+            DispatchQueue.main.async {
+                completion(value)
+            }
         }
-        _ = semaphore.wait(timeout: .now() + timeout)
-        box.lock.lock(); defer { box.lock.unlock() }
-        return box.value
     }
 
     /// Evaluates a snippet in the running context and describes the result. For the console

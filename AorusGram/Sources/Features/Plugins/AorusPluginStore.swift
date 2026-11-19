@@ -215,15 +215,20 @@ public final class AorusPluginStore {
         return queue.sync { FileManager.default.fileExists(atPath: manifestURL(for: id).path) }
     }
 
-    /// Whether the plugin's code and grants can be read right now. False only when a file
-    /// that is there cannot be read — the phone restarted and not unlocked yet, an I/O error —
-    /// which is a reason to look again later and never a reason to switch the plugin off.
+    /// Whether the plugin is complete and can be read right now: its manifest and its code are
+    /// there and read, and its grants read if it has any. False when a file cannot be read — the
+    /// phone restarted and not unlocked yet, an I/O error — or one a plugin cannot be without is
+    /// missing, which is a copy that never finished. Either is a reason to look again later and
+    /// never a reason to switch the plugin off.
     public func isReadable(id: String) -> Bool {
         guard let id = AorusPluginStore.normalizedIdentifier(id) else { return false }
         return queue.sync {
-            for url in [manifestURL(for: id), sourceURL(for: id), permissionsURL(for: id)]
-            where FileManager.default.fileExists(atPath: url.path) {
+            for url in [manifestURL(for: id), sourceURL(for: id)] {
                 if (try? Data(contentsOf: url)) == nil { return false }
+            }
+            let permissions = permissionsURL(for: id)
+            if FileManager.default.fileExists(atPath: permissions.path), (try? Data(contentsOf: permissions)) == nil {
+                return false
             }
             return true
         }
@@ -238,12 +243,21 @@ public final class AorusPluginStore {
         }
     }
 
+    /// The plugin as it is on disk, or nil while it cannot be read whole.
+    ///
+    /// The code is read or the plugin is not: code that is missing or cannot be read right now
+    /// is not empty code. Read as empty, its digest stopped matching the grants and the runtime
+    /// switched the plugin off for good, over what was a copy that never finished or a phone not
+    /// yet unlocked. An empty file is still empty code.
     public func load(id: String) -> AorusPluginRecord? {
         guard let id = AorusPluginStore.normalizedIdentifier(id) else { return nil }
         return queue.sync {
-            guard var manifest = readManifest(at: manifestURL(for: id)) else { return nil }
+            guard var manifest = readManifest(at: manifestURL(for: id)),
+                  let data = try? Data(contentsOf: sourceURL(for: id)),
+                  let source = String(data: data, encoding: .utf8) else {
+                return nil
+            }
             manifest.id = id
-            let source = (try? String(contentsOf: sourceURL(for: id), encoding: .utf8)) ?? ""
             return AorusPluginRecord(manifest: manifest, source: source)
         }
     }
@@ -274,6 +288,9 @@ public final class AorusPluginStore {
             } catch {
                 throw AorusPluginStoreError.io(error.localizedDescription)
             }
+            // Each file is replaced whole, and the code goes before the manifest: a plugin is
+            // listed by its manifest, so a new one cut short in between is not there at all, and
+            // `load` reads nothing of one whose code is not.
             try write(Data(record.source.utf8), to: sourceURL(for: record.manifest.id))
             try write(manifestData, to: manifestURL(for: record.manifest.id))
         }

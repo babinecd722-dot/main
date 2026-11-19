@@ -86,6 +86,39 @@ private func overlongEventIsDroppedWholeAndStreamRecovers() {
     require(events[0].name == "done", "the stream recovers after an over-long event")
 }
 
+/// A whole line over the ceiling is refused however it arrives: in one chunk with its newline,
+/// or a byte at a time. It used to be measured only when left unterminated after a chunk, so
+/// the same 2 MiB line went through in one chunk and was refused in many.
+private func overlongLineIsRefusedWhateverTheChunking() {
+    let payload = "data: " + String(repeating: "y", count: AorusAISSEParser.maximumLineBytes + 1) + "\n\nevent: done\ndata: {\"ok\":true}\n\n"
+    let bytes = Data(payload.utf8)
+    for chunkSize in [bytes.count, 4096, 65_537] {
+        let parser = AorusAISSEParser()
+        var events: [AorusAISSEParser.Event] = []
+        var start = 0
+        while start < bytes.count {
+            let end = min(start + chunkSize, bytes.count)
+            events.append(contentsOf: parser.append(bytes.subdata(in: start ..< end)))
+            start = end
+        }
+        require(events.count == 1, "an over-long line is refused in chunks of \(chunkSize)")
+        require(events.first?.name == "done", "and the stream goes on after it in chunks of \(chunkSize)")
+    }
+    // At the ceiling exactly, the line is kept.
+    let atLimit = "data: " + String(repeating: "z", count: AorusAISSEParser.maximumLineBytes - 6) + "\n\n"
+    let kept = AorusAISSEParser().append(Data(atLimit.utf8))
+    require(kept.count == 1 && kept[0].data.count == AorusAISSEParser.maximumLineBytes - 6, "a line at the ceiling is kept")
+}
+
+/// Many empty `data:` lines are bytes against the event's ceiling, nothing more.
+private func emptyDataLinesCountAgainstTheEvent() {
+    let parser = AorusAISSEParser()
+    let lines = Data(String(repeating: "data:\n", count: 2_000).utf8)
+    let events = parser.append(lines + Data("\n".utf8))
+    require(events.count == 1, "an event of empty data lines")
+    require(events[0].data.count == 1_999, "joined by newlines only")
+}
+
 /// An event name is an identifier, never an unbounded server string.
 private func eventNameIsClamped() {
     let parser = AorusAISSEParser()
@@ -104,6 +137,8 @@ private enum AorusAISSEParserTests {
         overlongLineIsDiscardedAndStreamRecovers()
         overlongEventIsDroppedWholeAndStreamRecovers()
         eventNameIsClamped()
+        overlongLineIsRefusedWhateverTheChunking()
+        emptyDataLinesCountAgainstTheEvent()
         print("AorusAISSEParser tests: OK")
     }
 }

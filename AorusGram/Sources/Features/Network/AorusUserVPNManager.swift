@@ -812,13 +812,19 @@ public final class AorusUserVPNManager {
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = self.requestTimeout
+        // The whole download, not only the wait between two packets: a host that trickles a
+        // byte at a time never trips the request timeout.
+        configuration.timeoutIntervalForResource = self.requestTimeout * 3.0
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
-        let redirectDelegate = AorusUserVPNRedirectDelegate()
-        let session = URLSession(configuration: configuration, delegate: redirectDelegate, delegateQueue: nil)
-        let task = session.dataTask(with: request) { [weak self] data, response, error in
-            session.finishTasksAndInvalidate()
-            guard let http = response as? HTTPURLResponse,
+        let delegate = AorusUserVPNSubscriptionDelegate(limit: Self.subscriptionByteLimit) { [weak self] data, response, error, tooLarge in
+            guard !tooLarge else {
+                // Refused at the limit, as it arrived. The next client profile would only be
+                // sent the same body again.
+                completion(.failure(firstError ?? .malformed))
+                return
+            }
+            guard let http = response,
                   http.url?.scheme?.lowercased() == "https",
                   error == nil else {
                 // Nothing answered. Asking again as a different client would only spend another
@@ -850,8 +856,14 @@ public final class AorusUserVPNManager {
                 )
             }
         }
-        task.resume()
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        session.dataTask(with: request).resume()
+        // A session holds its delegate until it is invalidated; this lets it go once the task ends.
+        session.finishTasksAndInvalidate()
     }
+
+    /// The largest subscription body taken. A real one is a list of links, a few kilobytes.
+    private static let subscriptionByteLimit = 4_000_000
 
     /// One subscription response as servers plus the counters the card shows.
     private static func subscriptionPayload(
@@ -859,7 +871,7 @@ public final class AorusUserVPNManager {
         response: HTTPURLResponse
     ) -> Result<SubscriptionPayload, AorusVlessImportError> {
         guard (200 ..< 300).contains(response.statusCode),
-              let data, !data.isEmpty, data.count <= 4_000_000,
+              let data, !data.isEmpty, data.count <= subscriptionByteLimit,
               let text = String(data: data, encoding: .utf8) else {
             return .failure(.malformed)
         }
@@ -951,7 +963,25 @@ public final class AorusUserVPNManager {
 /// URLSession follows redirects by default. A subscription URL is required to be HTTPS at
 /// import, and every redirect must preserve that property so device headers and credentials
 /// can never be downgraded onto a clear-text request.
-private final class AorusUserVPNRedirectDelegate: NSObject, URLSessionTaskDelegate {
+/// Reads a subscription body with a ceiling on what is kept: what arrives is counted as it
+/// arrives — after decompression, since that is what is held — and the download is cancelled
+/// the moment it would pass the limit, or before it starts when the server announces more. It
+/// used to be read whole into memory first and measured only after, so a huge or endless
+/// response took the memory it wanted before it was refused.
+///
+/// Also keeps redirects on HTTPS: the response is the credential.
+private final class AorusUserVPNSubscriptionDelegate: NSObject, URLSessionDataDelegate {
+    private let limit: Int
+    private let completion: (Data?, HTTPURLResponse?, Error?, Bool) -> Void
+    private var body = Data()
+    private var response: HTTPURLResponse?
+    private var tooLarge = false
+
+    init(limit: Int, completion: @escaping (Data?, HTTPURLResponse?, Error?, Bool) -> Void) {
+        self.limit = limit
+        self.completion = completion
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -964,6 +994,31 @@ private final class AorusUserVPNRedirectDelegate: NSObject, URLSessionTaskDelega
             return
         }
         completionHandler(request)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        self.response = response as? HTTPURLResponse
+        if response.expectedContentLength > Int64(limit) {
+            tooLarge = true
+            completionHandler(.cancel)
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard !tooLarge else { return }
+        guard body.count + data.count <= limit else {
+            tooLarge = true
+            body = Data()
+            dataTask.cancel()
+            return
+        }
+        body.append(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        completion(tooLarge ? nil : body, response ?? task.response as? HTTPURLResponse, error, tooLarge)
     }
 }
 

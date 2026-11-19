@@ -114,10 +114,11 @@ public enum AorusGlassSnapshot {
             // The last re-cut is done: the photographs have served their purpose.
             self.releaseSources()
         }
-        // Under memory pressure the photographs go at once; a later re-cut then simply keeps
-        // the picture it has.
+        // Under memory pressure everything goes at once, pictures and photographs: they only
+        // dress the app switcher's card, the panes draw their material live again on return,
+        // and a picture still up held memory the system was asking for back.
         center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in
-            self.releaseSources()
+            self.thaw()
         }
         // Live again the moment the app is on its way back, not only once it is active: a
         // passcode or Face ID prompt on return can keep it inactive for a while, and the
@@ -142,14 +143,25 @@ public enum AorusGlassSnapshot {
         let interfaceV2 = AorusLicenseAccess.isAllowed
             && UserDefaults.standard.bool(forKey: "aorusgram_interface_v2")
         guard interfaceV2 || AorusGramConfig.isEnabled(.glassUI) else { return }
+        // Under the capture protection the switcher's card is the protection's branding, never
+        // the app: a photograph would be taken for nothing, and of a canvas capture leaves blank.
+        guard !AntiScreenshotManager.shared.protectsCapture else { return }
 
+        // This runs on the main thread as the app leaves the screen, and also under Control
+        // Center, a notification or Face ID, so it is held to a budget: a few panes and a
+        // couple of screens' worth of pixels in all, and no second window once the first has
+        // taken its time.
+        let started = CFAbsoluteTimeGetCurrent()
+        var budget = Budget()
         for window in self.windows() {
+            if CFAbsoluteTimeGetCurrent() - started > Self.timeBudget { break }
             var panes: [UIView] = []
             self.collectPanes(in: window, into: &panes)
             guard !panes.isEmpty else { continue }
             guard let frame = self.capture(window: window) else { continue }
             for pane in panes {
-                self.freeze(pane: pane, from: frame, in: window)
+                guard budget.panes < Self.paneLimit else { break }
+                self.freeze(pane: pane, from: frame, in: window, budget: &budget)
             }
         }
         // The first re-cut, a turn of the run loop after the capture: the layout pass that the
@@ -159,11 +171,25 @@ public enum AorusGlassSnapshot {
         }
     }
 
-    private static func freeze(pane: UIView, from capture: UIImage, in window: UIWindow) {
+    /// What one freeze may spend.
+    private struct Budget {
+        var panes = 0
+        var points: CGFloat = 0.0
+    }
+    private static let paneLimit = 24
+    /// In screens' worth of area: the pictures together cover at most this much.
+    private static let areaLimit: CGFloat = 2.0
+    private static let timeBudget: CFAbsoluteTime = 0.12
+
+    private static func freeze(pane: UIView, from capture: UIImage, in window: UIWindow, budget: inout Budget) {
         let host = self.contentView(of: pane)
         let rect = self.rect(of: pane, in: window)
         guard rect.width >= 1.0, rect.height >= 1.0 else { return }
+        let area = rect.width * rect.height
+        guard budget.points + area <= window.bounds.width * window.bounds.height * Self.areaLimit else { return }
         guard let cropped = self.crop(capture, to: rect) else { return }
+        budget.panes += 1
+        budget.points += area
 
         let picture = UIImageView(image: cropped)
         picture.isUserInteractionEnabled = false
@@ -351,6 +377,13 @@ public enum AorusGlassSnapshot {
         return drawn ? image : nil
     }
 
+    /// The piece of the photograph under `rect`, as a picture of its own.
+    ///
+    /// Copied out rather than cut: `cropping(to:)` hands back a view into the photograph's own
+    /// pixels, so every picture held the whole window's photograph in memory for as long as it
+    /// was up, and letting go of the photograph freed nothing. The copy is drawn in the
+    /// photograph's own format — its colour range and scale — so it stays the exact copy the
+    /// rest of this depends on.
     private static func crop(_ image: UIImage, to rect: CGRect) -> UIImage? {
         guard let source = image.cgImage else { return nil }
         let scale = image.scale
@@ -359,7 +392,14 @@ public enum AorusGlassSnapshot {
         let bounds = CGRect(x: 0.0, y: 0.0, width: CGFloat(source.width), height: CGFloat(source.height))
         let clamped = pixels.intersection(bounds)
         guard clamped.width >= 1.0, clamped.height >= 1.0 else { return nil }
-        guard let cropped = source.cropping(to: clamped) else { return nil }
-        return UIImage(cgImage: cropped, scale: scale, orientation: image.imageOrientation)
+        guard let region = source.cropping(to: clamped) else { return nil }
+        let format = image.imageRendererFormat
+        format.scale = scale
+        format.opaque = false
+        let size = CGSize(width: clamped.width / scale, height: clamped.height / scale)
+        let copy = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            UIImage(cgImage: region, scale: scale, orientation: .up).draw(in: CGRect(origin: .zero, size: size))
+        }
+        return copy
     }
 }

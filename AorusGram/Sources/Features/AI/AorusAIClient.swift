@@ -640,6 +640,10 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
     /// True when the answer is one chat completion rather than an event stream.
     private var isPlainJSONResponse = false
     private var jsonBody = Data()
+    /// The plain answer outgrew its ceiling and was refused there.
+    private var responseTooLarge = false
+    /// Enough of an error page to say what it was.
+    private static let errorBodyLimit = 64 * 1024
     private var receivedSuccessfulDone = false
     private var completed = false
 
@@ -736,19 +740,35 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let status = responseStatus, (200..<300).contains(status) else {
-            if errorBody.count < 64 * 1024 { errorBody.append(data) }
+            // Up to the limit and not a byte past it, whatever the size of the chunk that
+            // reached it: the check used to look only at what was already there.
+            let room = Self.errorBodyLimit - errorBody.count
+            if room > 0 { errorBody.append(data.prefix(room)) }
             return
         }
         guard !isPlainJSONResponse else {
             // One object, not a stream of events: it is buffered whole and read once the
-            // body has arrived. Bounded by the same ceiling the parser uses.
-            if jsonBody.count < AorusAISSEParser.maximumEventBytes { jsonBody.append(data) }
+            // body has arrived, never past the parser's ceiling. An answer that would go
+            // past it is refused there and then as too large, instead of being cut short in
+            // silence, downloaded to its end for nothing and then read as a broken answer.
+            guard !responseTooLarge else { return }
+            guard jsonBody.count + data.count <= AorusAISSEParser.maximumEventBytes else {
+                jsonBody = Data()
+                responseTooLarge = true
+                dataTask.cancel()
+                return
+            }
+            jsonBody.append(data)
             return
         }
         emit(parser.append(data))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if responseTooLarge {
+            finish(.failure(.responseTooLarge))
+            return
+        }
         if error == nil {
             if isPlainJSONResponse {
                 emitCompletionBody()

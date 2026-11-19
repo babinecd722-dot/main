@@ -241,6 +241,21 @@ public final class AorusGramBootstrap {
         // Without this the cache only sees messages whose delete-hook fires, which is unreliable.
         DeletedMessagesCache.shared.handleIncomingNotification(note)
 
+        // Streaks: a day the contact wrote, in a private chat, on the account it arrived on.
+        if AorusGramConfig.isEnabled(.streaks),
+           let accountPath = info[AorusDMCNotifKey.accountPath] as? String, !accountPath.isEmpty,
+           (info["peerKind"] as? NSNumber)?.int32Value == AutoReplyManager.PeerKind.privateChat.rawValue,
+           (info[AorusDMCNotifKey.msgNs] as? NSNumber)?.int32Value == AorusDMCNamespace.cloud,
+           let msgId,
+           let date = (info[AorusDMCNotifKey.date] as? NSNumber)?.int32Value, date > 0 {
+            StreakManager.shared.recordMessage(
+                accountKey: DeletedMessagesCache.accountKey(forStoragePath: accountPath),
+                peerId: peerId,
+                messageId: msgId,
+                date: Date(timeIntervalSince1970: TimeInterval(date))
+            )
+        }
+
         // Anti-spoof online — record peer activity so we can show real "last seen"
         // even when the peer hides it client-side. Each incoming message is direct
         // proof they were online at that moment.

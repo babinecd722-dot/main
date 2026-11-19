@@ -23,6 +23,12 @@ public enum AorusImportArchive {
 
     /// No single extracted file of a tdata root or a session store comes near this.
     public static let maximumFileBytes = 256 * 1024 * 1024
+    /// The files at the root of a Telegram Desktop `tdata` folder are keys, settings and maps,
+    /// a few kilobytes each; nothing there comes near this either.
+    public static let maximumTDataFileBytes = 32 * 1024 * 1024
+    /// How much of an entry is inflated and written at a time. What an extraction holds in
+    /// memory is this, whatever the size of the entry.
+    private static let chunkBytes = 256 * 1024
     /// All the extracted files together; what is skipped does not count.
     public static let maximumTotalBytes = 512 * 1024 * 1024
     /// How many entries may be extracted; a tdata root holds a few dozen files.
@@ -73,12 +79,6 @@ public enum AorusImportArchive {
         let base = data.startIndex
         guard offset >= 0, bytes <= data.count - offset else { throw fail("Truncated header") }
         return (0..<bytes).reduce(UInt32(0)) { $0 | UInt32(data[base + offset + $1]) << ($1 * 8) }
-    }
-
-    private static func crc(_ data: Data) -> UInt32 {
-        data.withUnsafeBytes { buffer in
-            UInt32(crc32(0, buffer.bindMemory(to: Bytef.self).baseAddress, uInt(data.count)))
-        }
     }
 
     /// A relative, traversal-free path, or nil for anything that could escape the destination
@@ -179,35 +179,100 @@ public enum AorusImportArchive {
         }
     }
 
-    private static func inflateEntry(_ input: Data, size: Int) throws -> Data {
-        if size == 0 { return Data() }
-        var stream = z_stream()
-        guard inflateInit2_(&stream, -MAX_WBITS, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else { throw fail("Could not initialise the inflater") }
-        defer { inflateEnd(&stream) }
-        var bytes = [UInt8](repeating: 0, count: size + 1)
-        let status = input.withUnsafeBytes { source -> Int32 in
-            bytes.withUnsafeMutableBytes { destination -> Int32 in
-                stream.next_in = UnsafeMutablePointer(mutating: source.bindMemory(to: Bytef.self).baseAddress)
-                stream.avail_in = uInt(input.count)
-                stream.next_out = destination.bindMemory(to: Bytef.self).baseAddress
-                stream.avail_out = uInt(size + 1)
-                return inflate(&stream, Z_FINISH)
+    /// Writes one entry's data to `target`, a block at a time, inflating it if it is deflated,
+    /// and checks it as it goes: never more than the size its record declares, then exactly that
+    /// size, its CRC and — for a deflated entry — every compressed byte read.
+    ///
+    /// Streamed: the whole entry used to be inflated into one buffer, then copied into a `Data`,
+    /// beside a copy of the compressed bytes — for an entry of a few hundred megabytes, a peak of
+    /// several times that before anything reached the disk. The archive itself is mapped, and
+    /// its bytes are read where they lie.
+    private static func writeEntry(_ zip: Data, start: Int, record: Record, to target: URL) throws {
+        let manager = FileManager.default
+        let partial = target.deletingLastPathComponent().appendingPathComponent(target.lastPathComponent + ".part")
+        guard manager.createFile(atPath: partial.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: partial) else { throw fail("Could not write an entry") }
+        var closed = false
+        defer {
+            if !closed { try? handle.close() }
+        }
+        var checksum = uLong(crc32(0, nil, 0))
+        var written = 0
+        func put(_ bytes: UnsafeRawBufferPointer) throws {
+            guard bytes.count > 0 else { return }
+            guard bytes.count <= record.size - written else { throw fail("Size or checksum mismatch") }
+            checksum = crc32(checksum, bytes.bindMemory(to: Bytef.self).baseAddress, uInt(bytes.count))
+            written += bytes.count
+            do {
+                try handle.write(contentsOf: Data(bytes))
+            } catch {
+                throw fail("Could not write an entry")
             }
         }
-        guard status == Z_STREAM_END, stream.total_out == size, stream.total_in == input.count else { throw fail("Invalid deflated data") }
-        return Data(bytes.prefix(size))
+
+        try zip.withUnsafeBytes { (archive: UnsafeRawBufferPointer) in
+            let source = UnsafeRawBufferPointer(rebasing: archive[start ..< start + record.compressedSize])
+            if record.method == 0 {
+                var offset = 0
+                while offset < source.count {
+                    let length = min(chunkBytes, source.count - offset)
+                    try put(UnsafeRawBufferPointer(rebasing: source[offset ..< offset + length]))
+                    offset += length
+                }
+                return
+            }
+            // An empty file, deflated by an archiver that wrote no stream for it at all.
+            guard source.count > 0 else {
+                guard record.size == 0 else { throw fail("Invalid deflated data") }
+                return
+            }
+            var stream = z_stream()
+            guard inflateInit2_(&stream, -MAX_WBITS, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+                throw fail("Could not initialise the inflater")
+            }
+            defer { inflateEnd(&stream) }
+            stream.next_in = UnsafeMutablePointer(mutating: source.bindMemory(to: Bytef.self).baseAddress)
+            stream.avail_in = uInt(source.count)
+            var buffer = [UInt8](repeating: 0, count: chunkBytes)
+            var status = Z_OK
+            while status != Z_STREAM_END {
+                let produced: Int = try buffer.withUnsafeMutableBytes { out -> Int in
+                    stream.next_out = out.bindMemory(to: Bytef.self).baseAddress
+                    stream.avail_out = uInt(out.count)
+                    status = inflate(&stream, Z_NO_FLUSH)
+                    guard status == Z_OK || status == Z_STREAM_END else { throw fail("Invalid deflated data") }
+                    return out.count - Int(stream.avail_out)
+                }
+                try buffer.withUnsafeBytes { try put(UnsafeRawBufferPointer(rebasing: $0[0 ..< produced])) }
+                // Nothing in and nothing out, and not at the end: the data stops short.
+                if status == Z_OK, produced == 0, stream.avail_in == 0 {
+                    throw fail("Invalid deflated data")
+                }
+            }
+            guard Int(stream.total_in) == source.count else { throw fail("Invalid deflated data") }
+        }
+        guard written == record.size, UInt32(truncatingIfNeeded: checksum) == record.crc else {
+            throw fail("Size or checksum mismatch")
+        }
+        do {
+            closed = true
+            try handle.close()
+            try? manager.removeItem(at: target)
+            try manager.moveItem(at: partial, to: target)
+        } catch {
+            throw fail("Could not write an entry")
+        }
     }
 
     /// Extracts the regular files `include` accepts (by their normalised path) under
     /// `destination`, a directory the caller owns, and returns the paths written. Nothing else
     /// is inflated. The caller removes `destination` afterwards, also when this throws.
     @discardableResult
-    public static func extract(_ zip: Data, to destination: URL, including include: (String) -> Bool) throws -> [String] {
+    public static func extract(_ zip: Data, to destination: URL, maximumEntryBytes: Int = maximumFileBytes, including include: (String) -> Bool) throws -> [String] {
         let manager = FileManager.default
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
         let all = try records(zip)
         let directoryStart = try directoryBounds(zip).start
-        let base = zip.startIndex
         var written: [String] = []
         var names = Set<String>()
         var total = 0
@@ -218,7 +283,7 @@ public enum AorusImportArchive {
             // Encrypted entries and methods other than store and deflate are refused only when
             // they are actually needed.
             guard record.flags & 1 == 0, record.method == 0 || record.method == 8 else { throw fail("Unsupported entry") }
-            guard record.size <= maximumFileBytes else { throw fail("An entry is too large") }
+            guard record.size <= min(maximumEntryBytes, maximumFileBytes) else { throw fail("An entry is too large") }
             total += record.size
             guard total <= maximumTotalBytes else { throw fail("The archive expands past the limit") }
             let offset = record.localOffset
@@ -226,17 +291,11 @@ public enum AorusImportArchive {
                   try number(zip, offset + 8, 2) == UInt32(record.method) else { throw fail("Invalid local header") }
             let start = offset + 30 + Int(try number(zip, offset + 26, 2)) + Int(try number(zip, offset + 28, 2))
             guard start <= directoryStart, record.compressedSize <= directoryStart - start else { throw fail("Invalid entry data") }
-            let compressed = zip.subdata(in: base + start..<base + start + record.compressedSize)
-            let output: Data
-            if record.method == 0 {
-                output = compressed
-            } else {
-                output = try inflateEntry(compressed, size: record.size)
-            }
-            guard output.count == record.size, crc(output) == record.crc else { throw fail("Size or checksum mismatch") }
+            // A stored entry is its own size; one that says otherwise is not what it claims.
+            guard record.method == 8 || record.compressedSize == record.size else { throw fail("Size or checksum mismatch") }
             let target = name.split(separator: "/").reduce(destination) { $0.appendingPathComponent(String($1)) }
             try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try output.write(to: target, options: .atomic)
+            try writeEntry(zip, start: start, record: record, to: target)
             written.append(name)
         }
         return written
@@ -244,11 +303,11 @@ public enum AorusImportArchive {
 
     /// Extracts the files `include` accepts from the `.zip` at `url` into a fresh directory and
     /// returns that directory, which the caller removes when finished.
-    public static func extractFile(at url: URL, including include: (String) -> Bool) throws -> URL {
+    public static func extractFile(at url: URL, maximumEntryBytes: Int = maximumFileBytes, including include: (String) -> Bool) throws -> URL {
         let data = try open(url)
         let destination = Self.temporaryUnpackDirectory()
         do {
-            try extract(data, to: destination, including: include)
+            try extract(data, to: destination, maximumEntryBytes: maximumEntryBytes, including: include)
         } catch {
             try? FileManager.default.removeItem(at: destination)
             throw error

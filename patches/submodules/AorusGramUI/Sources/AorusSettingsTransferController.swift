@@ -58,10 +58,10 @@ enum AorusSettingsTransfer {
         }
 
         guard complete else {
-            // Part of the save could not be written; that part is as it was before, so the
-            // load is not reported as done.
+            // Part of the save could not be written, and a load is all or nothing: everything is
+            // as it was before it.
             UINotificationFeedbackGenerator().notificationOccurred(.error)
-            toast(aorusL("Не все настройки удалось загрузить. Попробуйте ещё раз.", "Some settings couldn't be loaded. Try again."), context: context, controller: controller)
+            toast(aorusL("Не удалось загрузить настройки. Ничего не изменилось. Попробуйте ещё раз.", "Couldn't load the settings. Nothing was changed. Try again."), context: context, controller: controller)
             return
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)

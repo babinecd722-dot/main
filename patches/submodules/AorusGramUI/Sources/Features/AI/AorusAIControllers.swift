@@ -4418,7 +4418,33 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             }
         }
         lastPersist = Date()
-        AorusAIStore.shared.upsert(conversation, accountId: accountId)
+        AorusAIStore.shared.upsert(conversation, accountId: accountId) { [weak self] saved in
+            self?.persistFinished(saved: saved)
+        }
+    }
+
+    /// Whether the reader has been told the conversation is not saved yet. A refused save is
+    /// tried again by the store on its own, until it goes in; the reader is told once, not on
+    /// each refused save of a streaming answer, and again only after one has gone in.
+    private var toldUnsaved = false
+
+    private func persistFinished(saved: Bool) {
+        if saved {
+            toldUnsaved = false
+            return
+        }
+        guard !toldUnsaved, !isDiscarded, view.window != nil else { return }
+        toldUnsaved = true
+        present(
+            UndoOverlayController(
+                presentationData: presentationData,
+                content: .info(title: nil, text: aorusL("Беседа пока не сохранена: хранилище недоступно. Сохранение повторится само.", "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically."), timeout: nil, customUndoText: nil),
+                elevatedLayout: false,
+                animateInAsReplacement: true,
+                action: { _ in false }
+            ),
+            in: .current
+        )
     }
 
     // MARK: - Reveal
@@ -9099,6 +9125,7 @@ private enum AorusAIFormat {
         case .quota: return "quota"
         case .serverUnavailable: return "server_unavailable"
         case .malformedResponse: return "malformed_response"
+        case .responseTooLarge: return "response_too_large"
         case .artifactExpired: return "artifact_expired"
         case .artifactNotOwned: return "artifact_not_owned"
         case .artifactGone: return "artifact_gone"
@@ -9128,6 +9155,7 @@ private enum AorusAIFormat {
         case let .quota(quota): return quotaText(quota)
         case .serverUnavailable: return aorusAILocalized("AorusAI временно недоступен", "AorusAI is temporarily unavailable")
         case .malformedResponse: return aorusAILocalized("Получен некорректный ответ", "Invalid response received")
+        case .responseTooLarge: return aorusL("Ответ слишком большой, чтобы его показать", "The answer is too large to show")
         case .artifactExpired: return aorusAILocalized("Срок ссылки на файл истёк. Попросите создать файл снова.", "The file link expired. Ask AorusAI to create it again.")
         case .artifactNotOwned: return aorusAILocalized("Файл недоступен для этого устройства", "This file is not available for this device")
         case .artifactGone: return aorusAILocalized("Файл больше недоступен", "The file is no longer available")

@@ -208,7 +208,7 @@ public enum AorusAccountImport {
                         }
                         let directory = AorusImportArchive.temporaryUnpackDirectory()
                         unpacked = directory
-                        try AorusImportArchive.extract(archive, to: directory, including: { name in
+                        try AorusImportArchive.extract(archive, to: directory, maximumEntryBytes: AorusImportArchive.maximumTDataFileBytes, including: { name in
                             self.parentPath(of: name) == root
                         })
                         searchRoot = root.split(separator: "/").reduce(directory) { $0.appendingPathComponent(String($1)) }
