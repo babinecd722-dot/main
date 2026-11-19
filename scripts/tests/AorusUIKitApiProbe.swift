@@ -105,33 +105,42 @@ final class AorusProbeTextViewDelegate: NSObject, UITextViewDelegate {
     }
 }
 
-// AorusAI's sheets (the work trail, the message actions): medium and large in portrait; in
-// landscape, where medium is inactive, attached to the bottom edge across the window's width
-// with a custom three-quarter height that leaves a dimmed strip to tap (iOS 16+), laid out again
-// when the window turns while the sheet is open. Not attached, a landscape sheet covers the
-// screen whole.
+// AorusAI's sheets (the work trail, the message actions): a page sheet in portrait, medium and
+// large, given a custom three-quarter height (iOS 16+) when turned to landscape while open; opened
+// in landscape, a custom presentation across the whole screen at three quarters of its height,
+// top corners rounded, dimmed above.
 @available(iOS 15.0, *)
 func aorusProbeWorkTrailSheet(_ controller: UIViewController, compact: Bool) {
     guard let sheet = controller.sheetPresentationController else { return }
-    func apply(_ compactHeight: Bool, width: CGFloat) {
-        sheet.prefersEdgeAttachedInCompactHeight = true
-        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
-        controller.preferredContentSize = compactHeight ? CGSize(width: width, height: 0.0) : .zero
-        if compactHeight, #available(iOS 16.0, *) {
-            let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.workTrail.landscape")
-            sheet.detents = [.custom(identifier: identifier) { context in
-                return floor(context.maximumDetentValue * 0.74)
-            }]
-            sheet.selectedDetentIdentifier = identifier
-        } else {
-            sheet.detents = [.medium(), .large()]
-            sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
-        }
+    sheet.prefersEdgeAttachedInCompactHeight = true
+    if compact, #available(iOS 16.0, *) {
+        let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.sheet.landscape")
+        sheet.detents = [.custom(identifier: identifier) { context in
+            return floor(context.maximumDetentValue * 0.74)
+        }]
+        sheet.selectedDetentIdentifier = identifier
+    } else {
+        sheet.detents = [.medium(), .large()]
+        sheet.selectedDetentIdentifier = compact ? .large : .medium
     }
-    let width = controller.view.window?.bounds.width ?? 0.0
-    apply(compact, width: width)
-    sheet.animateChanges {
-        apply(!compact, width: width)
+}
+
+final class AorusProbeLandscapeSheet: UIPresentationController, UIGestureRecognizerDelegate {
+    override var frameOfPresentedViewInContainerView: CGRect {
+        guard let containerView else { return .zero }
+        let height = floor(containerView.bounds.height * 0.74)
+        return CGRect(x: 0.0, y: containerView.bounds.height - height, width: containerView.bounds.width, height: height)
+    }
+
+    override func presentationTransitionWillBegin() {
+        super.presentationTransitionWillBegin()
+        presentedView?.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        presentedView?.layer.cornerCurve = .continuous
+        _ = presentedViewController.transitionCoordinator?.animate(alongsideTransition: { _ in })
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return otherGestureRecognizer.view is UIScrollView
     }
 }
 
@@ -156,32 +165,6 @@ func aorusProbeAccountImportPicker(urls: [URL], from controller: UIViewControlle
             try? handle.close()
         }
         try? FileManager.default.moveItem(at: url, to: staging.appendingPathComponent(url.lastPathComponent))
-    }
-}
-
-// Telegram Desktop's folder, or its .zip, picked in place (a folder cannot be copied by the
-// picker); the files at the folder's top level are copied out through a file coordinator under
-// the access the picker gave.
-func aorusProbeTDataPicker(folder: URL, into staging: URL, from controller: UIViewController) {
-    let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder, .zip, .data], asCopy: false)
-    picker.allowsMultipleSelection = true
-    picker.shouldShowFileExtensions = true
-    controller.present(picker, animated: true)
-    let scoped = folder.startAccessingSecurityScopedResource()
-    defer {
-        if scoped {
-            folder.stopAccessingSecurityScopedResource()
-        }
-    }
-    let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-    for name in names where !name.hasPrefix(".") {
-        let source = folder.appendingPathComponent(name)
-        let values = try? source.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-        guard values?.isDirectory != true else { continue }
-        var coordinationError: NSError?
-        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { readable in
-            try? FileManager.default.copyItem(at: readable, to: staging.appendingPathComponent(name))
-        }
     }
 }
 

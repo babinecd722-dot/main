@@ -56,15 +56,13 @@ public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnap
                                     from presenter: UIViewController) -> AorusAIWorkTrailHandle? {
     guard let snapshot = source(), !snapshot.phases.isEmpty else { return nil }
     let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
-    controller.modalPresentationStyle = .pageSheet
-    if let sheet = controller.sheetPresentationController {
-        controller.appliedSheetLayout = AorusAISheetLayout.apply(to: controller, sheet: sheet, in: presenter.view.window ?? presenter.view, landscapeDetent: "aorus.ai.workTrail.landscape")
-        sheet.prefersGrabberVisible = true
-        sheet.prefersScrollingExpandsWhenScrolledToEdge = true
-    }
     // Opened from the chat while its composer may have the keyboard: the sheet goes over it.
     AorusKeyboardHold.keepBelow(controller, in: presenter.view.window)
-    presenter.present(controller, animated: true)
+    // Half height in portrait, pulled up to full; in landscape across the whole screen at three
+    // quarters of its height (`AorusAISheetLayout`).
+    AorusAISheetLayout.present(controller, from: presenter, configureSheet: { _ in
+        controller.appliedCompactHeight = false
+    })
     return AorusAIWorkTrailHandle(controller: controller)
 }
 
@@ -158,16 +156,21 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         updateTicker()
     }
 
-    /// How the sheet was last laid out (`AorusAISheetLayout`). Checked on every layout, so a
-    /// rotation while the sheet is open lays it out for the other orientation.
-    fileprivate var appliedSheetLayout: AorusAISheetLayout.Applied?
+    /// VoiceOver's escape closes the sheet, the landscape one as the system sheet.
+    override func accessibilityPerformEscape() -> Bool {
+        dismiss(animated: true)
+        return true
+    }
+
+    /// The height class the page sheet was last given its heights for (`AorusAISheetLayout`).
+    /// Checked on every layout, so a rotation while it is open gives it the other heights.
+    fileprivate var appliedCompactHeight: Bool?
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if let changed = AorusAISheetLayout.change(for: self, from: appliedSheetLayout) {
-            let previous = appliedSheetLayout
-            appliedSheetLayout = changed
-            AorusAISheetLayout.relayout(self, from: previous, to: changed, landscapeDetent: "aorus.ai.workTrail.landscape")
+        if let changed = AorusAISheetLayout.change(for: self, from: appliedCompactHeight) {
+            appliedCompactHeight = changed
+            AorusAISheetLayout.relayout(self, compactHeight: changed)
         }
     }
 
@@ -635,77 +638,340 @@ private final class AorusAIWorkTrailSpinner: UIView {
 
 // MARK: - Sheet layout
 
-/// How AorusAI's page sheets sit on the screen: the message actions and the work trail.
+/// How AorusAI's sheets (the message actions, the work trail) are put on screen.
 ///
-/// In portrait a sheet opens at half height and pulls up to full. In landscape on a phone, where
-/// half height does not exist, it stays attached to the bottom edge, spans the whole width of the
-/// screen and takes three quarters of its height: the dimmed strip left above it closes it with a
-/// tap, and it swipes down like any sheet. A sheet that is not attached to the edge covers the
-/// whole screen in landscape, whatever its detents say; attached, its width is the width it asks
-/// for — the window's. iOS 15, which has no custom heights, keeps the full-height sheet there,
-/// which also swipes down.
+/// Opened in portrait, a sheet is the system's page sheet: half height, pulled up to full, with
+/// its grabber. Opened in landscape on a phone, it is `AorusAILandscapeSheet`: across the whole
+/// screen from edge to edge at three quarters of its height. A system sheet cannot be that in
+/// landscape: detached from the bottom edge it covers the whole screen whatever its height, and
+/// attached it is laid out inside the safe area, its sides and top corners cut by the screen's
+/// edges.
 enum AorusAISheetLayout {
-    /// What a layout was made for: the height class, and the window's width where the sheet
-    /// spans it (landscape on a phone) — elsewhere the width does not matter and is left at 0.
-    struct Applied: Equatable {
-        let compactHeight: Bool
-        let width: CGFloat
+    /// Whether a sheet opened from `container` now is the landscape one.
+    static func opensInLandscape(_ container: UIView?) -> Bool {
+        return container?.traitCollection.verticalSizeClass == .compact
     }
 
-    private static func applied(for container: UIView) -> Applied {
-        let compactHeight = container.traitCollection.verticalSizeClass == .compact
-        return Applied(compactHeight: compactHeight, width: compactHeight ? container.bounds.width : 0.0)
+    /// Presents `controller` as one of AorusAI's sheets, whichever kind its orientation calls
+    /// for; `configureSheet` sets up the page sheet of the portrait one.
+    static func present(_ controller: UIViewController, from presenter: UIViewController, configureSheet: (UISheetPresentationController) -> Void) {
+        if self.opensInLandscape(presenter.view.window ?? presenter.view) {
+            AorusAILandscapeSheet.present(controller, from: presenter)
+            return
+        }
+        controller.modalPresentationStyle = .pageSheet
+        if let sheet = controller.sheetPresentationController {
+            self.apply(to: sheet, compactHeight: false)
+            sheet.prefersGrabberVisible = true
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+            configureSheet(sheet)
+        }
+        presenter.present(controller, animated: true)
     }
 
-    @discardableResult
-    static func apply(to controller: UIViewController, sheet: UISheetPresentationController, in container: UIView, landscapeDetent: String) -> Applied {
-        let applied = self.applied(for: container)
+    /// The page sheet's heights. A page sheet turned to landscape while open keeps the system's
+    /// own edge-attached width, three quarters of the height on iOS 16 and later.
+    static func apply(to sheet: UISheetPresentationController, compactHeight: Bool) {
         sheet.prefersEdgeAttachedInCompactHeight = true
-        sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true
-        self.applyWidth(applied, to: controller)
-        if applied.compactHeight, #available(iOS 16.0, *) {
-            let identifier = UISheetPresentationController.Detent.Identifier(landscapeDetent)
+        if compactHeight, #available(iOS 16.0, *) {
+            let identifier = UISheetPresentationController.Detent.Identifier("aorus.ai.sheet.landscape")
             sheet.detents = [.custom(identifier: identifier) { context in
                 return floor(context.maximumDetentValue * 0.74)
             }]
             sheet.selectedDetentIdentifier = identifier
         } else {
             sheet.detents = [.medium(), .large()]
-            sheet.selectedDetentIdentifier = applied.compactHeight ? .large : .medium
+            sheet.selectedDetentIdentifier = compactHeight ? .large : .medium
         }
-        return applied
     }
 
-    /// Only edge-attached sheets read it, and only in landscape on a phone; elsewhere (an iPad's
-    /// sheet) nothing is asked for.
-    private static func applyWidth(_ applied: Applied, to controller: UIViewController) {
-        controller.preferredContentSize = applied.compactHeight ? CGSize(width: applied.width, height: 0.0) : .zero
-    }
-
-    /// What the sheet's window asks for now, when it is not what the sheet was last laid out for.
-    /// Nil while nothing changed, or before the sheet is in a window.
-    static func change(for controller: UIViewController, from applied: Applied?) -> Applied? {
-        guard controller.sheetPresentationController != nil, let window = controller.view.window else {
+    /// The height class a page sheet was last given its heights for. Nil while nothing changed,
+    /// for a sheet that is not a page sheet, or before the sheet is in a window.
+    static func change(for controller: UIViewController, from applied: Bool?) -> Bool? {
+        guard controller.sheetPresentationController != nil, controller.modalPresentationStyle == .pageSheet, let window = controller.view.window else {
             return nil
         }
-        let current = self.applied(for: window)
-        return current == applied ? nil : current
+        let compactHeight = window.traitCollection.verticalSizeClass == .compact
+        return compactHeight == applied ? nil : compactHeight
     }
 
-    /// Lays the sheet out again for `applied`, animated. Turned to the other height class it gets
-    /// that class's heights; still in landscape on a wider or narrower window, only its width
-    /// changes, and the height the reader pulled it to stays. The caller records `applied` first,
-    /// so the layout pass this starts finds nothing more to change.
-    static func relayout(_ controller: UIViewController, from previous: Applied?, to applied: Applied, landscapeDetent: String) {
-        guard let sheet = controller.sheetPresentationController, let window = controller.view.window else {
-            return
-        }
-        if previous?.compactHeight == applied.compactHeight {
-            self.applyWidth(applied, to: controller)
+    /// Gives an open page sheet the heights of the height class it has turned to, animated. The
+    /// caller records `compactHeight` first, so the layout pass this starts changes nothing more.
+    static func relayout(_ controller: UIViewController, compactHeight: Bool) {
+        guard let sheet = controller.sheetPresentationController else {
             return
         }
         sheet.animateChanges {
-            _ = self.apply(to: controller, sheet: sheet, in: window, landscapeDetent: landscapeDetent)
+            self.apply(to: sheet, compactHeight: compactHeight)
+        }
+    }
+}
+
+/// One of AorusAI's sheets in landscape on a phone, put on screen by the app: across the whole
+/// screen from edge to edge, three quarters of its height, its top corners rounded and a grabber
+/// at the top as a sheet has. The dimmed strip above closes it with a tap, and it swipes down —
+/// from anywhere its list is already at the top. What it shows keeps inside the safe area by
+/// itself, clear of the notch and the rounded corners. Turned to portrait while open, it keeps
+/// the same shape.
+enum AorusAILandscapeSheet {
+    static func present(_ controller: UIViewController, from presenter: UIViewController) {
+        let transitioning = TransitioningDelegate()
+        controller.modalPresentationStyle = .custom
+        controller.transitioningDelegate = transitioning
+        // UIKit holds its transitioning delegate weakly: the sheet keeps its own.
+        objc_setAssociatedObject(controller, &TransitioningDelegate.retainKey, transitioning, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        presenter.present(controller, animated: true)
+    }
+
+    private final class TransitioningDelegate: NSObject, UIViewControllerTransitioningDelegate {
+        static var retainKey: UInt8 = 0
+
+        func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source: UIViewController) -> UIPresentationController? {
+            return PresentationController(presentedViewController: presented, presenting: presenting)
+        }
+    }
+
+    private final class PresentationController: UIPresentationController, UIGestureRecognizerDelegate {
+        private static let heightFraction: CGFloat = 0.74
+        private static let cornerRadius: CGFloat = 16.0
+        private let dimmingView = UIView()
+        private let grabber = UIView()
+        /// The lists in the sheet, whose own drag carries on into the sheet's once they are at
+        /// their top, as a system sheet's does.
+        private var lists: [UIScrollView] = []
+        /// Where the list's drag stood when the list reached its top and the sheet took over.
+        private var listDragStart: CGFloat?
+
+        override var frameOfPresentedViewInContainerView: CGRect {
+            guard let containerView else {
+                return .zero
+            }
+            let bounds = containerView.bounds
+            let height = floor(bounds.height * Self.heightFraction)
+            return CGRect(x: 0.0, y: bounds.height - height, width: bounds.width, height: height)
+        }
+
+        override func presentationTransitionWillBegin() {
+            super.presentationTransitionWillBegin()
+            guard let containerView, let presentedView else {
+                return
+            }
+            dimmingView.backgroundColor = UIColor(white: 0.0, alpha: 0.4)
+            dimmingView.alpha = 0.0
+            dimmingView.frame = containerView.bounds
+            dimmingView.isAccessibilityElement = true
+            dimmingView.accessibilityTraits = .button
+            dimmingView.accessibilityLabel = aorusAILocalized("Закрыть", "Close")
+            dimmingView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(dimmingTapped)))
+            containerView.insertSubview(dimmingView, at: 0)
+
+            presentedView.layer.cornerRadius = Self.cornerRadius
+            presentedView.layer.cornerCurve = .continuous
+            presentedView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+            presentedView.clipsToBounds = true
+            // VoiceOver stays in the sheet, as it does in a system sheet.
+            presentedView.accessibilityViewIsModal = true
+
+            // The grabber in the ink of the sheet's own page, light or dark with the theme.
+            var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+            let isDark: Bool
+            if let page = presentedView.backgroundColor, page.getRed(&red, green: &green, blue: &blue, alpha: &alpha) {
+                isDark = 0.299 * red + 0.587 * green + 0.114 * blue < 0.5
+            } else {
+                isDark = true
+            }
+            grabber.backgroundColor = isDark ? UIColor(white: 1.0, alpha: 0.3) : UIColor(white: 0.0, alpha: 0.2)
+            grabber.layer.cornerRadius = 2.5
+            grabber.isUserInteractionEnabled = false
+            presentedView.addSubview(grabber)
+
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+            pan.delegate = self
+            presentedView.addGestureRecognizer(pan)
+
+            if let coordinator = presentedViewController.transitionCoordinator {
+                _ = coordinator.animate(alongsideTransition: { _ in
+                    self.dimmingView.alpha = 1.0
+                })
+            } else {
+                dimmingView.alpha = 1.0
+            }
+        }
+
+        override func presentationTransitionDidEnd(_ completed: Bool) {
+            super.presentationTransitionDidEnd(completed)
+            guard completed else {
+                dimmingView.removeFromSuperview()
+                return
+            }
+            // The lists are in place once the sheet is: each one's drag is followed.
+            if let presentedView {
+                lists = Self.scrollingLists(in: presentedView)
+                for list in lists {
+                    list.panGestureRecognizer.addTarget(self, action: #selector(listPanned(_:)))
+                }
+            }
+        }
+
+        override func dismissalTransitionWillBegin() {
+            super.dismissalTransitionWillBegin()
+            if let coordinator = presentedViewController.transitionCoordinator {
+                _ = coordinator.animate(alongsideTransition: { _ in
+                    self.dimmingView.alpha = 0.0
+                })
+            } else {
+                dimmingView.alpha = 0.0
+            }
+        }
+
+        override func dismissalTransitionDidEnd(_ completed: Bool) {
+            super.dismissalTransitionDidEnd(completed)
+            if completed {
+                dimmingView.removeFromSuperview()
+                for list in lists {
+                    list.panGestureRecognizer.removeTarget(self, action: #selector(listPanned(_:)))
+                }
+                lists = []
+            }
+        }
+
+        override func containerViewWillLayoutSubviews() {
+            super.containerViewWillLayoutSubviews()
+            guard let containerView, let presentedView else {
+                return
+            }
+            dimmingView.frame = containerView.bounds
+            // Not while a finger moves it: the drag owns its position until it is let go.
+            if presentedView.transform.isIdentity {
+                presentedView.frame = frameOfPresentedViewInContainerView
+            }
+        }
+
+        override func containerViewDidLayoutSubviews() {
+            super.containerViewDidLayoutSubviews()
+            guard let presentedView else {
+                return
+            }
+            grabber.frame = CGRect(x: floor((presentedView.bounds.width - 36.0) / 2.0), y: 5.0, width: 36.0, height: 5.0)
+            presentedView.bringSubviewToFront(grabber)
+        }
+
+        @objc private func dimmingTapped() {
+            presentedViewController.dismiss(animated: true)
+        }
+
+        // MARK: Dragging it down
+
+        /// Moves the sheet `distance` down from its place, the dimming fading with it.
+        private func follow(_ distance: CGFloat) {
+            guard let presentedView else {
+                return
+            }
+            let distance = max(0.0, distance)
+            presentedView.transform = CGAffineTransform(translationX: 0.0, y: distance)
+            dimmingView.alpha = 1.0 - min(1.0, distance / max(1.0, presentedView.bounds.height))
+        }
+
+        /// Lets the sheet go: closed when it was pulled far or fast enough, back in place if not.
+        private func letGo(velocity: CGFloat, ended: Bool) {
+            guard let presentedView else {
+                return
+            }
+            let height = max(1.0, presentedView.bounds.height)
+            let distance = presentedView.transform.ty
+            if ended && (distance > height * 0.3 || velocity > 900.0) {
+                UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseIn], animations: {
+                    presentedView.transform = CGAffineTransform(translationX: 0.0, y: height)
+                    self.dimmingView.alpha = 0.0
+                }, completion: { _ in
+                    self.presentedViewController.dismiss(animated: false)
+                })
+            } else if !presentedView.transform.isIdentity {
+                UIView.animate(withDuration: 0.35, delay: 0.0, usingSpringWithDamping: 0.9, initialSpringVelocity: 0.0, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
+                    presentedView.transform = .identity
+                    self.dimmingView.alpha = 1.0
+                })
+            }
+        }
+
+        /// A drag anywhere outside the lists: the grabber, the title, the buttons.
+        @objc private func panned(_ recognizer: UIPanGestureRecognizer) {
+            switch recognizer.state {
+            case .changed:
+                follow(recognizer.translation(in: presentedView?.superview).y)
+            case .ended, .cancelled, .failed:
+                letGo(velocity: recognizer.velocity(in: presentedView?.superview).y, ended: recognizer.state == .ended)
+            default:
+                break
+            }
+        }
+
+        /// A list's own drag: it scrolls the list, and once the list is at its top a further pull
+        /// down moves the sheet, in the same drag, as a system sheet does.
+        @objc private func listPanned(_ recognizer: UIPanGestureRecognizer) {
+            guard let list = recognizer.view as? UIScrollView else {
+                return
+            }
+            let top = -list.adjustedContentInset.top
+            let translation = recognizer.translation(in: presentedView?.superview).y
+            switch recognizer.state {
+            case .changed:
+                if listDragStart == nil, list.contentOffset.y <= top, recognizer.velocity(in: list).y > 0.0 {
+                    listDragStart = translation
+                }
+                guard let start = listDragStart else {
+                    return
+                }
+                let distance = translation - start
+                if distance <= 0.0 {
+                    // Pushed back up past where it took over: the list scrolls again.
+                    listDragStart = nil
+                    follow(0.0)
+                    return
+                }
+                follow(distance)
+                list.contentOffset.y = top
+            case .ended, .cancelled, .failed:
+                if listDragStart != nil {
+                    listDragStart = nil
+                    letGo(velocity: recognizer.velocity(in: presentedView?.superview).y, ended: recognizer.state == .ended)
+                }
+            default:
+                break
+            }
+        }
+
+        /// The sheet's own drag starts only outside the lists, and only downwards.
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer, let presentedView else {
+                return false
+            }
+            let velocity = pan.velocity(in: presentedView)
+            guard velocity.y > abs(velocity.x) else {
+                return false
+            }
+            var view = presentedView.hitTest(pan.location(in: presentedView), with: nil)
+            while let current = view, current !== presentedView {
+                if let list = current as? UIScrollView, self.lists.contains(where: { $0 === list }) {
+                    return false
+                }
+                view = current.superview
+            }
+            return true
+        }
+
+        /// The scrolling lists in `view`: its table views and other scroll views that scroll, not
+        /// text views.
+        private static func scrollingLists(in view: UIView) -> [UIScrollView] {
+            var result: [UIScrollView] = []
+            for subview in view.subviews {
+                if let list = subview as? UIScrollView, !(list is UITextView), list.isScrollEnabled {
+                    result.append(list)
+                } else {
+                    result.append(contentsOf: scrollingLists(in: subview))
+                }
+            }
+            return result
         }
     }
 }

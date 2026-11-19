@@ -37,21 +37,17 @@ public func aorusAIPresentMessageActions(
             navigationController: navigationController,
             reference: reference
         )
-        controller.modalPresentationStyle = .pageSheet
-        let presenter = navigationController.topViewController
-            ?? navigationController.view.window?.rootViewController
-        // Half height in portrait, pulled up to full; in landscape across the whole width of the
-        // screen and three quarters of its height, not all of it (`AorusAISheetLayout`).
-        if let sheet = controller.sheetPresentationController {
-            let container: UIView = presenter?.view.window ?? navigationController.view.window ?? presenter?.view ?? navigationController.view
-            controller.appliedSheetLayout = AorusAISheetLayout.apply(to: controller, sheet: sheet, in: container, landscapeDetent: "aorus.ai.messageActions.landscape")
-            sheet.prefersGrabberVisible = true
-            sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+        guard let presenter = navigationController.topViewController ?? navigationController.view.window?.rootViewController else {
+            return
         }
         // The chat focuses its input again as the message menu closes; without this the
         // keyboard came back over the sheet and hid its lower rows.
-        AorusKeyboardHold.keepBelow(controller, in: presenter?.view.window ?? navigationController.view.window)
-        presenter?.present(controller, animated: true)
+        AorusKeyboardHold.keepBelow(controller, in: presenter.view.window ?? navigationController.view.window)
+        // Half height in portrait, pulled up to full; in landscape across the whole screen at
+        // three quarters of its height (`AorusAISheetLayout`).
+        AorusAISheetLayout.present(controller, from: presenter, configureSheet: { _ in
+            controller.appliedCompactHeight = false
+        })
     }
 }
 
@@ -72,8 +68,15 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let newChatButton = AorusInsetButton(type: .system)
     private var selectedItems: [AorusAIMessageMenu.Item] = []
-    /// How the sheet was last laid out; checked on every layout, so a rotation lays it out again.
-    fileprivate var appliedSheetLayout: AorusAISheetLayout.Applied?
+    /// VoiceOver's escape closes the sheet, the landscape one as the system sheet.
+    override func accessibilityPerformEscape() -> Bool {
+        dismiss(animated: true)
+        return true
+    }
+
+    /// The height class the page sheet was last given its heights for; checked on every layout,
+    /// so a rotation while it is open gives it the other heights.
+    fileprivate var appliedCompactHeight: Bool?
 
     init(context: AccountContext, navigationController: NavigationController, reference: AorusAIReferencedMessage) {
         self.context = context
@@ -184,10 +187,9 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if let changed = AorusAISheetLayout.change(for: self, from: appliedSheetLayout) {
-            let previous = appliedSheetLayout
-            appliedSheetLayout = changed
-            AorusAISheetLayout.relayout(self, from: previous, to: changed, landscapeDetent: "aorus.ai.messageActions.landscape")
+        if let changed = AorusAISheetLayout.change(for: self, from: appliedCompactHeight) {
+            appliedCompactHeight = changed
+            AorusAISheetLayout.relayout(self, compactHeight: changed)
         }
         let safe = view.safeAreaInsets
         // Across the whole width in landscape, the rows keep clear of the notch and the rounded

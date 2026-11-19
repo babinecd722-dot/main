@@ -1123,8 +1123,14 @@ private final class AorusAIConversationListController: ViewController, UITableVi
             transition.updateFrame(view: topBar, frame: CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: top))
             topBar.update(statusBarHeight: layout.statusBarHeight ?? 0.0, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, showsBack: AorusAITopBar.canGoBack(from: self))
         }
-        let searchFrame = CGRect(x: 16.0, y: top, width: max(0.0, layout.size.width - 32.0), height: 38.0)
+        // In landscape the search, the greeting and the starters keep clear of the notch and the
+        // rounded corners; the rows are inset by the list itself.
+        let leftInset = layout.safeInsets.left
+        let rightInset = layout.safeInsets.right
+        let searchFrame = CGRect(x: 16.0 + leftInset, y: top, width: max(0.0, layout.size.width - 32.0 - leftInset - rightInset), height: 38.0)
         transition.updateFrame(view: searchField, frame: searchFrame)
+        listHeader.sideSafeInsets = (leftInset, rightInset)
+        emptyView.sideSafeInsets = (leftInset, rightInset)
         // The list runs to the bottom of the screen, the way every list in Telegram does.
         // A permanent 60pt bar holding a second "New chat" button sat under it, duplicating
         // the compose item in the navigation bar and taking a row's worth of the list with
@@ -1328,7 +1334,15 @@ private final class AorusAISectionHeaderView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        label.frame = CGRect(x: 20.0, y: 2.0, width: max(0.0, bounds.width - 40.0), height: 18.0)
+        // Clear of the notch and the rounded corners in landscape, as the rows under it are.
+        let left = safeAreaInsets.left
+        let right = safeAreaInsets.right
+        label.frame = CGRect(x: 20.0 + left, y: 2.0, width: max(0.0, bounds.width - 40.0 - left - right), height: 18.0)
+    }
+
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        setNeedsLayout()
     }
 }
 
@@ -1340,6 +1354,15 @@ private final class AorusAIConversationListHeaderView: UIView {
 
     private let greetingLabel = UILabel()
     private let subtitleLabel = UILabel()
+    /// The screen's safe area at either side: in landscape the greeting starts clear of the
+    /// notch instead of under it.
+    var sideSafeInsets: (left: CGFloat, right: CGFloat) = (0.0, 0.0) {
+        didSet {
+            if sideSafeInsets != oldValue {
+                setNeedsLayout()
+            }
+        }
+    }
     /// The name the line was last shown with, until the account's own arrives: the same line
     /// is drawn whole from the first frame instead of growing a name a moment later.
     private var displayName: String? = AorusAIGreetings.lastName
@@ -1403,7 +1426,7 @@ private final class AorusAIConversationListHeaderView: UIView {
     /// The height the current text needs at `width`. A table header view is positioned by
     /// its own frame, so the measurement has to happen before it is installed.
     func height(forWidth width: CGFloat) -> CGFloat {
-        let available = max(1.0, width - Self.horizontalInset * 2.0)
+        let available = max(1.0, width - Self.horizontalInset * 2.0 - sideSafeInsets.left - sideSafeInsets.right)
         return ceil(Self.topInset + textHeight(of: greetingLabel, width: available) + Self.spacing + textHeight(of: subtitleLabel, width: available) + Self.bottomInset)
     }
 
@@ -1413,11 +1436,11 @@ private final class AorusAIConversationListHeaderView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let available = max(0.0, bounds.width - Self.horizontalInset * 2.0)
+        let available = max(0.0, bounds.width - Self.horizontalInset * 2.0 - sideSafeInsets.left - sideSafeInsets.right)
         let greetingHeight = textHeight(of: greetingLabel, width: available)
-        greetingLabel.frame = CGRect(x: Self.horizontalInset, y: Self.topInset, width: available, height: greetingHeight)
+        greetingLabel.frame = CGRect(x: Self.horizontalInset + sideSafeInsets.left, y: Self.topInset, width: available, height: greetingHeight)
         subtitleLabel.frame = CGRect(
-            x: Self.horizontalInset,
+            x: Self.horizontalInset + sideSafeInsets.left,
             y: greetingLabel.frame.maxY + Self.spacing,
             width: available,
             height: textHeight(of: subtitleLabel, width: available)
@@ -1722,6 +1745,14 @@ private final class AorusAIConversationListEmptyView: UIView {
             setNeedsLayout()
         }
     }
+    /// The screen's safe area at either side: in landscape the card keeps clear of the notch.
+    var sideSafeInsets: (left: CGFloat, right: CGFloat) = (0.0, 0.0) {
+        didSet {
+            if sideSafeInsets != oldValue {
+                setNeedsLayout()
+            }
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1775,8 +1806,8 @@ private final class AorusAIConversationListEmptyView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let side: CGFloat = 16.0
-        let width = max(0.0, bounds.width - side * 2.0)
+        let side: CGFloat = 16.0 + sideSafeInsets.left
+        let width = max(0.0, bounds.width - 32.0 - sideSafeInsets.left - sideSafeInsets.right)
         if isSearching {
             let height = ceil(noResultsLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
             noResultsLabel.frame = CGRect(x: side, y: max(topInset + 24.0, floor((bounds.height - height) / 2.0) - 40.0), width: width, height: height)
@@ -2366,6 +2397,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             topBar.update(statusBarHeight: layout.statusBarHeight ?? 0.0, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, showsBack: AorusAITopBar.canGoBack(from: self))
         }
         let bottomInset = max(layout.intrinsicInsets.bottom, keyboardHeight)
+        // In landscape the input keeps clear of the notch and the rounded corners.
+        composer.sideSafeInsets = (layout.safeInsets.left, layout.safeInsets.right)
         let composerHeight = composer.requiredHeight(width: layout.size.width)
         let composerFrame = CGRect(x: 0, y: layout.size.height - bottomInset - composerHeight, width: layout.size.width, height: composerHeight)
         transition.updateFrame(view: composer, frame: composerFrame)
@@ -5349,6 +5382,10 @@ private final class AorusAIComposerView: UIView {
     /// How far below the composer the classic panel carries on: down to the bottom of the
     /// screen, under the home indicator or the keyboard. Set by the controller.
     var classicPanelExtension: CGFloat = 0.0
+    /// The screen's safe area at either side, in landscape the notch and the rounded corners:
+    /// the field and its buttons keep inside it, the classic panel's background still runs to
+    /// the edges. Set by the controller before it measures or lays the composer out.
+    var sideSafeInsets: (left: CGFloat, right: CGFloat) = (0.0, 0.0)
     private let placeholder = UILabel()
     private let referenceView = UIView()
     private let referenceLine = UIView()
@@ -5620,7 +5657,7 @@ private final class AorusAIComposerView: UIView {
             return
         }
         guard let containerGlass else { return }
-        let containerFrame = CGRect(x: Self.sideInset, y: 0.0, width: max(0.0, size.width - Self.sideInset * 2.0), height: max(0.0, size.height - Self.bottomGap))
+        let containerFrame = CGRect(x: Self.sideInset + sideSafeInsets.left, y: 0.0, width: max(0.0, size.width - Self.sideInset * 2.0 - sideSafeInsets.left - sideSafeInsets.right), height: max(0.0, size.height - Self.bottomGap))
         transition.updateFrame(view: container, frame: containerFrame)
         let width = containerFrame.width
         let height = containerFrame.height
@@ -5674,8 +5711,8 @@ private final class AorusAIComposerView: UIView {
         transition.updateFrame(view: classicSeparator, frame: CGRect(x: 0.0, y: 0.0, width: size.width, height: UIScreenPixel))
 
         let buttonSize = Self.classicButtonSize
-        let fieldWidth = max(0.0, size.width - Self.classicSideInset - Self.classicSendGap - buttonSize - Self.classicSideInset)
-        let fieldFrame = CGRect(x: Self.classicSideInset, y: Self.classicPanelInset, width: fieldWidth, height: max(0.0, size.height - Self.classicPanelInset * 2.0))
+        let fieldWidth = max(0.0, size.width - Self.classicSideInset - Self.classicSendGap - buttonSize - Self.classicSideInset - sideSafeInsets.left - sideSafeInsets.right)
+        let fieldFrame = CGRect(x: Self.classicSideInset + sideSafeInsets.left, y: Self.classicPanelInset, width: fieldWidth, height: max(0.0, size.height - Self.classicPanelInset * 2.0))
         transition.updateFrame(view: container, frame: fieldFrame)
         transition.updateFrame(view: classicField, frame: CGRect(origin: CGPoint(), size: fieldFrame.size))
         classicField.layer.cornerRadius = Self.classicFieldMinimumHeight / 2.0
@@ -5753,7 +5790,7 @@ private final class AorusAIComposerView: UIView {
         }
         // The width `updateLayout` gives the text: the capsule, less its leading inset and
         // the two round controls at the right.
-        let available = max(60.0, width - Self.sideInset * 2.0 - Self.textLeading - Self.buttonInset - Self.buttonSize * 2.0 - Self.buttonSpacing - 2.0)
+        let available = max(60.0, width - sideSafeInsets.left - sideSafeInsets.right - Self.sideInset * 2.0 - Self.textLeading - Self.buttonInset - Self.buttonSize * 2.0 - Self.buttonSpacing - 2.0)
         let measured = textView.sizeThatFits(CGSize(width: available, height: 1000.0)).height
         let containerHeight = min(Self.maximumHeight, max(Self.minimumHeight + extra, ceil(measured) + Self.verticalPadding * 2.0 + extra))
         return containerHeight + Self.bottomGap
@@ -5767,7 +5804,7 @@ private final class AorusAIComposerView: UIView {
         }
         // The width `updateClassicLayout` gives the text: the field, less its leading inset
         // and the microphone at its right end.
-        let fieldWidth = width - Self.classicSideInset * 2.0 - Self.classicSendGap - Self.classicButtonSize
+        let fieldWidth = width - sideSafeInsets.left - sideSafeInsets.right - Self.classicSideInset * 2.0 - Self.classicSendGap - Self.classicButtonSize
         let available = max(60.0, fieldWidth - Self.classicTextLeading - Self.classicButtonInset - Self.classicButtonSize - 2.0)
         let measured = textView.sizeThatFits(CGSize(width: available, height: 1000.0)).height
         let fieldHeight = min(Self.classicFieldMaximumHeight, max(Self.classicFieldMinimumHeight + extra, ceil(measured) + Self.classicVerticalPadding * 2.0 + extra))

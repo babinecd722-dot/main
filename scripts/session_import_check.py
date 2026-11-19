@@ -153,31 +153,27 @@ def check(repo: Path) -> list[str]:
         if "dismiss(" in finish:
             err.append("AorusAccountImport: the delegate dismisses the picker again on a choice; UIKit drops that and the choice is lost")
     # Both are picked with Telegram's chat file picker — its presentation, and its handling of a
-    # picker cancelled or lost behind a lock: session files as copies, Telegram Desktop's tdata in
-    # place, the only way a folder can be chosen.
-    if "documentPicker(context, types, inPlace, deliver)" not in ui_body:
+    # picker cancelled or lost behind a lock — as copies the app reads like files of its own.
+    if "documentPicker(context, types, deliver)" not in ui_body:
         err.append("AorusAccountImport: account files are no longer picked with Telegram's chat file picker")
-    if "pickFiles(types: self.sessionTypeIdentifiers, inPlace: false" not in ui_body:
-        err.append("AorusAccountImport: session files are no longer picked as copies")
-    if "UTType($0) ?? UTType(importedAs: $0) }, asCopy: !inPlace)" not in ui_body:
-        err.append("AorusAccountImport: the fallback picker must use the mode it was asked for")
-    # Telegram Desktop's tdata as it comes: the folder, its .zip, or the files in it (Desktop's
-    # have no extension, so any data file can be chosen), and what is read is copied out under
-    # the picker's access at once.
-    if "pickFiles(types: self.tdataTypeIdentifiers, inPlace: true" not in ui_body:
-        err.append("AorusAccountImport: the tdata picker no longer picks in place")
-    if "[UTType.folder.identifier, UTType.zip.identifier, UTType.data.identifier]" not in ui_body:
-        err.append("AorusAccountImport: the tdata picker no longer offers the folder, its archive and Desktop's files")
-    if "func stageTData(from urls: [URL], into staging: URL)" not in ui_body:
-        err.append("AorusAccountImport: picked tdata items are no longer copied out before reading")
-    if "coordinate(readingItemAt: source" not in ui_body:
-        err.append("AorusAccountImport: tdata files are no longer copied through a file coordinator")
-    if "forOpeningContentTypes: [.folder, .zip], asCopy: false" in ui_body:
-        err.append("AorusAccountImport: the tdata picker is shown on its own again instead of through Telegram's picker")
+    if "pickFiles(types: self.sessionTypeIdentifiers, context: context" not in ui_body:
+        err.append("AorusAccountImport: session files are no longer picked with the declared session types")
+    if "UTType($0) ?? UTType(importedAs: $0) }, asCopy: true)" not in ui_body:
+        err.append("AorusAccountImport: the fallback picker must hand over copies (asCopy: true)")
+    # Telegram Desktop's tdata is picked as a .zip and nothing else: a folder can only be opened in
+    # place, which broke the picker, and Desktop's own files have no extension to tell them from
+    # any other file.
+    if "self.pickFiles(types: [UTType.zip.identifier], context: context" not in ui_body:
+        err.append("AorusAccountImport: the tdata picker no longer offers ZIP archives alone")
+    for removed in ("UTType.folder", ".folder]", "asCopy: false", "inPlace", "startAccessingSecurityScopedResource()\n            defer {\n                if granted"):
+        if removed in ui_body:
+            err.append(f"AorusAccountImport: folder picking is back ({removed.splitlines()[0]})")
+    if "func stageArchive(from urls: [URL], into staging: URL)" not in ui_body:
+        err.append("AorusAccountImport: the picked archive is no longer moved into its own staging folder")
     installer = repo / "patches/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift"
     installer_text = installer.read_text(encoding="utf-8") if installer.is_file() else ""
-    if "legacyICloudFilePicker(" not in installer_text or "mode: inPlace ? .inPlace : .default" not in installer_text:
-        err.append("AorusAccountImportPicker.swift no longer installs Telegram's chat file picker in both modes")
+    if "legacyICloudFilePicker(" not in installer_text or "inPlace" in installer_text:
+        err.append("AorusAccountImportPicker.swift no longer installs Telegram's chat file picker in its copy mode")
     if "cp $PATCHES/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift" not in workflow_body:
         err.append("build-aorusgram.yml: AorusAccountImportPicker.swift is no longer copied into telegram-ios")
     branding = (repo / "scripts/aorus_branding.py").read_text(encoding="utf-8")

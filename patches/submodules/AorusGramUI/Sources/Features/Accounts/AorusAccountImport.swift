@@ -33,13 +33,10 @@ public enum AorusAccountImport {
 
     /// Telegram's own file picker, the one a file is sent to a chat with, installed by TelegramUI
     /// (`AorusAccountImportPicker`), which holds it: the same presentation, and the same handling
-    /// of a picker that is cancelled or lost behind a lock, as when a file is sent to a chat.
-    ///
-    /// `inPlace` false hands over a copy of each chosen file, moved into the app's temporary
-    /// storage (session files). `inPlace` true hands over what was chosen as it is, the only way a
-    /// folder can be chosen (Telegram Desktop's tdata): what the import reads from it is copied
-    /// out at once, under the access the picker gave, and the originals are never changed.
-    public static var documentPicker: ((_ context: AccountContext, _ documentTypes: [String], _ inPlace: Bool, _ completion: @escaping ([URL]) -> Void) -> ViewController)?
+    /// of a picker that is cancelled or lost behind a lock, as when a file is sent to a chat. It
+    /// hands over a copy of each chosen file, moved into the app's temporary storage, which the app
+    /// reads like any file of its own.
+    public static var documentPicker: ((_ context: AccountContext, _ documentTypes: [String], _ completion: @escaping ([URL]) -> Void) -> ViewController)?
 
     public static func present(_ kind: AorusAccountImportKind, context: AccountContext, from controller: ViewController?) {
         guard let controller else {
@@ -47,15 +44,16 @@ public enum AorusAccountImport {
         }
         switch kind {
         case .tdata:
-            // Telegram Desktop's tdata as it comes: the folder itself, a .zip holding it, or the
-            // files in it — key_datas and the account files beside it, several at once.
-            self.pickFiles(types: self.tdataTypeIdentifiers, inPlace: true, context: context, controller: controller) { urls in
+            // Telegram Desktop's tdata in a .zip, the one form it can be picked in with nothing
+            // else on offer: a folder can only be opened in place, which broke the picker, and
+            // Desktop's own files have no extension to tell them from any other file.
+            self.pickFiles(types: [UTType.zip.identifier], context: context, controller: controller) { urls in
                 self.readPickedTData(urls, context: context, controller: controller)
             }
         case .sessionFile:
             // One session file or several, or an archive holding them, with the picker a file is
             // sent to a chat with; nothing but sessions and archives can be chosen.
-            self.pickFiles(types: self.sessionTypeIdentifiers, inPlace: false, context: context, controller: controller) { urls in
+            self.pickFiles(types: self.sessionTypeIdentifiers, context: context, controller: controller) { urls in
                 self.readSessionFiles(urls: urls, context: context, controller: controller)
             }
         case .sessionString:
@@ -79,14 +77,9 @@ public enum AorusAccountImport {
     /// Declared in the app's Info.plist for the `session` extension.
     static let sessionTypeIdentifier = "org.aorusgram.telegram-session"
 
-    /// What Telegram Desktop's tdata can be picked as: a folder, a ZIP archive, or plain files —
-    /// Desktop's own (`key_datas`, `D877F783D5D3EF8Cs`) have no extension, so any data file can
-    /// be chosen; what is not Desktop's is told apart by reading, not by name.
-    private static let tdataTypeIdentifiers: [String] = [UTType.folder.identifier, UTType.zip.identifier, UTType.data.identifier]
-
-    /// Items of `types`, several at once, with the picker a file is sent to a chat with: copies
-    /// of files, or (`inPlace`) what was chosen as it is, folders included.
-    private static func pickFiles(types: [String], inPlace: Bool, context: AccountContext, controller: ViewController, completion: @escaping ([URL]) -> Void) {
+    /// Files of `types`, several at once, with the picker a file is sent to a chat with, handed
+    /// over as copies.
+    private static func pickFiles(types: [String], context: AccountContext, controller: ViewController, completion: @escaping ([URL]) -> Void) {
         let deliver: ([URL]) -> Void = { urls in
             guard !urls.isEmpty else {
                 return
@@ -98,11 +91,12 @@ public enum AorusAccountImport {
             }
         }
         if let documentPicker = self.documentPicker {
-            controller.present(documentPicker(context, types, inPlace, deliver), in: .window(.root))
+            controller.present(documentPicker(context, types, deliver), in: .window(.root))
             return
         }
-        // Only where TelegramUI has not installed its picker: the system picker in the same mode.
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types.map { UTType($0) ?? UTType(importedAs: $0) }, asCopy: !inPlace)
+        // Only where TelegramUI has not installed its picker: the system picker in the same copy
+        // mode.
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types.map { UTType($0) ?? UTType(importedAs: $0) }, asCopy: true)
         picker.allowsMultipleSelection = true
         picker.shouldShowFileExtensions = true
         // Deliberately no `modalPresentationStyle` override: a document picker lays out its own
@@ -138,37 +132,30 @@ public enum AorusAccountImport {
         }
     }
 
-    /// Reads what was picked for Telegram Desktop. Everything the import needs is first copied
-    /// into the app's own storage, off the main thread, under the access the picker gave; then
-    /// the copy is read under the same progress.
+    /// Reads the archive picked for Telegram Desktop. The picker's copy is moved into a staging
+    /// folder of its own, which goes with whatever is unpacked from it once the read (and any
+    /// passcode retry) is over; other copies picked with it go at once.
     private static func readPickedTData(_ urls: [URL], context: AccountContext, controller: ViewController) {
         guard let progress = self.beginReading(context: context, controller: controller) else {
+            self.removePicked(urls)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
             let staging = AorusImportArchive.temporaryUnpackDirectory()
-            let staged = Result { try self.stageTData(from: urls, into: staging) }
+            let staged = Result { try self.stageArchive(from: urls, into: staging) }
+            self.removePicked(urls)
             DispatchQueue.main.async {
                 switch staged {
-                case let .success(item):
-                    if item.isArchive {
-                        // The archive is read where it was picked, under its own access; the
-                        // staging folder goes with whatever is unpacked from it.
-                        self.readTData(url: item.url, extracted: nil, passcode: nil, cleanup: staging, progress: progress, context: context, controller: controller)
-                    } else {
-                        self.readTData(url: staging, extracted: staging, passcode: nil, progress: progress, context: context, controller: controller)
-                    }
+                case let .success(archive):
+                    self.readTData(url: archive, extracted: nil, passcode: nil, cleanup: staging, progress: progress, context: context, controller: controller)
                 case let .failure(error):
                     self.isReading = false
                     progress.dismiss()
                     try? FileManager.default.removeItem(at: staging)
                     if let failure = error as? AorusTDataFailure {
                         self.presentError(.tdata(failure), context: context, controller: controller)
-                    } else if error is NotTDataFiles {
-                        self.presentError(.notTDataFiles, context: context, controller: controller)
                     } else {
-                        // A file that could not be read from where it was picked (an iCloud file
-                        // that did not come down, say): said as it is.
+                        // The copy could not be moved (no space left, say): not the archive's fault.
                         self.presentError(.unreadable, context: context, controller: controller)
                     }
                 }
@@ -176,209 +163,31 @@ public enum AorusAccountImport {
         }
     }
 
-    /// Desktop's key file, in each generation it writes, as `AorusTDataReader` looks for it.
-    private static let tdataKeyFileNames: Set<String> = ["key_datas", "key_data0", "key_data1"]
-
-    /// What was picked for Telegram Desktop holds nothing of Desktop's: files only, no folder —
-    /// said as files, not as a folder without Desktop data.
-    private struct NotTDataFiles: Error {}
-
-    /// Copies what the import reads out of the picked items into `staging`:
-    /// - a folder: the tdata in it (the folder itself, its `tdata` subfolder, or its one subfolder
-    ///   that holds Desktop's key), and of that only the files at its top level — the key and the
-    ///   accounts' files, all Desktop needs to sign in; the media cache beside them, often
-    ///   gigabytes, is not touched. One installation at a time: the first picked folder that holds
-    ///   one is read, and nothing else picked is copied beside it, so two installations' files
-    ///   never mix;
-    /// - files: Desktop's own, picked from inside its tdata, each up to 64 MB and a name picked
-    ///   twice once; or a ZIP archive, which is read where it is (`url`), not copied — a zipped
-    ///   tdata carries its media cache. Desktop's files win over an archive picked with them.
-    /// Each file is read through a file coordinator, which brings one that is only in iCloud down
-    /// first. A file that cannot be read is reported as such, not as a folder without Desktop.
-    private static func stageTData(from urls: [URL], into staging: URL) throws -> (url: URL, isArchive: Bool) {
-        let fm = FileManager.default
-        try fm.createDirectory(at: staging, withIntermediateDirectories: true, attributes: nil)
-        var copyError: Error?
-        // Each picked item is reached under the access the picker gave it.
-        func scoped<T>(_ url: URL, _ body: () -> T) -> T {
-            let granted = url.startAccessingSecurityScopedResource()
-            defer {
-                if granted {
-                    url.stopAccessingSecurityScopedResource()
-                }
-            }
-            return body()
-        }
-        func isDirectory(_ url: URL) -> Bool {
-            return (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-        }
-
-        for url in urls where scoped(url, { isDirectory(url) }) {
-            let found: Bool = scoped(url) {
-                guard let folder = self.tdataFolder(in: url) else {
-                    return false
-                }
-                copyError = self.copyTopLevelFiles(of: folder, into: staging)
-                return true
-            }
-            if found {
-                if self.holdsTDataKey(staging) {
-                    return (staging, false)
-                }
-                throw copyError ?? AorusTDataFailure.noTData
-            }
-        }
-
-        let pickedFolder = urls.contains(where: { url in scoped(url, { isDirectory(url) }) })
-        var archive: URL?
-        var names = Set<String>()
-        var otherFormat = false
-        let otherArchives: Set<String> = ["rar", "7z", "tar", "gz", "tgz", "bz2", "xz"]
-        for url in urls where !scoped(url, { isDirectory(url) }) {
-            scoped(url) {
-                let fileExtension = url.pathExtension.lowercased()
-                if fileExtension == "zip" || AorusImportArchive.looksLikeZip(url: url) {
-                    archive = archive ?? url
-                    return
-                }
-                if otherArchives.contains(fileExtension) {
-                    otherFormat = true
-                    return
-                }
-                guard names.insert(url.lastPathComponent).inserted else {
-                    return
-                }
-                if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > 64 * 1024 * 1024 {
-                    return
-                }
-                do {
-                    try self.coordinatedCopy(from: url, to: staging.appendingPathComponent(url.lastPathComponent))
-                } catch {
-                    copyError = copyError ?? error
-                }
-            }
-        }
-
-        if self.holdsTDataKey(staging) {
-            return (staging, false)
-        }
-        if let archive {
-            return (archive, true)
-        }
-        if let copyError {
-            throw copyError
-        }
-        if otherFormat {
-            // An archive in a format that is not ZIP (a .rar or .7z, say) cannot be read.
+    /// The first picked file that is a ZIP archive, moved into `staging`.
+    private static func stageArchive(from urls: [URL], into staging: URL) throws -> URL {
+        guard let archive = urls.first(where: { AorusImportArchive.looksLikeZip(url: $0) }) else {
+            // A file named .zip that is not one, or an archive of another kind.
             throw AorusTDataFailure.unsupportedFormat
         }
-        if pickedFolder {
-            throw AorusTDataFailure.noTData
-        }
-        throw NotTDataFiles()
-    }
-
-    private static func holdsTDataKey(_ folder: URL) -> Bool {
-        return self.tdataKeyFileNames.contains(where: { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) })
-    }
-
-    /// The files at the top level of a tdata folder, each up to 64 MB: the key and the accounts'
-    /// files. Subfolders (the accounts' caches) are left where they are. Answers the first file
-    /// that could not be read, if any.
-    private static func copyTopLevelFiles(of folder: URL, into staging: URL) -> Error? {
-        var firstError: Error?
-        for name in self.fileNames(in: folder) {
-            let source = folder.appendingPathComponent(name)
-            let values = try? source.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
-            if values?.isDirectory == true {
-                continue
-            }
-            if let size = values?.fileSize, size > 64 * 1024 * 1024 {
-                continue
-            }
-            do {
-                try self.coordinatedCopy(from: source, to: staging.appendingPathComponent(name))
-            } catch {
-                firstError = firstError ?? error
-            }
-        }
-        return firstError
-    }
-
-    /// The `tdata` in a picked folder: the folder, its `tdata` subfolder, or its only subfolder
-    /// that holds Desktop's key.
-    private static func tdataFolder(in folder: URL) -> URL? {
-        func holdsKey(_ candidate: URL) -> Bool {
-            return !self.tdataKeyFileNames.isDisjoint(with: self.fileNames(in: candidate))
-        }
-        if holdsKey(folder) {
-            return folder
-        }
-        let nested = folder.appendingPathComponent("tdata", isDirectory: true)
-        if holdsKey(nested) {
-            return nested
-        }
-        var match: URL?
-        for name in self.fileNames(in: folder) {
-            let child = folder.appendingPathComponent(name, isDirectory: true)
-            guard (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true, holdsKey(child) else {
-                continue
-            }
-            // Two folders that both hold a key: neither is chosen rather than either at random.
-            guard match == nil else {
-                return nil
-            }
-            match = child
-        }
-        return match
-    }
-
-    /// The names in a folder, a file that is only in iCloud (`.name.icloud`) by its own name.
-    private static func fileNames(in folder: URL) -> Set<String> {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else {
-            return []
-        }
-        var result = Set<String>()
-        for name in names {
-            if name.hasPrefix("."), name.hasSuffix(".icloud") {
-                result.insert(String(name.dropFirst().dropLast(".icloud".count)))
-            } else if !name.hasPrefix(".") {
-                result.insert(name)
-            }
-        }
-        return result
-    }
-
-    private static func coordinatedCopy(from source: URL, to target: URL) throws {
-        var coordinationError: NSError?
-        var copyError: Error?
-        NSFileCoordinator(filePresenter: nil).coordinate(readingItemAt: source, options: .withoutChanges, error: &coordinationError) { readable in
-            do {
-                try? FileManager.default.removeItem(at: target)
-                try FileManager.default.copyItem(at: readable, to: target)
-            } catch {
-                copyError = error
-            }
-        }
-        if let error = coordinationError ?? copyError {
-            throw error
-        }
+        let fm = FileManager.default
+        try fm.createDirectory(at: staging, withIntermediateDirectories: true, attributes: nil)
+        let target = staging.appendingPathComponent(archive.lastPathComponent)
+        try fm.moveItem(at: archive, to: target)
+        return target
     }
 
     // MARK: - Reading
 
-    /// Reads a Telegram Desktop folder, whether it was picked as a folder or as a `.zip` that
-    /// holds one. `extracted`, when set, is a directory the app unpacked and must remove once
-    /// the read (and any passcode retry) is finished.
+    /// Reads Telegram Desktop's tdata: from the picked `.zip`, or, on a passcode retry, from the
+    /// folder already unpacked from it. `extracted`, when set, is a directory the app unpacked and
+    /// must remove once the read (and any passcode retry) is finished.
     private static func readTData(url: URL, extracted: URL?, passcode: String?, cleanup staging: URL? = nil, progress shown: ViewController? = nil, context: AccountContext, controller: ViewController) {
         guard let progress = shown ?? self.beginReading(context: context, controller: controller) else { return }
-        // PBKDF2 (100000 rounds), unpacking and provider I/O must not block Files or the UI.
+        // PBKDF2 (100000 rounds) and unpacking must not block the UI.
         DispatchQueue.global(qos: .userInitiated).async {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             var result: Result<[AorusImportedSession], Error> = .failure(AorusTDataFailure.noTData)
-            // The folder that was actually read: the picked directory, or the one unpacked from
-            // the archive. A passcode retry reads this directly instead of unpacking again.
+            // The folder that was actually read: the one unpacked from the archive, or the one a
+            // passcode retry was given. A retry reads it directly instead of unpacking again.
             var readFolder: URL?
             var unpacked: URL? = extracted
             var coordinationError: NSError?
@@ -387,9 +196,10 @@ public enum AorusAccountImport {
                     let searchRoot: URL
                     let isDirectory = (try? readableURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
                     if isDirectory {
+                        // The folder unpacked before, read again with the passcode.
                         searchRoot = readableURL
                     } else if AorusImportArchive.looksLikeZip(url: readableURL) {
-                        // A picked archive: find the tdata in its directory and unpack only that
+                        // The picked archive: find the tdata in its directory and unpack only that
                         // folder's own files — all Desktop's key reader reads. The media cache a
                         // zipped tdata usually carries (often gigabytes) is never inflated.
                         let archive = try AorusImportArchive.open(readableURL)
@@ -432,10 +242,8 @@ public enum AorusAccountImport {
                     self.add(sessions: sessions, context: context, controller: controller)
                 case .failure(AorusTDataFailure.passcodeRequired):
                     if passcode == nil {
-                        // Ask for the passcode and read again. An unpacked archive is read from
-                        // its own folder on retry (no scope needed, no second unpack); a picked
-                        // folder must be re-read through its original security-scoped URL, not a
-                        // child path, so the scope still covers it.
+                        // Ask for the passcode and read again, from the folder already unpacked:
+                        // no second unpack.
                         let retryURL = cleanup != nil ? (retryFolder ?? url) : url
                         self.presentPasscodePrompt(url: retryURL, extracted: cleanup, context: context, controller: controller)
                     } else {
@@ -726,8 +534,6 @@ public enum AorusAccountImport {
     // MARK: - Reporting
 
     private enum Failure {
-        case noTData
-        case notTDataFiles
         case unreadable
         case wrongPasscode
         case tdata(AorusTDataFailure)
@@ -751,10 +557,6 @@ public enum AorusAccountImport {
     private static func presentError(_ failure: Failure, context: AccountContext, controller: ViewController) {
         let text: String
         switch failure {
-        case .noTData:
-            text = aorusL("В этой папке нет данных Telegram Desktop", "This folder holds no Telegram Desktop data")
-        case .notTDataFiles:
-            text = aorusL("Это не файлы Telegram Desktop", "These aren't Telegram Desktop files")
         case .unreadable:
             text = aorusL("Файл не читается", "The file cannot be read")
         case .wrongPasscode:
@@ -762,7 +564,7 @@ public enum AorusAccountImport {
         case let .tdata(error):
             switch error {
             case .noTData:
-                text = aorusL("В этой папке нет данных Telegram Desktop", "This folder holds no Telegram Desktop data")
+                text = aorusL("В этом архиве нет данных Telegram Desktop", "This archive holds no Telegram Desktop data")
             case .passcodeRequired:
                 text = aorusL("Неверный пароль", "Wrong passcode")
             case .noAccounts:

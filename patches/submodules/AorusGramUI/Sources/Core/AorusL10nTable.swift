@@ -53,7 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
-        "These aren't Telegram Desktop files": "Questi non sono file di Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Questo archivio non contiene dati di Telegram Desktop",
         "Export File": "Esporta file",
         "Import a Save": "Importa un salvataggio",
         "Added: “%@”": "Aggiunto: «%@»",
@@ -72,7 +72,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ è stato aggiunto",
         "Accounts added: %@": "Account aggiunti: %@",
         "%@ is already here": "%@ è già qui",
-        "This folder holds no Telegram Desktop data": "Questa cartella non contiene dati di Telegram Desktop",
         "Wrong passcode": "Codice errato",
         "This data holds no accounts": "Questi dati non contengono account",
         "The file is damaged": "Il file è danneggiato",
@@ -1273,7 +1272,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
-        "These aren't Telegram Desktop files": "To nie są pliki Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "To archiwum nie zawiera danych Telegram Desktop",
         "Export File": "Eksportuj plik",
         "Import a Save": "Importuj zapis",
         "Added: “%@”": "Dodano: „%@”",
@@ -1292,7 +1291,6 @@ enum AorusL10nTable {
         "%@ has been added": "Dodano %@",
         "Accounts added: %@": "Dodane konta: %@",
         "%@ is already here": "%@ już tu jest",
-        "This folder holds no Telegram Desktop data": "W tym folderze nie ma danych Telegram Desktop",
         "Wrong passcode": "Nieprawidłowy kod",
         "This data holds no accounts": "Te dane nie zawierają kont",
         "The file is damaged": "Plik jest uszkodzony",
@@ -2493,7 +2491,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
-        "These aren't Telegram Desktop files": "Dit zijn geen Telegram Desktop-bestanden",
+        "This archive holds no Telegram Desktop data": "Dit archief bevat geen Telegram Desktop-gegevens",
         "Export File": "Bestand exporteren",
         "Import a Save": "Opslag importeren",
         "Added: “%@”": "Toegevoegd: ‘%@’",
@@ -2512,7 +2510,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ is toegevoegd",
         "Accounts added: %@": "Toegevoegde accounts: %@",
         "%@ is already here": "%@ staat er al",
-        "This folder holds no Telegram Desktop data": "Deze map bevat geen gegevens van Telegram Desktop",
         "Wrong passcode": "Verkeerde toegangscode",
         "This data holds no accounts": "Deze gegevens bevatten geen accounts",
         "The file is damaged": "Het bestand is beschadigd",
@@ -3713,7 +3710,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
-        "These aren't Telegram Desktop files": "Aquests no són fitxers de Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Aquest arxiu no conté dades de Telegram Desktop",
         "Export File": "Exporta el fitxer",
         "Import a Save": "Importa una còpia",
         "Added: “%@”": "Afegida: «%@»",
@@ -3732,7 +3729,6 @@ enum AorusL10nTable {
         "%@ has been added": "S'ha afegit %@",
         "Accounts added: %@": "Comptes afegits: %@",
         "%@ is already here": "%@ ja hi és",
-        "This folder holds no Telegram Desktop data": "Aquesta carpeta no conté dades del Telegram Desktop",
         "Wrong passcode": "Codi incorrecte",
         "This data holds no accounts": "Aquestes dades no contenen cap compte",
         "The file is damaged": "El fitxer està malmès",
@@ -4933,7 +4929,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
-        "These aren't Telegram Desktop files": "Ini bukan file Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Arsip ini tidak berisi data Telegram Desktop",
         "Export File": "Ekspor file",
         "Import a Save": "Impor simpanan",
         "Added: “%@”": "Ditambahkan: “%@”",
@@ -4952,7 +4948,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ telah ditambahkan",
         "Accounts added: %@": "Akun ditambahkan: %@",
         "%@ is already here": "%@ sudah ada di sini",
-        "This folder holds no Telegram Desktop data": "Folder ini tidak berisi data Telegram Desktop",
         "Wrong passcode": "Kode sandi salah",
         "This data holds no accounts": "Data ini tidak berisi akun",
         "The file is damaged": "Berkas rusak",
@@ -6153,7 +6148,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
-        "These aren't Telegram Desktop files": "Ini bukan fail Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Arkib ini tidak mengandungi data Telegram Desktop",
         "Export File": "Eksport fail",
         "Import a Save": "Import simpanan",
         "Added: “%@”": "Ditambah: “%@”",
@@ -6172,7 +6167,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ telah ditambah",
         "Accounts added: %@": "Akaun ditambah: %@",
         "%@ is already here": "%@ sudah ada di sini",
-        "This folder holds no Telegram Desktop data": "Folder ini tiada data Telegram Desktop",
         "Wrong passcode": "Kod laluan salah",
         "This data holds no accounts": "Data ini tiada akaun",
         "The file is damaged": "Fail rosak",
@@ -7373,7 +7367,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
-        "These aren't Telegram Desktop files": "Гэта не файлы Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "У гэтым архіве няма даных Telegram Desktop",
         "Export File": "Экспартаваць файл",
         "Import a Save": "Імпартаваць захаванне",
         "Added: “%@”": "Дададзена: «%@»",
@@ -7392,7 +7386,6 @@ enum AorusL10nTable {
         "%@ has been added": "Акаўнт %@ дададзены",
         "Accounts added: %@": "Дададзена акаўнтаў: %@",
         "%@ is already here": "%@ ужо дададзены",
-        "This folder holds no Telegram Desktop data": "У гэтай папцы няма даных Telegram Desktop",
         "Wrong passcode": "Няправільны пароль",
         "This data holds no accounts": "У гэтых даных няма акаўнтаў",
         "The file is damaged": "Файл пашкоджаны",
@@ -8593,7 +8586,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
-        "These aren't Telegram Desktop files": "Bular Telegram Desktop fayllari emas",
+        "This archive holds no Telegram Desktop data": "Bu arxivda Telegram Desktop ma’lumotlari yo‘q",
         "Export File": "Faylni eksport qilish",
         "Import a Save": "Saqlanmani import qilish",
         "Added: “%@”": "Qo‘shildi: “%@”",
@@ -8612,7 +8605,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ qo'shildi",
         "Accounts added: %@": "Qo'shilgan akkauntlar: %@",
         "%@ is already here": "%@ allaqachon shu yerda",
-        "This folder holds no Telegram Desktop data": "Bu jildda Telegram Desktop ma'lumotlari yo'q",
         "Wrong passcode": "Parol noto'g'ri",
         "This data holds no accounts": "Bu ma'lumotlarda akkaunt yo'q",
         "The file is damaged": "Fayl shikastlangan",
@@ -9813,7 +9805,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
-        "These aren't Telegram Desktop files": "Telegram Desktop 파일이 아닙니다",
+        "This archive holds no Telegram Desktop data": "이 압축 파일에는 Telegram Desktop 데이터가 없습니다",
         "Export File": "파일 내보내기",
         "Import a Save": "저장본 가져오기",
         "Added: “%@”": "추가됨: “%@”",
@@ -9832,7 +9824,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ 계정을 추가했습니다",
         "Accounts added: %@": "추가된 계정: %@",
         "%@ is already here": "%@ 계정은 이미 있습니다",
-        "This folder holds no Telegram Desktop data": "이 폴더에는 Telegram Desktop 데이터가 없습니다",
         "Wrong passcode": "암호가 틀렸습니다",
         "This data holds no accounts": "이 데이터에는 계정이 없습니다",
         "The file is damaged": "파일이 손상되었습니다",
@@ -11033,7 +11024,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
-        "These aren't Telegram Desktop files": "هذه ليست ملفات Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "لا يحتوي هذا الأرشيف على بيانات Telegram Desktop",
         "Export File": "تصدير الملف",
         "Import a Save": "استيراد نسخة محفوظة",
         "Added: “%@”": "تمت الإضافة: «%@»",
@@ -11052,7 +11043,6 @@ enum AorusL10nTable {
         "%@ has been added": "تمت إضافة %@",
         "Accounts added: %@": "الحسابات المضافة: %@",
         "%@ is already here": "%@ موجود هنا بالفعل",
-        "This folder holds no Telegram Desktop data": "لا توجد بيانات Telegram Desktop في هذا المجلد",
         "Wrong passcode": "الرمز غير صحيح",
         "This data holds no accounts": "لا توجد حسابات في هذه البيانات",
         "The file is damaged": "الملف تالف",
@@ -12253,7 +12243,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
-        "These aren't Telegram Desktop files": "این‌ها فایل‌های Telegram Desktop نیستند",
+        "This archive holds no Telegram Desktop data": "این بایگانی داده‌ای از Telegram Desktop ندارد",
         "Export File": "خروجی گرفتن فایل",
         "Import a Save": "وارد کردن ذخیره",
         "Added: “%@”": "افزوده شد: «%@»",
@@ -12272,7 +12262,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ افزوده شد",
         "Accounts added: %@": "حساب‌های افزوده‌شده: %@",
         "%@ is already here": "%@ از قبل اینجاست",
-        "This folder holds no Telegram Desktop data": "در این پوشه داده‌های Telegram Desktop نیست",
         "Wrong passcode": "رمز نادرست",
         "This data holds no accounts": "در این داده‌ها حسابی نیست",
         "The file is damaged": "فایل آسیب دیده است",
@@ -13473,7 +13462,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
-        "These aren't Telegram Desktop files": "Бұл Telegram Desktop файлдары емес",
+        "This archive holds no Telegram Desktop data": "Бұл мұрағатта Telegram Desktop деректері жоқ",
         "Export File": "Файлды экспорттау",
         "Import a Save": "Сақтауды импорттау",
         "Added: “%@”": "Қосылды: «%@»",
@@ -13492,7 +13481,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ қосылды",
         "Accounts added: %@": "Қосылған аккаунттар: %@",
         "%@ is already here": "%@ бұрыннан бар",
-        "This folder holds no Telegram Desktop data": "Бұл қалтада Telegram Desktop деректері жоқ",
         "Wrong passcode": "Құпия код қате",
         "This data holds no accounts": "Бұл деректерде аккаунт жоқ",
         "The file is damaged": "Файл бүлінген",
@@ -14693,7 +14681,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
-        "These aren't Telegram Desktop files": "这些不是 Telegram Desktop 文件",
+        "This archive holds no Telegram Desktop data": "此压缩包中没有 Telegram Desktop 数据",
         "Export File": "导出文件",
         "Import a Save": "导入存档",
         "Added: “%@”": "已添加：“%@”",
@@ -14712,7 +14700,6 @@ enum AorusL10nTable {
         "%@ has been added": "已添加 %@",
         "Accounts added: %@": "已添加账号：%@",
         "%@ is already here": "%@ 已经在这里了",
-        "This folder holds no Telegram Desktop data": "此文件夹没有 Telegram Desktop 的数据",
         "Wrong passcode": "密码错误",
         "This data holds no accounts": "这些数据没有任何账号",
         "The file is damaged": "文件已损坏",
@@ -15914,7 +15901,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
-        "These aren't Telegram Desktop files": "這些不是 Telegram Desktop 檔案",
+        "This archive holds no Telegram Desktop data": "此壓縮檔中沒有 Telegram Desktop 資料",
         "Export File": "匯出檔案",
         "Import a Save": "匯入存檔",
         "Added: “%@”": "已加入：「%@」",
@@ -15933,7 +15920,6 @@ enum AorusL10nTable {
         "%@ has been added": "已新增 %@",
         "Accounts added: %@": "已新增帳號：%@",
         "%@ is already here": "%@ 已經在這裡了",
-        "This folder holds no Telegram Desktop data": "此資料夾沒有 Telegram Desktop 的資料",
         "Wrong passcode": "密碼錯誤",
         "This data holds no accounts": "這些資料沒有任何帳號",
         "The file is damaged": "檔案已損毀",
@@ -17134,7 +17120,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
-        "These aren't Telegram Desktop files": "Telegram Desktop のファイルではありません",
+        "This archive holds no Telegram Desktop data": "このアーカイブには Telegram Desktop のデータがありません",
         "Export File": "ファイルを書き出す",
         "Import a Save": "保存データを読み込む",
         "Added: “%@”": "追加しました：「%@」",
@@ -17153,7 +17139,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ を追加しました",
         "Accounts added: %@": "追加したアカウント: %@",
         "%@ is already here": "%@ はすでにあります",
-        "This folder holds no Telegram Desktop data": "このフォルダに Telegram Desktop のデータはありません",
         "Wrong passcode": "パスコードが違います",
         "This data holds no accounts": "このデータにアカウントはありません",
         "The file is damaged": "ファイルが壊れています",
@@ -18354,7 +18339,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
-        "These aren't Telegram Desktop files": "Nämä eivät ole Telegram Desktopin tiedostoja",
+        "This archive holds no Telegram Desktop data": "Tässä arkistossa ei ole Telegram Desktopin tietoja",
         "Export File": "Vie tiedosto",
         "Import a Save": "Tuo tallennus",
         "Added: “%@”": "Lisätty: ”%@”",
@@ -18373,7 +18358,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ lisättiin",
         "Accounts added: %@": "Lisätyt tilit: %@",
         "%@ is already here": "%@ on jo täällä",
-        "This folder holds no Telegram Desktop data": "Tässä kansiossa ei ole Telegram Desktopin tietoja",
         "Wrong passcode": "Väärä pääsykoodi",
         "This data holds no accounts": "Näissä tiedoissa ei ole tilejä",
         "The file is damaged": "Tiedosto on vioittunut",
@@ -19574,7 +19558,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
-        "These aren't Telegram Desktop files": "אלה אינם קבצים של Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "בארכיון הזה אין נתונים של Telegram Desktop",
         "Export File": "ייצוא קובץ",
         "Import a Save": "ייבוא שמירה",
         "Added: “%@”": "נוספה: „%@”",
@@ -19593,7 +19577,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ נוסף",
         "Accounts added: %@": "חשבונות שנוספו: %@",
         "%@ is already here": "%@ כבר כאן",
-        "This folder holds no Telegram Desktop data": "בתיקייה הזו אין נתונים של Telegram Desktop",
         "Wrong passcode": "קוד גישה שגוי",
         "This data holds no accounts": "בנתונים האלה אין חשבונות",
         "The file is damaged": "הקובץ פגום",
@@ -20794,7 +20777,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
-        "These aren't Telegram Desktop files": "Ovo nisu datoteke Telegram Desktopa",
+        "This archive holds no Telegram Desktop data": "Ova arhiva ne sadrži podatke Telegram Desktopa",
         "Export File": "Izvezi datoteku",
         "Import a Save": "Uvezi spremanje",
         "Added: “%@”": "Dodano: „%@”",
@@ -20813,7 +20796,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ je dodan",
         "Accounts added: %@": "Dodano računa: %@",
         "%@ is already here": "%@ je već ovdje",
-        "This folder holds no Telegram Desktop data": "U ovoj mapi nema podataka Telegram Desktopa",
         "Wrong passcode": "Pogrešna lozinka",
         "This data holds no accounts": "Ovi podaci ne sadrže nijedan račun",
         "The file is damaged": "Datoteka je oštećena",
@@ -22014,7 +21996,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
-        "These aren't Telegram Desktop files": "Ово нису датотеке Telegram Desktop-а",
+        "This archive holds no Telegram Desktop data": "Ова архива не садржи податке Telegram Desktop-а",
         "Export File": "Извези датотеку",
         "Import a Save": "Увези чување",
         "Added: “%@”": "Додато: „%@”",
@@ -22033,7 +22015,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ је додат",
         "Accounts added: %@": "Додато налога: %@",
         "%@ is already here": "%@ је већ овде",
-        "This folder holds no Telegram Desktop data": "У овој фасцикли нема података Telegram Desktop-а",
         "Wrong passcode": "Погрешна лозинка",
         "This data holds no accounts": "Ови подаци немају ниједан налог",
         "The file is damaged": "Фајл је оштећен",
@@ -23234,7 +23215,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
-        "These aren't Telegram Desktop files": "Toto nejsou soubory Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Tento archiv neobsahuje data Telegram Desktop",
         "Export File": "Exportovat soubor",
         "Import a Save": "Importovat uložení",
         "Added: “%@”": "Přidáno: „%@“",
@@ -23253,7 +23234,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ byl přidán",
         "Accounts added: %@": "Přidané účty: %@",
         "%@ is already here": "%@ už tu je",
-        "This folder holds no Telegram Desktop data": "V této složce nejsou data Telegram Desktop",
         "Wrong passcode": "Nesprávné heslo",
         "This data holds no accounts": "Tato data neobsahují žádný účet",
         "The file is damaged": "Soubor je poškozený",
@@ -24454,7 +24434,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
-        "These aren't Telegram Desktop files": "Toto nie sú súbory Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Tento archív neobsahuje údaje Telegram Desktop",
         "Export File": "Exportovať súbor",
         "Import a Save": "Importovať uloženie",
         "Added: “%@”": "Pridané: „%@“",
@@ -24473,7 +24453,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ bol pridaný",
         "Accounts added: %@": "Pridané účty: %@",
         "%@ is already here": "%@ už tu je",
-        "This folder holds no Telegram Desktop data": "V tomto priečinku nie sú dáta Telegram Desktop",
         "Wrong passcode": "Nesprávne heslo",
         "This data holds no accounts": "Tieto dáta neobsahujú žiadny účet",
         "The file is damaged": "Súbor je poškodený",
@@ -25674,7 +25653,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
-        "These aren't Telegram Desktop files": "Acestea nu sunt fișiere Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Această arhivă nu conține date Telegram Desktop",
         "Export File": "Exportă fișierul",
         "Import a Save": "Importă o salvare",
         "Added: “%@”": "Adăugată: „%@”",
@@ -25693,7 +25672,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ a fost adăugat",
         "Accounts added: %@": "Conturi adăugate: %@",
         "%@ is already here": "%@ este deja aici",
-        "This folder holds no Telegram Desktop data": "Acest folder nu conține date Telegram Desktop",
         "Wrong passcode": "Cod greșit",
         "This data holds no accounts": "Aceste date nu conțin niciun cont",
         "The file is damaged": "Fișierul este deteriorat",
@@ -26894,7 +26872,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
-        "These aren't Telegram Desktop files": "Ezek nem Telegram Desktop-fájlok",
+        "This archive holds no Telegram Desktop data": "Ez az archívum nem tartalmaz Telegram Desktop-adatokat",
         "Export File": "Fájl exportálása",
         "Import a Save": "Mentés importálása",
         "Added: “%@”": "Hozzáadva: „%@”",
@@ -26913,7 +26891,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ hozzáadva",
         "Accounts added: %@": "Hozzáadott fiókok: %@",
         "%@ is already here": "%@ már itt van",
-        "This folder holds no Telegram Desktop data": "Ebben a mappában nincs Telegram Desktop adat",
         "Wrong passcode": "Hibás jelkód",
         "This data holds no accounts": "Ezek az adatok nem tartalmaznak fiókot",
         "The file is damaged": "A fájl sérült",
@@ -28114,7 +28091,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
-        "These aren't Telegram Desktop files": "Dette er ikke Telegram Desktop-filer",
+        "This archive holds no Telegram Desktop data": "Dette arkivet inneholder ingen Telegram Desktop-data",
         "Export File": "Eksporter fil",
         "Import a Save": "Importer en lagring",
         "Added: “%@”": "Lagt til: «%@»",
@@ -28133,7 +28110,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ er lagt til",
         "Accounts added: %@": "Kontoer lagt til: %@",
         "%@ is already here": "%@ er allerede her",
-        "This folder holds no Telegram Desktop data": "Mappen inneholder ingen Telegram Desktop-data",
         "Wrong passcode": "Feil passkode",
         "This data holds no accounts": "Disse dataene inneholder ingen kontoer",
         "The file is damaged": "Filen er skadet",
@@ -29334,7 +29310,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
-        "These aren't Telegram Desktop files": "Det här är inte Telegram Desktop-filer",
+        "This archive holds no Telegram Desktop data": "Det här arkivet innehåller inga Telegram Desktop-data",
         "Export File": "Exportera fil",
         "Import a Save": "Importera en sparning",
         "Added: “%@”": "Tillagd: ”%@”",
@@ -29353,7 +29329,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ har lagts till",
         "Accounts added: %@": "Tillagda konton: %@",
         "%@ is already here": "%@ finns redan här",
-        "This folder holds no Telegram Desktop data": "Mappen innehåller inga Telegram Desktop-data",
         "Wrong passcode": "Fel lösenkod",
         "This data holds no accounts": "Dessa data innehåller inga konton",
         "The file is damaged": "Filen är skadad",
@@ -30554,7 +30529,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
-        "These aren't Telegram Desktop files": "Đây không phải tệp của Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Tệp nén này không chứa dữ liệu Telegram Desktop",
         "Export File": "Xuất tệp",
         "Import a Save": "Nhập bản lưu",
         "Added: “%@”": "Đã thêm: “%@”",
@@ -30573,7 +30548,6 @@ enum AorusL10nTable {
         "%@ has been added": "Đã thêm %@",
         "Accounts added: %@": "Số tài khoản đã thêm: %@",
         "%@ is already here": "%@ đã có ở đây",
-        "This folder holds no Telegram Desktop data": "Thư mục này không có dữ liệu Telegram Desktop",
         "Wrong passcode": "Sai mật mã",
         "This data holds no accounts": "Dữ liệu này không có tài khoản nào",
         "The file is damaged": "Tệp bị hỏng",
@@ -31774,7 +31748,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
-        "These aren't Telegram Desktop files": "Це не файли Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "У цьому архіві немає даних Telegram Desktop",
         "Export File": "Експортувати файл",
         "Import a Save": "Імпортувати збереження",
         "Added: “%@”": "Додано: «%@»",
@@ -31793,7 +31767,6 @@ enum AorusL10nTable {
         "%@ has been added": "Акаунт %@ додано",
         "Accounts added: %@": "Додано акаунтів: %@",
         "%@ is already here": "%@ вже додано",
-        "This folder holds no Telegram Desktop data": "У цій теці немає даних Telegram Desktop",
         "Wrong passcode": "Невірний пароль",
         "This data holds no accounts": "У цих даних немає акаунтів",
         "The file is damaged": "Файл пошкоджено",
@@ -33003,7 +32976,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
-        "These aren't Telegram Desktop files": "Estos no son archivos de Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Este archivo comprimido no contiene datos de Telegram Desktop",
         "Export File": "Exportar archivo",
         "Import a Save": "Importar un guardado",
         "Added: “%@”": "Añadido: «%@»",
@@ -33022,7 +32995,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ se ha añadido",
         "Accounts added: %@": "Cuentas añadidas: %@",
         "%@ is already here": "%@ ya está aquí",
-        "This folder holds no Telegram Desktop data": "Esta carpeta no contiene datos de Telegram Desktop",
         "Wrong passcode": "Código incorrecto",
         "This data holds no accounts": "Estos datos no contienen cuentas",
         "The file is damaged": "El archivo está dañado",
@@ -34232,7 +34204,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
-        "These aren't Telegram Desktop files": "Estes não são ficheiros do Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Este arquivo não contém dados do Telegram Desktop",
         "Export File": "Exportar ficheiro",
         "Import a Save": "Importar uma gravação",
         "Added: “%@”": "Adicionada: «%@»",
@@ -34251,7 +34223,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ foi adicionado",
         "Accounts added: %@": "Contas adicionadas: %@",
         "%@ is already here": "%@ já está aqui",
-        "This folder holds no Telegram Desktop data": "Esta pasta não contém dados do Telegram Desktop",
         "Wrong passcode": "Senha incorreta",
         "This data holds no accounts": "Estes dados não contêm contas",
         "The file is damaged": "O arquivo está danificado",
@@ -35461,7 +35432,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
-        "These aren't Telegram Desktop files": "Das sind keine Telegram-Desktop-Dateien",
+        "This archive holds no Telegram Desktop data": "Dieses Archiv enthält keine Telegram-Desktop-Daten",
         "Export File": "Datei exportieren",
         "Import a Save": "Sicherung importieren",
         "Added: “%@”": "Hinzugefügt: „%@“",
@@ -35480,7 +35451,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ wurde hinzugefügt",
         "Accounts added: %@": "Hinzugefügte Konten: %@",
         "%@ is already here": "%@ ist bereits hier",
-        "This folder holds no Telegram Desktop data": "Dieser Ordner enthält keine Telegram-Desktop-Daten",
         "Wrong passcode": "Falscher Code",
         "This data holds no accounts": "Diese Daten enthalten keine Konten",
         "The file is damaged": "Die Datei ist beschädigt",
@@ -36690,7 +36660,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
-        "These aren't Telegram Desktop files": "Ce ne sont pas des fichiers de Telegram Desktop",
+        "This archive holds no Telegram Desktop data": "Cette archive ne contient aucune donnée de Telegram Desktop",
         "Export File": "Exporter le fichier",
         "Import a Save": "Importer une sauvegarde",
         "Added: “%@”": "Ajoutée : « %@ »",
@@ -36709,7 +36679,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ a été ajouté",
         "Accounts added: %@": "Comptes ajoutés : %@",
         "%@ is already here": "%@ est déjà là",
-        "This folder holds no Telegram Desktop data": "Ce dossier ne contient aucune donnée Telegram Desktop",
         "Wrong passcode": "Code incorrect",
         "This data holds no accounts": "Ces données ne contiennent aucun compte",
         "The file is damaged": "Le fichier est endommagé",
@@ -37919,7 +37888,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
-        "These aren't Telegram Desktop files": "Bunlar Telegram Desktop dosyaları değil",
+        "This archive holds no Telegram Desktop data": "Bu arşivde Telegram Desktop verisi yok",
         "Export File": "Dosyayı dışa aktar",
         "Import a Save": "Kaydı içe aktar",
         "Added: “%@”": "Eklendi: “%@”",
@@ -37938,7 +37907,6 @@ enum AorusL10nTable {
         "%@ has been added": "%@ eklendi",
         "Accounts added: %@": "Eklenen hesaplar: %@",
         "%@ is already here": "%@ zaten burada",
-        "This folder holds no Telegram Desktop data": "Bu klasörde Telegram Desktop verisi yok",
         "Wrong passcode": "Parola yanlış",
         "This data holds no accounts": "Bu veride hesap yok",
         "The file is damaged": "Dosya bozuk",

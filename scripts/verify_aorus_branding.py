@@ -4397,9 +4397,6 @@ def main() -> None:
             err.append("DocumentPicker: default picker copy mode was not integrated")
         if "case .default:\n            return .open" in document_picker_text:
             err.append("DocumentPicker: default picker still opens security-scoped URLs in place")
-        # The account import picks Telegram Desktop's tdata folder in place through this picker.
-        if "    case inPlace\n" not in document_picker_text or "        case .inPlace:\n            return false\n" not in document_picker_text:
-            err.append("DocumentPicker: the in-place mode the tdata import picks a folder with is missing")
 
     document_resources = tg / "submodules" / "ICloudResources" / "Sources" / "ICloudResources.swift"
     document_resources_text = document_resources.read_text(encoding="utf-8") if document_resources.is_file() else ""
@@ -4656,16 +4653,15 @@ def main() -> None:
         # this property is left alone, and a substring check would fail on that comment.
         if ".selectedSegmentTintColor =" in ai_context_menu_text:
             err.append("AorusAI: the category selector paints over the system's selection indicator")
-        # Its heights come from AorusAISheetLayout, shared with the work trail: half height in
-        # portrait; in landscape attached to the bottom edge across the window's width at three
-        # quarters of the height. A sheet that is not edge-attached covers the whole screen in
-        # landscape whatever its detents.
+        # It is put on screen by AorusAISheetLayout, shared with the work trail: the system's page
+        # sheet in portrait; opened in landscape, AorusAILandscapeSheet across the whole screen
+        # from edge to edge at three quarters of its height. A system sheet in landscape either
+        # covers the whole screen or is laid out in the safe area, its corners cut by the screen.
         for marker in (
             "UISegmentedControl",
             "UITableViewDataSource",
-            "modalPresentationStyle = .pageSheet",
-            "AorusAISheetLayout.apply(to: controller, sheet: sheet",
-            "AorusAISheetLayout.change(for: self, from: appliedSheetLayout)",
+            "AorusAISheetLayout.present(controller, from: presenter, configureSheet:",
+            "AorusAISheetLayout.change(for: self, from: appliedCompactHeight)",
             "AorusAIMessageMenu.run(",
         ):
             if marker not in ai_context_menu_text:
@@ -4674,14 +4670,17 @@ def main() -> None:
         ai_work_trail_text = ai_work_trail.read_text(encoding="utf-8") if ai_work_trail.is_file() else ""
         for marker in (
             "enum AorusAISheetLayout {",
-            "sheet.prefersEdgeAttachedInCompactHeight = true",
-            "sheet.widthFollowsPreferredContentSizeWhenEdgeAttached = true",
+            "AorusAILandscapeSheet.present(controller, from: presenter)",
+            "enum AorusAILandscapeSheet {",
+            "return CGRect(x: 0.0, y: bounds.height - height, width: bounds.width, height: height)",
+            "presentedView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]",
             "floor(context.maximumDetentValue * 0.74)",
+            "AorusAISheetLayout.present(controller, from: presenter, configureSheet:",
         ):
             if marker not in ai_work_trail_text:
                 err.append(f"AorusAI: the sheets' landscape layout lost {marker}")
-        if "prefersEdgeAttachedInCompactHeight = false" in ai_work_trail_text + ai_context_menu_text:
-            err.append("AorusAI: a sheet is detached from the bottom edge again, which covers the whole screen in landscape")
+        if "prefersEdgeAttachedInCompactHeight = false" in ai_work_trail_text + ai_context_menu_text or "widthFollowsPreferredContentSizeWhenEdgeAttached = true" in ai_work_trail_text + ai_context_menu_text:
+            err.append("AorusAI: a system sheet is stretched across landscape again, which covers the screen or cuts its corners")
         if "pushItems(" in ai_context_menu_text:
             err.append("AorusAI: message actions brought back overlapping ContextUI push levels")
 
