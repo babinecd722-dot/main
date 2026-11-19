@@ -1575,12 +1575,24 @@ def main() -> None:
     wakeup_manager_text = wakeup_manager.read_text(encoding="utf-8") if wakeup_manager.is_file() else ""
     if "$0.2.backgroundAudio || $0.2.activeCalls" in wakeup_manager_text:
         err.append("BackgroundWork: the keep-alive still waits underneath a call instead of letting go")
+    notifier = tg / "submodules" / "TelegramUI" / "Sources" / "AorusBackgroundPresence.swift"
+    notifier_text = notifier.read_text(encoding="utf-8") if notifier.is_file() else ""
+    if 'appendingPathComponent("Library/Sounds")' in notifier_text:
+        err.append("BackgroundWork: notification tones are copied beside Telegram's data again, where iOS does not look for them")
     for relative, markers in (
         ("submodules/TelegramUI/Sources/SharedWakeupManager.swift", (
             "let hasCall = self.accountsAndTasks.contains(where: { $0.2.activeCalls })",
             "guard isAway && !hasCall && !self.accountsAndTasks.isEmpty && AorusBackgroundWork.isWanted else {",
             "private func aorusBackgroundSettingsChanged() {",
             "self?.aorusBackgroundSettingsChanged()",
+        )),
+        # A notification's tone goes where iOS looks for the sound of a notification the app posts:
+        # the app's own Library/Sounds, not beside Telegram's data, which a re-signed build keeps
+        # in AorusgramGroupFallback, where iOS never looks.
+        ("submodules/TelegramUI/Sources/AorusBackgroundPresence.swift", (
+            "FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first",
+            "library.appendingPathComponent(\"Sounds\", isDirectory: true)",
+            "case .default, .bundledModern, .bundledClassic:",
         )),
         ("submodules/TelegramCore/Sources/State/ManagedAccountPresence.swift", (
             "let wasAlwaysOnline = aorusAlwaysOnline.swap(alwaysOnline)",

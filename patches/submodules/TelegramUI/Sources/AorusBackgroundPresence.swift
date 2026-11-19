@@ -414,12 +414,14 @@ final class AorusBackgroundNotifier {
     private enum Tone {
         case none
         /// Telegram's default and every tone chosen in its settings: a file from the cloud, copied
-        /// into the app group's Library/Sounds, where iOS looks for a notification's sound. Nil
-        /// resource: the tone is not in the account's list, and Telegram then plays its 0.m4a.
+        /// into the app's Library/Sounds, where iOS looks for the sound of a notification the app
+        /// posts. Nil resource: the tone is not in the account's list, and Telegram then plays its
+        /// 0.m4a.
         case cloud(fileId: Int64, resource: MediaResource?)
-        /// An older bundled tone, by file name. iOS plays its default sound if the file is missing,
-        /// as it does for Telegram's push naming the same file.
-        case named(String)
+        /// Telegram's own 0.m4a, the one tone the app carries: for a tone that cannot be had —
+        /// one missing from the account's list, or one of the old built-in tones, whose files
+        /// this version of Telegram no longer ships.
+        case telegramDefault
     }
 
     /// At most this many notifications for one delivery: a backlog fetched after a long break comes
@@ -444,12 +446,6 @@ final class AorusBackgroundNotifier {
         |> deliverOnMainQueue).startStrict(next: { [weak self] activeAccounts in
             self?.updateAccounts(primary: activeAccounts.primary?.id, accounts: activeAccounts.accounts.map { $0.1 })
         })
-        // The sender photos an earlier version kept for its notifications are not used any more.
-        DispatchQueue.global(qos: .utility).async {
-            if let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent("aorus-notification-photos", isDirectory: true), FileManager.default.fileExists(atPath: directory.path) {
-                let _ = try? FileManager.default.removeItem(at: directory)
-            }
-        }
     }
 
     deinit {
@@ -985,35 +981,36 @@ final class AorusBackgroundNotifier {
         switch sound {
         case .none:
             return .none
-        case .default:
-            return .named("default")
-        case let .bundledModern(id):
-            return .named("\(id + 100).m4a")
-        case let .bundledClassic(id):
-            return .named("\(id + 2).m4a")
+        case .default, .bundledModern, .bundledClassic:
+            return .telegramDefault
         case let .cloud(fileId):
             let resource = _internal_cachedNotificationSoundList(transaction: transaction)?.sounds.first(where: { $0.file.fileId.id == fileId })?.file.resource
             return .cloud(fileId: fileId, resource: resource)
         }
     }
 
-    /// The tone as iOS plays it: a cloud tone is copied into the app group's Library/Sounds as
-    /// `<file id>.mp3`, exactly where Telegram's notification service puts it, downloaded first
-    /// (for up to three seconds) if it is not on the device yet. A tone the account does not
-    /// have plays Telegram's 0.m4a, as its pushes do.
+    /// The tone as iOS plays it: a cloud tone is copied as `<file id>.mp3`, the name Telegram's
+    /// notification service gives it, into the app's own Library/Sounds, downloaded first (for up
+    /// to three seconds) if it is not on the device yet. A tone the account does not have plays
+    /// Telegram's 0.m4a, as its pushes do.
+    ///
+    /// The app's own Library/Sounds is where iOS always looks for the sound of a notification the
+    /// app posts. The app group's, where the notification service puts it, exists only when the
+    /// signature carries the group: a re-signed build keeps Telegram's data in a folder of its
+    /// own instead (AorusgramGroupFallback), where iOS never looks, and a tone copied beside it
+    /// was never played — each notification came with the system's sound.
     private static func resolveTone(_ tone: Tone, account: Account, completion: @escaping (UNNotificationSound?) -> Void) {
         switch tone {
         case .none:
             completion(nil)
-        case let .named(name):
-            completion(name == "default" ? UNNotificationSound.default : UNNotificationSound(named: UNNotificationSoundName(rawValue: name)))
+        case .telegramDefault:
+            completion(AorusBackgroundNotifier.telegramDefaultSound)
         case let .cloud(fileId, resource):
-            guard let resource else {
-                completion(UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a")))
+            guard let resource, let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first else {
+                completion(AorusBackgroundNotifier.telegramDefaultSound)
                 return
             }
-            let rootPath = (account.basePath as NSString).deletingLastPathComponent
-            let soundsPath = ((rootPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("Library/Sounds")
+            let soundsPath = library.appendingPathComponent("Sounds", isDirectory: true).path
             let fileName = "\(fileId).mp3"
             let filePath = (soundsPath as NSString).appendingPathComponent(fileName)
             let sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: fileName))
@@ -1048,6 +1045,9 @@ final class AorusBackgroundNotifier {
             })
         }
     }
+
+    /// Telegram's 0.m4a, in the app's bundle.
+    private static let telegramDefaultSound = UNNotificationSound(named: UNNotificationSoundName(rawValue: "0.m4a"))
 
     /// Whether Telegram's passcode is locked now, read the way its notification extension reads it.
     private static func appIsLocked(rootPath: String) -> Bool {
