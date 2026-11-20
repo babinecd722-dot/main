@@ -444,14 +444,21 @@ public enum AorusAccountImport {
         let controller: ViewController
         let disposable = MetaDisposable()
         private(set) var isCancelled = false
+        /// Run once when the user cancels, so a phase that is waiting rather than looping — the
+        /// readiness wait after commit — still tears down and reports instead of hanging.
+        var onCancel: (() -> Void)?
 
         init(controller: ViewController) {
             self.controller = controller
         }
 
         func cancel() {
+            guard !self.isCancelled else { return }
             self.isCancelled = true
             self.disposable.dispose()
+            let onCancel = self.onCancel
+            self.onCancel = nil
+            onCancel?()
         }
 
         func dismiss() {
@@ -616,32 +623,65 @@ public enum AorusAccountImport {
             }
             let rootPath = (context.account.basePath as NSString).deletingLastPathComponent
 
-            var remaining = pending
             var added: [AorusImportedAccountInfo] = []
             var issues = issues
             // The accounts known to be here: the open ones, plus each one this batch adds, with
             // the environment it was imported into. The record write checks again under its
             // transaction, so this only saves a round-trip for the same account picked twice.
             var known = existing
+            // Walked by index rather than removing the front of the array each time: a large batch
+            // would otherwise shift every remaining element on every account.
+            var index = 0
+            var reported = false
+
+            func report(cancelled: Bool) {
+                guard !reported else { return }
+                reported = true
+                self.isReading = false
+                progress.dismiss()
+                if !added.isEmpty {
+                    UINotificationFeedbackGenerator().notificationOccurred((issues.isEmpty && !cancelled) ? .success : .warning)
+                } else if !cancelled {
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                }
+                self.presentReport(ImportReport(added: added, issues: issues, skippedAccounts: skippedAccounts, cancelled: cancelled), context: context, controller: controller)
+            }
+            // A cancel while the batch is waiting rather than looping (the readiness wait below)
+            // still tears down and reports what was added.
+            progress.onCancel = { report(cancelled: true) }
+
+            // The success is not announced until the added accounts actually appear among the
+            // open ones, so the toast does not land while their rows are not yet there. The record
+            // is written; this only waits for Telegram's own reactive path to open it, and gives
+            // up after a bounded time with an honest result rather than blocking.
+            func finishWhenReady() {
+                guard !added.isEmpty, !progress.isCancelled else {
+                    report(cancelled: progress.isCancelled)
+                    return
+                }
+                let wanted = Set(added.map { $0.peerId })
+                let ready = context.sharedContext.activeAccountsWithInfo
+                |> map { value -> Bool in
+                    wanted.isSubset(of: Set(value.accounts.map { $0.peer.id }))
+                }
+                |> filter { $0 }
+                |> take(1)
+                |> map { _ in true }
+                |> timeout(20.0, queue: Queue.mainQueue(), alternate: .single(false))
+                |> deliverOnMainQueue
+                progress.disposable.set(ready.startStrict(next: { _ in
+                    report(cancelled: progress.isCancelled)
+                }))
+            }
+
             func step() {
-                if progress.isCancelled {
-                    self.isReading = false
-                    progress.dismiss()
-                    self.presentReport(ImportReport(added: added, issues: issues, skippedAccounts: skippedAccounts, cancelled: true), context: context, controller: controller)
+                if progress.isCancelled { return }
+                guard index < pending.count else {
+                    finishWhenReady()
                     return
                 }
-                guard !remaining.isEmpty else {
-                    self.isReading = false
-                    progress.dismiss()
-                    if !added.isEmpty {
-                        UINotificationFeedbackGenerator().notificationOccurred(issues.isEmpty ? .success : .warning)
-                    } else {
-                        UINotificationFeedbackGenerator().notificationOccurred(.error)
-                    }
-                    self.presentReport(ImportReport(added: added, issues: issues, skippedAccounts: skippedAccounts, cancelled: false), context: context, controller: controller)
-                    return
-                }
-                let candidate = remaining.removeFirst()
+                let candidate = pending[index]
+                index += 1
                 let environmentIsTesting = candidate.session.isTestingEnvironment
                 progress.disposable.set((aorusImportSession(
                     accountManager: context.sharedContext.accountManager,

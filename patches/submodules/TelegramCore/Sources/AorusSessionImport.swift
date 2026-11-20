@@ -51,10 +51,15 @@ public struct AorusImportedSession {
         return value > 0 && value <= self.maximumUserId
     }
 
-    /// A key is 2048 bits, its datacenter is one of Telegram's, and an account it names is one a
-    /// Telegram user id can be.
+    /// A key is 2048 bits, not all zero, its datacenter is one of Telegram's, and an account it
+    /// names is one a Telegram user id can be. The all-zero check is the same one the clients make:
+    /// Telethon writes an auth key only when some byte of it is set, so an all-zero key is an empty
+    /// slot, not a login, and is refused here rather than sent to the server to be refused there.
     public var isWellFormed: Bool {
         guard self.authKey.count == 256 && self.dcId >= 1 && self.dcId <= 10 else {
+            return false
+        }
+        guard self.authKey.contains(where: { $0 != 0 }) else {
             return false
         }
         if let userId = self.userId, !AorusImportedSession.isValidUserId(userId) {

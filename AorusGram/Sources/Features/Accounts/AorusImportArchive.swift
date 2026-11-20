@@ -73,6 +73,60 @@ public enum AorusImportArchive {
         let compressedSize: Int
         let localOffset: Int
         let crc: UInt32
+        /// The entry's own last-modified time, as the archive records it, so an extracted file
+        /// keeps it rather than taking the moment it was unpacked. Telegram Desktop picks the
+        /// newest of two legacy key files (`key_data0` / `key_data1`) by modification date, so a
+        /// file whose date became "now" on extraction would make that choice follow the unzip
+        /// order instead of the original. Nil when the archive records no usable date.
+        let modificationDate: Date?
+    }
+
+    /// An entry's last-modified time from its central-directory record: the Unix "extended
+    /// timestamp" extra field (0x5455) when present — it is UTC and to the second — otherwise the
+    /// MS-DOS date and time every archive carries, which has a two-second resolution and no zone
+    /// but still orders two files written at different times correctly.
+    private static func modificationDate(dosTime: UInt32, dosDate: UInt32, extra: Data) -> Date? {
+        if let unix = unixExtendedModificationDate(extra) {
+            return unix
+        }
+        return dosModificationDate(time: dosTime, date: dosDate)
+    }
+
+    private static func unixExtendedModificationDate(_ extra: Data) -> Date? {
+        let bytes = [UInt8](extra)
+        var cursor = 0
+        while cursor + 4 <= bytes.count {
+            let id = Int(bytes[cursor]) | (Int(bytes[cursor + 1]) << 8)
+            let size = Int(bytes[cursor + 2]) | (Int(bytes[cursor + 3]) << 8)
+            let dataStart = cursor + 4
+            guard dataStart + size <= bytes.count else { break }
+            // 0x5455: flags byte, then the modification time (if its flag bit is set) as a
+            // little-endian signed 32-bit Unix timestamp.
+            if id == 0x5455, size >= 5, bytes[dataStart] & 0x01 != 0 {
+                let raw = UInt32(bytes[dataStart + 1])
+                    | (UInt32(bytes[dataStart + 2]) << 8)
+                    | (UInt32(bytes[dataStart + 3]) << 16)
+                    | (UInt32(bytes[dataStart + 4]) << 24)
+                return Date(timeIntervalSince1970: TimeInterval(Int32(bitPattern: raw)))
+            }
+            cursor = dataStart + size
+        }
+        return nil
+    }
+
+    private static func dosModificationDate(time: UInt32, date: UInt32) -> Date? {
+        guard date != 0 else { return nil }
+        var components = DateComponents()
+        components.second = Int(time & 0x1F) * 2
+        components.minute = Int((time >> 5) & 0x3F)
+        components.hour = Int((time >> 11) & 0x1F)
+        components.day = Int(date & 0x1F)
+        components.month = Int((date >> 5) & 0x0F)
+        components.year = Int((date >> 9) & 0x7F) + 1980
+        guard let day = components.day, day >= 1, let month = components.month, month >= 1 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? calendar.timeZone
+        return calendar.date(from: components)
     }
 
     private static func number(_ data: Data, _ offset: Int, _ bytes: Int) throws -> UInt32 {
@@ -146,12 +200,17 @@ public enum AorusImportArchive {
             guard try number(data, cursor, 4) == 0x02014b50 else { throw fail("Invalid directory entry") }
             let flags = Int(try number(data, cursor + 8, 2))
             let method = Int(try number(data, cursor + 10, 2))
+            let dosTime = try number(data, cursor + 12, 2)
+            let dosDate = try number(data, cursor + 14, 2)
             let compressed = Int(try number(data, cursor + 20, 4))
             let size = Int(try number(data, cursor + 24, 4))
             let nameSize = Int(try number(data, cursor + 28, 2))
-            let length = 46 + nameSize + Int(try number(data, cursor + 30, 2)) + Int(try number(data, cursor + 32, 2))
+            let extraSize = Int(try number(data, cursor + 30, 2))
+            let length = 46 + nameSize + extraSize + Int(try number(data, cursor + 32, 2))
             guard length <= bounds.end - cursor else { throw fail("Truncated directory entry") }
             guard let name = entryName(data.subdata(in: base + cursor + 46..<base + cursor + 46 + nameSize), flags: flags) else { throw fail("Damaged entry name") }
+            let extraStart = base + cursor + 46 + nameSize
+            let extra = data.subdata(in: extraStart..<extraStart + extraSize)
             let mode = try number(data, cursor + 38, 4) >> 16
             result.append(Record(
                 name: name,
@@ -162,7 +221,8 @@ public enum AorusImportArchive {
                 size: size,
                 compressedSize: compressed,
                 localOffset: Int(try number(data, cursor + 42, 4)),
-                crc: try number(data, cursor + 16, 4)
+                crc: try number(data, cursor + 16, 4),
+                modificationDate: Self.modificationDate(dosTime: dosTime, dosDate: dosDate, extra: extra)
             ))
             cursor += length
         }
@@ -308,6 +368,12 @@ public enum AorusImportArchive {
             let target = name.split(separator: "/").reduce(destination) { $0.appendingPathComponent(String($1)) }
             try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             try writeEntry(zip, start: start, record: record, to: target, scratch: scratch)
+            // Keep the entry's own date, so a reader that chooses between files by modification
+            // time — Telegram Desktop's legacy key generations — sees the original order, not the
+            // order these were unpacked in.
+            if let date = record.modificationDate {
+                try? manager.setAttributes([.modificationDate: date], ofItemAtPath: target.path)
+            }
             written.append(name)
         }
         return written

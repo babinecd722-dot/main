@@ -55,6 +55,10 @@ def check(repo: Path) -> list[str]:
         err.append("AorusSessionImport: a session is no longer checked for a 256-byte key and a real datacenter")
     if "guard session.isWellFormed else" not in core_body:
         err.append("AorusSessionImport: aorusImportSession no longer refuses a malformed session")
+    # An all-zero key is an empty slot, not a login; it is refused before the network, the same
+    # way the clients only write a key when some byte of it is set.
+    if "self.authKey.contains(where: { $0 != 0 })" not in core_body:
+        err.append("AorusSessionImport: an all-zero auth key is no longer rejected")
     for label, body in (("AorusTDataReader", tdata_body), ("AorusSessionFileReader", sessions_body)):
         if "authKeySize = 256" not in body:
             err.append(f"{label}: the 256-byte key size is no longer stated")
