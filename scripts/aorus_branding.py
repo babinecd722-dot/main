@@ -21238,6 +21238,30 @@ private func aorusBubbleDrawsOutline(_ type: ChatMessageBackgroundType, dark: Bo
 }
 """
 
+_AORUS_MESSAGE_GRADIENT_MASK_HELPER = r"""
+
+// AorusGram: bubbles a person, or a style, filled with a gradient. The gradient is drawn behind
+// the bubble and cut to its shape. Out of mask mode Telegram does the cutting with an image of
+// the bubble laid on a rectangle painted the plain wallpaper's colour -- right only while that
+// very colour is all that lies behind the bubble. Anywhere else the rectangle's corners showed
+// as square ones in the wallpaper's colour, black on a dark theme: a message with a reaction,
+// the backdrop of its menu, a wallpaper of AorusGram's own. Mask mode, which every picture
+// wallpaper and Message Settings' preview already use, cuts the gradient by the bubble's own
+// shape and paints nothing around it.
+private func aorusBubbleGradientNeedsMask(dark: Bool) -> Bool {
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return false
+    }
+    for key in ["bubble.incoming.fill", "bubble.outgoing.fill"] {
+        if let fill = AorusPluginAppearanceValues.colors(key, dark: dark, in: values), fill.count > 1 {
+            return true
+        }
+    }
+    return false
+}
+"""
+
 _AORUS_MESSAGE_AVATAR_HELPER = r"""
 
 // AorusGram: no avatars beside messages in groups, when the person turned them off in
@@ -21430,6 +21454,18 @@ def patch_message_shape_and_layout(tg: Path) -> None:
                 raise RuntimeError(f"MessageLayout: bubble anchor found {b.count(old)} times: {old.strip()[:80]!r}")
             b = b.replace(old, new, 1)
         b = b.rstrip("\n") + "\n" + _AORUS_MESSAGE_LAYOUT_HELPERS
+        bubble.write_text(b, encoding="utf-8")
+    b = bubble.read_text(encoding="utf-8")
+    if "aorusBubbleGradientNeedsMask(" not in b:
+        # A gradient fill is cut to the bubble's shape. Out of mask mode Telegram cuts it with an
+        # image of the bubble on a rectangle painted the plain wallpaper's colour, and that
+        # rectangle's corners show wherever anything but that colour is behind the bubble.
+        old = "        return self.mainContextSourceNode.isExtractedToContextPreview || hasWallpaper || isPreview || !self.disablesComments\n"
+        new = ("        // AorusGram: a gradient fill set in Message Settings or by a style is cut by the bubble's own shape.\n"
+               "        return self.mainContextSourceNode.isExtractedToContextPreview || hasWallpaper || isPreview || !self.disablesComments || aorusBubbleGradientNeedsMask(dark: self.item?.presentationData.theme.theme.overallDarkAppearance ?? false)\n")
+        if b.count(old) != 1:
+            raise RuntimeError(f"MessageShape: bubble mask mode anchor found {b.count(old)} times")
+        b = b.replace(old, new, 1).rstrip("\n") + "\n" + _AORUS_MESSAGE_GRADIENT_MASK_HELPER
         bubble.write_text(b, encoding="utf-8")
 
     item = tg / "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatMessageItemImpl.swift"

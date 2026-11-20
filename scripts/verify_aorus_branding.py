@@ -4911,6 +4911,8 @@ def main() -> None:
         # Shadows and outlines that were set are drawn on any wallpaper.
         ("submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift", "if hasWallpaper || aorusBubbleDrawsShadow(type) {"),
         ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "hasWallpaper: hasWallpaper || aorusBubbleDrawsOutline(backgroundType, dark: item.presentationData.theme.theme.overallDarkAppearance)"),
+        # A gradient fill is cut by the bubble's shape, never by a rectangle in the wallpaper's colour.
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "|| !self.disablesComments || aorusBubbleGradientNeedsMask(dark: self.item?.presentationData.theme.theme.overallDarkAppearance ?? false)"),
         # See-through bubbles show the wallpaper itself, not a dimmed copy of it.
         ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "return !hasPlainWallpaper && !aorusBubbleSeeThrough(bubbleTheme, incoming: true)"),
         ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "return !hasPlainWallpaper && !aorusBubbleSeeThrough(bubbleTheme, incoming: false)"),
