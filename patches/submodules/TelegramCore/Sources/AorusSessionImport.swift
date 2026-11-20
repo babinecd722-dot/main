@@ -190,10 +190,10 @@ public func aorusImportSession(
     guard session.isWellFormed else {
         return .fail(.invalidSession)
     }
-    return aorusResolveImportedSession(accountManager: accountManager, networkArguments: networkArguments, rootPath: rootPath, session: session)
-    |> mapToSignal { user -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
-        let title = user.debugDisplayTitle
-        if existingPeerIds.contains(user.id) {
+    // Writes the record. Shared by the two ways the account's own peer is learnt: from the
+    // server, when the key could be resolved, and from the file itself, when it could not be.
+    let add: (PeerId, String, String?) -> Signal<AorusImportedAccountInfo, AorusSessionImportError> = { peerId, title, username in
+        if existingPeerIds.contains(peerId) {
             return .fail(.duplicate(title: title))
         }
         var additionalDatacenterKeys: [Int32: AccountBackupData.DatacenterKey] = [:]
@@ -205,7 +205,7 @@ public func aorusImportSession(
         }
         let backupData = AccountBackupData(
             masterDatacenterId: session.dcId,
-            peerId: user.id.toInt64(),
+            peerId: peerId.toInt64(),
             masterDatacenterKey: session.authKey,
             masterDatacenterKeyId: aorusAuthKeyId(session.authKey),
             notificationEncryptionKeyId: nil,
@@ -227,8 +227,28 @@ public func aorusImportSession(
                 .sortOrder(AccountSortOrderAttribute(order: nextSortOrder)),
                 .backupData(AccountBackupDataAttribute(data: backupData))
             ])
-            return AorusImportedAccountInfo(recordId: recordId, peerId: user.id, title: title, username: user.username)
+            return AorusImportedAccountInfo(recordId: recordId, peerId: peerId, title: title, username: username)
         }
         |> castError(AorusSessionImportError.self)
+    }
+    return aorusResolveImportedSession(accountManager: accountManager, networkArguments: networkArguments, rootPath: rootPath, session: session)
+    |> mapToSignal { user -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
+        return add(user.id, user.debugDisplayTitle, user.username)
+    }
+    |> `catch` { error -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
+        // The server rejecting the key, or already holding the account, is final. But Telegram
+        // being out of reach for this one request -- a cold REALITY tunnel still coming up, a
+        // slow first handshake that runs past the timeout -- is not a reason to throw away a
+        // sound session. When the file names its own account (a Telegram Desktop tdata and most
+        // session strings do), the account is added from that id and connects on the app's own
+        // network, the one every other account uses, where the key is checked exactly as
+        // theirs is and a dead one is signed out rather than refused here. A key that names no
+        // account (a bare Telethon session) still needs the server to say whose it is, so that
+        // one keeps the network error.
+        guard case .network = error, let userId = session.userId, userId > 0 else {
+            return .fail(error)
+        }
+        let peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(userId))
+        return add(peerId, "", nil)
     }
 }

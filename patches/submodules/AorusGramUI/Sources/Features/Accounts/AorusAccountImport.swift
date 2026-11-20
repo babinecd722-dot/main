@@ -545,9 +545,16 @@ public enum AorusAccountImport {
 
     private static func presentSuccess(_ imported: [AorusImportedAccountInfo], context: AccountContext, controller: ViewController) {
         let text: String
-        if imported.count == 1, let account = imported.first {
+        let singleName: String? = imported.count == 1 ? imported.first.flatMap { account -> String? in
             let name = account.username.flatMap({ "@\($0)" }) ?? account.title
-            text = aorusL("Аккаунт %@ добавлен", "%@ has been added").replacingOccurrences(of: "%@", with: name)
+            return name.isEmpty ? nil : name
+        } : nil
+        if let singleName {
+            text = aorusL("Аккаунт %@ добавлен", "%@ has been added").replacingOccurrences(of: "%@", with: singleName)
+        } else if imported.count == 1 {
+            // Added from the file itself, its name not yet learnt from Telegram: it fills in when
+            // the account syncs, which is better than naming it with a placeholder now.
+            text = aorusL("Аккаунт добавлен", "Account added")
         } else {
             text = aorusL("Добавлено аккаунтов: %@", "Accounts added: %@").replacingOccurrences(of: "%@", with: "\(imported.count)")
         }

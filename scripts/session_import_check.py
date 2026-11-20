@@ -76,8 +76,16 @@ def check(repo: Path) -> list[str]:
             err.append("AorusSessionImport: the probe must not open a postbox")
 
     # An account already here is reported, never added twice.
-    if "existingPeerIds.contains(user.id)" not in core_body or ".duplicate" not in core_body:
+    if "existingPeerIds.contains(peerId)" not in core_body or ".duplicate" not in core_body:
         err.append("AorusSessionImport: an account already on the device is no longer reported as a duplicate")
+
+    # Telegram being unreachable for the one probe request does not throw away a sound session
+    # that names its own account: it is added and connects on the app's own network. Only a key
+    # the server refuses, or a session that names no account, keeps the error.
+    if "`catch`" not in core_body or "case .network = error, let userId = session.userId" not in core_body:
+        err.append("AorusSessionImport: a network failure during the probe is no longer tolerated for a self-identifying session")
+    if "PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(userId))" not in core_body:
+        err.append("AorusSessionImport: the file's own account id is no longer used when the probe cannot reach Telegram")
 
     # The record Telegram opens as an authorized account.
     for needle in (".environment(AccountEnvironmentAttribute", ".sortOrder(AccountSortOrderAttribute", ".backupData(AccountBackupDataAttribute"):
