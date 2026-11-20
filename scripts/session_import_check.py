@@ -344,8 +344,12 @@ def test_progress_controller(repo: Path, swiftc: str) -> None:
 
     source = (repo / "patches/submodules/AorusGramUI/Sources/Features/Accounts/AorusAccountImport.swift").read_text()
     # The reading guard, the shared cancellable progress, and the overlay's cancel wiring are one
-    # unit: pull all three in and exercise them against stubs.
-    progress_class = block(source, "    private final class ImportProgress {")
+    # unit: pull all three in and exercise them against stubs. The class is private where it lives
+    # (inside the import enum); here the test code sits beside it rather than within it, so it is
+    # lifted to internal — the same body, reachable from the harness.
+    progress_class = block(source, "    private final class ImportProgress {").replace(
+        "private final class ImportProgress", "final class ImportProgress", 1
+    )
     make_progress = block(source, "    private static func makeProgress(").replace("private static func", "static func", 1)
     begin_reading = block(source, "    private static func beginReading(").replace("private static func", "static func", 1)
     finish_reading = block(source, "    private static func finishReading(").replace("private static func", "static func", 1)
