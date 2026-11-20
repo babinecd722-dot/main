@@ -4719,7 +4719,11 @@ def main() -> None:
     for relative, markers in (
         ("submodules/TelegramCore/Sources/AorusEditHistory.swift", ("public static func migrateLegacy(postbox: Postbox)", "!newEdit.isHidden")),
         ("submodules/TelegramUI/Sources/AorusEditHistoryScreen.swift", ("public final class AorusEditHistoryChatContents", "public func openAorusEditHistory(")),
-        ("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift", ("// AorusGram: edit history v1", "let aorusHistory = aorusContents as? AorusEditHistoryChatContents", "// AorusGram: one-time round video save v1")),
+        ("submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift", ("// AorusGram: edit history v1", "let aorusHistory = aorusContents as? AorusEditHistoryChatContents", "// AorusGram: one-time media unlocked v1", "(!message.containsSecretMedia || aorusOneTimeUnlocked(message)) && !isCopyProtected", "(!message.containsSecretMedia || aorusOneTimeUnlocked(message)) && !isAction")),
+        ("submodules/TelegramUI/Sources/ChatHistoryListNode.swift", ("AorusGram: a one-time item playing in the chat is the playing message.",)),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageInstantVideoBubbleContentNode/Sources/ChatMessageInstantVideoBubbleContentNode.swift", ("(aorusOneTimeInChat && item.associatedData.currentlyPlayingMessageId == item.message.index)",)),
+        ("submodules/TelegramCore/Sources/AorusAntiSearch.swift", ("sourceMessage.minAutoremoveOrClearTimeout == viewOnceTimeout",)),
+        ("submodules/TelegramUI/Sources/ChatControllerForwardMessages.swift", ("// AorusGram: hide-name forward default v2", "let aorusHideNames = aorusTakeHideNamesRequest()")),
         ("submodules/TelegramUI/Sources/ChatControllerContentData.swift", ("customChatContents as? AorusEditHistoryChatContents",)),
         ("submodules/TelegramUI/Sources/AppDelegate.swift", ("AorusEditHistory.migrateLegacy(postbox: context.context.account.postbox)",)),
         ("submodules/TelegramUI/Components/Chat/ChatMessageInteractiveInstantVideoNode/Sources/ChatMessageInteractiveInstantVideoNode.swift", ("|| item.associatedData.isStandalone || aorusOneTimeInChat {",)),
@@ -4735,9 +4739,9 @@ def main() -> None:
         err.append("AorusAI: missing ChatInterfaceStateContextMenus.swift")
     else:
         ai_menu_text = ai_menu_host.read_text(encoding="utf-8")
-        if "// AorusGram: AorusAI message action v7" not in ai_menu_text:
-            err.append("AorusAI: single-sheet message menu hand-off (v7) was not integrated")
-        for legacy in ("v1", "v2", "v3", "v4", "v5", "v6"):
+        if "// AorusGram: AorusAI message action v8" not in ai_menu_text:
+            err.append("AorusAI: single-sheet message menu hand-off (v8) was not integrated")
+        for legacy in ("v1", "v2", "v3", "v4", "v5", "v6", "v7"):
             if f"// AorusGram: AorusAI message action {legacy}" in ai_menu_text:
                 err.append(f"AorusAI: legacy message action ({legacy}) is still present")
         for removed in ("aorusAIOpenMessageActions", "aorusAIMessageMenuSections()"):
@@ -4746,7 +4750,7 @@ def main() -> None:
         # The generated block, bounded by its sentinel and the native anchor it precedes.
         # Everything below is asserted inside it: the file's own native menu code also
         # pushes levels, and those must not be touched.
-        ai_menu_index = ai_menu_text.find("// AorusGram: AorusAI message action v7")
+        ai_menu_index = ai_menu_text.find("// AorusGram: AorusAI message action v8")
         if ai_menu_index >= 0:
             ai_menu_end = ai_menu_text.find("if !isReplyThreadHead, (!data.messageActions.options", ai_menu_index)
             ai_menu_block = ai_menu_text[ai_menu_index:ai_menu_end if ai_menu_end > ai_menu_index else ai_menu_index + 6000]
@@ -4766,6 +4770,40 @@ def main() -> None:
                 err.append("AorusAI: message menu icons are not tinted through generateTintedImage")
             if "aorusAIMessageMenuIconName()" not in ai_menu_block:
                 err.append("AorusAI: message menu row does not use the native AorusAI bundle icon")
+
+    # The message menu ends as Telegram ends it -- Delete, one separator, Select -- with every
+    # AorusGram row in one group above it, Hide Name under Forward and plugin rows last.
+    menu_host = tg / "submodules" / "TelegramUI" / "Sources" / "ChatInterfaceStateContextMenus.swift"
+    if menu_host.is_file():
+        menu_text = menu_host.read_text(encoding="utf-8")
+        group_markers = (
+            "        // AorusGram: wall post actions\n",
+            "        // AorusGram: AorusAI message action v8\n",
+            "        // AorusGram: edit locally v3\n",
+            "        // AorusGram: edit history v1\n",
+            "        // AorusGram: media metadata v1\n",
+            "        // AorusGram: user messages v1\n",
+            "        // AorusGram plugins: declarative context actions\n",
+        )
+        positions = [menu_text.find(marker) for marker in group_markers]
+        group_end = menu_text.find("        if let aorusWallContents {\n")
+        reply = menu_text.find("Conversation_ContextMenuReply, icon:")
+        forward = menu_text.find("        if data.messageActions.options.contains(.forward) {\n            if !isCopyProtected {\n")
+        hide_name = menu_text.find("        // AorusGram: hide-name forward v1\n")
+        if min(positions) < 0 or group_end < 0 or reply < 0 or forward < 0 or hide_name < 0:
+            err.append("MessageMenu: a row of the message menu is missing")
+        else:
+            if positions != sorted(positions) or positions[-1] > group_end:
+                err.append("MessageMenu: AorusGram rows are not in one ordered group above Delete")
+            if min(positions) < reply:
+                err.append("MessageMenu: an AorusGram row stands above Reply")
+            if "actions.append(.separator)" in menu_text[positions[0]:group_end]:
+                err.append("MessageMenu: an AorusGram row adds a separator of its own")
+            if not forward < hide_name < menu_text.find("Conversation_ContextMenuReport, icon:", forward):
+                err.append("MessageMenu: Hide Name does not follow Forward")
+            metadata = menu_text[positions[4]:positions[5]]
+            if "c?.dismiss(completion:" not in metadata or "asyncAfter" in metadata:
+                err.append("MessageMenu: Metadata opens before the menu is gone")
 
     # Poll results seen before voting: Telegram's own results, faint, until the vote is in.
     poll_bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessagePollBubbleContentNode/Sources/ChatMessagePollBubbleContentNode.swift"

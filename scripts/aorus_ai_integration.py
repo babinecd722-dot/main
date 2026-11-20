@@ -104,13 +104,90 @@ def patch_settings(root: Path) -> None:
     items.write_text(value, encoding="utf-8")
 
 
+# The message menu ends the way Telegram ends it: Delete, one separator, Select. Every row
+# AorusGram adds sits above that separator, as one group after Telegram's own rows, in the
+# order below; Hide Name is a way of forwarding, so it follows Forward instead. Each row is
+# injected by its own pass, at whatever anchor that pass knows; this one runs after all of
+# them and puts the rows where they belong. None of them adds a separator of its own.
+MENU_WALL_STATE = "        // AorusGram: wall post actions\n"
+MENU_PLUGINS = "        // AorusGram plugins: declarative context actions\n"
+MENU_HIDE_NAME = "        // AorusGram: hide-name forward v1\n"
+MENU_GROUP_ORDER = (
+    # Declarations only. First, because the rows below read them.
+    MENU_WALL_STATE,
+    "        // AorusGram: AorusAI message action v8\n",
+    "        // AorusGram: edit locally v3\n",
+    "        // AorusGram: edit history v1\n",
+    "        // AorusGram: media metadata v1\n",
+    "        // AorusGram: user messages v1\n",
+    # Rows a plugin adds come after everything AorusGram itself offers.
+    MENU_PLUGINS,
+)
+MENU_GROUP_END = "        if let aorusWallContents {\n"
+MENU_NATIVE_FORWARD = (
+    "        if data.messageActions.options.contains(.forward) {\n"
+    "            if !isCopyProtected {\n"
+    "                actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuForward, icon: { theme in\n"
+    "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.actionSheet.primaryTextColor)\n"
+    "                }, action: { _, f in\n"
+    "                    interfaceInteraction.forwardMessages(selectAll || isImage ? messages : [message])\n"
+    "                    f(.dismissWithoutContent)\n"
+    "                })))\n"
+    "            }\n"
+    "        }\n"
+)
+
+
+def _cut(value: str, start: int, end: int) -> tuple:
+    """Removes value[start:end] and the blank lines after it; returns (rest, block)."""
+    block = value[start:end].rstrip("\n") + "\n"
+    return value[:start] + value[end:].lstrip("\n"), block
+
+
+def arrange_message_menu(value: str) -> str:
+    for sentinel in MENU_GROUP_ORDER + (MENU_HIDE_NAME,):
+        if value.count(sentinel) != 1:
+            raise RuntimeError(f"AorusAI: menu block {sentinel.strip()!r} found {value.count(sentinel)} times")
+    if value.count(MENU_GROUP_END) != 1 or value.count(MENU_NATIVE_FORWARD) != 1:
+        raise RuntimeError("AorusAI: Delete or Forward of the message menu not found")
+
+    blocks = {}
+    # The plugin rows are one statement, wherever they stand (they were placed above Reply).
+    start = value.index(MENU_PLUGINS)
+    end = value.index("\n", value.index("aorusPluginMessageContextMenuItems(", start)) + 1
+    value, blocks[MENU_PLUGINS] = _cut(value, start, end)
+    # Hide Name is one `if`, closed by the first brace back at its own indentation.
+    start = value.index(MENU_HIDE_NAME)
+    end = value.index("\n        }\n", start) + len("\n        }\n")
+    value, hide_name = _cut(value, start, end)
+
+    # The rest stand together above Delete; each runs from its sentinel to the next one.
+    group = MENU_GROUP_ORDER[:-1]
+    group_end = value.index(MENU_GROUP_END)
+    if any(value.index(sentinel) > group_end for sentinel in group):
+        raise RuntimeError("AorusAI: an AorusGram menu row is not above Delete")
+    for sentinel in group:
+        start = value.index(sentinel)
+        ends = [value.find(stop, start + len(sentinel)) for stop in group + (MENU_GROUP_END,)]
+        value, blocks[sentinel] = _cut(value, start, min(end for end in ends if end >= 0))
+
+    insert_at = value.index(MENU_GROUP_END)
+    head = value[:insert_at].rstrip("\n ") + "\n\n"
+    value = head + "\n".join(blocks[sentinel] for sentinel in MENU_GROUP_ORDER) + "\n" + value[insert_at:]
+
+    forward_end = value.index(MENU_NATIVE_FORWARD) + len(MENU_NATIVE_FORWARD)
+    value = value[:forward_end] + "\n" + hide_name + value[forward_end:].lstrip("\n")
+    return value
+
+
 def patch_context_menu(root: Path) -> None:
     path = root / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
     if not path.is_file():
         raise RuntimeError(f"AorusAI: missing {path}")
     value = path.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: AorusAI message action v7"
+    sentinel = "// AorusGram: AorusAI message action v8"
     if sentinel in value:
+        path.write_text(arrange_message_menu(value), encoding="utf-8")
         return
     if "import AorusGramUI\n" not in value:
         value = replace_once(value, "import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", "AorusGramUI import")
@@ -130,6 +207,7 @@ def patch_context_menu(root: Path) -> None:
         "        // AorusGram: AorusAI message action v4\n",
         "        // AorusGram: AorusAI message action v5\n",
         "        // AorusGram: AorusAI message action v6\n",
+        "        // AorusGram: AorusAI message action v7\n",
     ):
         legacy_index = value.find(legacy_sentinel)
         if legacy_index < 0:
@@ -172,7 +250,6 @@ def patch_context_menu(root: Path) -> None:
         "                    )\n"
         "                })\n"
         "            })))\n"
-        "            actions.append(.separator)\n"
         "        }\n"
         # A voice message carries no text, so the block above never offered the menu on
         # one. It is transcribed on the device first and the transcript becomes the
@@ -208,12 +285,11 @@ def patch_context_menu(root: Path) -> None:
         "                        )\n"
         "                    })\n"
         "                })))\n"
-        "                actions.append(.separator)\n"
         "            }\n"
         "        }\n"
     )
     value = replace_once(value, anchor, block + anchor, "message context menu")
-    path.write_text(value, encoding="utf-8")
+    path.write_text(arrange_message_menu(value), encoding="utf-8")
 
 
 def main() -> None:

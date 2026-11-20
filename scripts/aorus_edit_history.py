@@ -196,39 +196,76 @@ def patch_one_time_round_video(tg: Path, licensed_once: str, license_lock_key: s
         )
         node.write_text(t, encoding="utf-8")
 
+    # Playing in the chat, a one-time recording is the message being played, as any other
+    # is: Telegram reports none while a one-time item plays, because its own viewer plays
+    # it outside the chat. A round video then grows to full size like any other.
+    in_chat = (
+        f"!UserDefaults.standard.bool(forKey: \"{license_lock_key}\") "
+        "&& !UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\")"
+    )
+    history = tg / "submodules/TelegramUI/Sources/ChatHistoryListNode.swift"
+    t = history.read_text(encoding="utf-8")
+    if "AorusGram: a one-time item playing in the chat" not in t:
+        t = _edit(
+            t,
+            "            if let source = currentItem?.playbackData?.source, case let .telegramFile(_, _, isViewOnce) = source, isViewOnce {\n",
+            "            // AorusGram: a one-time item playing in the chat is the playing message.\n"
+            f"            if let source = currentItem?.playbackData?.source, case let .telegramFile(_, _, isViewOnce) = source, isViewOnce, !({in_chat}) {{\n",
+            "one-time playing message",
+        )
+        history.write_text(t, encoding="utf-8")
+
+    bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessageInstantVideoBubbleContentNode/Sources/ChatMessageInstantVideoBubbleContentNode.swift"
+    t = bubble.read_text(encoding="utf-8")
+    if "aorusOneTimeInChat" not in t:
+        t = _edit(
+            t,
+            "            if (item.associatedData.currentlyPlayingMessageId == item.message.index || forceIsPlaying) && (!isViewOnceMessage || item.associatedData.isStandalone) {\n",
+            "            // AorusGram: a one-time round video playing in the chat grows like any other.\n"
+            f"            let aorusOneTimeInChat = isViewOnceMessage && !item.associatedData.isStandalone && {in_chat}\n"
+            "            if ((item.associatedData.currentlyPlayingMessageId == item.message.index || forceIsPlaying) && (!isViewOnceMessage || item.associatedData.isStandalone)) || (aorusOneTimeInChat && item.associatedData.currentlyPlayingMessageId == item.message.index) {\n",
+            "one-time round video size",
+        )
+        bubble.write_text(t, encoding="utf-8")
+
+    # Saved and forwarded from the menu like any other message: Telegram's own Save and
+    # Forward, which a one-time message never offered. A forward goes out as a fresh copy
+    # of the file the device already holds (AorusForwardBypass), so the server is never
+    # asked to forward the one-time original.
     menus = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
     t = menus.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: one-time round video save v1"
+    sentinel = "// AorusGram: one-time media unlocked v1"
     if sentinel not in t:
-        start = t.index("// AorusGram: media metadata v1")
-        end_marker = (
-            "                        AorusMediaMetadata.present(context: context, message: aorusMetaMsg)\n"
-            "                    }\n"
-            "                })))\n"
-            "            }\n"
-            "        }\n"
+        helper = (
+            sentinel + "\n"
+            "/// A one-time message the one-time media setting opens up. A secret chat's timed media\n"
+            "/// is not one-time and stays as Telegram keeps it.\n"
+            "func aorusOneTimeUnlocked(_ message: Message) -> Bool {\n"
+            f"    return message.minAutoremoveOrClearTimeout == viewOnceTimeout && {licensed_once}\n"
+            "}\n"
+            "\n"
         )
-        end = t.index(end_marker, start) + len(end_marker)
-        # Telegram's own Save Video, which a one-time message never offers: the file is
-        # already on the device once the video has played.
-        save = (
-            "        " + sentinel + "\n"
-            f"        if {licensed_once}, messages.count == 1, resourceAvailable, messages[0].minAutoremoveOrClearTimeout == viewOnceTimeout, let aorusRoundFile = messages[0].media.first(where: {{ ($0 as? TelegramMediaFile)?.isInstantVideo == true }}) as? TelegramMediaFile {{\n"
-            "            let aorusRoundMessageId = messages[0].id\n"
-            "            actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Gallery_SaveVideo, icon: { theme in\n"
-            "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Save\"), color: theme.actionSheet.primaryTextColor)\n"
-            "            }, action: { _, f in\n"
-            "                let _ = (saveToCameraRoll(context: context, userLocation: .peer(aorusRoundMessageId.peerId), mediaReference: FileMediaReference.standalone(media: aorusRoundFile).abstract)\n"
-            "                         |> deliverOnMainQueue).startStandalone(completed: {\n"
-            "                    Queue.mainQueue().after(0.2) {\n"
-            "                        let presentationData = context.sharedContext.currentPresentationData.with { $0 }\n"
-            "                        controllerInteraction.presentControllerInCurrent(UndoOverlayController(presentationData: presentationData, content: .mediaSaved(text: presentationData.strings.Gallery_VideoSaved), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return true }), nil)\n"
-            "                    }\n"
-            "                })\n"
-            "                f(.default)\n"
-            "            })))\n"
-            "        }\n"
-        )
-        t = t[:end] + save + t[end:]
+        anchor = "func chatAvailableMessageActionsImpl(engine: TelegramEngine,"
+        t = _edit(t, anchor, helper + anchor, "one-time helper")
+        for old, new, label in (
+            (
+                "        if resourceAvailable, !message.containsSecretMedia && !isCopyProtected {\n",
+                "        if resourceAvailable, (!message.containsSecretMedia || aorusOneTimeUnlocked(message)) && !isCopyProtected {\n",
+                "one-time save",
+            ),
+            (
+                "                if message.isCopyProtected() || message.containsSecretMedia {\n",
+                "                if message.isCopyProtected() || (message.containsSecretMedia && !aorusOneTimeUnlocked(message)) {\n",
+                "one-time copy protection",
+            ),
+            (
+                "message.id.peerId.namespace != Namespaces.Peer.SecretChat && !message.containsSecretMedia && !isAction && !message.id.peerId.isReplies",
+                "message.id.peerId.namespace != Namespaces.Peer.SecretChat && (!message.containsSecretMedia || aorusOneTimeUnlocked(message)) && !isAction && !message.id.peerId.isReplies",
+                "one-time forward",
+            ),
+        ):
+            if t.count(old) != 1:
+                raise RuntimeError(f"OneTimeRound: {label} anchor found {t.count(old)} times")
+            t = t.replace(old, new, 1)
         menus.write_text(t, encoding="utf-8")
-    print("OneTimeRound: video shown while it plays in the chat; Save Video under Metadata")
+    print("OneTimeRound: plays, grows, saves and forwards in the chat like any round video")

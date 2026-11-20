@@ -515,10 +515,17 @@ public enum AorusGlassProfileTint {
             return
         }
         // Capped so a session spent opening profiles cannot grow this without bound; a dropped
-        // entry only costs one resample.
-        if AorusGlassProfileTint.pageColors.count > 32 {
-            AorusGlassProfileTint.pageColors.removeAll()
-            AorusGlassProfileTint.pageImages.removeAll()
+        // entry only costs one resample. The peers seen longest ago go first: emptying the lot
+        // at the cap also took the pages of the profiles still open under this one, and their
+        // capsules and panes read the theme's colour until each was sampled again.
+        if let index = AorusGlassProfileTint.pageOrder.firstIndex(of: peerId) {
+            AorusGlassProfileTint.pageOrder.remove(at: index)
+        }
+        AorusGlassProfileTint.pageOrder.append(peerId)
+        while AorusGlassProfileTint.pageOrder.count > 32 {
+            let oldest = AorusGlassProfileTint.pageOrder.removeFirst()
+            AorusGlassProfileTint.pageColors.removeValue(forKey: oldest)
+            AorusGlassProfileTint.pageImages.removeValue(forKey: oldest)
         }
         AorusGlassProfileTint.pageColors[peerId] = sample.color
         if let image = sample.image {
@@ -709,6 +716,8 @@ public enum AorusGlassProfileTint {
     private static var pageColors: [Int64: UIColor] = [:]
     /// The stretched backdrop for each of those, dropped together with the colours.
     private static var pageImages: [Int64: UIImage] = [:]
+    /// The peers in `pageColors`, the one given a page longest ago first.
+    private static var pageOrder: [Int64] = []
     /// What each individual photo has sampled to so far, so paging back and forth costs nothing once
     /// the photo has settled.
     private static var sampledColors: [PhotoKey: Sample] = [:]
