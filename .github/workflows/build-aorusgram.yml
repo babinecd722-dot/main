@@ -316,6 +316,15 @@ jobs:
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             aorusgram/AorusGram/Sources/Features/Accounts/AccountBackupArchive.swift \
             aorusgram/AorusGram/Sources/Features/Accounts/AccountBackupManager.swift
+          # The restore applied at launch, run against real folders in every state a launch can
+          # find it in: finished, undone, deferred, or holding the launch until the user chooses.
+          swiftc \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            aorusgram/AorusGram/Sources/Features/Accounts/AccountBackupArchive.swift \
+            aorusgram/AorusGram/Sources/Features/Accounts/AccountBackupManager.swift \
+            aorusgram/scripts/tests/AorusRestoreJournalTests.swift \
+            -o /tmp/aorus-ai-preflight/restore-journal-tests
+          /tmp/aorus-ai-preflight/restore-journal-tests
           swiftc \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             aorusgram/AorusGram/Sources/Features/Subscription/SubscriptionL10nTable.swift \

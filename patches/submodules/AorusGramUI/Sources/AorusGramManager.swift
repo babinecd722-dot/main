@@ -262,7 +262,10 @@ public final class AorusGramManager {
         doubleTapCopy       = d["doubleTapCopy"]       as? Bool ?? false
         tripleTapDelete     = d["tripleTapDelete"]     as? Bool ?? false
         cacheAutoClean      = d["cacheAutoClean"]      as? Bool ?? false
-        cacheCleanInterval  = d["cacheCleanInterval"]  as? Int  ?? 24
+        // Bounded on the way in: a stored value out of range (a corrupt defaults file, a value
+        // from a build with a different slider) must never reach the hours×3600 that schedules the
+        // timer, where a large Int traps. 1 hour to a year is the slider's own range.
+        cacheCleanInterval  = min(8760, max(1, d["cacheCleanInterval"] as? Int ?? 24))
         performanceStatsEnabled = d["performanceStatsEnabled"] as? Bool ?? false
         performanceShowUptime   = d["performanceShowUptime"]   as? Bool ?? true
         performanceShowRAM      = d["performanceShowRAM"]      as? Bool ?? true
@@ -274,7 +277,9 @@ public final class AorusGramManager {
         performanceShowThermal  = d["performanceShowThermal"]  as? Bool ?? true
         performanceShowGraph    = d["performanceShowGraph"]    as? Bool ?? true
         ramAutoClean            = d["ramAutoClean"]            as? Bool ?? false
-        ramCleanInterval        = d["ramCleanInterval"]        as? Int  ?? 60
+        // Bounded like the cache interval: 30 seconds to a day, so a stored value out of range
+        // cannot schedule nonsense.
+        ramCleanInterval        = min(86_400, max(30, d["ramCleanInterval"] as? Int ?? 60))
         backgroundNotifications = d["backgroundNotifications"] as? Bool ?? false
         voiceTwinEnabled    = d["voiceTwinEnabled"]    as? Bool   ?? false
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"

@@ -187,9 +187,15 @@ public enum AorusImportArchive {
     /// beside a copy of the compressed bytes — for an entry of a few hundred megabytes, a peak of
     /// several times that before anything reached the disk. The archive itself is mapped, and
     /// its bytes are read where they lie.
-    private static func writeEntry(_ zip: Data, start: Int, record: Record, to target: URL) throws {
+    ///
+    /// The partial file is written in `scratch`, a directory of this extraction's own under a name
+    /// no entry can have. It used to be `<target>.part` beside the target, which collides when an
+    /// archive holds both `x` and `x.part`: the temporary for `x` is the final name of `x.part`,
+    /// and moving the first into place deletes the second. A separate scratch space cannot clash
+    /// with any entry name, and the file is moved into place only once it has passed every check.
+    private static func writeEntry(_ zip: Data, start: Int, record: Record, to target: URL, scratch: URL) throws {
         let manager = FileManager.default
-        let partial = target.deletingLastPathComponent().appendingPathComponent(target.lastPathComponent + ".part")
+        let partial = scratch.appendingPathComponent(UUID().uuidString)
         guard manager.createFile(atPath: partial.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: partial) else { throw fail("Could not write an entry") }
         var closed = false
@@ -271,6 +277,12 @@ public enum AorusImportArchive {
     public static func extract(_ zip: Data, to destination: URL, maximumEntryBytes: Int = maximumFileBytes, including include: (String) -> Bool) throws -> [String] {
         let manager = FileManager.default
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
+        // A scratch directory of this extraction's own, beside the destination rather than inside
+        // it, so a partial file can never take the name of an entry still to be written. Removed
+        // whether the extraction finishes or throws.
+        let scratch = destination.deletingLastPathComponent().appendingPathComponent("aorus-extract-part-" + UUID().uuidString, isDirectory: true)
+        try manager.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: scratch) }
         let all = try records(zip)
         let directoryStart = try directoryBounds(zip).start
         var written: [String] = []
@@ -295,7 +307,7 @@ public enum AorusImportArchive {
             guard record.method == 8 || record.compressedSize == record.size else { throw fail("Size or checksum mismatch") }
             let target = name.split(separator: "/").reduce(destination) { $0.appendingPathComponent(String($1)) }
             try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try writeEntry(zip, start: start, record: record, to: target)
+            try writeEntry(zip, start: start, record: record, to: target, scratch: scratch)
             written.append(name)
         }
         return written

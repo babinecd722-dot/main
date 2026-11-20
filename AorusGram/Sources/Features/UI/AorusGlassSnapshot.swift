@@ -155,9 +155,17 @@ public enum AorusGlassSnapshot {
         var budget = Budget()
         for window in self.windows() {
             if CFAbsoluteTimeGetCurrent() - started > Self.timeBudget { break }
+            // Spent panes stop everything: nothing more can be added, so no further window is
+            // captured. `capture` drives a full synchronous render pass with no interruption of
+            // its own, so the one sure way not to pay for it is not to start it.
+            if budget.panes >= Self.paneLimit { break }
             var panes: [UIView] = []
             self.collectPanes(in: window, into: &panes)
             guard !panes.isEmpty else { continue }
+            // Spent area, measured against this window: not a single one of its panes could be
+            // kept, so its capture would be pure cost. Skip it rather than render it.
+            let windowArea = window.bounds.width * window.bounds.height
+            if windowArea > 0.0, budget.points >= windowArea * Self.areaLimit { continue }
             guard let frame = self.capture(window: window) else { continue }
             for pane in panes {
                 guard budget.panes < Self.paneLimit else { break }

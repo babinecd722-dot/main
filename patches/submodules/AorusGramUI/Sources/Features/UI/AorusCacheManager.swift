@@ -68,7 +68,9 @@ public final class AorusCacheManager {
     private static let lastCleanupKey = "aorusgram_cache_last_cleanup"
 
     private func _applyAutoClean(enabled: Bool, intervalHours: Int) {
-        let hours = max(1, intervalHours)
+        // Bounded here as well as at load, since this is the common boundary every caller reaches:
+        // the multiplication to seconds below must never overflow. A year is far past any real use.
+        let hours = min(8760, max(1, intervalHours))
         guard enabled else {
             // Switched off: the next time it is on, its countdown starts then.
             UserDefaults.standard.removeObject(forKey: Self.lastCleanupKey)
@@ -86,7 +88,9 @@ public final class AorusCacheManager {
         // came for anyone who opened the app more often than that.
         if let timer = cleanTimer, timer.isValid, cleanTimerHours == hours { return }
         cleanTimer?.invalidate()
-        let interval = TimeInterval(hours * 3600)
+        // The widening is done before the multiply, not after: `hours * 3600` is Int arithmetic
+        // and would trap on a large value; `TimeInterval(hours) * 3600` cannot.
+        let interval = TimeInterval(hours) * 3600
         let now = Date()
         let defaults = UserDefaults.standard
         var last = defaults.double(forKey: Self.lastCleanupKey)

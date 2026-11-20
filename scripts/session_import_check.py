@@ -75,17 +75,38 @@ def check(repo: Path) -> list[str]:
         if "openPostbox" in core_body:
             err.append("AorusSessionImport: the probe must not open a postbox")
 
-    # An account already here is reported, never added twice.
-    if "existingPeerIds.contains(peerId)" not in core_body or ".duplicate" not in core_body:
-        err.append("AorusSessionImport: an account already on the device is no longer reported as a duplicate")
+    # A user id is checked against Telegram's own range before it ever reaches a Postbox peer id:
+    # the internal id type is narrower than Int64, so a value past it is cut or traps. The guard
+    # lives on the shared importer boundary and in every reader.
+    if "maximumUserId" not in core_body or "func isValidUserId" not in core_body:
+        err.append("AorusSessionImport: a user id is no longer bounded to Telegram's range before a PeerId is made")
+    if "(1 << 52) - 1" not in core_body:
+        err.append("AorusSessionImport: the maximum user id bound is not the 52-bit Telegram/Postbox limit")
+    for label, body in (("AorusTDataReader", tdata_body), ("AorusSessionFileReader", sessions_body)):
+        if "AorusImportedSession.isValidUserId" not in body:
+            err.append(f"{label}: a user id out of Telegram's range is no longer rejected at the reader")
 
-    # Telegram being unreachable for the one probe request does not throw away a sound session
-    # that names its own account: it is added and connects on the app's own network. Only a key
-    # the server refuses, or a session that names no account, keeps the error.
-    if "`catch`" not in core_body or "case .network = error, let userId = session.userId" not in core_body:
-        err.append("AorusSessionImport: a network failure during the probe is no longer tolerated for a self-identifying session")
-    if "PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(userId))" not in core_body:
-        err.append("AorusSessionImport: the file's own account id is no longer used when the probe cannot reach Telegram")
+    # The account is written as the user Telegram names for the key, never as an id a file states:
+    # a key and an id that do not belong together can never become an authorized account, and an
+    # offline import is never added as if it had signed in. The peer written is the resolved user.
+    if "let peerId = user.id" not in core_body or "peerId: peerId.toInt64()" not in core_body:
+        err.append("AorusSessionImport: the record's peer is no longer the user Telegram resolved for the key")
+    if "_internalFromInt64Value" in core_body:
+        err.append("AorusSessionImport: a file's own id must not be turned into a PeerId; only the server-resolved user is used")
+    # Telegram being out of reach, or declining for a reason of its own, never writes a record. It
+    # is reported so the session can be imported again, not silently added unverified.
+    if "case server(" not in core_body or "return .server(" not in core_body:
+        err.append("AorusSessionImport: a server error other than an invalid key is no longer distinguished from a dead session")
+    if "AccountBackupData(" in core_body and "catch" in core_body.split("AccountBackupData(")[0][-400:]:
+        err.append("AorusSessionImport: a record must not be built inside a network-error fallback")
+
+    # An account already here is reported, never added twice — including two imports racing each
+    # other: the records are re-checked inside the transaction that writes the new one, in the
+    # account's own environment.
+    if "existingAccounts.contains(AorusExistingAccount(" not in core_body or ".duplicate" not in core_body:
+        err.append("AorusSessionImport: an account already on the device is no longer reported as a duplicate")
+    if "for record in transaction.getRecords()" not in core_body or "recordPeerId == backupData.peerId" not in core_body:
+        err.append("AorusSessionImport: the duplicate check is no longer re-done inside the write transaction")
 
     # The record Telegram opens as an authorized account.
     for needle in (".environment(AccountEnvironmentAttribute", ".sortOrder(AccountSortOrderAttribute", ".backupData(AccountBackupDataAttribute"):
@@ -176,8 +197,30 @@ def check(repo: Path) -> list[str]:
     for removed in ("UTType.folder", ".folder]", "asCopy: false", "inPlace", "startAccessingSecurityScopedResource()\n            defer {\n                if granted"):
         if removed in ui_body:
             err.append(f"AorusAccountImport: folder picking is back ({removed.splitlines()[0]})")
-    if "func stageArchive(from urls: [URL], into staging: URL)" not in ui_body:
-        err.append("AorusAccountImport: the picked archive is no longer moved into its own staging folder")
+    # Every picked tdata archive is read, each in its own staging folder, not just the first.
+    if "readTDataQueue(" not in ui_body or "index + 1" not in ui_body:
+        err.append("AorusAccountImport: picked tdata archives are no longer read one after another")
+    # Every .session inside a ZIP is read, not only the first.
+    if "sessionsFromArchive(" not in ui_body:
+        err.append("AorusAccountImport: only one .session is read from a ZIP")
+    # The result is a per-source report, so a key refused or an account skipped is shown beside
+    # what was added rather than swallowed.
+    if "struct ImportReport" not in ui_body or "presentReport(" not in ui_body:
+        err.append("AorusAccountImport: the import no longer reports a per-source result")
+    if "skippedAccounts" not in ui_body or "readReport(" not in tdata_body:
+        err.append("AorusAccountImport: accounts a tdata holds but cannot read are no longer counted")
+    if "Added %1 of %2" not in ui_body:
+        err.append("AorusAccountImport: the report no longer states how many of how many were added")
+    # The import is one cancellable operation: a cancel stops the batch and disposes the network
+    # wait in flight. No progress overlay is created with a nil cancel handler.
+    if "loading(cancelled: nil)" in ui_body:
+        err.append("AorusAccountImport: a progress overlay is still created with no cancel handler")
+    if "ImportProgress" not in ui_body or "disposable.set(" not in ui_body or "progress.isCancelled" not in ui_body:
+        err.append("AorusAccountImport: the import is no longer a single cancellable operation")
+    # The duplicate set carries the environment, not a bare peer id: the same user is a different
+    # account on the test servers.
+    if "AorusExistingAccount(" not in ui_body or "testingEnvironment" not in ui_body:
+        err.append("AorusAccountImport: duplicate detection no longer accounts for the test environment")
     installer = repo / "patches/submodules/TelegramUI/Sources/AorusAccountImportPicker.swift"
     installer_text = installer.read_text(encoding="utf-8") if installer.is_file() else ""
     if "legacyICloudFilePicker(" not in installer_text or "inPlace" in installer_text:
@@ -296,16 +339,30 @@ def test_progress_controller(repo: Path, swiftc: str) -> None:
     from telegram13_list_check import block
 
     source = (repo / "patches/submodules/AorusGramUI/Sources/Features/Accounts/AorusAccountImport.swift").read_text()
-    method = block(source, "    private static func beginReading(").replace("private static func", "static func", 1)
+    # The reading guard, the shared cancellable progress, and the overlay's cancel wiring are one
+    # unit: pull all three in and exercise them against stubs.
+    progress_class = block(source, "    private final class ImportProgress {")
+    make_progress = block(source, "    private static func makeProgress(").replace("private static func", "static func", 1)
+    begin_reading = block(source, "    private static func beginReading(").replace("private static func", "static func", 1)
+    finish_reading = block(source, "    private static func finishReading(").replace("private static func", "static func", 1)
     # Telegram 24638bc: PresentationDataUtils/Sources/OverlayStatusController.swift
     # exports a factory returning Display.ViewController, not a class of that name.
     fixture = r'''
+import Foundation
 enum OverlayStatusControllerType { case loading(cancelled: (() -> Void)?) }
 enum Window { case root }
 enum Location { case window(Window) }
+final class MetaDisposable {
+    private(set) var disposed = false
+    func set(_ disposable: Any?) {}
+    func dispose() { disposed = true }
+}
 class ViewController {
     var presented: ViewController?
+    var dismissed = false
+    var cancelHandler: (() -> Void)?
     func present(_ controller: ViewController, in location: Location) { presented = controller }
+    func dismiss() { dismissed = true }
 }
 struct PresentationTheme {}
 struct PresentationData { let theme = PresentationTheme() }
@@ -315,20 +372,28 @@ struct CurrentPresentationData {
 struct SharedContext { let currentPresentationData = CurrentPresentationData() }
 struct AccountContext { let sharedContext = SharedContext() }
 func OverlayStatusController(theme: PresentationTheme, type: OverlayStatusControllerType) -> ViewController {
-    return ViewController()
+    let controller = ViewController()
+    if case let .loading(cancelled) = type { controller.cancelHandler = cancelled }
+    return controller
 }
 enum ImportProbe {
     static var isReading = false
-''' + method + r'''
+''' + progress_class + make_progress + begin_reading + finish_reading + r'''
 }
 let presenter = ViewController()
-let first = ImportProbe.beginReading(context: AccountContext(), controller: presenter)
-precondition(first != nil && presenter.presented === first && ImportProbe.isReading)
+guard let first = ImportProbe.beginReading(context: AccountContext(), controller: presenter) else { preconditionFailure("no progress") }
+precondition(presenter.presented === first.controller && ImportProbe.isReading)
+// A second reading is refused while the first is on screen.
 precondition(ImportProbe.beginReading(context: AccountContext(), controller: presenter) == nil)
-ImportProbe.isReading = false
+// The overlay's cancel button cancels the operation; finishing clears the reading flag.
+precondition(!first.isCancelled)
+first.controller.cancelHandler?()
+precondition(first.isCancelled)
+ImportProbe.finishReading(first)
+precondition(!ImportProbe.isReading && first.controller.dismissed)
 let next = ImportProbe.beginReading(context: AccountContext(), controller: presenter)
-precondition(next != nil && next !== first && presenter.presented === next)
-print("Import progress: factory return type and reading guard passed")
+precondition(next != nil && next!.controller !== first.controller && presenter.presented === next!.controller)
+print("Import progress: cancellable overlay and reading guard passed")
 '''
     with tempfile.TemporaryDirectory(prefix="aorus-import-progress-") as directory:
         work = Path(directory)

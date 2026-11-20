@@ -1273,6 +1273,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Quale dispositivo vedono Telegram e le tue sessioni",
         "Which tabs are shown and how they look": "Quali schede sono visibili e come appaiono",
         "Word List": "Elenco parole",
+        "Added %1 of %2": "Aggiunti %1 di %2",
+        "Damaged accounts skipped: %@": "Account danneggiati saltati: %@",
+        "Import cancelled": "Importazione annullata",
+        "No accounts were added": "Nessun account aggiunto",
+        "and %@ more": "e altri %@",
+        "The settings didn't load completely. Restart the app.": "Le impostazioni non sono state caricate completamente. Riavvia l'app.",
     ]
 
     private static let pl: [String: String] = [
@@ -2496,6 +2502,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Jakie urządzenie widzą Telegram i twoje sesje",
         "Which tabs are shown and how they look": "Które karty są widoczne i jak wyglądają",
         "Word List": "Lista słów",
+        "Added %1 of %2": "Dodano %1 z %2",
+        "Damaged accounts skipped: %@": "Pominięto uszkodzone konta: %@",
+        "Import cancelled": "Import anulowany",
+        "No accounts were added": "Nie dodano żadnego konta",
+        "and %@ more": "i jeszcze %@",
+        "The settings didn't load completely. Restart the app.": "Ustawienia nie zostały w pełni wczytane. Uruchom aplikację ponownie.",
     ]
 
     private static let nl: [String: String] = [
@@ -3719,6 +3731,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Welk apparaat Telegram en je sessies zien",
         "Which tabs are shown and how they look": "Welke tabbladen zichtbaar zijn en hoe ze eruitzien",
         "Word List": "Woordenlijst",
+        "Added %1 of %2": "%1 van %2 toegevoegd",
+        "Damaged accounts skipped: %@": "Beschadigde accounts overgeslagen: %@",
+        "Import cancelled": "Import geannuleerd",
+        "No accounts were added": "Geen accounts toegevoegd",
+        "and %@ more": "en nog %@",
+        "The settings didn't load completely. Restart the app.": "De instellingen zijn niet volledig geladen. Start de app opnieuw.",
     ]
 
     private static let ca: [String: String] = [
@@ -4942,6 +4960,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Quin dispositiu veuen Telegram i les teves sessions",
         "Which tabs are shown and how they look": "Quines pestanyes es mostren i com es veuen",
         "Word List": "Llista de paraules",
+        "Added %1 of %2": "Afegits %1 de %2",
+        "Damaged accounts skipped: %@": "Comptes malmesos omesos: %@",
+        "Import cancelled": "Importació cancel·lada",
+        "No accounts were added": "No s'ha afegit cap compte",
+        "and %@ more": "i %@ més",
+        "The settings didn't load completely. Restart the app.": "La configuració no s'ha carregat del tot. Reinicia l'app.",
     ]
 
     private static let id: [String: String] = [
@@ -6165,6 +6189,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Perangkat mana yang dilihat Telegram dan sesimu",
         "Which tabs are shown and how they look": "Tab mana yang ditampilkan dan bagaimana tampilannya",
         "Word List": "Daftar Kata",
+        "Added %1 of %2": "Ditambahkan %1 dari %2",
+        "Damaged accounts skipped: %@": "Akun rusak dilewati: %@",
+        "Import cancelled": "Impor dibatalkan",
+        "No accounts were added": "Tidak ada akun yang ditambahkan",
+        "and %@ more": "dan %@ lainnya",
+        "The settings didn't load completely. Restart the app.": "Pengaturan tidak dimuat sepenuhnya. Mulai ulang aplikasi.",
     ]
 
     private static let ms: [String: String] = [
@@ -7388,6 +7418,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Peranti mana yang dilihat Telegram dan sesi anda",
         "Which tabs are shown and how they look": "Tab mana yang ditunjukkan dan bagaimana rupanya",
         "Word List": "Senarai Perkataan",
+        "Added %1 of %2": "Ditambah %1 daripada %2",
+        "Damaged accounts skipped: %@": "Akaun rosak dilangkau: %@",
+        "Import cancelled": "Import dibatalkan",
+        "No accounts were added": "Tiada akaun ditambah",
+        "and %@ more": "dan %@ lagi",
+        "The settings didn't load completely. Restart the app.": "Tetapan tidak dimuatkan sepenuhnya. Mulakan semula aplikasi.",
     ]
 
     private static let be: [String: String] = [
@@ -8611,6 +8647,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Якую прыладу бачаць Telegram і твае сеансы",
         "Which tabs are shown and how they look": "Якія ўкладкі бачныя і як яны выглядаюць",
         "Word List": "Спіс слоў",
+        "Added %1 of %2": "Дададзена %1 з %2",
+        "Damaged accounts skipped: %@": "Пропушчана пашкоджаных акаўнтаў: %@",
+        "Import cancelled": "Імпарт скасаваны",
+        "No accounts were added": "Не дададзена ніводнага акаўнта",
+        "and %@ more": "і яшчэ %@",
+        "The settings didn't load completely. Restart the app.": "Налады загружаны не цалкам. Перазапусціце праграму.",
     ]
 
     private static let uz: [String: String] = [
@@ -9834,6 +9876,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram va seanslaringiz qaysi qurilmani ko'radi",
         "Which tabs are shown and how they look": "Qaysi bo'limlar ko'rinadi va ular qanday ko'rinadi",
         "Word List": "So'zlar ro'yxati",
+        "Added %1 of %2": "%2 dan %1 tasi qo‘shildi",
+        "Damaged accounts skipped: %@": "Buzilgan hisoblar o‘tkazib yuborildi: %@",
+        "Import cancelled": "Import bekor qilindi",
+        "No accounts were added": "Hech qanday hisob qo‘shilmadi",
+        "and %@ more": "va yana %@",
+        "The settings didn't load completely. Restart the app.": "Sozlamalar to‘liq yuklanmadi. Ilovani qayta ishga tushiring.",
     ]
 
     private static let ko: [String: String] = [
@@ -11057,6 +11105,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram과 내 세션에 보이는 기기",
         "Which tabs are shown and how they look": "표시할 탭과 탭의 모양",
         "Word List": "단어 목록",
+        "Added %1 of %2": "%2개 중 %1개 추가됨",
+        "Damaged accounts skipped: %@": "손상된 계정 건너뜀: %@",
+        "Import cancelled": "가져오기 취소됨",
+        "No accounts were added": "추가된 계정이 없습니다",
+        "and %@ more": "외 %@개",
+        "The settings didn't load completely. Restart the app.": "설정이 완전히 불러와지지 않았습니다. 앱을 다시 시작하세요.",
     ]
 
     private static let ar: [String: String] = [
@@ -12280,6 +12334,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "أي جهاز يراه تيليجرام وجلساتك",
         "Which tabs are shown and how they look": "أي التبويبات تظهر وكيف تبدو",
         "Word List": "قائمة الكلمات",
+        "Added %1 of %2": "تمت إضافة %1 من %2",
+        "Damaged accounts skipped: %@": "حسابات تالفة تم تخطّيها: %@",
+        "Import cancelled": "أُلغي الاستيراد",
+        "No accounts were added": "لم تُضَف أي حسابات",
+        "and %@ more": "و%@ أخرى",
+        "The settings didn't load completely. Restart the app.": "لم تُحمَّل الإعدادات بالكامل. أعد تشغيل التطبيق.",
     ]
 
     private static let fa: [String: String] = [
@@ -13503,6 +13563,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "تلگرام و نشست‌هایت کدام دستگاه را می‌بینند",
         "Which tabs are shown and how they look": "کدام زبانه‌ها دیده شوند و چه شکلی باشند",
         "Word List": "فهرست واژه‌ها",
+        "Added %1 of %2": "%1 از %2 افزوده شد",
+        "Damaged accounts skipped: %@": "حساب‌های آسیب‌دیده رد شد: %@",
+        "Import cancelled": "ورود لغو شد",
+        "No accounts were added": "هیچ حسابی افزوده نشد",
+        "and %@ more": "و %@ مورد دیگر",
+        "The settings didn't load completely. Restart the app.": "تنظیمات به‌طور کامل بارگذاری نشد. برنامه را دوباره باز کنید.",
     ]
 
     private static let kk: [String: String] = [
@@ -14726,6 +14792,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram мен сеанстарың қандай құрылғыны көреді",
         "Which tabs are shown and how they look": "Қай қойындылар көрінеді және олар қалай көрінеді",
         "Word List": "Сөздер тізімі",
+        "Added %1 of %2": "%2 ішінен %1 қосылды",
+        "Damaged accounts skipped: %@": "Зақымдалған аккаунттар өткізілді: %@",
+        "Import cancelled": "Импорт болдырылмады",
+        "No accounts were added": "Бірде-бір аккаунт қосылмады",
+        "and %@ more": "және тағы %@",
+        "The settings didn't load completely. Restart the app.": "Параметрлер толық жүктелмеді. Қолданбаны қайта іске қосыңыз.",
     ]
 
     private static let zhHans: [String: String] = [
@@ -15949,6 +16021,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram 和你的会话看到的设备",
         "Which tabs are shown and how they look": "显示哪些标签页及其外观",
         "Word List": "词语列表",
+        "Added %1 of %2": "已添加 %1 / %2",
+        "Damaged accounts skipped: %@": "已跳过损坏的账号：%@",
+        "Import cancelled": "导入已取消",
+        "No accounts were added": "未添加任何账号",
+        "and %@ more": "还有 %@ 个",
+        "The settings didn't load completely. Restart the app.": "设置未完全加载。请重新启动应用。",
     ]
 
 
@@ -17173,6 +17251,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram 與你的工作階段看到的裝置",
         "Which tabs are shown and how they look": "顯示哪些分頁及其外觀",
         "Word List": "字詞清單",
+        "Added %1 of %2": "已新增 %1 / %2",
+        "Damaged accounts skipped: %@": "已略過損毀的帳號：%@",
+        "Import cancelled": "匯入已取消",
+        "No accounts were added": "未新增任何帳號",
+        "and %@ more": "還有 %@ 個",
+        "The settings didn't load completely. Restart the app.": "設定未完全載入。請重新啟動 App。",
     ]
 
     private static let ja: [String: String] = [
@@ -18396,6 +18480,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegramとセッションに見える端末",
         "Which tabs are shown and how they look": "表示するタブとその見た目",
         "Word List": "単語リスト",
+        "Added %1 of %2": "%2 件中 %1 件を追加",
+        "Damaged accounts skipped: %@": "破損したアカウントをスキップ: %@",
+        "Import cancelled": "インポートを取り消しました",
+        "No accounts were added": "追加されたアカウントはありません",
+        "and %@ more": "ほか %@ 件",
+        "The settings didn't load completely. Restart the app.": "設定が完全に読み込まれませんでした。アプリを再起動してください。",
     ]
 
     private static let fi: [String: String] = [
@@ -19619,6 +19709,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Minkä laitteen Telegram ja istuntosi näkevät",
         "Which tabs are shown and how they look": "Mitkä välilehdet näkyvät ja miltä ne näyttävät",
         "Word List": "Sanalista",
+        "Added %1 of %2": "Lisätty %1/%2",
+        "Damaged accounts skipped: %@": "Vioittuneita tilejä ohitettu: %@",
+        "Import cancelled": "Tuonti peruutettu",
+        "No accounts were added": "Yhtään tiliä ei lisätty",
+        "and %@ more": "ja %@ muuta",
+        "The settings didn't load completely. Restart the app.": "Asetuksia ei ladattu kokonaan. Käynnistä sovellus uudelleen.",
     ]
 
     private static let he: [String: String] = [
@@ -20842,6 +20938,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "איזה מכשיר Telegram והסשנים שלך רואים",
         "Which tabs are shown and how they look": "אילו לשוניות מוצגות ואיך הן נראות",
         "Word List": "רשימת מילים",
+        "Added %1 of %2": "נוספו %1 מתוך %2",
+        "Damaged accounts skipped: %@": "חשבונות פגומים שדולגו: %@",
+        "Import cancelled": "הייבוא בוטל",
+        "No accounts were added": "לא נוספו חשבונות",
+        "and %@ more": "ועוד %@",
+        "The settings didn't load completely. Restart the app.": "ההגדרות לא נטענו במלואן. הפעילו מחדש את האפליקציה.",
     ]
 
     private static let hr: [String: String] = [
@@ -22065,6 +22167,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Koji uređaj vide Telegram i tvoje sesije",
         "Which tabs are shown and how they look": "Koje su kartice prikazane i kako izgledaju",
         "Word List": "Popis riječi",
+        "Added %1 of %2": "Dodano %1 od %2",
+        "Damaged accounts skipped: %@": "Preskočeni oštećeni računi: %@",
+        "Import cancelled": "Uvoz otkazan",
+        "No accounts were added": "Nijedan račun nije dodan",
+        "and %@ more": "i još %@",
+        "The settings didn't load completely. Restart the app.": "Postavke nisu u potpunosti učitane. Ponovno pokrenite aplikaciju.",
     ]
 
     private static let sr: [String: String] = [
@@ -23288,6 +23396,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Који уређај виде Telegram и твоје сесије",
         "Which tabs are shown and how they look": "Које картице се приказују и како изгледају",
         "Word List": "Листа речи",
+        "Added %1 of %2": "Додато %1 од %2",
+        "Damaged accounts skipped: %@": "Прескочени оштећени налози: %@",
+        "Import cancelled": "Увоз отказан",
+        "No accounts were added": "Ниједан налог није додат",
+        "and %@ more": "и још %@",
+        "The settings didn't load completely. Restart the app.": "Подешавања нису у потпуности учитана. Поново покрените апликацију.",
     ]
 
     private static let cs: [String: String] = [
@@ -24511,6 +24625,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Jaké zařízení vidí Telegram a tvé relace",
         "Which tabs are shown and how they look": "Které karty jsou vidět a jak vypadají",
         "Word List": "Seznam slov",
+        "Added %1 of %2": "Přidáno %1 z %2",
+        "Damaged accounts skipped: %@": "Přeskočené poškozené účty: %@",
+        "Import cancelled": "Import zrušen",
+        "No accounts were added": "Nebyl přidán žádný účet",
+        "and %@ more": "a %@ dalších",
+        "The settings didn't load completely. Restart the app.": "Nastavení se nenačetlo úplně. Restartujte aplikaci.",
     ]
 
     private static let sk: [String: String] = [
@@ -25734,6 +25854,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Aké zariadenie vidí Telegram a tvoje relácie",
         "Which tabs are shown and how they look": "Ktoré karty sú viditeľné a ako vyzerajú",
         "Word List": "Zoznam slov",
+        "Added %1 of %2": "Pridané %1 z %2",
+        "Damaged accounts skipped: %@": "Preskočené poškodené účty: %@",
+        "Import cancelled": "Import zrušený",
+        "No accounts were added": "Nepridal sa žiadny účet",
+        "and %@ more": "a %@ ďalších",
+        "The settings didn't load completely. Restart the app.": "Nastavenia sa nenačítali úplne. Reštartujte aplikáciu.",
     ]
 
     private static let ro: [String: String] = [
@@ -26957,6 +27083,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Ce dispozitiv văd Telegram și sesiunile tale",
         "Which tabs are shown and how they look": "Ce file sunt afișate și cum arată",
         "Word List": "Listă de cuvinte",
+        "Added %1 of %2": "Adăugate %1 din %2",
+        "Damaged accounts skipped: %@": "Conturi deteriorate omise: %@",
+        "Import cancelled": "Import anulat",
+        "No accounts were added": "Niciun cont adăugat",
+        "and %@ more": "și încă %@",
+        "The settings didn't load completely. Restart the app.": "Setările nu s-au încărcat complet. Reporniți aplicația.",
     ]
 
     private static let hu: [String: String] = [
@@ -28180,6 +28312,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Milyen eszközt lát a Telegram és a munkameneteid",
         "Which tabs are shown and how they look": "Mely lapok látszanak és hogyan néznek ki",
         "Word List": "Szólista",
+        "Added %1 of %2": "%2 közül %1 hozzáadva",
+        "Damaged accounts skipped: %@": "Kihagyott sérült fiókok: %@",
+        "Import cancelled": "Importálás megszakítva",
+        "No accounts were added": "Nem lett fiók hozzáadva",
+        "and %@ more": "és még %@",
+        "The settings didn't load completely. Restart the app.": "A beállítások nem töltődtek be teljesen. Indítsa újra az alkalmazást.",
     ]
 
     private static let nb: [String: String] = [
@@ -29403,6 +29541,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Hvilken enhet Telegram og øktene dine ser",
         "Which tabs are shown and how they look": "Hvilke faner som vises og hvordan de ser ut",
         "Word List": "Ordliste",
+        "Added %1 of %2": "La til %1 av %2",
+        "Damaged accounts skipped: %@": "Hoppet over skadede kontoer: %@",
+        "Import cancelled": "Importen ble avbrutt",
+        "No accounts were added": "Ingen kontoer ble lagt til",
+        "and %@ more": "og %@ til",
+        "The settings didn't load completely. Restart the app.": "Innstillingene ble ikke lastet inn fullstendig. Start appen på nytt.",
     ]
 
     private static let sv: [String: String] = [
@@ -30626,6 +30770,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Vilken enhet Telegram och dina sessioner ser",
         "Which tabs are shown and how they look": "Vilka flikar som visas och hur de ser ut",
         "Word List": "Ordlista",
+        "Added %1 of %2": "Lade till %1 av %2",
+        "Damaged accounts skipped: %@": "Skadade konton hoppades över: %@",
+        "Import cancelled": "Importen avbröts",
+        "No accounts were added": "Inga konton lades till",
+        "and %@ more": "och %@ till",
+        "The settings didn't load completely. Restart the app.": "Inställningarna lästes inte in helt. Starta om appen.",
     ]
 
     private static let vi: [String: String] = [
@@ -31849,6 +31999,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram và các phiên của bạn thấy thiết bị nào",
         "Which tabs are shown and how they look": "Thẻ nào được hiển thị và trông như thế nào",
         "Word List": "Danh sách từ",
+        "Added %1 of %2": "Đã thêm %1 trên %2",
+        "Damaged accounts skipped: %@": "Đã bỏ qua tài khoản hỏng: %@",
+        "Import cancelled": "Đã hủy nhập",
+        "No accounts were added": "Không có tài khoản nào được thêm",
+        "and %@ more": "và %@ nữa",
+        "The settings didn't load completely. Restart the app.": "Cài đặt chưa được tải đầy đủ. Hãy khởi động lại ứng dụng.",
     ]
 
     private static let uk: [String: String] = [
@@ -33081,6 +33237,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Який пристрій бачать Telegram і твої сеанси",
         "Which tabs are shown and how they look": "Які вкладки видно і як вони виглядають",
         "Word List": "Список слів",
+        "Added %1 of %2": "Додано %1 з %2",
+        "Damaged accounts skipped: %@": "Пропущено пошкоджених акаунтів: %@",
+        "Import cancelled": "Імпорт скасовано",
+        "No accounts were added": "Не додано жодного акаунта",
+        "and %@ more": "і ще %@",
+        "The settings didn't load completely. Restart the app.": "Налаштування завантажено не повністю. Перезапустіть застосунок.",
     ]
 
     private static let es: [String: String] = [
@@ -34313,6 +34475,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Qué dispositivo ven Telegram y tus sesiones",
         "Which tabs are shown and how they look": "Qué pestañas se muestran y cómo se ven",
         "Word List": "Lista de palabras",
+        "Added %1 of %2": "Añadidas %1 de %2",
+        "Damaged accounts skipped: %@": "Cuentas dañadas omitidas: %@",
+        "Import cancelled": "Importación cancelada",
+        "No accounts were added": "No se añadió ninguna cuenta",
+        "and %@ more": "y %@ más",
+        "The settings didn't load completely. Restart the app.": "Los ajustes no se cargaron por completo. Reinicia la app.",
     ]
 
     private static let pt: [String: String] = [
@@ -35545,6 +35713,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Qual dispositivo o Telegram e suas sessões veem",
         "Which tabs are shown and how they look": "Quais abas aparecem e como elas ficam",
         "Word List": "Lista de palavras",
+        "Added %1 of %2": "Adicionadas %1 de %2",
+        "Damaged accounts skipped: %@": "Contas danificadas ignoradas: %@",
+        "Import cancelled": "Importação cancelada",
+        "No accounts were added": "Nenhuma conta adicionada",
+        "and %@ more": "e mais %@",
+        "The settings didn't load completely. Restart the app.": "As configurações não foram totalmente carregadas. Reinicie o app.",
     ]
 
     private static let de: [String: String] = [
@@ -36777,6 +36951,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Welches Gerät Telegram und deine Sitzungen sehen",
         "Which tabs are shown and how they look": "Welche Tabs angezeigt werden und wie sie aussehen",
         "Word List": "Wortliste",
+        "Added %1 of %2": "%1 von %2 hinzugefügt",
+        "Damaged accounts skipped: %@": "Beschädigte Konten übersprungen: %@",
+        "Import cancelled": "Import abgebrochen",
+        "No accounts were added": "Es wurden keine Konten hinzugefügt",
+        "and %@ more": "und %@ weitere",
+        "The settings didn't load completely. Restart the app.": "Die Einstellungen wurden nicht vollständig geladen. Starte die App neu.",
     ]
 
     private static let fr: [String: String] = [
@@ -38009,6 +38189,12 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Quel appareil Telegram et vos sessions voient",
         "Which tabs are shown and how they look": "Quels onglets sont affichés et leur apparence",
         "Word List": "Liste de mots",
+        "Added %1 of %2": "%1 sur %2 ajoutés",
+        "Damaged accounts skipped: %@": "Comptes endommagés ignorés : %@",
+        "Import cancelled": "Importation annulée",
+        "No accounts were added": "Aucun compte ajouté",
+        "and %@ more": "et %@ de plus",
+        "The settings didn't load completely. Restart the app.": "Les réglages n'ont pas été entièrement chargés. Redémarrez l'app.",
     ]
 
     private static let tr: [String: String] = [
@@ -39241,5 +39427,11 @@ enum AorusL10nTable {
         "Which device Telegram and your sessions see": "Telegram'ın ve oturumlarının hangi cihazı gördüğü",
         "Which tabs are shown and how they look": "Hangi sekmelerin görüneceği ve nasıl görünecekleri",
         "Word List": "Kelime listesi",
+        "Added %1 of %2": "%2 hesaptan %1 tanesi eklendi",
+        "Damaged accounts skipped: %@": "Atlanan bozuk hesaplar: %@",
+        "Import cancelled": "İçe aktarma iptal edildi",
+        "No accounts were added": "Hiçbir hesap eklenmedi",
+        "and %@ more": "ve %@ tane daha",
+        "The settings didn't load completely. Restart the app.": "Ayarlar tam olarak yüklenemedi. Uygulamayı yeniden başlatın.",
     ]
 }

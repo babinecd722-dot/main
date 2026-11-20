@@ -617,9 +617,24 @@ public final class AccountBackupManager {
         case restored
         /// It could not be finished, and everything is as it was before it.
         case rolledBack
-        /// It could not be finished nor yet undone: nothing was deleted, and the next launch
-        /// tries again before anything opens the accounts.
+        /// It was asked for and not begun: nothing has moved, the accounts open as they are, and
+        /// the next launch begins it. The staging could not be read or the journal not written —
+        /// protected data before the first unlock, most often.
+        case deferred
+        /// The user set an unfinished restore aside from the recovery prompt: its journal and its
+        /// staging are kept in a snapshot folder, and the accounts open as they are on disk.
+        case abandoned
+        /// It could not be finished nor yet undone, or what it did cannot be read: nothing was
+        /// deleted, and nothing may open the accounts until a retry or the next launch gets past
+        /// it. `blocksAccountAccess` is the one question the launch has to ask.
         case failed
+
+        /// Whether the account data on disk may be half old and half new, or is unknown. The
+        /// launch must not open any account, nor run anything that writes beside them, while
+        /// this is true.
+        public var blocksAccountAccess: Bool {
+            return self == .failed
+        }
     }
 
     /// What a restore under way has done, written to disk before each of its steps, so a
@@ -637,6 +652,10 @@ public final class AccountBackupManager {
             case merging
             /// Undoing; `afterPlacing` says whether anything of the backup's may be in place.
             case rollingBack
+            /// Undone, every slot back where it was; only the clean-up is left. Recorded before
+            /// the staging goes, because the staging is what tells a rerun of the rollback the
+            /// backup's slots from the ones it has already put back.
+            case rolledBack
             case committed
         }
         var phase: Phase
@@ -652,7 +671,22 @@ public final class AccountBackupManager {
         var attempts: Int
     }
 
+    /// What reading the journal found. Only a journal that is not there means no restore is
+    /// under way: one that is there and cannot be read or decoded means one is, and that what
+    /// it did is unknown.
+    private enum JournalRead {
+        case missing
+        case valid(RestoreJournal)
+        /// On disk and not readable now: protected data before the first unlock, an I/O error.
+        case unreadable
+        /// Read, and not a journal this code can follow.
+        case corrupt
+    }
+
     private static let journalName = ".aorus-restore-journal"
+    /// Inside a snapshot: whatever a restore found standing in a slot's way. A restore never
+    /// deletes what it meets on disk; it is kept here until the next successful restore.
+    private static let displacedFolderName = ".aorus-displaced"
     private static let restoreOutcomeKey = "aorusgram_pending_restore_outcome"
     private static let maxRestoreAttempts = 3
 
@@ -660,14 +694,49 @@ public final class AccountBackupManager {
         return root.appendingPathComponent(journalName)
     }
 
-    private static func readJournal(_ root: URL) -> RestoreJournal? {
-        guard let data = try? Data(contentsOf: journalURL(root)) else { return nil }
-        return try? JSONDecoder().decode(RestoreJournal.self, from: data)
+    private static func readJournal(_ root: URL) -> JournalRead {
+        let url = journalURL(root)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            return isMissingFile(error, at: url) ? .missing : .unreadable
+        }
+        guard let journal = try? JSONDecoder().decode(RestoreJournal.self, from: data) else {
+            return .corrupt
+        }
+        return .valid(journal)
+    }
+
+    /// Whether a read failed because nothing is there. Both have to agree: `fileExists` is
+    /// false for a path it cannot stat as well, and a read error alone may be the data
+    /// protection class refusing a file that is very much there.
+    private static func isMissingFile(_ error: Error, at url: URL) -> Bool {
+        let nsError = error as NSError
+        let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        let noSuchFile = (nsError.domain == NSCocoaErrorDomain && nsError.code == NSFileReadNoSuchFileError)
+            || (nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOENT))
+            || (underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(ENOENT))
+        return noSuchFile && !FileManager.default.fileExists(atPath: url.path)
     }
 
     private static func writeJournal(_ journal: RestoreJournal, _ root: URL) throws {
         let data = try JSONEncoder().encode(journal)
         try data.write(to: journalURL(root), options: .atomic)
+    }
+
+    /// A snapshot folder of its own for every restore. The seconds alone could repeat, and a
+    /// snapshot that already held a slot would make that slot look set aside when it was not.
+    private static func newSnapshotName() -> String {
+        return snapshotPrefix + String(Int(Date().timeIntervalSince1970)) + "-" + UUID().uuidString
+    }
+
+    /// Moves what stands in a slot's way into the restore's snapshot, under a name of its own.
+    private static func displace(_ url: URL, snapshot: URL) throws {
+        let fm = FileManager.default
+        let folder = snapshot.appendingPathComponent(displacedFolderName, isDirectory: true)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        try fm.moveItem(at: url, to: folder.appendingPathComponent(url.lastPathComponent + "." + UUID().uuidString))
     }
 
     /// Whether a restore is still under way on disk: one the last launch neither finished nor
@@ -678,23 +747,78 @@ public final class AccountBackupManager {
     }
 
     // Called from AppDelegate immediately after `rootPath` is known and BEFORE
-    // any postbox / account context is created.
+    // any postbox / account context is created. When the outcome blocks account access the
+    // launch stops there and offers `retryUnfinishedRestore` and `abandonUnfinishedRestore`.
     @discardableResult
     public static func applyPendingRestoreIfNeeded(rootPath: String) -> RestoreOutcome {
         guard !rootPath.isEmpty else { return .none }
         let root = URL(fileURLWithPath: rootPath)
         let ud = UserDefaults.standard
         let outcome: RestoreOutcome
-        if let journal = readJournal(root) {
+        switch readJournal(root) {
+        case let .valid(journal):
             // A restore the last launch did not finish comes first, whatever the flags say.
             outcome = resume(journal, root: root)
-        } else if ud.bool(forKey: pendingFlagKey) {
+        case .unreadable, .corrupt:
+            // A restore is under way and what it has done cannot be known. Nothing is moved on
+            // a guess, and nothing opens the accounts: an unreadable journal is most often
+            // protected data before the first unlock, and is read again by a retry.
+            outcome = .failed
+        case .missing:
+            guard ud.bool(forKey: pendingFlagKey) else { return .none }
             outcome = beginPendingRestore(root: root)
-        } else {
-            return .none
         }
         ud.set(outcome.rawValue, forKey: restoreOutcomeKey)
         return outcome
+    }
+
+    /// The recovery prompt's "Retry": the same step the launch takes, once more.
+    @discardableResult
+    public static func retryUnfinishedRestore(rootPath: String) -> RestoreOutcome {
+        return applyPendingRestoreIfNeeded(rootPath: rootPath)
+    }
+
+    /// The recovery prompt's way out, for a restore that can be neither finished nor undone by
+    /// itself. A journal that can be read is undone, whatever its attempts. One that is there
+    /// and cannot be decoded says nothing about what the restore did, so nothing is guessed:
+    /// the journal and the staging are moved into a snapshot folder, every snapshot stays, and
+    /// the accounts open as they are on disk — which is what the user chose. A journal that
+    /// cannot be read at all is left alone; there is nothing safe to do until it can.
+    @discardableResult
+    public static func abandonUnfinishedRestore(rootPath: String) -> RestoreOutcome {
+        guard !rootPath.isEmpty else { return .none }
+        let root = URL(fileURLWithPath: rootPath)
+        let outcome: RestoreOutcome
+        switch readJournal(root) {
+        case .missing:
+            outcome = .none
+        case .unreadable:
+            outcome = .failed
+        case let .valid(journal):
+            outcome = rollBackRestore(journal, root: root)
+        case .corrupt:
+            outcome = setAsideUnreadableRestore(root: root) ? .abandoned : .failed
+        }
+        UserDefaults.standard.set(outcome.rawValue, forKey: restoreOutcomeKey)
+        return outcome
+    }
+
+    private static func setAsideUnreadableRestore(root: URL) -> Bool {
+        let fm = FileManager.default
+        // A snapshot like any other, so the next successful restore clears it like any other.
+        let folder = root.appendingPathComponent(newSnapshotName(), isDirectory: true)
+        let staging = root.appendingPathComponent(stagingName)
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: staging.path) {
+                try fm.moveItem(at: staging, to: folder.appendingPathComponent(stagingName))
+            }
+            // Last: it is what makes a launch treat the restore as under way.
+            try fm.moveItem(at: journalURL(root), to: folder.appendingPathComponent(journalName))
+            return true
+        } catch {
+            return false
+        }
     }
 
     private static func beginPendingRestore(root: URL) -> RestoreOutcome {
@@ -702,8 +826,8 @@ public final class AccountBackupManager {
         let mergeIntoExisting = ud.bool(forKey: pendingMergeFlagKey)
         let selectedAccountId = ud.string(forKey: pendingSelectedAccountKey)
         let clearFlags = {
-            // A restore must never loop and brick every launch: once the journal holds it, or it
-            // cannot be begun at all, the flags that asked for it go.
+            // A restore must never loop and brick every launch: once the journal holds it, or
+            // there is nothing to restore, the flags that asked for it go.
             ud.set(false, forKey: pendingFlagKey)
             ud.set(false, forKey: pendingMergeFlagKey)
             ud.removeObject(forKey: pendingSelectedAccountKey)
@@ -711,9 +835,21 @@ public final class AccountBackupManager {
 
         let fm = FileManager.default
         let staging = root.appendingPathComponent(stagingName)
-        guard fm.fileExists(atPath: staging.path),
-              let staged = try? fm.contentsOfDirectory(atPath: staging.path),
-              !staged.isEmpty else {
+        guard fm.fileExists(atPath: staging.path) else {
+            clearFlags()
+            return .none
+        }
+        let staged: [String]
+        do {
+            staged = try fm.contentsOfDirectory(atPath: staging.path)
+        } catch {
+            // There and not readable now. Nothing has moved, so the accounts open as they are and
+            // the request stays for the next launch, staging and all.
+            return .deferred
+        }
+        // Only what the archive reader can have written is a slot.
+        let names = staged.filter { $0 == "accounts-metadata" || $0.hasPrefix("account-") }.sorted()
+        guard !names.isEmpty else {
             clearFlags()
             try? fm.removeItem(at: staging)
             return .none
@@ -721,8 +857,8 @@ public final class AccountBackupManager {
         let merging = mergeIntoExisting && selectedAccountId != nil
         let journal = RestoreJournal(
             phase: merging ? .merging : .settingAside,
-            names: staged.sorted(),
-            snapshot: snapshotPrefix + String(Int(Date().timeIntervalSince1970)),
+            names: names,
+            snapshot: newSnapshotName(),
             accountId: merging ? selectedAccountId : nil,
             afterPlacing: false,
             attempts: 0
@@ -731,10 +867,8 @@ public final class AccountBackupManager {
             try writeJournal(journal, root)
         } catch {
             // Without a journal nothing is moved: a restore that could not be undone after a
-            // crash is not begun.
-            clearFlags()
-            try? fm.removeItem(at: staging)
-            return .failed
+            // crash is not begun. The request is kept and begun again by the next launch.
+            return .deferred
         }
         clearFlags()
         return resume(journal, root: root)
@@ -746,6 +880,9 @@ public final class AccountBackupManager {
         case .committed:
             finishRestore(journal, root: root)
             return .restored
+        case .rolledBack:
+            cleanUpRolledBack(journal, root: root)
+            return .rolledBack
         case .rollingBack:
             return rollBackRestore(journal, root: root)
         case .settingAside, .placing, .merging:
@@ -760,7 +897,10 @@ public final class AccountBackupManager {
     }
 
     /// Replace: the live slots go into the snapshot, all of them, and only then do the
-    /// backup's come in. Each step is skipped when an earlier launch already took it.
+    /// backup's come in. Each step is skipped when an earlier launch already took it, and
+    /// anything found in a slot that an earlier launch already emptied — written there since by
+    /// an extension, or by a launch that went on past an unfinished restore — is displaced into
+    /// the snapshot rather than mistaken for the slot or deleted.
     private static func continueReplace(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
         var journal = journal
         let fm = FileManager.default
@@ -773,8 +913,12 @@ public final class AccountBackupManager {
                 for name in journal.names {
                     let current = root.appendingPathComponent(name)
                     let aside = snapshot.appendingPathComponent(name)
-                    guard fm.fileExists(atPath: current.path), !fm.fileExists(atPath: aside.path) else { continue }
-                    try fm.moveItem(at: current, to: aside)
+                    guard fm.fileExists(atPath: current.path) else { continue }
+                    if fm.fileExists(atPath: aside.path) {
+                        try displace(current, snapshot: snapshot)
+                    } else {
+                        try fm.moveItem(at: current, to: aside)
+                    }
                 }
                 journal.phase = .placing
                 journal.afterPlacing = true
@@ -784,13 +928,18 @@ public final class AccountBackupManager {
             }
         }
 
-        // Every live slot is in the snapshot now, so whatever of these names is in the root is
-        // the backup's, put there by this launch or the one before.
+        // Every live slot is in the snapshot now, so a name still in the staging has nothing of
+        // the user's in its place in the root: whatever is there came after the snapshot.
         for name in journal.names {
             let incoming = staging.appendingPathComponent(name)
             let target = root.appendingPathComponent(name)
             guard fm.fileExists(atPath: incoming.path) else { continue }
-            guard !fm.fileExists(atPath: target.path), (try? fm.moveItem(at: incoming, to: target)) != nil else {
+            do {
+                if fm.fileExists(atPath: target.path) {
+                    try displace(target, snapshot: snapshot)
+                }
+                try fm.moveItem(at: incoming, to: target)
+            } catch {
                 return rollBackRestore(journal, root: root)
             }
         }
@@ -813,11 +962,12 @@ public final class AccountBackupManager {
             return rollBackRestore(journal, root: root)
         }
         let staging = root.appendingPathComponent(stagingName)
+        let snapshot = root.appendingPathComponent(journal.snapshot)
         let liveAtomic = root.appendingPathComponent("accounts-metadata/atomic-state")
         let stagedAtomic = staging.appendingPathComponent("accounts-metadata/atomic-state")
         let stagedAccount = staging.appendingPathComponent("account-" + accountId, isDirectory: true)
         let liveAccount = root.appendingPathComponent("account-" + accountId, isDirectory: true)
-        let snapshotAtomic = root.appendingPathComponent(journal.snapshot).appendingPathComponent("accounts-metadata/atomic-state")
+        let snapshotAtomic = snapshot.appendingPathComponent("accounts-metadata/atomic-state")
 
         // Done but for the clean-up: the list names the account and its folder is in place.
         if liveListNames(accountId, atomicState: liveAtomic), fm.fileExists(atPath: liveAccount.path) {
@@ -834,13 +984,16 @@ public final class AccountBackupManager {
                 try fm.createDirectory(at: snapshotAtomic.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.copyItem(at: liveAtomic, to: snapshotAtomic)
             }
-            if !fm.fileExists(atPath: liveAccount.path) {
-                guard fm.fileExists(atPath: stagedAccount.path) else {
-                    return rollBackRestore(journal, root: root)
-                }
+            if fm.fileExists(atPath: stagedAccount.path) {
                 journal.afterPlacing = true
                 try writeJournal(journal, root)
+                if fm.fileExists(atPath: liveAccount.path) {
+                    // Not on the list, so no account Telegram knows: a folder left behind.
+                    try displace(liveAccount, snapshot: snapshot)
+                }
                 try fm.moveItem(at: stagedAccount, to: liveAccount)
+            } else if !fm.fileExists(atPath: liveAccount.path) {
+                return rollBackRestore(journal, root: root)
             }
             try mergedState.write(to: liveAtomic, options: .atomic)
         } catch {
@@ -862,8 +1015,9 @@ public final class AccountBackupManager {
 
     /// Back to what was there before the restore, all of it, without deleting anything until it
     /// is: what the backup brought goes back into the staging folder, where nothing reads it,
-    /// and what was set aside comes back. If any of that fails, everything stays as it is, the
-    /// journal included, and the next launch tries again.
+    /// what was set aside comes back, and anything else found in its place is displaced into
+    /// the snapshot. If any of that fails, everything stays as it is, the journal included, and
+    /// a retry or the next launch tries again — each step is skipped once taken.
     private static func rollBackRestore(_ journal: RestoreJournal, root: URL) -> RestoreOutcome {
         var journal = journal
         if journal.phase != .rollingBack {
@@ -891,13 +1045,20 @@ public final class AccountBackupManager {
                 }
             }
         } else {
+            // The staging lives as long as the restore does: only a clean-up removes it, and a
+            // clean-up runs once every slot is back. A rollback that finds it gone — left so by
+            // a version that cleaned up before recording the rollback — has nothing of the
+            // backup's left to take out, and must not take the user's slots for it.
+            let backupMayBeInPlace = journal.afterPlacing && fm.fileExists(atPath: staging.path)
             for name in journal.names {
                 let current = root.appendingPathComponent(name)
                 let aside = snapshot.appendingPathComponent(name)
                 let incoming = staging.appendingPathComponent(name)
-                // In the root and the backup's: put there after every live slot was set aside,
-                // which a slot that had no live one before shows only through `afterPlacing`.
-                if journal.afterPlacing, fm.fileExists(atPath: current.path), !fm.fileExists(atPath: incoming.path) {
+                // In the root and not in the staging: the backup's, put there after every live
+                // slot was set aside — which a slot that had no live one before shows only
+                // through `afterPlacing`. A slot already put back by an earlier pass is never
+                // taken for it: that pass moved the backup's copy into the staging first.
+                if backupMayBeInPlace, fm.fileExists(atPath: current.path), !fm.fileExists(atPath: incoming.path) {
                     do {
                         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
                         try fm.moveItem(at: current, to: incoming)
@@ -907,22 +1068,44 @@ public final class AccountBackupManager {
                     }
                 }
                 guard fm.fileExists(atPath: aside.path) else { continue }
-                guard !fm.fileExists(atPath: current.path), (try? fm.moveItem(at: aside, to: current)) != nil else {
+                do {
+                    if fm.fileExists(atPath: current.path) {
+                        // The user's slot is still in the snapshot and the backup's is in the
+                        // staging, so this was written here since: kept, out of the way.
+                        try displace(current, snapshot: snapshot)
+                    }
+                    try fm.moveItem(at: aside, to: current)
+                } catch {
                     complete = false
-                    continue
                 }
             }
         }
         guard complete else { return .failed }
-        try? fm.removeItem(at: staging)
-        // A replace has moved everything back out of the snapshot; a merge only ever copied the
-        // account list into it. Either way it holds nothing that is not in place again.
-        let left = (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? []
-        if left.isEmpty || journal.accountId != nil {
+        journal.phase = .rolledBack
+        guard (try? writeJournal(journal, root)) != nil else {
+            // Undone on disk. The clean-up waits for a launch that can record that, and the
+            // staging with it, so the rerun this leaves sees every slot as already put back.
+            return .rolledBack
+        }
+        cleanUpRolledBack(journal, root: root)
+        return .rolledBack
+    }
+
+    /// After a rollback is recorded: the staging goes, the merge's copy of the account list
+    /// goes, and the snapshot goes only if nothing was displaced into it.
+    private static func cleanUpRolledBack(_ journal: RestoreJournal, root: URL) {
+        let fm = FileManager.default
+        let snapshot = root.appendingPathComponent(journal.snapshot)
+        try? fm.removeItem(at: root.appendingPathComponent(stagingName))
+        if journal.accountId != nil {
+            try? fm.removeItem(at: snapshot.appendingPathComponent("accounts-metadata"))
+        }
+        // Only a listing that succeeds and is empty: a snapshot that cannot be listed right now
+        // may hold the user's data.
+        if let left = try? fm.contentsOfDirectory(atPath: snapshot.path), left.isEmpty {
             try? fm.removeItem(at: snapshot)
         }
         try? fm.removeItem(at: journalURL(root))
-        return .rolledBack
     }
 
     /// After the restore is in place: the staging goes, and so do the snapshots of earlier
@@ -936,6 +1119,32 @@ public final class AccountBackupManager {
             }
         }
         try? fm.removeItem(at: journalURL(root))
+    }
+
+    /// The words the launch shows when a restore stops it. The launch has no presentation data
+    /// yet, so they come from the same table as the backup's other messages.
+    public struct RestoreRecoveryText {
+        public let title: String
+        public let message: String
+        public let retry: String
+        public let cancelRestore: String
+        public let finished: String
+        public let close: String
+    }
+
+    public static var restoreRecoveryText: RestoreRecoveryText {
+        let manager = shared
+        return RestoreRecoveryText(
+            title: manager.localized("Восстановление аккаунтов не завершено", "Account restore is not finished"),
+            message: manager.localized(
+                "Данные аккаунтов сохранены, ничего не удалено. Пока восстановление не закончено, AorusGram не открывает аккаунты. Если устройство заблокировано, разблокируйте его и нажмите «Повторить».",
+                "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry."
+            ),
+            retry: manager.localized("Повторить", "Retry"),
+            cancelRestore: manager.localized("Отменить восстановление", "Cancel restore"),
+            finished: manager.localized("Данные аккаунтов в порядке. Откройте AorusGram снова.", "Account data is in order. Open AorusGram again."),
+            close: manager.localized("Закрыть AorusGram", "Close AorusGram")
+        )
     }
 
     private static func selectCurrentAccount(in root: URL, accountId: String) -> Bool {
@@ -1291,6 +1500,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Decifratura del backup non riuscita",
             "The selected account is missing from the backup": "L'account selezionato non è presente nel backup",
             "The selected account data is missing": "Mancano i dati dell'account selezionato",
+            "Account restore is not finished": "Il ripristino degli account non è terminato",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "I dati degli account sono conservati e nulla è stato eliminato. AorusGram non apre gli account finché il ripristino non è terminato. Se il dispositivo è bloccato, sbloccalo e tocca Riprova.",
+            "Retry": "Riprova",
+            "Cancel restore": "Annulla ripristino",
+            "Account data is in order. Open AorusGram again.": "I dati degli account sono in ordine. Apri di nuovo AorusGram.",
+            "Close AorusGram": "Chiudi AorusGram",
         ],
         "pl": [
             "The previous restore has not finished yet. Restart the app": "Poprzednie przywracanie jeszcze się nie zakończyło. Uruchom aplikację ponownie",
@@ -1310,6 +1525,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Błąd odszyfrowania kopii",
             "The selected account is missing from the backup": "Wybranego konta nie ma w kopii",
             "The selected account data is missing": "Brakuje danych wybranego konta",
+            "Account restore is not finished": "Przywracanie kont nie zostało zakończone",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Dane kont są zachowane i nic nie zostało usunięte. AorusGram nie otworzy kont, dopóki przywracanie się nie zakończy. Jeśli urządzenie jest zablokowane, odblokuj je i stuknij Ponów.",
+            "Retry": "Ponów",
+            "Cancel restore": "Anuluj przywracanie",
+            "Account data is in order. Open AorusGram again.": "Dane kont są w porządku. Otwórz AorusGram ponownie.",
+            "Close AorusGram": "Zamknij AorusGram",
         ],
         "nl": [
             "The previous restore has not finished yet. Restart the app": "Het vorige herstel is nog niet voltooid. Start de app opnieuw",
@@ -1329,6 +1550,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Ontsleutelen van de back-up is mislukt",
             "The selected account is missing from the backup": "Het gekozen account ontbreekt in de back-up",
             "The selected account data is missing": "De gegevens van het gekozen account ontbreken",
+            "Account restore is not finished": "Het herstel van de accounts is niet voltooid",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "De accountgegevens zijn bewaard en er is niets verwijderd. AorusGram opent de accounts pas als het herstel is voltooid. Is het apparaat vergrendeld, ontgrendel het dan en tik op Opnieuw.",
+            "Retry": "Opnieuw",
+            "Cancel restore": "Herstel annuleren",
+            "Account data is in order. Open AorusGram again.": "De accountgegevens zijn in orde. Open AorusGram opnieuw.",
+            "Close AorusGram": "AorusGram sluiten",
         ],
         "ca": [
             "The previous restore has not finished yet. Restart the app": "La restauració anterior encara no ha acabat. Reinicia l'app",
@@ -1348,6 +1575,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Ha fallat el desxifratge de la còpia",
             "The selected account is missing from the backup": "El compte triat no és a la còpia",
             "The selected account data is missing": "Falten les dades del compte triat",
+            "Account restore is not finished": "La restauració dels comptes no ha acabat",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Les dades dels comptes es conserven i no s'ha eliminat res. AorusGram no obre els comptes fins que la restauració acabi. Si el dispositiu està bloquejat, desbloqueja'l i toca Torna-ho a provar.",
+            "Retry": "Torna-ho a provar",
+            "Cancel restore": "Cancel·la la restauració",
+            "Account data is in order. Open AorusGram again.": "Les dades dels comptes estan en ordre. Torna a obrir AorusGram.",
+            "Close AorusGram": "Tanca AorusGram",
         ],
         "id": [
             "The previous restore has not finished yet. Restart the app": "Pemulihan sebelumnya belum selesai. Mulai ulang aplikasi",
@@ -1367,6 +1600,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dekripsi cadangan gagal",
             "The selected account is missing from the backup": "Akun yang dipilih tidak ada di cadangan",
             "The selected account data is missing": "Data akun yang dipilih tidak ada",
+            "Account restore is not finished": "Pemulihan akun belum selesai",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Data akun tetap tersimpan dan tidak ada yang dihapus. AorusGram tidak membuka akun sampai pemulihan selesai. Jika perangkat terkunci, buka kuncinya lalu ketuk Coba Lagi.",
+            "Retry": "Coba Lagi",
+            "Cancel restore": "Batalkan pemulihan",
+            "Account data is in order. Open AorusGram again.": "Data akun sudah beres. Buka AorusGram lagi.",
+            "Close AorusGram": "Tutup AorusGram",
         ],
         "ms": [
             "The previous restore has not finished yet. Restart the app": "Pemulihan sebelumnya belum selesai. Mulakan semula aplikasi",
@@ -1386,6 +1625,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Nyahsulit sandaran gagal",
             "The selected account is missing from the backup": "Akaun yang dipilih tiada dalam sandaran",
             "The selected account data is missing": "Data akaun yang dipilih tiada",
+            "Account restore is not finished": "Pemulihan akaun belum selesai",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Data akaun disimpan dan tiada apa-apa yang dipadam. AorusGram tidak membuka akaun sehingga pemulihan selesai. Jika peranti dikunci, buka kuncinya dan ketik Cuba Semula.",
+            "Retry": "Cuba Semula",
+            "Cancel restore": "Batalkan pemulihan",
+            "Account data is in order. Open AorusGram again.": "Data akaun dalam keadaan baik. Buka AorusGram semula.",
+            "Close AorusGram": "Tutup AorusGram",
         ],
         "be": [
             "The previous restore has not finished yet. Restart the app": "Папярэдняе аднаўленне яшчэ не завершана. Перазапусціце праграму",
@@ -1405,6 +1650,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Памылка расшыфроўкі копіі",
             "The selected account is missing from the backup": "Выбраны акаўнт адсутнічае ў копіі",
             "The selected account data is missing": "Даныя выбранага акаўнта адсутнічаюць",
+            "Account restore is not finished": "Аднаўленне акаўнтаў не завершана",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Даныя акаўнтаў захаваныя, нічога не выдалена. Пакуль аднаўленне не скончыцца, AorusGram не адкрывае акаўнты. Калі прылада заблакіравана, разблакіруйце яе і націсніце «Паўтарыць».",
+            "Retry": "Паўтарыць",
+            "Cancel restore": "Скасаваць аднаўленне",
+            "Account data is in order. Open AorusGram again.": "Даныя акаўнтаў у парадку. Адкрыйце AorusGram зноў.",
+            "Close AorusGram": "Закрыць AorusGram",
         ],
         "uz": [
             "The previous restore has not finished yet. Restart the app": "Oldingi tiklash hali tugamagan. Ilovani qayta ishga tushiring",
@@ -1424,6 +1675,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Zaxirani shifrdan chiqarib bo‘lmadi",
             "The selected account is missing from the backup": "Tanlangan hisob zaxirada yo‘q",
             "The selected account data is missing": "Tanlangan hisob ma’lumotlari yo‘q",
+            "Account restore is not finished": "Hisoblarni tiklash tugallanmadi",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Hisob ma’lumotlari saqlangan, hech narsa o‘chirilmadi. Tiklash tugamaguncha AorusGram hisoblarni ochmaydi. Agar qurilma qulflangan bo‘lsa, qulfdan chiqaring va «Qayta urinish» tugmasini bosing.",
+            "Retry": "Qayta urinish",
+            "Cancel restore": "Tiklashni bekor qilish",
+            "Account data is in order. Open AorusGram again.": "Hisob ma’lumotlari joyida. AorusGram’ni qayta oching.",
+            "Close AorusGram": "AorusGram’ni yopish",
         ],
         "ko": [
             "The previous restore has not finished yet. Restart the app": "이전 복원이 아직 끝나지 않았습니다. 앱을 다시 시작하세요",
@@ -1443,6 +1700,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "백업 복호화에 실패했습니다",
             "The selected account is missing from the backup": "선택한 계정이 백업에 없습니다",
             "The selected account data is missing": "선택한 계정의 데이터가 없습니다",
+            "Account restore is not finished": "계정 복원이 완료되지 않았습니다",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "계정 데이터는 보존되었으며 아무것도 삭제되지 않았습니다. 복원이 끝날 때까지 AorusGram은 계정을 열지 않습니다. 기기가 잠겨 있다면 잠금을 해제한 뒤 다시 시도를 누르세요.",
+            "Retry": "다시 시도",
+            "Cancel restore": "복원 취소",
+            "Account data is in order. Open AorusGram again.": "계정 데이터에 문제가 없습니다. AorusGram을 다시 여세요.",
+            "Close AorusGram": "AorusGram 닫기",
         ],
         "ar": [
             "The previous restore has not finished yet. Restart the app": "لم تنتهِ الاستعادة السابقة بعد. أعد تشغيل التطبيق",
@@ -1462,6 +1725,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "فشل فك تشفير النسخة الاحتياطية",
             "The selected account is missing from the backup": "الحساب المحدد غير موجود في النسخة الاحتياطية",
             "The selected account data is missing": "بيانات الحساب المحدد غير موجودة",
+            "Account restore is not finished": "لم تكتمل استعادة الحسابات",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "بيانات الحسابات محفوظة ولم يُحذف شيء. لن يفتح AorusGram الحسابات حتى تكتمل الاستعادة. إذا كان الجهاز مقفلًا، فافتح قفله ثم اضغط «إعادة المحاولة».",
+            "Retry": "إعادة المحاولة",
+            "Cancel restore": "إلغاء الاستعادة",
+            "Account data is in order. Open AorusGram again.": "بيانات الحسابات سليمة. افتح AorusGram من جديد.",
+            "Close AorusGram": "إغلاق AorusGram",
         ],
         "fa": [
             "The previous restore has not finished yet. Restart the app": "بازیابی قبلی هنوز تمام نشده است. برنامه را دوباره باز کنید",
@@ -1481,6 +1750,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "رمزگشایی پشتیبان ناموفق بود",
             "The selected account is missing from the backup": "حساب انتخاب‌شده در پشتیبان نیست",
             "The selected account data is missing": "داده‌های حساب انتخاب‌شده موجود نیست",
+            "Account restore is not finished": "بازیابی حساب‌ها کامل نشده است",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "داده‌های حساب‌ها حفظ شده‌اند و چیزی حذف نشده است. تا وقتی بازیابی تمام نشود، AorusGram حساب‌ها را باز نمی‌کند. اگر دستگاه قفل است، قفل آن را باز کنید و «تلاش دوباره» را بزنید.",
+            "Retry": "تلاش دوباره",
+            "Cancel restore": "لغو بازیابی",
+            "Account data is in order. Open AorusGram again.": "داده‌های حساب‌ها سالم است. AorusGram را دوباره باز کنید.",
+            "Close AorusGram": "بستن AorusGram",
         ],
         "kk": [
             "The previous restore has not finished yet. Restart the app": "Алдыңғы қалпына келтіру әлі аяқталған жоқ. Қолданбаны қайта іске қосыңыз",
@@ -1500,6 +1775,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Көшірмені шифрдан шығару мүмкін болмады",
             "The selected account is missing from the backup": "Таңдалған аккаунт көшірмеде жоқ",
             "The selected account data is missing": "Таңдалған аккаунт деректері жоқ",
+            "Account restore is not finished": "Аккаунттарды қалпына келтіру аяқталмады",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Аккаунт деректері сақталған, ештеңе жойылмаған. Қалпына келтіру аяқталмайынша AorusGram аккаунттарды ашпайды. Құрылғы құлыпталған болса, құлпын ашып, «Қайталау» түймесін басыңыз.",
+            "Retry": "Қайталау",
+            "Cancel restore": "Қалпына келтіруден бас тарту",
+            "Account data is in order. Open AorusGram again.": "Аккаунт деректері дұрыс. AorusGram-ды қайта ашыңыз.",
+            "Close AorusGram": "AorusGram-ды жабу",
         ],
         "zh-hans": [
             "The previous restore has not finished yet. Restart the app": "上一次恢复尚未完成。请重新启动应用",
@@ -1519,6 +1800,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "备份解密失败",
             "The selected account is missing from the backup": "备份中没有所选账号",
             "The selected account data is missing": "所选账号的数据缺失",
+            "Account restore is not finished": "账号恢复尚未完成",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "账号数据已保留，没有删除任何内容。恢复完成之前，AorusGram 不会打开账号。如果设备已锁定，请先解锁，然后轻点“重试”。",
+            "Retry": "重试",
+            "Cancel restore": "取消恢复",
+            "Account data is in order. Open AorusGram again.": "账号数据正常。请重新打开 AorusGram。",
+            "Close AorusGram": "关闭 AorusGram",
         ],
         "zh-hant": [
             "The previous restore has not finished yet. Restart the app": "上一次還原尚未完成。請重新啟動 App",
@@ -1538,6 +1825,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "備份解密失敗",
             "The selected account is missing from the backup": "備份中沒有所選帳號",
             "The selected account data is missing": "所選帳號的資料缺失",
+            "Account restore is not finished": "帳號還原尚未完成",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "帳號資料已保留，沒有刪除任何內容。還原完成之前，AorusGram 不會開啟帳號。如果裝置已鎖定，請先解鎖，然後點一下「重試」。",
+            "Retry": "重試",
+            "Cancel restore": "取消還原",
+            "Account data is in order. Open AorusGram again.": "帳號資料正常。請重新開啟 AorusGram。",
+            "Close AorusGram": "關閉 AorusGram",
         ],
         "ja": [
             "The previous restore has not finished yet. Restart the app": "前回の復元がまだ完了していません。アプリを再起動してください",
@@ -1557,6 +1850,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "バックアップの復号に失敗しました",
             "The selected account is missing from the backup": "選択したアカウントがバックアップにありません",
             "The selected account data is missing": "選択したアカウントのデータがありません",
+            "Account restore is not finished": "アカウントの復元が完了していません",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "アカウントデータは保持されており、何も削除されていません。復元が完了するまで AorusGram はアカウントを開きません。デバイスがロックされている場合は、ロックを解除して「再試行」をタップしてください。",
+            "Retry": "再試行",
+            "Cancel restore": "復元をキャンセル",
+            "Account data is in order. Open AorusGram again.": "アカウントデータに問題はありません。AorusGram をもう一度開いてください。",
+            "Close AorusGram": "AorusGram を閉じる",
         ],
         "fi": [
             "The previous restore has not finished yet. Restart the app": "Edellinen palautus ei ole vielä valmis. Käynnistä sovellus uudelleen",
@@ -1576,6 +1875,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Varmuuskopion purku epäonnistui",
             "The selected account is missing from the backup": "Valittua tiliä ei ole varmuuskopiossa",
             "The selected account data is missing": "Valitun tilin tiedot puuttuvat",
+            "Account restore is not finished": "Tilien palautus ei ole valmis",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Tilien tiedot on säilytetty, eikä mitään poistettu. AorusGram ei avaa tilejä ennen kuin palautus on valmis. Jos laite on lukittu, avaa lukitus ja napauta Yritä uudelleen.",
+            "Retry": "Yritä uudelleen",
+            "Cancel restore": "Peru palautus",
+            "Account data is in order. Open AorusGram again.": "Tilien tiedot ovat kunnossa. Avaa AorusGram uudelleen.",
+            "Close AorusGram": "Sulje AorusGram",
         ],
         "he": [
             "The previous restore has not finished yet. Restart the app": "השחזור הקודם עדיין לא הסתיים. הפעילו מחדש את האפליקציה",
@@ -1595,6 +1900,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "פענוח הגיבוי נכשל",
             "The selected account is missing from the backup": "החשבון שנבחר חסר בגיבוי",
             "The selected account data is missing": "נתוני החשבון שנבחר חסרים",
+            "Account restore is not finished": "שחזור החשבונות לא הסתיים",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "נתוני החשבונות נשמרו ושום דבר לא נמחק. AorusGram לא יפתח את החשבונות עד שהשחזור יסתיים. אם המכשיר נעול, בטלו את הנעילה והקישו על \"ניסיון חוזר\".",
+            "Retry": "ניסיון חוזר",
+            "Cancel restore": "ביטול השחזור",
+            "Account data is in order. Open AorusGram again.": "נתוני החשבונות תקינים. פתחו את AorusGram מחדש.",
+            "Close AorusGram": "סגירת AorusGram",
         ],
         "hr": [
             "The previous restore has not finished yet. Restart the app": "Prethodno vraćanje još nije završeno. Ponovno pokrenite aplikaciju",
@@ -1614,6 +1925,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dešifriranje sigurnosne kopije nije uspjelo",
             "The selected account is missing from the backup": "Odabrani račun nedostaje u sigurnosnoj kopiji",
             "The selected account data is missing": "Podaci odabranog računa nedostaju",
+            "Account restore is not finished": "Vraćanje računa nije završeno",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Podaci računa su sačuvani i ništa nije izbrisano. AorusGram ne otvara račune dok se vraćanje ne završi. Ako je uređaj zaključan, otključajte ga i dodirnite Pokušaj ponovno.",
+            "Retry": "Pokušaj ponovno",
+            "Cancel restore": "Otkaži vraćanje",
+            "Account data is in order. Open AorusGram again.": "Podaci računa su u redu. Ponovno otvorite AorusGram.",
+            "Close AorusGram": "Zatvori AorusGram",
         ],
         "sr": [
             "The previous restore has not finished yet. Restart the app": "Претходно враћање још није завршено. Поново покрените апликацију",
@@ -1633,6 +1950,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Дешифровање резервне копије није успело",
             "The selected account is missing from the backup": "Изабрани налог недостаје у резервној копији",
             "The selected account data is missing": "Подаци изабраног налога недостају",
+            "Account restore is not finished": "Враћање налога није завршено",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Подаци налога су сачувани и ништа није обрисано. AorusGram не отвара налоге док се враћање не заврши. Ако је уређај закључан, откључајте га и додирните „Покушај поново”.",
+            "Retry": "Покушај поново",
+            "Cancel restore": "Откажи враћање",
+            "Account data is in order. Open AorusGram again.": "Подаци налога су у реду. Поново отворите AorusGram.",
+            "Close AorusGram": "Затвори AorusGram",
         ],
         "cs": [
             "The previous restore has not finished yet. Restart the app": "Předchozí obnova ještě neskončila. Restartujte aplikaci",
@@ -1652,6 +1975,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dešifrování zálohy se nezdařilo",
             "The selected account is missing from the backup": "Vybraný účet v záloze chybí",
             "The selected account data is missing": "Data vybraného účtu chybí",
+            "Account restore is not finished": "Obnova účtů není dokončena",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Data účtů jsou zachována a nic nebylo smazáno. Dokud obnova neskončí, AorusGram účty neotevře. Pokud je zařízení zamčené, odemkněte ho a klepněte na Zkusit znovu.",
+            "Retry": "Zkusit znovu",
+            "Cancel restore": "Zrušit obnovu",
+            "Account data is in order. Open AorusGram again.": "Data účtů jsou v pořádku. Otevřete AorusGram znovu.",
+            "Close AorusGram": "Zavřít AorusGram",
         ],
         "sk": [
             "The previous restore has not finished yet. Restart the app": "Predchádzajúca obnova ešte neskončila. Reštartujte aplikáciu",
@@ -1671,6 +2000,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dešifrovanie zálohy zlyhalo",
             "The selected account is missing from the backup": "Vybraný účet v zálohe chýba",
             "The selected account data is missing": "Údaje vybraného účtu chýbajú",
+            "Account restore is not finished": "Obnova účtov nie je dokončená",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Údaje účtov sú zachované a nič nebolo odstránené. Kým obnova neskončí, AorusGram účty neotvorí. Ak je zariadenie zamknuté, odomknite ho a klepnite na Skúsiť znova.",
+            "Retry": "Skúsiť znova",
+            "Cancel restore": "Zrušiť obnovu",
+            "Account data is in order. Open AorusGram again.": "Údaje účtov sú v poriadku. Otvorte AorusGram znova.",
+            "Close AorusGram": "Zavrieť AorusGram",
         ],
         "ro": [
             "The previous restore has not finished yet. Restart the app": "Restaurarea anterioară nu s-a încheiat încă. Reporniți aplicația",
@@ -1690,6 +2025,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Decriptarea copiei de rezervă a eșuat",
             "The selected account is missing from the backup": "Contul selectat lipsește din copia de rezervă",
             "The selected account data is missing": "Datele contului selectat lipsesc",
+            "Account restore is not finished": "Restaurarea conturilor nu s-a încheiat",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Datele conturilor sunt păstrate și nu s-a șters nimic. AorusGram nu deschide conturile până nu se încheie restaurarea. Dacă dispozitivul este blocat, deblocați-l și atingeți Reîncearcă.",
+            "Retry": "Reîncearcă",
+            "Cancel restore": "Anulează restaurarea",
+            "Account data is in order. Open AorusGram again.": "Datele conturilor sunt în regulă. Deschideți din nou AorusGram.",
+            "Close AorusGram": "Închide AorusGram",
         ],
         "hu": [
             "The previous restore has not finished yet. Restart the app": "Az előző visszaállítás még nem fejeződött be. Indítsa újra az alkalmazást",
@@ -1709,6 +2050,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "A mentés visszafejtése nem sikerült",
             "The selected account is missing from the backup": "A kiválasztott fiók hiányzik a mentésből",
             "The selected account data is missing": "A kiválasztott fiók adatai hiányoznak",
+            "Account restore is not finished": "A fiókok visszaállítása nem fejeződött be",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "A fiókadatok megmaradtak, semmi sem törlődött. Amíg a visszaállítás be nem fejeződik, az AorusGram nem nyitja meg a fiókokat. Ha az eszköz zárolva van, oldja fel, és koppintson az Újra gombra.",
+            "Retry": "Újra",
+            "Cancel restore": "Visszaállítás megszakítása",
+            "Account data is in order. Open AorusGram again.": "A fiókadatok rendben vannak. Nyissa meg újra az AorusGramot.",
+            "Close AorusGram": "AorusGram bezárása",
         ],
         "nb": [
             "The previous restore has not finished yet. Restart the app": "Den forrige gjenopprettingen er ikke ferdig ennå. Start appen på nytt",
@@ -1728,6 +2075,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dekrypteringen av sikkerhetskopien mislyktes",
             "The selected account is missing from the backup": "Den valgte kontoen mangler i sikkerhetskopien",
             "The selected account data is missing": "Dataene til den valgte kontoen mangler",
+            "Account restore is not finished": "Gjenopprettingen av kontoene er ikke fullført",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Kontodataene er tatt vare på, og ingenting er slettet. AorusGram åpner ikke kontoene før gjenopprettingen er fullført. Hvis enheten er låst, låser du den opp og trykker på Prøv igjen.",
+            "Retry": "Prøv igjen",
+            "Cancel restore": "Avbryt gjenopprettingen",
+            "Account data is in order. Open AorusGram again.": "Kontodataene er i orden. Åpne AorusGram på nytt.",
+            "Close AorusGram": "Lukk AorusGram",
         ],
         "sv": [
             "The previous restore has not finished yet. Restart the app": "Den förra återställningen är inte klar än. Starta om appen",
@@ -1747,6 +2100,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Dekrypteringen av säkerhetskopian misslyckades",
             "The selected account is missing from the backup": "Det valda kontot saknas i säkerhetskopian",
             "The selected account data is missing": "Uppgifterna för det valda kontot saknas",
+            "Account restore is not finished": "Återställningen av kontona är inte klar",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Kontouppgifterna finns kvar och inget har raderats. AorusGram öppnar inte kontona förrän återställningen är klar. Om enheten är låst låser du upp den och trycker på Försök igen.",
+            "Retry": "Försök igen",
+            "Cancel restore": "Avbryt återställningen",
+            "Account data is in order. Open AorusGram again.": "Kontouppgifterna är i ordning. Öppna AorusGram igen.",
+            "Close AorusGram": "Stäng AorusGram",
         ],
         "vi": [
             "The previous restore has not finished yet. Restart the app": "Lần khôi phục trước chưa hoàn tất. Hãy khởi động lại ứng dụng",
@@ -1766,6 +2125,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Giải mã bản sao lưu không thành công",
             "The selected account is missing from the backup": "Bản sao lưu không có tài khoản đã chọn",
             "The selected account data is missing": "Thiếu dữ liệu của tài khoản đã chọn",
+            "Account restore is not finished": "Chưa khôi phục xong tài khoản",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Dữ liệu tài khoản vẫn được giữ và không có gì bị xóa. AorusGram sẽ không mở tài khoản cho đến khi khôi phục xong. Nếu thiết bị đang khóa, hãy mở khóa rồi chạm vào Thử lại.",
+            "Retry": "Thử lại",
+            "Cancel restore": "Hủy khôi phục",
+            "Account data is in order. Open AorusGram again.": "Dữ liệu tài khoản vẫn ổn. Hãy mở lại AorusGram.",
+            "Close AorusGram": "Đóng AorusGram",
         ],
         "uk": [
             "The previous restore has not finished yet. Restart the app": "Попереднє відновлення ще не завершено. Перезапустіть застосунок",
@@ -1785,6 +2150,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Помилка розшифрування резервної копії",
             "The selected account is missing from the backup": "Акаунт відсутній у резервній копії",
             "The selected account data is missing": "Дані вибраного акаунта відсутні",
+            "Account restore is not finished": "Відновлення акаунтів не завершено",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Дані акаунтів збережено, нічого не видалено. Доки відновлення не завершиться, AorusGram не відкриває акаунти. Якщо пристрій заблоковано, розблокуйте його й натисніть «Повторити».",
+            "Retry": "Повторити",
+            "Cancel restore": "Скасувати відновлення",
+            "Account data is in order. Open AorusGram again.": "Дані акаунтів у порядку. Відкрийте AorusGram знову.",
+            "Close AorusGram": "Закрити AorusGram",
         ],
         "es": [
             "The previous restore has not finished yet. Restart the app": "La restauración anterior aún no ha terminado. Reinicia la app",
@@ -1804,6 +2175,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Fallo al descifrar la copia",
             "The selected account is missing from the backup": "La cuenta elegida no está en la copia",
             "The selected account data is missing": "Faltan los datos de la cuenta elegida",
+            "Account restore is not finished": "La restauración de las cuentas no ha terminado",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Los datos de las cuentas se conservan y no se ha eliminado nada. AorusGram no abre las cuentas hasta que termine la restauración. Si el dispositivo está bloqueado, desbloquéalo y toca Reintentar.",
+            "Retry": "Reintentar",
+            "Cancel restore": "Cancelar restauración",
+            "Account data is in order. Open AorusGram again.": "Los datos de las cuentas están en orden. Vuelve a abrir AorusGram.",
+            "Close AorusGram": "Cerrar AorusGram",
         ],
         "pt": [
             "The previous restore has not finished yet. Restart the app": "A restauração anterior ainda não terminou. Reinicie o app",
@@ -1823,6 +2200,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Falha ao descriptografar o backup",
             "The selected account is missing from the backup": "A conta escolhida não está no backup",
             "The selected account data is missing": "Faltam os dados da conta escolhida",
+            "Account restore is not finished": "A restauração das contas não terminou",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Os dados das contas foram mantidos e nada foi apagado. O AorusGram não abre as contas até a restauração terminar. Se o dispositivo estiver bloqueado, desbloqueie-o e toque em Tentar novamente.",
+            "Retry": "Tentar novamente",
+            "Cancel restore": "Cancelar restauração",
+            "Account data is in order. Open AorusGram again.": "Os dados das contas estão em ordem. Abra o AorusGram novamente.",
+            "Close AorusGram": "Fechar o AorusGram",
         ],
         "de": [
             "The previous restore has not finished yet. Restart the app": "Die vorherige Wiederherstellung ist noch nicht abgeschlossen. Starte die App neu",
@@ -1842,6 +2225,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Das Backup konnte nicht entschlüsselt werden",
             "The selected account is missing from the backup": "Das gewählte Konto fehlt im Backup",
             "The selected account data is missing": "Die Daten des gewählten Kontos fehlen",
+            "Account restore is not finished": "Die Wiederherstellung der Konten ist nicht abgeschlossen",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Die Kontodaten sind erhalten, nichts wurde gelöscht. AorusGram öffnet die Konten erst, wenn die Wiederherstellung abgeschlossen ist. Ist das Gerät gesperrt, entsperre es und tippe auf „Erneut versuchen“.",
+            "Retry": "Erneut versuchen",
+            "Cancel restore": "Wiederherstellung abbrechen",
+            "Account data is in order. Open AorusGram again.": "Die Kontodaten sind in Ordnung. Öffne AorusGram erneut.",
+            "Close AorusGram": "AorusGram schließen",
         ],
         "fr": [
             "The previous restore has not finished yet. Restart the app": "La restauration précédente n'est pas encore terminée. Redémarrez l'app",
@@ -1861,6 +2250,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Échec du déchiffrement de la sauvegarde",
             "The selected account is missing from the backup": "Le compte sélectionné est absent de la sauvegarde",
             "The selected account data is missing": "Les données du compte sélectionné sont absentes",
+            "Account restore is not finished": "La restauration des comptes n'est pas terminée",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Les données des comptes sont conservées et rien n'a été supprimé. AorusGram n'ouvre pas les comptes tant que la restauration n'est pas terminée. Si l'appareil est verrouillé, déverrouillez-le puis touchez Réessayer.",
+            "Retry": "Réessayer",
+            "Cancel restore": "Annuler la restauration",
+            "Account data is in order. Open AorusGram again.": "Les données des comptes sont en ordre. Rouvrez AorusGram.",
+            "Close AorusGram": "Fermer AorusGram",
         ],
         "tr": [
             "The previous restore has not finished yet. Restart the app": "Önceki geri yükleme henüz bitmedi. Uygulamayı yeniden başlatın",
@@ -1880,6 +2275,12 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "Yedek şifresi çözülemedi",
             "The selected account is missing from the backup": "Seçilen hesap yedekte yok",
             "The selected account data is missing": "Seçilen hesabın verileri eksik",
+            "Account restore is not finished": "Hesapların geri yüklenmesi tamamlanmadı",
+            "Account data is kept and nothing was deleted. AorusGram does not open the accounts until the restore is finished. If the device is locked, unlock it and tap Retry.": "Hesap verileri korunuyor ve hiçbir şey silinmedi. Geri yükleme bitene kadar AorusGram hesapları açmaz. Cihaz kilitliyse kilidini açın ve Yeniden Dene'ye dokunun.",
+            "Retry": "Yeniden Dene",
+            "Cancel restore": "Geri yüklemeyi iptal et",
+            "Account data is in order. Open AorusGram again.": "Hesap verileri yerinde. AorusGram'ı yeniden açın.",
+            "Close AorusGram": "AorusGram'ı kapat",
         ],
     ]
 }

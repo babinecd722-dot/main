@@ -406,8 +406,23 @@ public enum AorusTDataReader {
         }
     }
 
+    /// What a folder held: the accounts that read, and how many were present but could not be —
+    /// signed-out keys, damaged data — so the UI can say an account was skipped rather than
+    /// quietly drop it.
+    public struct AorusTDataReadReport {
+        public let sessions: [AorusImportedSession]
+        public let skippedAccounts: Int
+    }
+
     /// Every authorised account in the folder, as sessions ready to be added.
     public static func read(folder: URL, passcode: String) throws -> [AorusImportedSession] {
+        return try self.readReport(folder: folder, passcode: passcode).sessions
+    }
+
+    /// Every authorised account in the folder, with a count of those that were present but did not
+    /// read. Throws only when nothing at all could be read; a folder where one account reads and
+    /// another does not returns the one and counts the other.
+    public static func readReport(folder: URL, passcode: String) throws -> AorusTDataReadReport {
         let keyData = try AorusTDataCrypto.readFile(named: "key_" + self.keyFile, in: folder)
         var keyStream = AorusQtReader(keyData.body)
         let salt = try keyStream.readByteArray()
@@ -489,6 +504,7 @@ public enum AorusTDataReader {
             do {
                 sessions.append(try self.readAccount(folder: folder, index: Int(index), localKey: localKey))
             } catch AorusTDataFailure.noAccounts {
+                // Present in the list but holds no authorised key: a slot Desktop has signed out.
                 continue
             } catch {
                 hadCorruptAccount = true
@@ -497,7 +513,11 @@ public enum AorusTDataReader {
         guard !sessions.isEmpty else {
             throw hadCorruptAccount ? AorusTDataFailure.corrupt : AorusTDataFailure.noAccounts
         }
-        return sessions
+        // How many distinct accounts the list named but did not become a session: those whose own
+        // data was damaged or signed out. A name the list repeats, or one out of range, is not an
+        // account and is not counted.
+        let skipped = max(0, seen.count - sessions.count)
+        return AorusTDataReadReport(sessions: sessions, skippedAccounts: skipped)
     }
 
     private static func derivePasscodeKey(_ passcode: String, kind: UInt32, memory: UInt32, time: UInt32, parallel: UInt32, salt: Data) throws -> Data {
@@ -538,7 +558,9 @@ public enum AorusTDataReader {
             userId = Int64(bitPattern: try authorization.readUInt64())
             mainDcId = try authorization.readInt32()
         }
-        guard userId > 0 else {
+        // A real account names a user id Telegram can give and Postbox can hold. A value outside
+        // that range was not written by Desktop for an account and the slot is treated as empty.
+        guard AorusImportedSession.isValidUserId(userId) else {
             throw AorusTDataFailure.noAccounts
         }
 

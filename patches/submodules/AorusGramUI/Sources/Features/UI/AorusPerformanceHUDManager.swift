@@ -465,7 +465,9 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func applyCleanup(enabled: Bool, intervalSeconds: Int) {
-        let seconds = max(30, intervalSeconds)
+        // The common boundary for the RAM cleanup timer: a stored value out of range is bounded
+        // to 30 seconds … one day before it schedules anything.
+        let seconds = min(86_400, max(30, intervalSeconds))
         if !enabled {
             cleanupTimer?.invalidate()
             cleanupTimer = nil

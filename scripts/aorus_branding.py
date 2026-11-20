@@ -4841,11 +4841,16 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
     or any postbox is opened — swaps the staged account data into place, taking a
     safety snapshot of the current data first. Running this pre-postbox is what
     makes the restore safe: nothing has the account databases open yet.
+
+    A restore that can be neither finished nor undone — or whose journal cannot be read —
+    stops the launch right there, before anything opens or upgrades the account folders, and
+    asks: retry, or cancel the restore. The launch is not resumed in the same process: what
+    follows the hook in `didFinishLaunching` runs once, so a recovered launch ends with a
+    prompt to open the app again.
     """
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     if not path.is_file():
-        print("AccountRestoreHook: AppDelegate.swift not found, skip")
-        return
+        raise RuntimeError("AccountRestoreHook: AppDelegate.swift not found")
     t = path.read_text(encoding="utf-8")
     if "AccountBackupManager.applyPendingRestoreIfNeeded" in t:
         print("AccountRestoreHook: already injected")
@@ -4856,8 +4861,9 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
         "        }\n"
     )
     if anchor not in t:
-        print("AccountRestoreHook: performAppGroupUpgrades anchor not found — skipped")
-        return
+        # Not skipped: without the hook a prepared restore is never applied, and without the
+        # gate a launch would open accounts a restore left half old and half new.
+        raise RuntimeError("AccountRestoreHook: performAppGroupUpgrades anchor not found")
     hook = (
         "        // AorusGram: login-by-backup — a request raised from the phone-entry screen\n"
         "        // prepares the restore now (rebuilds + decrypts the durable Keychain archive\n"
@@ -4874,12 +4880,48 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
         "                mergeIntoExisting: isAddingAccount\n"
         "            )\n"
         "        }\n"
-        "        // AorusGram: apply a pending account-backup restore before any postbox opens\n"
-        "        AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath)\n"
+        "        // AorusGram: apply a pending account-backup restore before any postbox opens. A\n"
+        "        // restore that is neither finished nor undone leaves the account folders half old\n"
+        "        // and half new, or unknown: nothing below may open them — not the upgrades, not the\n"
+        "        // account manager — so the launch stops here, the way Telegram's own stops when the\n"
+        "        // app group or free space is missing, and asks.\n"
+        "        if AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath).blocksAccountAccess {\n"
+        "            let aorusRestoreText = AccountBackupManager.restoreRecoveryText\n"
+        "            let aorusRestoreWindow = self.mainWindow\n"
+        "            func aorusPresentRestoreFinished() {\n"
+        "                let alert = UIAlertController(title: nil, message: aorusRestoreText.finished, preferredStyle: .alert)\n"
+        "                alert.addAction(UIAlertAction(title: aorusRestoreText.close, style: .default, handler: { _ in\n"
+        "                    // The rest of this launch was skipped and runs only in a new process,\n"
+        "                    // which now finds the account data whole.\n"
+        "                    exit(0)\n"
+        "                }))\n"
+        "                aorusRestoreWindow?.presentNative(alert)\n"
+        "            }\n"
+        "            func aorusPresentRestoreRecovery() {\n"
+        "                let alert = UIAlertController(title: aorusRestoreText.title, message: aorusRestoreText.message, preferredStyle: .alert)\n"
+        "                alert.addAction(UIAlertAction(title: aorusRestoreText.retry, style: .default, handler: { _ in\n"
+        "                    if AccountBackupManager.retryUnfinishedRestore(rootPath: rootPath).blocksAccountAccess {\n"
+        "                        aorusPresentRestoreRecovery()\n"
+        "                    } else {\n"
+        "                        aorusPresentRestoreFinished()\n"
+        "                    }\n"
+        "                }))\n"
+        "                alert.addAction(UIAlertAction(title: aorusRestoreText.cancelRestore, style: .destructive, handler: { _ in\n"
+        "                    if AccountBackupManager.abandonUnfinishedRestore(rootPath: rootPath).blocksAccountAccess {\n"
+        "                        aorusPresentRestoreRecovery()\n"
+        "                    } else {\n"
+        "                        aorusPresentRestoreFinished()\n"
+        "                    }\n"
+        "                }))\n"
+        "                aorusRestoreWindow?.presentNative(alert)\n"
+        "            }\n"
+        "            aorusPresentRestoreRecovery()\n"
+        "            return true\n"
+        "        }\n"
     )
     t = t.replace(anchor, hook + anchor, 1)
     path.write_text(t, encoding="utf-8")
-    print("AccountRestoreHook: injected login-by-backup + applyPendingRestoreIfNeeded before performAppGroupUpgrades")
+    print("AccountRestoreHook: injected login-by-backup + gated applyPendingRestoreIfNeeded before performAppGroupUpgrades")
 
 
 def patch_app_delegate_siri_continue_activity(tg: Path) -> None:

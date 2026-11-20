@@ -40,9 +40,27 @@ public struct AorusImportedSession {
         self.additionalKeys = additionalKeys
     }
 
-    /// A key is 2048 bits and its datacenter is one of Telegram's five.
+    /// The largest id Telegram gives a user: 52 significant bits, which MTProto and the Bot API
+    /// both promise never to exceed. A Postbox peer id holds that and round-trips it through its
+    /// 64-bit form; a larger one is cut to 61 bits on the way, or traps.
+    public static let maximumUserId: Int64 = (1 << 52) - 1
+
+    /// Whether `value` can be a Telegram user id at all. A file that states anything else was not
+    /// written by a Telegram client, and is refused as damaged rather than carried any further.
+    public static func isValidUserId(_ value: Int64) -> Bool {
+        return value > 0 && value <= self.maximumUserId
+    }
+
+    /// A key is 2048 bits, its datacenter is one of Telegram's, and an account it names is one a
+    /// Telegram user id can be.
     public var isWellFormed: Bool {
-        return self.authKey.count == 256 && self.dcId >= 1 && self.dcId <= 10
+        guard self.authKey.count == 256 && self.dcId >= 1 && self.dcId <= 10 else {
+            return false
+        }
+        if let userId = self.userId, !AorusImportedSession.isValidUserId(userId) {
+            return false
+        }
+        return true
     }
 }
 
@@ -51,8 +69,23 @@ public enum AorusSessionImportError {
     case invalidSession
     /// Telegram could not be reached.
     case network
+    /// Telegram answered and declined the request for a reason of its own (a flood wait, an
+    /// internal error): the key may well be sound, and the import can be tried again.
+    case server(String)
     /// This account is already on the device.
     case duplicate(title: String)
+}
+
+/// An account already on the device. The same user is a different account in the test
+/// environment, so an import is a duplicate only of one in the environment it is for.
+public struct AorusExistingAccount: Hashable {
+    public let peerId: PeerId
+    public let isTestingEnvironment: Bool
+
+    public init(peerId: PeerId, isTestingEnvironment: Bool) {
+        self.peerId = peerId
+        self.isTestingEnvironment = isTestingEnvironment
+    }
 }
 
 public struct AorusImportedAccountInfo {
@@ -151,10 +184,13 @@ private func aorusResolveImportedSession(
         |> mapToSignal { network -> Signal<TelegramUser, AorusSessionImportError> in
             return network.request(Api.functions.users.getUsers(id: [.inputUserSelf]), automaticFloodWait: false)
             |> mapError { error -> AorusSessionImportError in
-                if error.errorDescription.hasPrefix("AUTH_KEY") || error.errorDescription.hasPrefix("SESSION_") || error.errorDescription.hasPrefix("USER_DEACTIVATED") {
+                // Any answer means Telegram was reached; only the key's own refusals say the
+                // session is gone. Being out of reach never arrives here — MTProto keeps retrying
+                // a request it cannot send — it is the timeout below.
+                if error.errorCode == 401 || error.errorDescription.hasPrefix("AUTH_KEY") || error.errorDescription.hasPrefix("SESSION_") || error.errorDescription.hasPrefix("USER_DEACTIVATED") {
                     return .invalidSession
                 } else {
-                    return .network
+                    return .server(error.errorDescription)
                 }
             }
             |> mapToSignal { result -> Signal<TelegramUser, AorusSessionImportError> in
@@ -178,22 +214,31 @@ private func aorusResolveImportedSession(
     }
 }
 
-/// Adds the session as an account. `existingPeerIds` are the accounts already on the device, so
-/// the same account is reported rather than added twice.
+/// Adds the session as an account, as the account Telegram says the key belongs to.
+///
+/// Nothing is written until the key has answered: the record's peer is the user Telegram
+/// returns for the key, never the id a file states, so a key and an id that do not belong
+/// together cannot become an account, and a dead key is reported instead of added. Telegram out
+/// of reach is reported as such, and the caller keeps the session to try again.
+///
+/// `existingAccounts` are the accounts the app has open; the records themselves are checked
+/// again inside the transaction that writes the new one, so two imports of the same account
+/// running at once still add it once.
 public func aorusImportSession(
     accountManager: AccountManager<TelegramAccountManagerTypes>,
     networkArguments: NetworkInitializationArguments,
     rootPath: String,
     session: AorusImportedSession,
-    existingPeerIds: Set<PeerId>
+    existingAccounts: Set<AorusExistingAccount>
 ) -> Signal<AorusImportedAccountInfo, AorusSessionImportError> {
     guard session.isWellFormed else {
         return .fail(.invalidSession)
     }
-    // Writes the record. Shared by the two ways the account's own peer is learnt: from the
-    // server, when the key could be resolved, and from the file itself, when it could not be.
-    let add: (PeerId, String, String?) -> Signal<AorusImportedAccountInfo, AorusSessionImportError> = { peerId, title, username in
-        if existingPeerIds.contains(peerId) {
+    return aorusResolveImportedSession(accountManager: accountManager, networkArguments: networkArguments, rootPath: rootPath, session: session)
+    |> mapToSignal { user -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
+        let peerId = user.id
+        let title = user.debugDisplayTitle
+        if existingAccounts.contains(AorusExistingAccount(peerId: peerId, isTestingEnvironment: session.isTestingEnvironment)) {
             return .fail(.duplicate(title: title))
         }
         var additionalDatacenterKeys: [Int32: AccountBackupData.DatacenterKey] = [:]
@@ -212,43 +257,47 @@ public func aorusImportSession(
             notificationEncryptionKey: nil,
             additionalDatacenterKeys: additionalDatacenterKeys
         )
-        return accountManager.transaction { transaction -> AorusImportedAccountInfo in
-            // The order Telegram gives a freshly logged-in account, so the new one sits last.
-            let nextSortOrder = (transaction.getRecords().map({ record -> Int32 in
+        let environment: AccountEnvironment = session.isTestingEnvironment ? .test : .production
+        return accountManager.transaction { transaction -> AorusImportedAccountInfo? in
+            var maxSortOrder: Int32 = 0
+            for record in transaction.getRecords() {
+                var recordEnvironment: AccountEnvironment = .production
+                var recordPeerId: Int64?
+                var isLoggedOut = false
                 for attribute in record.attributes {
-                    if case let .sortOrder(sortOrder) = attribute {
-                        return sortOrder.order
+                    switch attribute {
+                    case let .environment(value):
+                        recordEnvironment = value.environment
+                    case let .backupData(value):
+                        recordPeerId = value.data?.peerId
+                    case let .sortOrder(value):
+                        maxSortOrder = max(maxSortOrder, value.order)
+                    case .loggedOut:
+                        isLoggedOut = true
+                    default:
+                        break
                     }
                 }
-                return 0
-            }).max() ?? 0) + 1
+                // Checked where the record is written, so an import that raced this one, or an
+                // account the app has not opened yet, is not added a second time.
+                if !isLoggedOut, recordEnvironment == environment, recordPeerId == backupData.peerId {
+                    return nil
+                }
+            }
+            // The order Telegram gives a freshly logged-in account, so the new one sits last.
             let recordId = transaction.createRecord([
-                .environment(AccountEnvironmentAttribute(environment: session.isTestingEnvironment ? .test : .production)),
-                .sortOrder(AccountSortOrderAttribute(order: nextSortOrder)),
+                .environment(AccountEnvironmentAttribute(environment: environment)),
+                .sortOrder(AccountSortOrderAttribute(order: maxSortOrder + 1)),
                 .backupData(AccountBackupDataAttribute(data: backupData))
             ])
-            return AorusImportedAccountInfo(recordId: recordId, peerId: peerId, title: title, username: username)
+            return AorusImportedAccountInfo(recordId: recordId, peerId: peerId, title: title, username: user.username)
         }
         |> castError(AorusSessionImportError.self)
-    }
-    return aorusResolveImportedSession(accountManager: accountManager, networkArguments: networkArguments, rootPath: rootPath, session: session)
-    |> mapToSignal { user -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
-        return add(user.id, user.debugDisplayTitle, user.username)
-    }
-    |> `catch` { error -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
-        // The server rejecting the key, or already holding the account, is final. But Telegram
-        // being out of reach for this one request -- a cold REALITY tunnel still coming up, a
-        // slow first handshake that runs past the timeout -- is not a reason to throw away a
-        // sound session. When the file names its own account (a Telegram Desktop tdata and most
-        // session strings do), the account is added from that id and connects on the app's own
-        // network, the one every other account uses, where the key is checked exactly as
-        // theirs is and a dead one is signed out rather than refused here. A key that names no
-        // account (a bare Telethon session) still needs the server to say whose it is, so that
-        // one keeps the network error.
-        guard case .network = error, let userId = session.userId, userId > 0 else {
-            return .fail(error)
+        |> mapToSignal { info -> Signal<AorusImportedAccountInfo, AorusSessionImportError> in
+            guard let info else {
+                return .fail(.duplicate(title: title))
+            }
+            return .single(info)
         }
-        let peerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(userId))
-        return add(peerId, "", nil)
     }
 }

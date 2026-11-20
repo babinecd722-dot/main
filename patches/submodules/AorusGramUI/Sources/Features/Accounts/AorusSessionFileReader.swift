@@ -84,7 +84,9 @@ public enum AorusSessionFileReader {
         return AorusImportedSession(
             dcId: dcId,
             authKey: authKey,
-            userId: userId > 0 ? userId : nil,
+            // A user id outside Telegram's range is not read as one: the server names the
+            // account instead, exactly as it does for a session that states no user at all.
+            userId: AorusImportedSession.isValidUserId(userId) ? userId : nil,
             isTestingEnvironment: isTestMode,
             additionalKeys: []
         )
@@ -136,7 +138,7 @@ public enum AorusSessionFileReader {
                 for i in 0 ..< 8 {
                     userId = (userId << 8) | Int64(bytes[6 + self.authKeySize + i])
                 }
-                return AorusImportedSession(dcId: dcId, authKey: authKey, userId: userId > 0 ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])
+                return AorusImportedSession(dcId: dcId, authKey: authKey, userId: AorusImportedSession.isValidUserId(userId) ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])
             }
             // Pyrogram, older: dc id (1), test mode (1), key (256), user id (4), is bot (1)
             if bytes.count == 1 + 1 + self.authKeySize + 4 + 1 || bytes.count == 1 + 1 + self.authKeySize + 8 + 1 {
@@ -148,7 +150,7 @@ public enum AorusSessionFileReader {
                 for i in 0 ..< userIdSize {
                     userId = (userId << 8) | Int64(bytes[2 + self.authKeySize + i])
                 }
-                return AorusImportedSession(dcId: dcId, authKey: authKey, userId: userId > 0 ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])
+                return AorusImportedSession(dcId: dcId, authKey: authKey, userId: AorusImportedSession.isValidUserId(userId) ? userId : nil, isTestingEnvironment: isTestMode, additionalKeys: [])
             }
             // A bare key, pasted on its own, with the datacenter asked for separately.
             if bytes.count == self.authKeySize {

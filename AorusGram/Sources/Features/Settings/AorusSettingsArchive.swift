@@ -267,38 +267,64 @@ public enum AorusSettingsArchive {
         return Prepared(staging: staging, standard: standard, suite: suite, keychain: keychain, vpn: vpn, files: files, name: meta.name)
     }
 
+    /// How a load ended, so the caller can tell the user the truth rather than a guess.
+    public enum Outcome: Equatable {
+        /// The save is in force.
+        case loaded
+        /// A step could not be completed and everything was put back: the app is as it was.
+        case rolledBack
+        /// A step could not be completed and putting it back did not fully succeed either: some
+        /// of the save is in place and some is not. The caller tells the user to restart, and a
+        /// restart reads whatever is now on disk.
+        case incomplete
+    }
+
     /// Puts a prepared save in force. Main thread. The stores let go of their files first and
     /// read everything again after; the core ones are read again here, the interface module
     /// and Telegram's own stores by the caller.
     ///
-    /// All of it or none of it. The files go in first and the keychain items after them, each
-    /// keeping what it replaced; the settings and the VPN, which cannot fail, only once both
-    /// are in. If either cannot be written in full, both are put back as they were and nothing
-    /// else is touched. A failed load used to go on to the keychain, the settings and the VPN
-    /// all the same, and the app ran on a mix of the old files and the new keys and settings.
-    /// Returns false when nothing was loaded.
+    /// Within the process it is all or nothing: the files go in first, each keeping what it
+    /// replaced, then the keychain items keeping theirs; the settings and the VPN, which cannot
+    /// fail, only once both are in. If either cannot be written in full it is put back, and the
+    /// result says whether putting it back succeeded — `rolledBack` when the app is exactly as it
+    /// was, `incomplete` when it could not be fully restored. The one case this cannot cover is
+    /// the process being killed mid-apply: the file half is replaced atomically a file at a time
+    /// with its predecessor kept beside it, but there is no on-disk journal spanning files and
+    /// keychain, and the keychain's prior values are held only in memory — persisting them would
+    /// write secrets to disk — so a kill between the file and keychain phases can leave the two
+    /// out of step until the next load. `rolledBack`/`incomplete` are reported for the in-process
+    /// failures, which are the ones this can act on.
     @discardableResult
-    public static func apply(_ prepared: Prepared) -> Bool {
+    public static func apply(_ prepared: Prepared) -> Outcome {
         NotificationCenter.default.post(name: AorusSettingsLifecycle.willImport, object: nil)
 
-        var complete = false
-        if let files = placeFiles(from: prepared.staging, saved: prepared.files) {
-            if let keychain = replaceKeychain(with: prepared.keychain) {
+        var outcome: Outcome = .rolledBack
+        switch placeFiles(from: prepared.staging, saved: prepared.files) {
+        case let .placed(files):
+            switch replaceKeychain(with: prepared.keychain) {
+            case let .placed(keychain):
                 replaceDefaults(UserDefaults.standard, with: prepared.standard, own: isOwnStandardKey)
                 replaceDefaults(UserDefaults(suiteName: suiteName), with: prepared.suite, own: isOwnSuiteKey)
                 AorusUserVPNStore.shared.importState(prepared.vpn)
                 keychain.commit()
                 files.commit()
-                complete = true
-            } else {
-                files.rollBack()
+                outcome = .loaded
+            case let .failed(keychainRolledBack):
+                // The keychain could not go in. Put the files back too; the app is consistent
+                // only if both halves were fully restored.
+                let filesRolledBack = files.rollBack()
+                outcome = (keychainRolledBack && filesRolledBack) ? .rolledBack : .incomplete
             }
+        case let .failed(filesRolledBack):
+            // Nothing beyond the files was touched, so the app is as it was when the files went
+            // back cleanly; otherwise some of them are the save's and some are not.
+            outcome = filesRolledBack ? .rolledBack : .incomplete
         }
         AorusPluginStore.shared.settingsDidLoad()
         AorusConnectionPreferences.shared.reloadFromStorage()
 
         NotificationCenter.default.post(name: AorusSettingsLifecycle.didImport, object: nil)
-        return complete
+        return outcome
     }
 
     // MARK: - What belongs to the save
@@ -485,23 +511,38 @@ public enum AorusSettingsArchive {
             self.holding = holding
         }
 
-        func rollBack() {
+        /// Every placed file back to what it replaced, and every held file back where it was.
+        /// Reports whether all of it succeeded: a caller that is told `false` knows the stores on
+        /// disk are a mix of the save's and the app's, not the clean "nothing changed" it would
+        /// otherwise claim.
+        @discardableResult
+        func rollBack() -> Bool {
             let fm = FileManager.default
+            var restored = true
             for item in placed.reversed() {
-                if let backup = item.backup {
-                    _ = try? fm.replaceItemAt(item.target, withItemAt: backup)
-                } else {
-                    try? fm.removeItem(at: item.target)
+                do {
+                    if let backup = item.backup {
+                        _ = try fm.replaceItemAt(item.target, withItemAt: backup)
+                    } else if fm.fileExists(atPath: item.target.path) {
+                        try fm.removeItem(at: item.target)
+                    }
+                } catch {
+                    restored = false
                 }
             }
             for item in held.reversed() {
-                try? fm.createDirectory(at: item.original.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? fm.moveItem(at: item.held, to: item.original)
+                do {
+                    try fm.createDirectory(at: item.original.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try fm.moveItem(at: item.held, to: item.original)
+                } catch {
+                    restored = false
+                }
             }
             // Only once nothing is left in it: a file that could not be moved back stays there.
             if let left = try? fm.contentsOfDirectory(atPath: holding.path), left.isEmpty {
                 try? fm.removeItem(at: holding)
             }
+            return restored
         }
 
         func commit() {
@@ -513,14 +554,22 @@ public enum AorusSettingsArchive {
         }
     }
 
+    /// Whether the files went in, or could not and were put back — and, if so, whether putting
+    /// them back fully succeeded.
+    private enum FilesResult {
+        case placed(FilesChange)
+        case failed(rolledBack: Bool)
+    }
+
     /// The saved files in place of the current ones. Each saved file replaces its counterpart
     /// in one step, the one it replaced kept aside; then what the save does not have — a whole
     /// unit the save lacks, or within a unit it has, what is not in it — is moved aside too, not
-    /// deleted. Nil, with everything put back, when any of it could not be done; otherwise the
-    /// change, to be committed or put back once the rest of the load is known.
-    private static func placeFiles(from staging: URL, saved: Set<String>) -> FilesChange? {
+    /// deleted. On any failure everything is put back and `.failed` carries whether that
+    /// succeeded; otherwise `.placed`, to be committed or put back once the rest of the load is
+    /// known.
+    private static func placeFiles(from staging: URL, saved: Set<String>) -> FilesResult {
         let fm = FileManager.default
-        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return .failed(rolledBack: true) }
         let change = FilesChange(holding: support.appendingPathComponent(".aorus-settings-held-\(UUID().uuidString)", isDirectory: true))
         let savedEntries = saved.compactMap(FileEntry.init(entryPath:))
         var savedUnits = Set<Unit>()
@@ -533,8 +582,7 @@ public enum AorusSettingsArchive {
 
         for entry in savedEntries {
             guard let base = entry.scope.base else {
-                change.rollBack()
-                return nil
+                return .failed(rolledBack: change.rollBack())
             }
             let source = staging.appendingPathComponent(entry.scope.rawValue, isDirectory: true).appendingPathComponent(entry.relativePath)
             let target = base.appendingPathComponent(entry.relativePath)
@@ -549,8 +597,7 @@ public enum AorusSettingsArchive {
                     change.placed.append((target, nil))
                 }
             } catch {
-                change.rollBack()
-                return nil
+                return .failed(rolledBack: change.rollBack())
             }
         }
 
@@ -575,8 +622,7 @@ public enum AorusSettingsArchive {
         }) where !savedUnits.contains(unit) && !unit.keptWhenAbsent {
             guard let base = unit.scope.base else { continue }
             for url in unitPaths(unit, base: base) where !hold(url) {
-                change.rollBack()
-                return nil
+                return .failed(rolledBack: change.rollBack())
             }
         }
         for file in current where !savedPaths.contains(file.entryPath) {
@@ -584,11 +630,10 @@ public enum AorusSettingsArchive {
                   let unit = unit(scope: entry.scope, relativePath: entry.relativePath),
                   savedUnits.contains(unit) else { continue }
             guard hold(file.url) else {
-                change.rollBack()
-                return nil
+                return .failed(rolledBack: change.rollBack())
             }
         }
-        return change
+        return .placed(change)
     }
 
     /// Where a unit lives on disk: its file or folder, and a database's journal beside it.
@@ -703,12 +748,21 @@ public enum AorusSettingsArchive {
         }
     }
 
+    /// Whether the keychain went in, or could not and was put back — and, if so, whether putting
+    /// it back fully succeeded.
+    private enum KeychainResult {
+        case placed(KeychainChange)
+        case failed(rolledBack: Bool)
+    }
+
     /// The saved items in place of the current ones. Every service is read before anything is
     /// written, since one that cannot be read cannot be put back; the saved items are written
     /// over their counterparts, and only after all of them are in do the current items the save
-    /// lacks go. If any write or delete is refused, every service goes back as it was. Nil then;
-    /// otherwise the change, to be committed or put back once the rest of the load is known.
-    private static func replaceKeychain(with saved: [[String: Any]]) -> KeychainChange? {
+    /// lacks go. If any write or delete is refused, every service goes back as it was, and
+    /// `.failed` carries whether that fully succeeded; otherwise `.placed`, to be committed or put
+    /// back once the rest of the load is known. A service that cannot even be read is a failure
+    /// before anything was written, so nothing had to be put back.
+    private static func replaceKeychain(with saved: [[String: Any]]) -> KeychainResult {
         var byService: [String: [[String: Any]]] = [:]
         for item in saved {
             guard let service = item["service"] as? String, keychainServices.contains(service),
@@ -722,7 +776,7 @@ public enum AorusSettingsArchive {
             if items.isEmpty && keptWhenAbsent.contains(service) {
                 continue
             }
-            guard let previous = Self.items(in: service) else { return nil }
+            guard let previous = Self.items(in: service) else { return .failed(rolledBack: true) }
             change.previous[service] = previous
             replaced.append(service)
         }
@@ -730,8 +784,7 @@ public enum AorusSettingsArchive {
             for item in byService[service] ?? [] {
                 guard let account = item["account"] as? String, let data = item["data"] as? Data else { continue }
                 guard writeItem(service: service, account: account, data: data, accessible: importedAccessibility(item["accessible"] as? String, service: service)) else {
-                    change.rollBack()
-                    return nil
+                    return .failed(rolledBack: change.rollBack())
                 }
                 change.touched.append((service, account))
             }
@@ -741,8 +794,7 @@ public enum AorusSettingsArchive {
             for old in change.previous[service] ?? [] {
                 guard let account = old["account"] as? String, !savedAccounts.contains(account) else { continue }
                 guard deleteItem(service: service, account: account) else {
-                    change.rollBack()
-                    return nil
+                    return .failed(rolledBack: change.rollBack())
                 }
                 change.touched.append((service, account))
             }
@@ -750,7 +802,7 @@ public enum AorusSettingsArchive {
                 change.replacedAccountBackup = true
             }
         }
-        return change
+        return .placed(change)
     }
 
     fileprivate static func writeItem(service: String, account: String, data: Data, accessible: String) -> Bool {
