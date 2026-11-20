@@ -5178,6 +5178,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         resolveDraftEntities(in: user.rawText)
         pendingReference = user.referencedMessage
         composer.reference = pendingReference
+        // The answer being replaced takes its files with it. A download still running for one
+        // of them finished later and opened that file's preview over the new turn, for a card
+        // that was no longer in the chat.
+        for artifact in conversation.messages[assistantIndex].artifacts {
+            let id = artifact.artifactId
+            artifactDownloadAttempts.removeValue(forKey: id)
+            artifactDownloads.removeValue(forKey: id)?.cancel()
+            loadingArtifactIds.remove(id)
+        }
         conversation.messages.removeSubrange((assistantIndex - 1)...assistantIndex)
         pruneMeasuredHeights()
         tableView.reloadData()
@@ -6657,9 +6666,18 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         let bodyLeading = bodyStack.leadingAnchor.constraint(equalTo: bubble.leadingAnchor, constant: 16)
         let bodyTrailing = bodyStack.trailingAnchor.constraint(equalTo: bubble.trailingAnchor, constant: -16)
         bodyInsetConstraints = (top: bodyTop, bottom: bodyBottom, leading: bodyLeading, trailing: bodyTrailing)
+        // The row is as tall as the turn, and a row the table hands more height than that
+        // keeps the spare below the turn instead of stretching something inside it. Required
+        // `==` left the stack no choice but to grow one of its views to fill the row, and the
+        // first one Auto Layout reached for was whichever had no height of its own -- the
+        // file card. Measured, the row is still exactly its content: the fit below outranks
+        // the table's own pull towards the smallest height.
+        let contentBottomFit = contentStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+        contentBottomFit.priority = UILayoutPriority(249.0)
         NSLayoutConstraint.activate([
             contentStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            contentStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
+            contentStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -12),
+            contentBottomFit,
             contentStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
             contentStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
             bodyTop, bodyBottom, bodyLeading, bodyTrailing,
@@ -8374,10 +8392,15 @@ private final class AorusAITableCard: UIView {
 }
 
 private final class AorusAIArtifactCard: UIControl {
+    private static let minimumHeight: CGFloat = 58.0
+    private static let textInset: CGFloat = 10.0
+    private static let lineGap: CGFloat = 3.0
     private let icon = UIImageView()
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
     private let activity = UIActivityIndicatorView(style: .medium)
+    /// The name and the detail line as one block, centred the way the icon beside it is.
+    private let textGuide = UILayoutGuide()
     var onOpen: (() -> Void)?
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -8386,14 +8409,32 @@ private final class AorusAIArtifactCard: UIControl {
         titleLabel.font = aorusUIFont(14, .semibold)
         detailLabel.font = aorusUIFont(12)
         [icon, activity, titleLabel, detailLabel].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
+        addLayoutGuide(textGuide)
+        // Exactly as tall as what it holds (see `intrinsicContentSize`), and never anything
+        // else. The card used to be only "at least 58 points", with its text pinned to the top
+        // and nothing below it: a height the stack around it was free to choose, so any spare
+        // height in the row -- a row measured a little taller than its content, as a turn
+        // that was retried and then reopened could be -- went into the card and stretched it
+        // downwards, and even at rest it had more room under its text than over it.
+        setContentHuggingPriority(.required, for: .vertical)
+        setContentCompressionResistancePriority(.required, for: .vertical)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 58), widthAnchor.constraint(greaterThanOrEqualToConstant: 235),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 235),
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12), icon.centerYAnchor.constraint(equalTo: centerYAnchor), icon.widthAnchor.constraint(equalToConstant: 28), icon.heightAnchor.constraint(equalToConstant: 28),
             activity.centerXAnchor.constraint(equalTo: icon.centerXAnchor), activity.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10), titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10), titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor), detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor), detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3)
+            textGuide.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 10), textGuide.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            textGuide.centerYAnchor.constraint(equalTo: centerYAnchor), textGuide.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: Self.textInset),
+            titleLabel.topAnchor.constraint(equalTo: textGuide.topAnchor), titleLabel.leadingAnchor.constraint(equalTo: textGuide.leadingAnchor), titleLabel.trailingAnchor.constraint(equalTo: textGuide.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: Self.lineGap), detailLabel.leadingAnchor.constraint(equalTo: textGuide.leadingAnchor), detailLabel.trailingAnchor.constraint(equalTo: textGuide.trailingAnchor),
+            detailLabel.bottomAnchor.constraint(equalTo: textGuide.bottomAnchor)
         ])
         addTarget(self, action: #selector(open), for: .touchUpInside)
+    }
+    /// The two lines and their insets, or the card's minimum when they need less. Each line is
+    /// one line, so this does not depend on the card's width.
+    override var intrinsicContentSize: CGSize {
+        let text = titleLabel.intrinsicContentSize.height + Self.lineGap + detailLabel.intrinsicContentSize.height
+        return CGSize(width: UIView.noIntrinsicMetric, height: max(Self.minimumHeight, ceil(text + 2.0 * Self.textInset)))
     }
     required init?(coder: NSCoder) { fatalError() }
     /// Fully declarative: the card owns no state of its own, so it can be thrown away and
@@ -8426,6 +8467,7 @@ private final class AorusAIArtifactCard: UIControl {
         accessibilityTraits = .button
         accessibilityLabel = artifact.filename
         accessibilityValue = detailLabel.text
+        invalidateIntrinsicContentSize()
         if isLoading {
             accessibilityHint = aorusAILocalized("Останавливает загрузку", "Stops the download")
         } else {
