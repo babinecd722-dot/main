@@ -1314,11 +1314,34 @@ def main() -> None:
             # A restore cut short between two moves is finished or undone at the next launch,
             # before any postbox opens, never left half old and half new.
             ("private static let journalName = \".aorus-restore-journal\"", "restore has no journal on disk"),
-            ("if let journal = readJournal(root) {", "an unfinished restore is not resumed at launch"),
+            ("case let .valid(journal):", "an unfinished restore is not resumed at launch"),
+            ("outcome = resume(journal, root: root)", "an unfinished restore is not resumed at launch"),
             ("private static func rollBackRestore(", "an unfinished restore cannot be undone"),
+            # A journal that is there but cannot be read or decoded is a restore under way whose
+            # state is unknown: it must hold the launch, never pass for "no restore".
+            ("case .unreadable, .corrupt:", "an unreadable or corrupt restore journal is taken for no restore"),
+            ("public var blocksAccountAccess: Bool", "the restore outcome no longer says when the launch must stop"),
+            # The rollback's clean-up only follows a recorded rollback, so a rerun can never take
+            # slots already put back for the backup's.
+            ("case rolledBack", "a finished rollback is not recorded before its clean-up"),
         ):
             if marker not in account_backup_text:
                 err.append(f"LoginBackupKey: {message}")
+
+    # The launch stops before any postbox opens when a restore can be neither finished nor
+    # undone, and offers to retry or to cancel the restore instead of opening half-restored data.
+    for marker, message in (
+        ("AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath).blocksAccountAccess", "a restore that could not finish does not stop the launch"),
+        ("AccountBackupManager.retryUnfinishedRestore(rootPath: rootPath)", "the restore recovery prompt has no retry"),
+        ("AccountBackupManager.abandonUnfinishedRestore(rootPath: rootPath)", "the restore recovery prompt cannot cancel the restore"),
+    ):
+        if marker not in t:
+            err.append(f"LoginBackupKey: {message}")
+    if "AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath).blocksAccountAccess" in t:
+        gate = t.index("AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath).blocksAccountAccess")
+        upgrades = t.find("performAppGroupUpgrades(appGroupPath:", gate)
+        if upgrades == -1 or "return true" not in t[gate:upgrades]:
+            err.append("LoginBackupKey: the restore gate does not end the launch before the app-group upgrades")
 
     if "selectedAccountId: selectedAccountId" not in t or "mergeIntoExisting: isAddingAccount" not in t:
         err.append("LoginBackupKey: AppDelegate ignores the selected account or add-account mode")
