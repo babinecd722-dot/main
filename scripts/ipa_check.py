@@ -35,6 +35,15 @@ def main():
             expected_logo = Path(__file__).resolve().parent.parent / "AorusGram/Animations" / (logo + ".tgs")
             if bundled not in archive.namelist() or archive.read(bundled) != expected_logo.read_bytes():
                 raise RuntimeError("IPA must embed the settings logo " + logo + ".tgs in the main bundle")
+        # The MAXimal interface's own resources (patches/assets/max): a missing one costs no build
+        # error, only a tab with no animation, a chat with no wallpaper or an alert with no icon.
+        for resource in (
+            "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json",
+            "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
+            "MaxIcon@2x.png", "MaxIcon@3x.png",
+        ):
+            if app_root + "/" + resource not in archive.namelist():
+                raise RuntimeError("IPA must embed the MAXimal interface's " + resource + " in the main bundle")
         executable = app_root + "/" + info["CFBundleExecutable"]
         with archive.open(executable) as file:
             header = file.read(8)

@@ -47,7 +47,8 @@ public enum AorusMaxInterfaceSwitch {
                 decline: aorusL("Оставить", "Keep"),
                 confirmed: {
                     UserDefaults.standard.set(currentIcon, forKey: AorusMaxInterfaceSwitch.previousIconKey)
-                    bindings.requestSetAlternateIconName(AorusMaxInterface.alternateIconName, { success in
+                    // After the alert has gone: iOS asks its own confirmation of the new icon.
+                    AorusMaxInterfaceSwitch.setIcon(AorusMaxInterface.alternateIconName, bindings: bindings, completion: { success in
                         if success {
                             UserDefaults.standard.set(AorusMaxInterface.alternateIconName, forKey: AorusMaxInterfaceSwitch.selectedIconKey)
                         }
@@ -75,7 +76,7 @@ public enum AorusMaxInterfaceSwitch {
                 decline: aorusL("Оставить", "Keep"),
                 confirmed: {
                     // `nil` is the primary icon, which the picker shows as the default one.
-                    bindings.requestSetAlternateIconName(restored?.name, { success in
+                    AorusMaxInterfaceSwitch.setIcon(restored?.name, bindings: bindings, completion: { success in
                         if success {
                             if let name = restored?.name ?? defaultIcon?.name {
                                 UserDefaults.standard.set(name, forKey: AorusMaxInterfaceSwitch.selectedIconKey)
@@ -90,6 +91,18 @@ public enum AorusMaxInterfaceSwitch {
                 declined: restartNotice
             )
         }
+    }
+
+    /// Switches the home-screen icon once the alert is gone, and answers on the main queue: iOS
+    /// calls back on a queue of its own, and what follows presents on screen.
+    private static func setIcon(_ name: String?, bindings: TelegramApplicationBindings, completion: @escaping (Bool) -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: {
+            bindings.requestSetAlternateIconName(name, { success in
+                DispatchQueue.main.async {
+                    completion(success)
+                }
+            })
+        })
     }
 
     /// Telegram's own alert, with the icon in question drawn above the question.
