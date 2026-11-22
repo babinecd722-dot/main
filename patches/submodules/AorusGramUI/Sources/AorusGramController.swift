@@ -438,6 +438,7 @@ private struct AorusState: Equatable {
     var tripleTapDelete: Bool
     var interfaceV2: Bool
     var oldInterface: Bool
+    var maxInterface: Bool
     var glassUI: Bool
     var subscriptionBanner: Bool
     var showStories: Bool
@@ -725,6 +726,14 @@ private struct AorusPageBuilder {
         self.append("footer.\(self.blockIndex)", .footer(text))
     }
 
+    /// A note in place of every row the page has written, for a page with nothing to change.
+    mutating func replaceWithPlaceholder(_ id: String, _ title: String, _ text: String) {
+        self.entries.removeAll()
+        self.blockIndex = 0
+        self.rowsInBlock = 0
+        self.append(id, .placeholder(title: title, text: text))
+    }
+
     mutating func pluginShortcut(_ title: String, _ subtitle: String, pluginId: String, id: String) {
         self.append("plugin.\(pluginId).\(id)", .row(icon: AorusSettingsIcon("puzzlepiece.extension.fill"), title: title, subtitle: subtitle.isEmpty ? nil : subtitle, accessory: .disclosure(value: nil, isOn: nil), style: .feature, target: .open(.pluginShortcut(pluginId: pluginId, id: id)), highlight: nil))
     }
@@ -851,18 +860,29 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
         b.block(l10n.uiHeader)
         b.toggle("interfaceV2", icon("sparkles"), l10n.interfaceV2, aorusL("Новый дизайн всего приложения. Нужен перезапуск", "A new design for the whole app. Needs a restart"), \.interfaceV2, state)
         b.toggle("oldInterface", icon("clock.arrow.2.circlepath"), l10n.oldInterface, aorusL("Классический вид Telegram. Нужен перезапуск", "The classic Telegram look. Needs a restart"), \.oldInterface, state)
+        // The MAXimal interface: the whole client as the MAX messenger draws itself
+        // (AorusMaxInterface in Display), a third interface beside the two above.
+        b.toggle("maxInterface", .maxLogo, aorusL("MAXимальный интерфейс", "MAXimal Interface"), aorusL("Интерфейс мессенджера MAX. Нужен перезапуск", "The MAX messenger's interface. Needs a restart"), \.maxInterface, state)
         // The old interface has no glass: the glass effects do nothing there, so they are not
-        // offered. Their value is kept for when it is turned off.
-        if !state.oldInterface {
+        // offered. Their value is kept for when it is turned off. MAX draws no glass either.
+        if !state.oldInterface && !state.maxInterface {
             b.toggle("glassUI", icon("drop.fill"), l10n.glassUI, aorusL("Стеклянные панели и кнопки", "Glass bars and buttons"), \.glassUI, state)
         }
-        b.toggle("amoledMode", icon("moon.fill"), l10n.amoledMode, aorusL("Чисто чёрный фон в тёмной теме", "Pure black background in the dark theme"), \.amoledMode, state)
-        b.block(aorusL("ВНЕШНИЙ ВИД", "LOOK"))
-        b.screen("font", icon("textformat.size"), aorusL("Шрифт", "Font"), aorusL("Шрифт всего приложения", "The font across the app"), .font, isOn: state.fontIsCustom, value: state.fontTitle)
-        b.screen("bubbles", icon("bubble.left.fill"), aorusL("Пузыри сообщений", "Message Bubbles"), aorusL("Форма, стекло и цвета пузырей", "Shape, glass and colours of bubbles"), .bubbleSettings)
-        b.screen("messageSettings", icon("text.alignleft"), l10n.messageSettings, aorusL("Что показывать в сообщениях и превью", "What messages and previews show"), .messageSettings)
-        b.toggle("squareAvatars", icon("person.crop.square"), l10n.squareAvatars, aorusL("Квадратные аватарки вместо круглых", "Square avatars instead of round ones"), \.squareAvatars, state)
-        b.screen("appBadge", icon("app.badge"), aorusL("Бейдж в статус-баре", "Status Bar Badge"), aorusL("Бейдж вверху экрана, рядом с камерой", "A badge at the top of the screen, beside the camera"), .appBadge, isOn: state.appBadge != "off", value: appBadgeLabel(state.appBadge, l10n))
+        // MAX is one look: every other change to how the app looks steps aside while it is on,
+        // and its row slides away with it. What was chosen is kept for when MAX is turned off.
+        if !state.maxInterface {
+            b.toggle("amoledMode", icon("moon.fill"), l10n.amoledMode, aorusL("Чисто чёрный фон в тёмной теме", "Pure black background in the dark theme"), \.amoledMode, state)
+            b.block(aorusL("ВНЕШНИЙ ВИД", "LOOK"))
+            b.screen("font", icon("textformat.size"), aorusL("Шрифт", "Font"), aorusL("Шрифт всего приложения", "The font across the app"), .font, isOn: state.fontIsCustom, value: state.fontTitle)
+            b.screen("bubbles", icon("bubble.left.fill"), aorusL("Пузыри сообщений", "Message Bubbles"), aorusL("Форма, стекло и цвета пузырей", "Shape, glass and colours of bubbles"), .bubbleSettings)
+            b.screen("messageSettings", icon("text.alignleft"), l10n.messageSettings, aorusL("Что показывать в сообщениях и превью", "What messages and previews show"), .messageSettings)
+            b.toggle("squareAvatars", icon("person.crop.square"), l10n.squareAvatars, aorusL("Квадратные аватарки вместо круглых", "Square avatars instead of round ones"), \.squareAvatars, state)
+            b.screen("appBadge", icon("app.badge"), aorusL("Бейдж в статус-баре", "Status Bar Badge"), aorusL("Бейдж вверху экрана, рядом с камерой", "A badge at the top of the screen, beside the camera"), .appBadge, isOn: state.appBadge != "off", value: appBadgeLabel(state.appBadge, l10n))
+        } else {
+            // An empty block keeps the blocks below in their places, so they do not jump as the
+            // look's block leaves.
+            b.block()
+        }
         b.block(aorusL("ПРОФИЛЬ И ИСТОРИИ", "PROFILE & STORIES"))
         b.screen("animatedWallpapers", icon("photo.fill"), aorusL("Анимированные обои", "Animated Wallpapers"), aorusL("Живые обои для чатов", "Live wallpapers for chats"), .animatedWallpapers)
         b.screen("animatedBanner", icon("play.rectangle.fill"), aorusL("Анимированный баннер", "Animated Banner"), aorusL("Видео или GIF в шапке профиля", "A video or GIF in your profile header"), .animatedBanner)
@@ -883,6 +903,11 @@ private func aorusPageEntries(_ page: AorusPage, state: AorusState, l10n: AorusL
             b.toggle("hideSearchButton", icon("magnifyingglass"), l10n.hideSearchButton, aorusL("Кнопка поиска рядом с вкладками", "The search button next to the tabs"), \.hideSearchButton, state, inverted: true)
             b.toggle("hideTabTitles", icon("textformat.abc"), l10n.hideTabTitles, aorusL("Подписи под значками вкладок", "Labels under tab icons"), \.hideTabTitles, state, inverted: true)
             b.toggle("compactTabBar", icon("rectangle.compress.vertical"), l10n.compactTabBar, aorusL("Панель ниже и уже", "A lower, narrower bar"), \.compactTabBar, state)
+        }
+        if state.maxInterface {
+            // MAX's tab bar is MAX's own — Contacts, Calls, Chats and Profile, in its colours and
+            // order — so the page's rows give way to a note that says so.
+            b.replaceWithPlaceholder("maxTabs", aorusL("Вкладки MAX", "MAX Tabs"), aorusL("В MAXимальном интерфейсе вкладки стоят как в MAX: Контакты, Звонки, Чаты и Профиль.", "In the MAXimal interface the tabs are MAX's: Contacts, Calls, Chats and Profile."))
         }
 
     case .wall:
@@ -1223,6 +1248,7 @@ private func aorusStoredState(accountId: Int64) -> AorusState {
         tripleTapDelete:    mgr.tripleTapDelete,
         interfaceV2:        AorusInterfaceV2.isRequested,
         oldInterface:       AorusOldInterface.isRequested,
+        maxInterface:       AorusMaxInterface.isRequested,
         glassUI:            mgr.glassUI,
         subscriptionBanner: UserDefaults.standard.object(forKey: "aorusgram_subscription_banner") as? Bool ?? true,
         showStories:        UserDefaults.standard.object(forKey: "aorusgram_show_stories") as? Bool ?? true,
@@ -1452,7 +1478,18 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                         return next
                     }
                 }
-                aorusPresentRestartNotice(context: context, controller: weakController)
+                // The MAXimal interface is a whole interface as well: it gives way the same.
+                if s.interfaceV2 && s.maxInterface {
+                    AorusMaxInterfaceSwitch.setRequested(false)
+                    updateState { current in
+                        var next = current
+                        next.maxInterface = false
+                        return next
+                    }
+                    AorusMaxInterfaceSwitch.switched(context: context, controller: weakController, isOn: false)
+                } else {
+                    aorusPresentRestartNotice(context: context, controller: weakController)
+                }
             }
             if keyPath == \AorusState.oldInterface {
                 AorusOldInterfaceSwitch.setRequested(s.oldInterface)
@@ -1464,7 +1501,38 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
                         return next
                     }
                 }
-                aorusPresentRestartNotice(context: context, controller: weakController)
+                if s.oldInterface && s.maxInterface {
+                    AorusMaxInterfaceSwitch.setRequested(false)
+                    updateState { current in
+                        var next = current
+                        next.maxInterface = false
+                        return next
+                    }
+                    AorusMaxInterfaceSwitch.switched(context: context, controller: weakController, isOn: false)
+                } else {
+                    aorusPresentRestartNotice(context: context, controller: weakController)
+                }
+            }
+            // The MAXimal interface turns the other two off, and the rows of every other look
+            // slide away with them (the list animates its changes). Then MAX's icon is offered
+            // for the home screen — or Aorusgram's offered back — and the restart is announced.
+            if keyPath == \AorusState.maxInterface {
+                AorusMaxInterfaceSwitch.setRequested(s.maxInterface)
+                if s.maxInterface {
+                    if s.interfaceV2 {
+                        AorusInterfaceV2.setEnabled(false)
+                    }
+                    if s.oldInterface {
+                        AorusOldInterfaceSwitch.setRequested(false)
+                    }
+                    updateState { current in
+                        var next = current
+                        next.interfaceV2 = false
+                        next.oldInterface = false
+                        return next
+                    }
+                }
+                AorusMaxInterfaceSwitch.switched(context: context, controller: weakController, isOn: s.maxInterface)
             }
             // The chat-list stories strip re-reads this key on every layout, so posting
             // this notification makes the chat list re-lay-out and apply the change live —

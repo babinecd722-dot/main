@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Display
 import AorusGram
 
 // MARK: - Central Config
@@ -198,7 +199,8 @@ public final class AorusGramManager {
         ud.set(effective(wallEnabled),         forKey: "aorusgram_wall_enabled")
         ud.set(effective(streaks),             forKey: "aorusgram_feature_streaks")
         ud.set(effective(siriShortcuts),       forKey: "aorusgram_feature_siri_shortcuts")
-        ud.set(effective(squareAvatars),       forKey: "aorusgram_square_avatars")
+        // MAX draws its avatars round, whatever was chosen for the other interfaces.
+        ud.set(effective(squareAvatars) && !AorusMaxInterface.isEnabled, forKey: "aorusgram_square_avatars")
         ud.set(effective(editLocally),         forKey: "aorusgram_feature_edit_locally")
         ud.set(effective(userMessagesInGroup), forKey: "aorusgram_feature_user_messages")
         ud.set(effective(messageSeconds),      forKey: "aorusgram_feature_message_seconds")

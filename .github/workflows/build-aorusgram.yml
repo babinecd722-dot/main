@@ -2,7 +2,7 @@ name: Build AorusGram IPA
 
 on:
   push:
-    branches: [ main, "claude/**", "cursor/**", "codex/**", "Codex/**" ]
+    branches: [ main, "claude/**", "Claude/**", "cursor/**", "codex/**", "Codex/**" ]
   workflow_dispatch:
 
 # Do not cancel in-progress Bazel runs: a new push or manual dispatch must not kill a 40–60m build.
@@ -1089,6 +1089,8 @@ jobs:
           # Telegram 12.0's buttons on a profile's header, which the old interface draws
           # instead of the glass capsules (wired in by aorus_old_interface.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift $PEER/Sources/
+          # The MAXimal interface's service cards over the Profile tab (placed by aorus_max_interface.py).
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusMaxProfileItems.swift $PEER/Sources/
           # The classic browser and editor renderers from Telegram iOS 12.0.
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserAddressBarComponent.swift $TG/submodules/BrowserUI/Sources/
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserNavigationBarComponent.swift $TG/submodules/BrowserUI/Sources/
@@ -1197,6 +1199,9 @@ jobs:
           #     aorus_branding.py; the glass module adds its own shapes to it.
           cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
           cp $PATCHES/submodules/Display/Source/AorusOldInterface.swift $TG/submodules/Display/Source/
+          # The MAXimal interface, decided once at start beside the old interface, which it implies
+          # (aorus_max_interface.py lays MAX's look, glyphs, tabs and screens over the old interface).
+          cp $PATCHES/submodules/Display/Source/AorusMaxInterface.swift $TG/submodules/Display/Source/
           # Telegram 12.0's navigation bar, which the old interface hands every screen in place of
           # 13.1.1's glass one, and 12.0's chat list header row (wired in by aorus_old_interface.py).
           cp $PATCHES/submodules/Display/Source/AorusClassicNavigationBar.swift $TG/submodules/Display/Source/

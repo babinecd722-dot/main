@@ -26,6 +26,8 @@ public enum AorusPluginIconValues {
     public static let personLookKey = "aorusgram_icon_look"
     /// The person's look goes in as a layer after every plugin's, so it is the style in force.
     private static let personLayer = "~aorusgram.person"
+    /// MAX's glyphs go in before every plugin's layer (`AorusMaxInterface.iconLayer`).
+    private static let maxLayer = "!aorusgram.max"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
 
     /// Styles reach icons up to this size. Anything larger is an illustration, not an icon.
@@ -323,7 +325,11 @@ public enum AorusPluginIconValues {
             return NSDictionary()
         }
         var layers = defaults.dictionary(forKey: layersKey) ?? [:]
-        if let look = defaults.dictionary(forKey: personLookKey), look["look"] is String {
+        if AorusMaxInterface.isEnabled {
+            // MAX's glyphs, as the first layer: its id sorts before every plugin's. The icon
+            // style the person chose is AorusGram's own look, which MAX sets aside.
+            layers[maxLayer] = AorusMaxInterface.iconLayer
+        } else if let look = defaults.dictionary(forKey: personLookKey), look["look"] is String {
             layers[personLayer] = ["*": look]
         }
         return layers as NSDictionary
@@ -762,6 +768,13 @@ public enum AorusPluginIconValues {
             // Loaded past the resolver, so an icon standing in for another never becomes a
             // chain, and never a loop.
             return UIImage(named: name, in: getAppBundle(), compatibleWith: nil)
+        case "tintedAsset":
+            // A glyph shipped as a mask (MAX's): drawn in the colour of the icon it replaces,
+            // so an icon drawn as it is keeps the colour Telegram gave it.
+            guard let name = spec["asset"] as? String, let glyph = UIImage(named: name, in: getAppBundle(), compatibleWith: nil) else {
+                return nil
+            }
+            return generateTintedImage(image: glyph, color: color)
         default:
             return nil
         }

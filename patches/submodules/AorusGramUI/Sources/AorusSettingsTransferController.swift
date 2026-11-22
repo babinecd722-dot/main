@@ -127,9 +127,11 @@ enum AorusSettingsTransfer {
 
         /// The interface the switches ask for, against the one this run draws.
         static var interfaceDiffersFromRun: Bool {
-            let old = AorusOldInterface.isRequested
+            // A MAX run is an old-interface run with MAX's look over it.
+            let max = AorusMaxInterface.isRequested
+            let old = AorusOldInterface.isRequested || max
             let v2 = AorusInterfaceV2.isRequested && !old
-            return old != AorusOldInterface.isEnabled || v2 != AorusInterfaceV2Run.isEnabled
+            return old != AorusOldInterface.isEnabled || v2 != AorusInterfaceV2Run.isEnabled || max != AorusMaxInterface.isEnabled
         }
     }
 

@@ -98,8 +98,16 @@ public enum AorusTabBarSettings {
     private static let lock = NSLock()
     private static var previous: Data?
     private static var cached = AorusTabBarLayout()
+    /// Whether this run draws the MAXimal interface, read once as `AorusMaxInterface.isEnabled`
+    /// is: the tab bar keeps the interface the app started with.
+    private static let isMaxRun: Bool = {
+        let defaults = UserDefaults.standard
+        return !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface")
+    }()
     public static var current: AorusTabBarLayout {
         if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") { return AorusTabBarLayout() }
+        // The MAXimal interface's tab bar is MAX's own: its order, colours, titles and counters.
+        if isMaxRun { return AorusTabBarLayout() }
         let data = UserDefaults.standard.data(forKey: key)
         lock.lock()
         defer { lock.unlock() }

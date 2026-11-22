@@ -56,6 +56,11 @@ def verify_language_tables(tg: Path, repo: Path) -> list[str]:
         profile_patch = here / "profile_personalization_patch.py"
         if profile_patch.is_file():
             branding_body += "\n" + profile_patch.read_text(encoding="utf-8")
+        # The MAXimal interface is imported by branding the same way, and writes its own
+        # labels into Telegram's files.
+        max_patch = here / "aorus_max_interface.py"
+        if max_patch.is_file():
+            branding_body += "\n" + max_patch.read_text(encoding="utf-8")
         injected_literals = {
             match.group(2)
             for match in re.finditer(

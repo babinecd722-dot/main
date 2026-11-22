@@ -102,6 +102,8 @@ struct AorusSettingsIcon: Equatable, Hashable {
         /// A glyph from Telegram's own asset catalogue, for a sign Telegram already draws.
         case bundle(String)
         case ghost
+        /// MAX's own sign, the speech-bubble "o", for the MAXimal interface.
+        case maxLogo
     }
 
     let glyph: Glyph
@@ -115,6 +117,7 @@ struct AorusSettingsIcon: Equatable, Hashable {
     }
 
     static let ghost = AorusSettingsIcon(glyph: .ghost)
+    static let maxLogo = AorusSettingsIcon(glyph: .maxLogo)
     /// Telegram's Stars and GRAM signs, as its own menus draw them.
     static let telegramStars = AorusSettingsIcon(glyph: .bundle("Chat/Context Menu/Stars"))
     static let telegramGram = AorusSettingsIcon(glyph: .bundle("Chat/Context Menu/Ton"))
@@ -164,6 +167,8 @@ private func aorusSettingsGlyph(_ glyph: AorusSettingsIcon.Glyph, pointSize: CGF
         return UIImage(bundleImageName: name)
     case .ghost:
         return AorusGlyphs.ghost(size: pointSize * 1.3)
+    case .maxLogo:
+        return AorusMaxInterface.glyph("max_solid_themed")
     }
 }
 
@@ -176,13 +181,14 @@ private func aorusDrawSettingsIcon(_ icon: AorusSettingsIcon, side: CGFloat, ink
     let size = CGSize(width: side, height: side)
     return UIGraphicsImageRenderer(size: size, format: format).image { _ in
         let tinted: UIImage
-        if case .bundle = icon.glyph {
+        switch icon.glyph {
+        case .bundle, .maxLogo:
             // A catalogue image is not a symbol: `withTintColor` would leave it in its own ink.
             guard let image = generateTintedImage(image: glyph, color: ink) else {
                 return
             }
             tinted = image
-        } else {
+        default:
             tinted = glyph.withTintColor(ink, renderingMode: .alwaysOriginal)
         }
         let fitted = aorusFit(tinted.size, in: size)

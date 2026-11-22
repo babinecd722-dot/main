@@ -7782,6 +7782,8 @@ def patch_alternate_icons(tg: Path) -> None:
         ("GXCClassic", "GXC Классика", "GXC Classic", False),
         ("OrbitBlack", "Орбита",       "Orbit",       False),
         ("OrbitWhite", "Орбита белая", "Orbit White", False),
+        # MAX's own icon, which the MAXimal interface offers for the home screen.
+        ("MaxIcon",    "MAX",          "MAX",         False),
     ]
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -19602,7 +19604,7 @@ def patch_bypass_story_screenshot(tg: Path) -> None:
 _AORUS_AMOLED_HELPER = (
     "// AorusGram: AMOLED dark mode — force true-black surfaces on dark themes only.\n"
     "private func aorusAmoledEnabled() -> Bool {\n"
-    f"    return !UserDefaults.standard.bool(forKey: \"{_AG_LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_amoled\")\n"
+    f"    return !UserDefaults.standard.bool(forKey: \"{_AG_LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_amoled\") && !AorusMaxInterface.isEnabled\n"
     "}\n"
     "\n"
     "func aorusApplyAmoledTheme(_ theme: PresentationTheme) -> PresentationTheme {\n"
@@ -19804,6 +19806,11 @@ public enum AorusPluginAppearanceValues {
         if let own = UserDefaults.standard.dictionary(forKey: messageLookKey), !own.isEmpty {
             values.merge(own, uniquingKeysWith: { _, own in own })
         }
+        // The MAX interface is one look, MAX's own (`AorusMaxInterface.appearance`): it takes
+        // the place of the plugins' layers and of the person's look for the whole run.
+        if AorusMaxInterface.isEnabled {
+            values = AorusMaxInterface.appearance
+        }
         if let seconds = UserDefaults.standard.object(forKey: "aorusgram_presence_seconds") as? NSNumber {
             values["presence.seconds"] = seconds.boolValue
         }
@@ -19870,6 +19877,10 @@ public enum AorusPluginAppearanceValues {
                 values[key + "@light"] = nil
             }
             values.merge(own, uniquingKeysWith: { _, own in own })
+        }
+        // MAX draws no glass: its panes are the old interface's flat panels.
+        if AorusMaxInterface.isEnabled {
+            values = [:]
         }
         if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
             values = [:]
@@ -25422,6 +25433,10 @@ def patch_app_badge_switcher(tg: Path) -> None:
     methods_anchor = "    private func updateBadgeVisibility() {\n"
     methods_new = (
         "    static func aorusAppBadgeImage() -> UIImage? {\n"
+        "        // The MAXimal interface has no badge of AorusGram's beside the camera.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            return nil\n"
+        "        }\n"
         '        let choice = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"\n'
         '        if choice == "off" {\n'
         "            return nil\n"
@@ -26450,6 +26465,10 @@ private enum AorusRuntimeFont {
     }
 
     static var cacheKey: String {
+        // The MAXimal interface draws in the system font, as MAX does.
+        if AorusMaxInterface.isEnabled {
+            return "system"
+        }
         let choice = selectedChoice
         if isImportedChoice(choice) {
             return "\(choice)_\(importedFontName(for: choice) ?? "")"
@@ -26458,6 +26477,9 @@ private enum AorusRuntimeFont {
     }
 
     static func font(size: CGFloat, designKey: String, weight: UIFont.Weight, traitsRaw: Int32) -> UIFont? {
+        if AorusMaxInterface.isEnabled {
+            return nil
+        }
         let choice = selectedChoice
         guard choice != "system" else { return nil }
 
@@ -32470,6 +32492,10 @@ def main() -> None:
     from aorus_avatar_crossfade import patch_avatar_crossfade
     patch_avatar_crossfade(tg)
     patch_interface_v2_run_switch(tg)
+    # The MAXimal interface, MAX's look over the old interface: after the old interface, the tab
+    # settings and the tab bar it reorders, before the translation pass gives its files the import.
+    from aorus_max_interface import patch_max_interface
+    patch_max_interface(tg)
 
     from aorus_large_stars import patch as patch_large_stars
     patch_large_stars(tg)

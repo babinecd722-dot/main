@@ -1005,19 +1005,34 @@ def _patch_chat_panels(tg: Path) -> None:
 
 
 _APP_BUNDLE_FLAG_H = (
+    "/// AorusGram: whether this run draws the MAXimal interface, MAX's look over the old\n"
+    "/// interface (aorus_max_interface.py). Read once, beside the old interface's flag.\n"
+    "BOOL aorusMaxInterfaceIsEnabled(void);\n"
+    "\n"
     "/// AorusGram: whether this run draws the old interface, Telegram 12.0's look. Read once, so\n"
-    "/// that every module, and the asset lookup below, agree on it.\n"
+    "/// that every module, and the asset lookup below, agree on it. A MAX run draws it too.\n"
     "BOOL aorusOldInterfaceIsEnabled(void);\n"
     "\n"
 )
 
 _APP_BUNDLE_FLAG_M = (
+    "BOOL aorusMaxInterfaceIsEnabled(void) {\n"
+    "    static BOOL enabled = NO;\n"
+    "    static dispatch_once_t onceToken;\n"
+    "    dispatch_once(&onceToken, ^{\n"
+    "        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];\n"
+    "        enabled = ![defaults boolForKey:@\"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"] && [defaults boolForKey:@\"aorusgram_max_interface\"];\n"
+    "    });\n"
+    "    return enabled;\n"
+    "}\n"
+    "\n"
     "BOOL aorusOldInterfaceIsEnabled(void) {\n"
     "    static BOOL enabled = NO;\n"
     "    static dispatch_once_t onceToken;\n"
     "    dispatch_once(&onceToken, ^{\n"
     "        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];\n"
-    "        enabled = ![defaults boolForKey:@\"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"] && [defaults boolForKey:@\"aorusgram_old_interface\"];\n"
+    "        // The MAXimal interface is drawn on the old interface: a MAX run is an old-interface run.\n"
+    "        enabled = ![defaults boolForKey:@\"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"] && ([defaults boolForKey:@\"aorusgram_old_interface\"] || aorusMaxInterfaceIsEnabled());\n"
     "    });\n"
     "    return enabled;\n"
     "}\n"

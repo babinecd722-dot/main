@@ -91,7 +91,15 @@ private final class AorusClassicChatListButtonView: HighlightTrackingButton {
         case let .text(title, isBold):
             textString = NSAttributedString(string: AorusOldInterface.classicTitle(title) ?? title, font: isBold ? Font.bold(17.0) : Font.regular(17.0), textColor: color)
         case let .icon(imageName):
-            iconSource = .bundle(imageName)
+            // AorusGram: MAX interface: MAX's round buttons — the blue one with the plus that
+            // composes, and the grey one with the glass that searches.
+            if AorusMaxInterface.isEnabled, imageName == "Chat List/ComposeIcon", let image = AorusMaxInterface.headerButtonImage(.compose, dark: theme.overallDarkAppearance) {
+                iconSource = .image(image)
+            } else if AorusMaxInterface.isEnabled, imageName == AorusMaxInterface.headerSearchIconName, let image = AorusMaxInterface.headerButtonImage(.search, dark: theme.overallDarkAppearance) {
+                iconSource = .image(image)
+            } else {
+                iconSource = .bundle(imageName)
+            }
         case let .image(image):
             iconSource = .image(image)
         case .more:
@@ -727,7 +735,10 @@ private final class AorusClassicChatListContentView: UIView {
             }
 
             let chatListTitleOffset: CGFloat
-            if chatListTitle.activity {
+            if AorusMaxInterface.isEnabled && backTitle == nil {
+                // AorusGram: MAX interface: MAX's large title stands on the left of its header.
+                chatListTitleOffset = leftOffset + 2.0 - titleContentRect.minX - floor((size.width - chatListTitleContentSize.width) / 2.0)
+            } else if chatListTitle.activity {
                 chatListTitleOffset = 0.0
             } else {
                 chatListTitleOffset = (centerOffset + centerContentOffsetX) * sideContentFraction
