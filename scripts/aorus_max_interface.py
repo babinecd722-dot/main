@@ -276,6 +276,28 @@ def patch_tab_bar(tg: Path) -> None:
         "\n"
     )
     text = _edit(text, helper_anchor, helper + helper_anchor, "MAX contacts tab factory")
+    text = _edit(
+        text,
+        "    /// Contacts has no tab: the Settings tab, with the screen Settings ▸ Contacts pushes over it.\n"
+        "    public func openContacts() {\n"
+        "        guard let rootTabController = self.rootTabController else {\n"
+        "            return\n"
+        "        }\n"
+        "        \n"
+        "        self.popToRoot(animated: false)\n",
+        "    public func openContacts() {\n"
+        "        guard let rootTabController = self.rootTabController else {\n"
+        "            return\n"
+        "        }\n"
+        "\n"
+        "        self.popToRoot(animated: false)\n"
+        "        if let contactsController = self.aorusMaxContactsController,\n"
+        "           let index = rootTabController.controllers.firstIndex(where: { $0 === contactsController }) {\n"
+        "            rootTabController.selectedIndex = index\n"
+        "            return\n"
+        "        }\n",
+        "MAX contacts route opens the existing tab",
+    )
     path.write_text(text, encoding="utf-8")
 
     # Keep the profile glyph consistent across accounts and motion settings.
@@ -919,7 +941,6 @@ def patch_attachment_panel(tg: Path) -> None:
         "            buttonView.accessibilityTraits = [.button]\n",
         "            buttonView.accessibilityTraits = AorusMaxInterface.isEnabled && i == self.selectedIndex ? [.button, .selected] : [.button]\n",
         "MAX selected attachment accessibility",
-        count=2,
     )
     path.write_text(text, encoding="utf-8")
     print("MaxInterface: attachment tabs with selection feedback")

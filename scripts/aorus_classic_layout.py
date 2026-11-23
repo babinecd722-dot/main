@@ -267,6 +267,10 @@ def _attachments(tg: Path) -> None:
     body = body.replace("                    context: self.context,", "                    context: self.context,\n                    style: .legacy,")
     body = body.replace("                    type: type,", "                    type: type,\n                    isFirstOrLast: i == 0 || i == self.buttons.count - 1,")
     body = body.replace("                    isSelected: i == self.selectedIndex,", "                    isSelected: i == self.selectedIndex,\n                    isAnimating: i == self.selectedIndex,")
+    body = body.replace(
+        "buttonView.accessibilityTraits = [.button]",
+        "buttonView.accessibilityTraits = AorusMaxInterface.isEnabled && i == self.selectedIndex ? [.button, .selected] : [.button]",
+    )
     body = body.replace("strongSelf.itemViews[i]", "strongSelf.itemViews[type.key]")
     # Keep the current client's additional attachment kinds and their labels.
     extra_titles = """            case .money:
