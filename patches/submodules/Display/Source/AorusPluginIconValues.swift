@@ -26,7 +26,7 @@ public enum AorusPluginIconValues {
     public static let personLookKey = "aorusgram_icon_look"
     /// The person's look goes in as a layer after every plugin's, so it is the style in force.
     private static let personLayer = "~aorusgram.person"
-    /// MAX's glyphs go in before every plugin's layer (`AorusMaxInterface.iconLayer`).
+    /// The layer of MAX's glyphs, the only one a run of the MAXimal interface draws.
     private static let maxLayer = "!aorusgram.max"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
 
@@ -319,17 +319,126 @@ public enum AorusPluginIconValues {
         return tableLocked()
     }
 
+    // MARK: - The MAXimal interface
+
+    /// Whether this run draws the MAXimal interface (`AorusMaxInterface`). Read once, as the
+    /// run's interface is, from the same two keys AppBundle's launch flag reads: this file is
+    /// built on its own as well, where nothing else of the app is.
+    private static let isMaxRun: Bool = {
+        let defaults = UserDefaults.standard
+        return !defaults.bool(forKey: "__LOCK_KEY__") && defaults.bool(forKey: "aorusgram_max_interface")
+    }()
+
+    /// MAX's glyph (from its asset catalogue, under `AorusMax/`) for each of Telegram's icons it
+    /// stands in for. Each is fitted into the original's box and drawn in the original's colour,
+    /// so whatever sizes, tints or animates an icon keeps doing so.
+    private static let maxGlyphs: [(glyph: String, targets: [String])] = [
+        ("message_fill_28", ["Chat List/Tabs/IconChats"]),
+        ("call_fill_28", ["Chat List/Tabs/IconCalls"]),
+        ("chats_fill_28", ["Chat List/Tabs/IconContacts"]),
+        ("profile_tab_28", ["Chat List/Tabs/IconSettings"]),
+        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add"]),
+        ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search"]),
+        ("attachment_24", ["Chat/Input/Text/IconAttachment"]),
+        ("microphone_on_24", ["Chat/Input/Text/IconMicrophone", "Item List/Icons/Microphone"]),
+        ("video_message_24", ["Chat/Input/Text/IconVideo"]),
+        ("smile_square_24", ["Chat/Input/Text/AccessoryIconStickers", "Chat/Context Menu/Sticker", "Item List/Icons/Sticker"]),
+        ("keyboard_outline_24", ["Chat/Input/Text/AccessoryIconKeyboard"]),
+        ("send_24", ["Chat/Input/Text/SendIcon"]),
+        ("ic_suggest_commands_24", ["Chat/Input/Text/AccessoryIconCommands"]),
+        ("clock_24", ["Chat/Input/Text/AccessoryIconSchedule", "Chat/Context Menu/Schedule", "Chat/Context Menu/Time", "Chat/Context Menu/Timer", "Item List/Icons/Clock", "Item List/Icons/Timer"]),
+        ("pin_on_fill_16", ["Chat List/PeerPinnedIcon"]),
+        ("notifications_off_fill_16", ["Chat List/PeerMutedIcon"]),
+        ("new_story_32", ["Chat List/AddStoryIcon"]),
+        ("reply_24", ["Chat/Context Menu/Reply"]),
+        ("copy_24", ["Chat/Context Menu/Copy"]),
+        ("forward_24", ["Chat/Context Menu/Forward"]),
+        ("delete_24", ["Chat/Context Menu/Delete", "Item List/Icons/Delete"]),
+        ("edit_24", ["Chat/Context Menu/Edit", "Chat/Context Menu/Pencil"]),
+        ("pin_on_24", ["Chat/Context Menu/Pin"]),
+        ("pin_off_24", ["Chat/Context Menu/Unpin"]),
+        ("multi_select_24", ["Chat/Context Menu/Select"]),
+        ("report_24", ["Chat/Context Menu/Report"]),
+        ("info_24", ["Chat/Context Menu/Info"]),
+        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link"]),
+        ("save_to_gallery_24", ["Chat/Context Menu/Save"]),
+        ("archive_24", ["Chat/Context Menu/Archive", "Chat/Context Menu/Unarchive"]),
+        ("share_24_iOS", ["Chat/Context Menu/Share"]),
+        ("download_24", ["Chat/Context Menu/Download", "Item List/Icons/Download"]),
+        ("clear_history_24", ["Chat/Context Menu/Clear", "Chat/Context Menu/ClearMessages"]),
+        ("show_24", ["Chat/Context Menu/Eye", "Item List/Icons/View"]),
+        ("leave_chat_24", ["Chat/Context Menu/Logout"]),
+        ("favorites_star_24", ["Chat/Context Menu/Fave"]),
+        ("add_to_folder_24", ["Chat/Context Menu/AddToFolder"]),
+        ("exclude_from_folder_24", ["Chat/Context Menu/RemoveFromFolder"]),
+        ("block_24", ["Chat/Context Menu/Ban", "Item List/Icons/Block"]),
+        ("smile_24", ["Chat/Context Menu/Smile", "Item List/Icons/Emoji"]),
+        ("message_24", ["Chat/Context Menu/Message", "Item List/Icons/Chat", "Item List/Icons/Messages"]),
+        ("call_24", ["Chat/Context Menu/Call", "Chat/Context Menu/PhoneCall"]),
+        ("videocam_on_24", ["Chat/Context Menu/VideoCall", "Item List/Icons/Video"]),
+        ("profile_24", ["Chat/Context Menu/User", "Item List/Icons/Profile", "Item List/Icons/Member"]),
+        ("add_contact_24", ["Chat/Context Menu/AddUser"]),
+        ("folder_24", ["Chat/Context Menu/Folder", "Item List/Icons/Folder"]),
+        ("settings_24", ["Chat/Context Menu/Settings", "Item List/Icons/Settings"]),
+        ("notifications_off_24", ["Chat/Context Menu/Muted", "Chat/Context Menu/Mute2d"]),
+        ("notifications_on_24", ["Chat/Context Menu/Unmute", "Item List/Icons/Notifications"]),
+        ("privacy_24", ["Chat/Context Menu/Lock", "Item List/Icons/Privacy"]),
+        ("favorites_24", ["Item List/Icons/SavedMessages"]),
+        ("devices_24", ["Item List/Icons/Devices"]),
+        ("globe_language_24", ["Item List/Icons/Language", "Item List/Icons/Translation", "Chat/Context Menu/Translate"]),
+        ("customization_24", ["Item List/Icons/Appearance", "Item List/Icons/Brush"]),
+        ("memory_24", ["Item List/Icons/Data"]),
+        ("mobile_24", ["Item List/Icons/Phone", "Item List/Icons/ChangePhone"]),
+        ("user_defence_24", ["Item List/Icons/Proxy"]),
+        ("case_24", ["Item List/Icons/Business"]),
+        ("users_24", ["Item List/Icons/Group", "Item List/Icons/Members"]),
+        ("megaphone_24", ["Item List/Icons/Channel"]),
+        ("bot_24", ["Item List/Icons/Bot"]),
+        ("administrator_24", ["Item List/Icons/Admin"]),
+        ("chart_24", ["Item List/Icons/Stats"]),
+        ("wallet_24", ["Item List/Icons/Balance"]),
+        ("support_24", ["Item List/Icons/Support"]),
+        ("help_outline_24", ["Item List/Icons/Faq"]),
+        ("lamp_24", ["Item List/Icons/Tips"]),
+        ("key_24", ["Item List/Icons/Key"]),
+        ("photo_24", ["Item List/Icons/Photo", "Chat/Attach Menu/Camera"]),
+        ("file_24", ["Item List/Icons/File", "Chat/Context Menu/File"]),
+        ("ico_gif_24", ["Item List/Icons/Gif"]),
+        ("current_location_24", ["Item List/Icons/Location"]),
+        // The video-message recorder's buttons.
+        ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip"]),
+        // The call's buttons.
+        ("sound_on_fill_32", ["Call/Speaker"]),
+        ("microphone_off_fill_32", ["Call/Mute"]),
+        ("videocam_on_fill_32", ["Call/Video"]),
+        ("phone_off_fill_32", ["Call/End"]),
+        ("flash_fill_on_32", ["Camera/VideoMessageFlash"]),
+    ]
+
+    private static let maxGlyphLayer: [String: Any] = {
+        var layer: [String: Any] = [:]
+        for (index, entry) in maxGlyphs.enumerated() {
+            layer[String(format: "max%03d", index)] = [
+                "kind": "tintedAsset",
+                "asset": "AorusMax/" + entry.glyph,
+                "targets": entry.targets
+            ] as [String: Any]
+        }
+        return layer
+    }()
+
     private static func storedLayers() -> NSDictionary {
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "__LOCK_KEY__") {
             return NSDictionary()
         }
+        if isMaxRun {
+            // MAX is one look: its glyphs, and neither a plugin's icons nor the icon style the
+            // person chose, which are AorusGram's own looks.
+            return [maxLayer: maxGlyphLayer] as NSDictionary
+        }
         var layers = defaults.dictionary(forKey: layersKey) ?? [:]
-        if AorusMaxInterface.isEnabled {
-            // MAX's glyphs, as the first layer: its id sorts before every plugin's. The icon
-            // style the person chose is AorusGram's own look, which MAX sets aside.
-            layers[maxLayer] = AorusMaxInterface.iconLayer
-        } else if let look = defaults.dictionary(forKey: personLookKey), look["look"] is String {
+        if let look = defaults.dictionary(forKey: personLookKey), look["look"] is String {
             layers[personLayer] = ["*": look]
         }
         return layers as NSDictionary
@@ -771,10 +880,19 @@ public enum AorusPluginIconValues {
         case "tintedAsset":
             // A glyph shipped as a mask (MAX's): drawn in the colour of the icon it replaces,
             // so an icon drawn as it is keeps the colour Telegram gave it.
-            guard let name = spec["asset"] as? String, let glyph = UIImage(named: name, in: getAppBundle(), compatibleWith: nil) else {
+            guard let name = spec["asset"] as? String, let glyph = UIImage(named: name, in: getAppBundle(), compatibleWith: nil), glyph.size.width > 0.0, glyph.size.height > 0.0 else {
                 return nil
             }
-            return generateTintedImage(image: glyph, color: color)
+            return generateImage(glyph.size, opaque: false, scale: glyph.scale, rotatedContext: { size, context in
+                let bounds = CGRect(origin: CGPoint(), size: size)
+                context.clear(bounds)
+                UIGraphicsPushContext(context)
+                glyph.draw(in: bounds)
+                UIGraphicsPopContext()
+                context.setBlendMode(.sourceIn)
+                context.setFillColor(color.cgColor)
+                context.fill(bounds)
+            })
         default:
             return nil
         }

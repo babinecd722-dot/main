@@ -150,6 +150,7 @@ public enum AorusPluginAppearance {
             Key("input.sendIcon", .color, "Send button icon"),
             Key("input.recording", .color, "Voice and video recording button"),
             Key("input.recordingIcon", .color, "Recording button icon"),
+            Key("input.recordingDot", .color, "Dot beside the recording timer"),
             Key("input.disabled", .color, "Panel controls that are unavailable"),
             Key("input.destructive", .color, "Cancel and delete controls in the panel"),
             Key("input.panelText", .color, "Text on the panel in place of the field, such as Unblock or Join"),

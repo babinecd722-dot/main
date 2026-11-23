@@ -20299,7 +20299,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         actionControlFillColor: sendFill,
         actionControlForegroundColor: on(sendFill, "input.sendIcon", input.actionControlForegroundColor),
         primaryTextColor: c("input.panelText"),
-        mediaRecordingDotColor: recording,
+        mediaRecordingDotColor: c("input.recordingDot") ?? recording,
         mediaRecordingControl: input.mediaRecordingControl.withUpdated(buttonColor: recording, activeIconColor: c("input.recordingIcon"))
     )
     let keyboardButton = c("keyboard.button")
@@ -26457,6 +26457,13 @@ private enum AorusRuntimeFont {
     private static let importedFontsKey = "aorusgram_font_imported_fonts"
     private static let keychainService = "AorusGramFont"
     private static var didRegisterImported = false
+    // The MAXimal interface draws in the system font, as MAX does. Read once, as the run's
+    // interface is: the same two keys the launch flag in AppBundle reads, here because this
+    // file is built on its own as well.
+    private static let isMaxRun: Bool = {
+        let defaults = UserDefaults.standard
+        return !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface")
+    }()
 
     private struct ImportedFontRecord: Codable {
         let id: String
@@ -26465,8 +26472,7 @@ private enum AorusRuntimeFont {
     }
 
     static var cacheKey: String {
-        // The MAXimal interface draws in the system font, as MAX does.
-        if AorusMaxInterface.isEnabled {
+        if isMaxRun {
             return "system"
         }
         let choice = selectedChoice
@@ -26477,7 +26483,7 @@ private enum AorusRuntimeFont {
     }
 
     static func font(size: CGFloat, designKey: String, weight: UIFont.Weight, traitsRaw: Int32) -> UIFont? {
-        if AorusMaxInterface.isEnabled {
+        if isMaxRun {
             return nil
         }
         let choice = selectedChoice

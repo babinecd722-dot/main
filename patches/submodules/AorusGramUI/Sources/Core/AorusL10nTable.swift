@@ -1313,6 +1313,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Chiamate vocali e video con un tocco, nella scheda Chiamate.",
         "Welcome to MAX": "Benvenuto in MAX",
         "Change Icon": "Cambia icona",
+        "Gallery": "Galleria",
+        "Contact": "Contatto",
+        "Poll": "Sondaggio",
+        "Money": "Denaro",
     ]
 
     private static let pl: [String: String] = [
@@ -2576,6 +2580,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Połączenia głosowe i wideo jednym dotknięciem, w karcie Połączenia.",
         "Welcome to MAX": "Witaj w MAX",
         "Change Icon": "Zmień ikonę",
+        "Gallery": "Galeria",
+        "Contact": "Kontakt",
+        "Poll": "Ankieta",
+        "Money": "Pieniądze",
     ]
 
     private static let nl: [String: String] = [
@@ -3839,6 +3847,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Spraak- en videogesprekken met één tik, in het tabblad Gesprekken.",
         "Welcome to MAX": "Welkom bij MAX",
         "Change Icon": "Icoon wijzigen",
+        "Gallery": "Galerij",
+        "Contact": "Contact",
+        "Poll": "Peiling",
+        "Money": "Geld",
     ]
 
     private static let ca: [String: String] = [
@@ -5102,6 +5114,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Trucades de veu i vídeo amb un toc, a la pestanya Trucades.",
         "Welcome to MAX": "Et donem la benvinguda a MAX",
         "Change Icon": "Canvia la icona",
+        "Gallery": "Galeria",
+        "Contact": "Contacte",
+        "Poll": "Enquesta",
+        "Money": "Diners",
     ]
 
     private static let id: [String: String] = [
@@ -6365,6 +6381,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Panggilan suara dan video sekali ketuk, di tab Panggilan.",
         "Welcome to MAX": "Selamat datang di MAX",
         "Change Icon": "Ganti ikon",
+        "Gallery": "Galeri",
+        "Contact": "Kontak",
+        "Poll": "Polling",
+        "Money": "Uang",
     ]
 
     private static let ms: [String: String] = [
@@ -7628,6 +7648,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Panggilan suara dan video dengan satu ketikan, dalam tab Panggilan.",
         "Welcome to MAX": "Selamat datang ke MAX",
         "Change Icon": "Tukar ikon",
+        "Gallery": "Galeri",
+        "Contact": "Kenalan",
+        "Poll": "Undian",
+        "Money": "Wang",
     ]
 
     private static let be: [String: String] = [
@@ -8891,6 +8915,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Аўдыя- і відэазванкі ў адзін дотык — ва ўкладцы «Званкі».",
         "Welcome to MAX": "Вітаем у MAX",
         "Change Icon": "Змяніць",
+        "Gallery": "Галерэя",
+        "Contact": "Кантакт",
+        "Poll": "Апытанне",
+        "Money": "Грошы",
     ]
 
     private static let uz: [String: String] = [
@@ -10154,6 +10182,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Audio va video qo‘ng‘iroqlar bir teginishda — «Qo‘ng‘iroqlar» bo‘limida.",
         "Welcome to MAX": "MAX’ga xush kelibsiz",
         "Change Icon": "Almashtirish",
+        "Gallery": "Galereya",
+        "Contact": "Kontakt",
+        "Poll": "So‘rovnoma",
+        "Money": "Pul",
     ]
 
     private static let ko: [String: String] = [
@@ -11417,6 +11449,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "통화 탭에서 한 번의 탭으로 음성·영상 통화.",
         "Welcome to MAX": "MAX에 오신 것을 환영합니다",
         "Change Icon": "아이콘 변경",
+        "Gallery": "갤러리",
+        "Contact": "연락처",
+        "Poll": "투표",
+        "Money": "돈",
     ]
 
     private static let ar: [String: String] = [
@@ -12680,6 +12716,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "مكالمات صوتية ومرئية بلمسة واحدة في علامة تبويب المكالمات.",
         "Welcome to MAX": "مرحبًا بك في MAX",
         "Change Icon": "تغيير الأيقونة",
+        "Gallery": "المعرض",
+        "Contact": "جهة اتصال",
+        "Poll": "استطلاع",
+        "Money": "المال",
     ]
 
     private static let fa: [String: String] = [
@@ -13943,6 +13983,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "تماس صوتی و تصویری با یک لمس، در زبانه تماس‌ها.",
         "Welcome to MAX": "به MAX خوش آمدید",
         "Change Icon": "تغییر نماد",
+        "Gallery": "گالری",
+        "Contact": "مخاطب",
+        "Poll": "نظرسنجی",
+        "Money": "پول",
     ]
 
     private static let kk: [String: String] = [
@@ -15206,6 +15250,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Аудио және бейне қоңыраулар бір жанасумен — «Қоңыраулар» қойындысында.",
         "Welcome to MAX": "MAX-қа қош келдіңіз",
         "Change Icon": "Ауыстыру",
+        "Gallery": "Галерея",
+        "Contact": "Контакт",
+        "Poll": "Сауалнама",
+        "Money": "Ақша",
     ]
 
     private static let zhHans: [String: String] = [
@@ -16469,6 +16517,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "在“通话”标签页中一键拨打语音和视频通话。",
         "Welcome to MAX": "欢迎使用 MAX",
         "Change Icon": "更换图标",
+        "Gallery": "相册",
+        "Contact": "联系人",
+        "Poll": "投票",
+        "Money": "钱",
     ]
 
 
@@ -17733,6 +17785,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "在「通話」分頁中一鍵撥打語音和視訊通話。",
         "Welcome to MAX": "歡迎使用 MAX",
         "Change Icon": "更換圖示",
+        "Gallery": "相簿",
+        "Contact": "聯絡人",
+        "Poll": "投票",
+        "Money": "錢",
     ]
 
     private static let ja: [String: String] = [
@@ -18996,6 +19052,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "音声・ビデオ通話はワンタップで、通話タブから。",
         "Welcome to MAX": "MAXへようこそ",
         "Change Icon": "アイコンを変更",
+        "Gallery": "ギャラリー",
+        "Contact": "連絡先",
+        "Poll": "投票",
+        "Money": "お金",
     ]
 
     private static let fi: [String: String] = [
@@ -20259,6 +20319,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Ääni- ja videopuhelut yhdellä napautuksella, Puhelut-välilehdellä.",
         "Welcome to MAX": "Tervetuloa MAXiin",
         "Change Icon": "Vaihda kuvake",
+        "Gallery": "Galleria",
+        "Contact": "Yhteystieto",
+        "Poll": "Kysely",
+        "Money": "Raha",
     ]
 
     private static let he: [String: String] = [
@@ -21522,6 +21586,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "שיחות קול ווידאו בהקשה אחת, בכרטיסיית השיחות.",
         "Welcome to MAX": "ברוכים הבאים ל-MAX",
         "Change Icon": "שינוי סמל",
+        "Gallery": "גלריה",
+        "Contact": "איש קשר",
+        "Poll": "סקר",
+        "Money": "כסף",
     ]
 
     private static let hr: [String: String] = [
@@ -22785,6 +22853,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Glasovni i video pozivi jednim dodirom, na kartici Pozivi.",
         "Welcome to MAX": "Dobro došli u MAX",
         "Change Icon": "Promijeni ikonu",
+        "Gallery": "Galerija",
+        "Contact": "Kontakt",
+        "Poll": "Anketa",
+        "Money": "Novac",
     ]
 
     private static let sr: [String: String] = [
@@ -24048,6 +24120,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Гласовни и видео позиви једним додиром, на картици Позиви.",
         "Welcome to MAX": "Добро дошли у MAX",
         "Change Icon": "Промени иконицу",
+        "Gallery": "Галерија",
+        "Contact": "Контакт",
+        "Poll": "Анкета",
+        "Money": "Новац",
     ]
 
     private static let cs: [String: String] = [
@@ -25311,6 +25387,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Hlasové a video hovory jedním klepnutím, na kartě Hovory.",
         "Welcome to MAX": "Vítejte v MAX",
         "Change Icon": "Změnit ikonu",
+        "Gallery": "Galerie",
+        "Contact": "Kontakt",
+        "Poll": "Anketa",
+        "Money": "Peníze",
     ]
 
     private static let sk: [String: String] = [
@@ -26574,6 +26654,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Hlasové a video hovory jedným ťuknutím, na karte Hovory.",
         "Welcome to MAX": "Vitajte v MAX",
         "Change Icon": "Zmeniť ikonu",
+        "Gallery": "Galéria",
+        "Contact": "Kontakt",
+        "Poll": "Anketa",
+        "Money": "Peniaze",
     ]
 
     private static let ro: [String: String] = [
@@ -27837,6 +27921,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Apeluri vocale și video dintr-o atingere, în fila Apeluri.",
         "Welcome to MAX": "Bine ai venit în MAX",
         "Change Icon": "Schimbă pictograma",
+        "Gallery": "Galerie",
+        "Contact": "Contact",
+        "Poll": "Sondaj",
+        "Money": "Bani",
     ]
 
     private static let hu: [String: String] = [
@@ -29100,6 +29188,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Hang- és videóhívások egy koppintással, a Hívások lapon.",
         "Welcome to MAX": "Üdv a MAX-ben",
         "Change Icon": "Ikon cseréje",
+        "Gallery": "Galéria",
+        "Contact": "Névjegy",
+        "Poll": "Szavazás",
+        "Money": "Pénz",
     ]
 
     private static let nb: [String: String] = [
@@ -30363,6 +30455,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Tale- og videoanrop med ett trykk, i Anrop-fanen.",
         "Welcome to MAX": "Velkommen til MAX",
         "Change Icon": "Bytt ikon",
+        "Gallery": "Galleri",
+        "Contact": "Kontakt",
+        "Poll": "Avstemning",
+        "Money": "Penger",
     ]
 
     private static let sv: [String: String] = [
@@ -31626,6 +31722,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Röst- och videosamtal med ett tryck, på fliken Samtal.",
         "Welcome to MAX": "Välkommen till MAX",
         "Change Icon": "Byt ikon",
+        "Gallery": "Galleri",
+        "Contact": "Kontakt",
+        "Poll": "Omröstning",
+        "Money": "Pengar",
     ]
 
     private static let vi: [String: String] = [
@@ -32889,6 +32989,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Gọi thoại và video chỉ với một chạm, trong thẻ Cuộc gọi.",
         "Welcome to MAX": "Chào mừng đến với MAX",
         "Change Icon": "Đổi biểu tượng",
+        "Gallery": "Thư viện",
+        "Contact": "Liên hệ",
+        "Poll": "Bình chọn",
+        "Money": "Tiền",
     ]
 
     private static let uk: [String: String] = [
@@ -34161,6 +34265,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Аудіо- й відеодзвінки в один дотик — у вкладці «Дзвінки».",
         "Welcome to MAX": "Ласкаво просимо до MAX",
         "Change Icon": "Змінити",
+        "Gallery": "Галерея",
+        "Contact": "Контакт",
+        "Poll": "Опитування",
+        "Money": "Гроші",
     ]
 
     private static let es: [String: String] = [
@@ -35433,6 +35541,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Llamadas de voz y vídeo con un toque, en la pestaña Llamadas.",
         "Welcome to MAX": "Te damos la bienvenida a MAX",
         "Change Icon": "Cambiar icono",
+        "Gallery": "Galería",
+        "Contact": "Contacto",
+        "Poll": "Encuesta",
+        "Money": "Dinero",
     ]
 
     private static let pt: [String: String] = [
@@ -36705,6 +36817,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Chamadas de voz e vídeo com um toque, na aba Chamadas.",
         "Welcome to MAX": "Boas-vindas ao MAX",
         "Change Icon": "Mudar ícone",
+        "Gallery": "Galeria",
+        "Contact": "Contato",
+        "Poll": "Enquete",
+        "Money": "Dinheiro",
     ]
 
     private static let de: [String: String] = [
@@ -37977,6 +38093,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Sprach- und Videoanrufe mit einem Tippen, im Tab Anrufe.",
         "Welcome to MAX": "Willkommen bei MAX",
         "Change Icon": "Symbol ändern",
+        "Gallery": "Galerie",
+        "Contact": "Kontakt",
+        "Poll": "Umfrage",
+        "Money": "Geld",
     ]
 
     private static let fr: [String: String] = [
@@ -39249,6 +39369,10 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Appels audio et vidéo en un toucher, dans l’onglet Appels.",
         "Welcome to MAX": "Bienvenue dans MAX",
         "Change Icon": "Changer l’icône",
+        "Gallery": "Galerie",
+        "Contact": "Contact",
+        "Poll": "Sondage",
+        "Money": "Argent",
     ]
 
     private static let tr: [String: String] = [
@@ -40521,5 +40645,9 @@ enum AorusL10nTable {
         "Voice and video calls in one tap, on the Calls tab.": "Tek dokunuşla sesli ve görüntülü aramalar, Aramalar sekmesinde.",
         "Welcome to MAX": "MAX’e hoş geldiniz",
         "Change Icon": "Simgeyi değiştir",
+        "Gallery": "Galeri",
+        "Contact": "Kişi",
+        "Poll": "Anket",
+        "Money": "Para",
     ]
 }

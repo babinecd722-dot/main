@@ -1164,7 +1164,8 @@ _TABS_SELECTION_LINE = '''        // AorusGram: old interface: 12.0's accent lin
         private func aorusUpdateSelectionLine(component: HorizontalTabsComponent, sizeHeight: CGFloat, transition: ComponentTransition) {
             if self.aorusSelectionLineTheme !== component.theme {
                 self.aorusSelectionLineTheme = component.theme
-                let color = component.theme.list.itemAccentColor
+                // The MAXimal interface draws the line in the text colour, as MAX does.
+                let color = AorusMaxInterface.isEnabled ? component.theme.list.itemPrimaryTextColor : component.theme.list.itemAccentColor
                 self.aorusSelectionLine.image = generateImage(CGSize(width: 5.0, height: 3.0), rotatedContext: { size, context in
                     context.clear(CGRect(origin: CGPoint(), size: size))
                     context.setFillColor(color.cgColor)
@@ -1301,7 +1302,8 @@ def _patch_tabs(tg: Path) -> None:
         "                        return component.isSelected ? accent : accent.withAlphaComponent(0.5)\n"
         "                    } ?? component.theme.chat.inputPanel.panelControlColor\n"
     )
-    classic_colour = "AorusOldInterface.isEnabled ? (component.isSelected ? component.theme.list.itemAccentColor : component.theme.list.itemSecondaryTextColor) : "
+    # The chosen tab is the accent, or the text colour in the MAXimal interface, as MAX draws it.
+    classic_colour = "AorusOldInterface.isEnabled ? (component.isSelected ? (AorusMaxInterface.isEnabled ? component.theme.list.itemPrimaryTextColor : component.theme.list.itemAccentColor) : component.theme.list.itemSecondaryTextColor) : "
     if interface_v2_colour in text:
         text = _edit(
             text,

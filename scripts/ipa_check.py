@@ -39,6 +39,7 @@ def main():
         # error, only a tab with no animation, a chat with no wallpaper or an alert with no icon.
         for resource in (
             "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json",
+            "AorusMaxRecordLock.json", "AorusMaxRecordPause.json",
             "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
             "MaxIcon@2x.png", "MaxIcon@3x.png",
         ):

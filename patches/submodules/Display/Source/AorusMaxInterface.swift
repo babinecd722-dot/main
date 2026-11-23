@@ -271,6 +271,8 @@ public enum AorusMaxInterface {
         both("input.sendIcon", "ffffff")
         both("input.recording", "0a7df7")
         both("input.recordingIcon", "ffffff")
+        // The dot beside the timer is red, as MAX's is, under the blue button.
+        both("input.recordingDot", "ed2c34")
         pair("input.panelText", "e1e3e6", "000000")
         pair("keyboard.background", "1c1f22", "f2f3f5")
         pair("keyboard.button", "2c2e33", "ffffff")
@@ -312,99 +314,6 @@ public enum AorusMaxInterface {
         both("settings.iconBackground", "00000000")
         pair("settings.iconGlyph", "e1e3e6", "2c2d2e")
         return table
-    }()
-
-    // MARK: - Glyphs
-
-    /// MAX's glyph (from its asset catalogue, under `AorusMax/`) for each of Telegram's icons it
-    /// stands in for. The icon resolver fits each into the original's box and draws it in the
-    /// original's colour, so whatever sizes, tints or animates an icon keeps doing so.
-    private static let glyphs: [(glyph: String, targets: [String])] = [
-        ("message_fill_28", ["Chat List/Tabs/IconChats"]),
-        ("call_fill_28", ["Chat List/Tabs/IconCalls"]),
-        ("chats_fill_28", ["Chat List/Tabs/IconContacts"]),
-        ("profile_tab_28", ["Chat List/Tabs/IconSettings"]),
-        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add"]),
-        ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search"]),
-        ("attachment_24", ["Chat/Input/Text/IconAttachment"]),
-        ("microphone_on_24", ["Chat/Input/Text/IconMicrophone", "Item List/Icons/Microphone"]),
-        ("video_message_24", ["Chat/Input/Text/IconVideo"]),
-        ("smile_square_24", ["Chat/Input/Text/AccessoryIconStickers", "Chat/Context Menu/Sticker", "Item List/Icons/Sticker"]),
-        ("keyboard_outline_24", ["Chat/Input/Text/AccessoryIconKeyboard"]),
-        ("send_24", ["Chat/Input/Text/SendIcon"]),
-        ("ic_suggest_commands_24", ["Chat/Input/Text/AccessoryIconCommands"]),
-        ("clock_24", ["Chat/Input/Text/AccessoryIconSchedule", "Chat/Context Menu/Schedule", "Chat/Context Menu/Time", "Chat/Context Menu/Timer", "Item List/Icons/Clock", "Item List/Icons/Timer"]),
-        ("pin_on_fill_16", ["Chat List/PeerPinnedIcon"]),
-        ("notifications_off_fill_16", ["Chat List/PeerMutedIcon"]),
-        ("new_story_32", ["Chat List/AddStoryIcon"]),
-        ("reply_24", ["Chat/Context Menu/Reply"]),
-        ("copy_24", ["Chat/Context Menu/Copy"]),
-        ("forward_24", ["Chat/Context Menu/Forward"]),
-        ("delete_24", ["Chat/Context Menu/Delete", "Item List/Icons/Delete"]),
-        ("edit_24", ["Chat/Context Menu/Edit", "Chat/Context Menu/Pencil"]),
-        ("pin_on_24", ["Chat/Context Menu/Pin"]),
-        ("pin_off_24", ["Chat/Context Menu/Unpin"]),
-        ("multi_select_24", ["Chat/Context Menu/Select"]),
-        ("report_24", ["Chat/Context Menu/Report"]),
-        ("info_24", ["Chat/Context Menu/Info"]),
-        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link"]),
-        ("save_to_gallery_24", ["Chat/Context Menu/Save"]),
-        ("archive_24", ["Chat/Context Menu/Archive", "Chat/Context Menu/Unarchive"]),
-        ("share_24_iOS", ["Chat/Context Menu/Share"]),
-        ("download_24", ["Chat/Context Menu/Download", "Item List/Icons/Download"]),
-        ("clear_history_24", ["Chat/Context Menu/Clear", "Chat/Context Menu/ClearMessages"]),
-        ("show_24", ["Chat/Context Menu/Eye", "Item List/Icons/View"]),
-        ("leave_chat_24", ["Chat/Context Menu/Logout"]),
-        ("favorites_star_24", ["Chat/Context Menu/Fave"]),
-        ("add_to_folder_24", ["Chat/Context Menu/AddToFolder"]),
-        ("exclude_from_folder_24", ["Chat/Context Menu/RemoveFromFolder"]),
-        ("block_24", ["Chat/Context Menu/Ban", "Item List/Icons/Block"]),
-        ("smile_24", ["Chat/Context Menu/Smile", "Item List/Icons/Emoji"]),
-        ("message_24", ["Chat/Context Menu/Message", "Item List/Icons/Chat", "Item List/Icons/Messages"]),
-        ("call_24", ["Chat/Context Menu/Call", "Chat/Context Menu/PhoneCall"]),
-        ("videocam_on_24", ["Chat/Context Menu/VideoCall", "Item List/Icons/Video"]),
-        ("profile_24", ["Chat/Context Menu/User", "Item List/Icons/Profile", "Item List/Icons/Member"]),
-        ("add_contact_24", ["Chat/Context Menu/AddUser"]),
-        ("folder_24", ["Chat/Context Menu/Folder", "Item List/Icons/Folder"]),
-        ("settings_24", ["Chat/Context Menu/Settings", "Item List/Icons/Settings"]),
-        ("notifications_off_24", ["Chat/Context Menu/Muted", "Chat/Context Menu/Mute2d"]),
-        ("notifications_on_24", ["Chat/Context Menu/Unmute", "Item List/Icons/Notifications"]),
-        ("privacy_24", ["Chat/Context Menu/Lock", "Item List/Icons/Privacy"]),
-        ("favorites_24", ["Item List/Icons/SavedMessages"]),
-        ("devices_24", ["Item List/Icons/Devices"]),
-        ("globe_language_24", ["Item List/Icons/Language", "Item List/Icons/Translation", "Chat/Context Menu/Translate"]),
-        ("customization_24", ["Item List/Icons/Appearance", "Item List/Icons/Brush"]),
-        ("memory_24", ["Item List/Icons/Data"]),
-        ("mobile_24", ["Item List/Icons/Phone", "Item List/Icons/ChangePhone"]),
-        ("user_defence_24", ["Item List/Icons/Proxy"]),
-        ("case_24", ["Item List/Icons/Business"]),
-        ("users_24", ["Item List/Icons/Group", "Item List/Icons/Members"]),
-        ("megaphone_24", ["Item List/Icons/Channel"]),
-        ("bot_24", ["Item List/Icons/Bot"]),
-        ("administrator_24", ["Item List/Icons/Admin"]),
-        ("chart_24", ["Item List/Icons/Stats"]),
-        ("wallet_24", ["Item List/Icons/Balance"]),
-        ("support_24", ["Item List/Icons/Support"]),
-        ("help_outline_24", ["Item List/Icons/Faq"]),
-        ("lamp_24", ["Item List/Icons/Tips"]),
-        ("key_24", ["Item List/Icons/Key"]),
-        ("photo_24", ["Item List/Icons/Photo"]),
-        ("file_24", ["Item List/Icons/File"]),
-        ("ico_gif_24", ["Item List/Icons/Gif"]),
-        ("current_location_24", ["Item List/Icons/Location"]),
-    ]
-
-    /// The icon layer the resolver lays under every plugin's (`AorusPluginIconValues`).
-    public static let iconLayer: [String: Any] = {
-        var layer: [String: Any] = [:]
-        for (index, entry) in AorusMaxInterface.glyphs.enumerated() {
-            layer[String(format: "max%03d", index)] = [
-                "kind": "tintedAsset",
-                "asset": "AorusMax/" + entry.glyph,
-                "targets": entry.targets
-            ] as [String: Any]
-        }
-        return layer
     }()
 
     // MARK: - Tab bar

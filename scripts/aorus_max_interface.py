@@ -107,7 +107,7 @@ def install_assets(tg: Path) -> None:
             if file.is_file():
                 shutil.copy2(file, resources / file.name)
                 count += 1
-    for name in ("AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json", "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png"):
+    for name in ("AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json", "AorusMaxRecordLock.json", "AorusMaxRecordPause.json", "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png"):
         if not (resources / name).is_file():
             raise RuntimeError(f"MaxInterface: resource {name} is missing")
     print(f"MaxInterface: {len(icons)} glyphs under AorusMax/, {count} resources")
@@ -740,6 +740,325 @@ def patch_tour(tg: Path) -> None:
     print("MaxInterface: the tour shown at the first MAX run")
 
 
+_MAX_ATTACH_TABS = """            // AorusGram: MAX interface: the tabs of MAX's attach drawer.
+            if AorusMaxInterface.isEnabled {
+                var maxGlyph: String?
+                switch component.type {
+                case .gallery:
+                    name = aorusL("Галерея", "Gallery")
+                    maxGlyph = "media_fill_24"
+                case .file:
+                    name = aorusL("Файл", "File")
+                    maxGlyph = "file_fill_24"
+                case .location:
+                    name = aorusL("Место", "Place")
+                    maxGlyph = "geolocation_fill_24"
+                case .contact:
+                    name = aorusL("Контакт", "Contact")
+                    maxGlyph = "profile_fill_24"
+                case .poll:
+                    name = aorusL("Опрос", "Poll")
+                    maxGlyph = "poll_fill_24"
+                case .money:
+                    name = aorusL("Деньги", "Money")
+                    maxGlyph = "wallet_fill_24"
+                case .audio:
+                    maxGlyph = "ic_music_24"
+                case .sticker:
+                    maxGlyph = "draw_sticker_24"
+                case .emoji:
+                    maxGlyph = "emoji_28"
+                case .todo:
+                    maxGlyph = "ic_add_to_list_24"
+                case .quickReply:
+                    maxGlyph = "reply_24"
+                case .link:
+                    maxGlyph = "link_24"
+                default:
+                    break
+                }
+                if let maxGlyph {
+                    imageName = "AorusMax/" + maxGlyph
+                    animationName = nil
+                    animationScale = 1.0
+                    animationOffset = 0.0
+                }
+            }
+
+"""
+
+
+def patch_attachment_panel(tg: Path) -> None:
+    """The attach menu's tabs as MAX's drawer draws them: MAX's names (Галерея, Файл, Место,
+    Контакт, Опрос, Деньги) over MAX's filled glyphs, drawn still and tinted as Telegram tints
+    its own — the selected one in the accent. A tab MAX has no glyph for keeps Telegram's."""
+    path = tg / "submodules/AttachmentUI/Sources/AttachmentPanel.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        return { context in\n            let name: String\n            let imageName: String\n",
+        "        return { context in\n            var name: String\n            var imageName: String\n",
+        "attach tab name and image",
+    )
+    anchor = "            let tintColor: UIColor\n            switch component.style {\n"
+    text = _edit(text, anchor, _MAX_ATTACH_TABS + anchor, "MAX attach tabs")
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: the attach menu's tabs in MAX's names and glyphs")
+
+_MAX_LOCK_PANEL = """
+
+// AorusGram: MAX interface. The panel behind the lock as MAX draws it: a plain rounded square of
+// the card colour, not Telegram's glass capsule. It is laid out and shrunk by the record button
+// as Telegram's is; its corners stay MAX's.
+private final class AorusMaxLockPanelView: UIView, TGModernConversationInputMicButtonLockPanelView {
+    init(size: CGSize, dark: Bool) {
+        super.init(frame: CGRect(origin: CGPoint(), size: size))
+        self.isUserInteractionEnabled = true
+        self.backgroundColor = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xffffff)
+        self.layer.cornerRadius = 13.0
+        self.layer.cornerCurve = .continuous
+        if !dark {
+            self.layer.shadowColor = UIColor.black.cgColor
+            self.layer.shadowOpacity = 0.12
+            self.layer.shadowRadius = 6.0
+            self.layer.shadowOffset = CGSize(width: 0.0, height: 1.0)
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(_ size: CGSize) {
+    }
+}
+"""
+
+
+def patch_recording(tg: Path) -> None:
+    """Recording a voice or video message as MAX does: MAX's padlock, which closes as the
+    recording is pulled up, on a plain rounded square; once it locks, MAX's pause button in its
+    place. Beside the timer — two-digit minutes, as MAX writes them — a red dot and «Отменить»
+    behind the arrow."""
+    components = tg / "submodules/TelegramUI/Components"
+
+    path = components / "ChatTextInputMediaRecordingButton/Sources/LockView.swift"
+    text = _read(path)
+    if "import Display\n" not in text:
+        text = _edit(text, "import UIKit\n", "import UIKit\nimport Display\n", "Display import for the lock")
+    text = _edit(
+        text,
+        "    private let idleView: AnimationView\n    private let lockingView: AnimationView\n",
+        "    private let idleView: AnimationView\n    private let lockingView: AnimationView\n"
+        f"    // {MARK}: the pause button that takes the padlock's place once it locks.\n"
+        "    private var aorusMaxPauseView: AnimationView?\n",
+        "MAX pause view property",
+    )
+    text = _edit(
+        text,
+        'getAppBundle().url(forResource: self.pause ? "LockPause" : "Lock", withExtension: "json")',
+        'getAppBundle().url(forResource: AorusMaxInterface.isEnabled ? "AorusMaxRecordLock" : (self.pause ? "LockPause" : "Lock"), withExtension: "json")',
+        "MAX padlock animation",
+    )
+    text = _edit(
+        text,
+        "        addSubview(lockingView)\n        lockingView.frame = bounds\n",
+        "        addSubview(lockingView)\n        lockingView.frame = bounds\n"
+        f"        // {MARK}: MAX's padlock in the middle of the panel, and its pause button.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            let side: CGFloat = 24.0\n"
+        "            lockingView.frame = CGRect(x: floor((bounds.width - side) / 2.0), y: floor((bounds.height - side) / 2.0), width: side, height: side)\n"
+        '            if self.pause, let url = getAppBundle().url(forResource: "AorusMaxRecordPause", withExtension: "json"), let animation = Animation.filepath(url.path) {\n'
+        "                let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .mainThread, decodingStrategy: .codable))\n"
+        "                view.backgroundColor = .clear\n"
+        "                view.isOpaque = false\n"
+        "                view.isHidden = true\n"
+        "                let pauseSide: CGFloat = 28.0\n"
+        "                view.frame = CGRect(x: floor((bounds.width - pauseSide) / 2.0), y: floor((bounds.height - pauseSide) / 2.0), width: pauseSide, height: pauseSide)\n"
+        "                addSubview(view)\n"
+        "                self.aorusMaxPauseView = view\n"
+        "            }\n"
+        "        }\n",
+        "MAX padlock layout",
+    )
+    text = _edit(
+        text,
+        "    func updateLockness(_ lockness: CGFloat) {\n",
+        "    func updateLockness(_ lockness: CGFloat) {\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.aorusMaxUpdateLockness(lockness)\n"
+        "            return\n"
+        "        }\n",
+        "MAX lockness",
+    )
+    text = _edit(
+        text,
+        "    func updateTheme(_ theme: PresentationTheme) {\n",
+        f"    // {MARK}: MAX's padlock stands open until the recording is pulled up and closes with\n"
+        "    // the pull; once locked, the pause button takes its place, drawn as it turns from the\n"
+        "    // record dot into the two bars.\n"
+        "    private func aorusMaxUpdateLockness(_ lockness: CGFloat) {\n"
+        "        if idleView.isAnimationPlaying {\n"
+        "            idleView.stop()\n"
+        "        }\n"
+        "        idleView.isHidden = true\n"
+        "        let locked = lockness >= 1.0 && self.aorusMaxPauseView != nil\n"
+        "        if let pauseView = self.aorusMaxPauseView {\n"
+        "            if locked {\n"
+        "                if pauseView.isHidden {\n"
+        "                    pauseView.isHidden = false\n"
+        "                    pauseView.currentProgress = 0.0\n"
+        "                    pauseView.play()\n"
+        "                }\n"
+        "            } else {\n"
+        "                pauseView.stop()\n"
+        "                pauseView.isHidden = true\n"
+        "            }\n"
+        "        }\n"
+        "        lockingView.isHidden = locked\n"
+        "        lockingView.currentProgress = lockness\n"
+        "    }\n\n"
+        "    func updateTheme(_ theme: PresentationTheme) {\n",
+        "MAX lockness helper",
+    )
+    text = _edit(
+        text,
+        "            lockingView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.panelControlColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n        }\n",
+        "            lockingView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.panelControlColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n        }\n"
+        f"        // {MARK}: the padlock in the panel's text colour, the pause button in the accent.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            for keypath in lockingView.allKeypaths(predicate: { $0.keys.last == \"Color\" }) {\n"
+        "                lockingView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.primaryTextColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n"
+        "            }\n"
+        "            if let pauseView = self.aorusMaxPauseView {\n"
+        "                for keypath in pauseView.allKeypaths(predicate: { $0.keys.last == \"Color\" }) {\n"
+        "                    pauseView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.panelControlAccentColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n"
+        "                }\n"
+        "            }\n"
+        "        }\n",
+        "MAX padlock colours",
+    )
+    text = _edit(
+        text,
+        "        if superTest === lockingView {\n",
+        "        if superTest === lockingView || (superTest != nil && superTest === self.aorusMaxPauseView) {\n",
+        "MAX pause hit test",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = components / "ChatTextInputMediaRecordingButton/Sources/ChatTextInputMediaRecordingButton.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    public override func createLockPanelView() -> (UIView & TGModernConversationInputMicButtonLockPanelView)! {\n",
+        "    public override func createLockPanelView() -> (UIView & TGModernConversationInputMicButtonLockPanelView)! {\n"
+        f"        // {MARK}: MAX's plain rounded square behind the lock.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            return AorusMaxLockPanelView(size: CGSize(width: 40.0, height: 72.0), dark: self.hidesOnLock || self.theme.overallDarkAppearance)\n"
+        "        }\n",
+        "MAX lock panel",
+    )
+    text = text.rstrip("\n") + "\n" + _MAX_LOCK_PANEL
+    path.write_text(text, encoding="utf-8")
+
+    path = components / "Chat/ChatTextInputAudioRecordingCancelIndicator/Sources/ChatTextInputAudioRecordingCancelIndicator.swift"
+    text = _read(path)
+    text = _edit(text, "strings.Conversation_SlideToCancel", "aorusMaxSlideToCancelText(strings)", "MAX cancel text", count=4)
+    text = text.rstrip("\n") + (
+        "\n\n"
+        f"// {MARK}: MAX says only «Отменить» behind the arrow.\n"
+        "private func aorusMaxSlideToCancelText(_ strings: PresentationStrings) -> String {\n"
+        "    return AorusMaxInterface.isEnabled ? aorusL(\"Отменить\", \"Cancel\") : strings.Conversation_SlideToCancel\n"
+        "}\n"
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = components / "Chat/ChatTextInputAudioRecordingTimeNode/Sources/ChatTextInputAudioRecordingTimeNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        'text = String(format: "%d:%02d,%02d", currentAudioDurationSeconds / 60,',
+        'text = String(format: AorusMaxInterface.isEnabled ? "%02d:%02d,%02d" : "%d:%02d,%02d", currentAudioDurationSeconds / 60,',
+        "MAX recording timer",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: recording in MAX's padlock, pause button, timer and cancel")
+
+
+def patch_call_buttons(tg: Path) -> None:
+    """The call's buttons as MAX lays them out: one capsule of the blurred panel around the row,
+    the glyphs on it with no titles under them, closer together, and MAX's pink-red to hang up.
+    (CallScreen sits under AorusGramUI, so nothing here may call aorusL.)"""
+    components = tg / "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components"
+
+    path = components / "ButtonGroupView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    private var buttonViews: [Button.Content.Key: ContentOverlayButton] = [:]\n",
+        "    private var buttonViews: [Button.Content.Key: ContentOverlayButton] = [:]\n"
+        f"    // {MARK}: the capsule around the buttons, cut from the blurred panel as the buttons are.\n"
+        "    private var aorusMaxPanel: UIView?\n",
+        "MAX call panel property",
+    )
+    text = _edit(
+        text,
+        "        let buttonRowMinX: CGFloat = centeredX(width: buttonSize * CGFloat(buttons.count) + buttonSpacing * CGFloat(buttons.count - 1))\n",
+        f"        // {MARK}: MAX's buttons stand closer, inside one capsule.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            buttonSpacing = min(buttonSpacing, 18.0)\n"
+        "        }\n"
+        "        let buttonRowMinX: CGFloat = centeredX(width: buttonSize * CGFloat(buttons.count) + buttonSpacing * CGFloat(buttons.count - 1))\n",
+        "MAX call button spacing",
+    )
+    text = _edit(
+        text,
+        "        var removeKeys: [Button.Content.Key] = []\n",
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            let panel: UIView\n"
+        "            var panelTransition = transition\n"
+        "            if let current = self.aorusMaxPanel {\n"
+        "                panel = current\n"
+        "            } else {\n"
+        "                panelTransition = transition.withAnimation(.none)\n"
+        "                panel = UIView()\n"
+        "                panel.backgroundColor = .white\n"
+        "                panel.layer.cornerCurve = .continuous\n"
+        "                self.maskContents.insertSubview(panel, at: 0)\n"
+        "                self.aorusMaxPanel = panel\n"
+        "            }\n"
+        "            let padding: CGFloat = 10.0\n"
+        "            let rowWidth = buttonSize * CGFloat(buttons.count) + buttonSpacing * CGFloat(max(0, buttons.count - 1))\n"
+        "            let panelFrame = CGRect(x: buttonRowMinX - padding, y: buttonY - padding, width: rowWidth + padding * 2.0, height: buttonSize + padding * 2.0)\n"
+        "            panelTransition.setFrame(view: panel, frame: panelFrame)\n"
+        "            panel.layer.cornerRadius = panelFrame.height * 0.5\n"
+        "            transition.setAlpha(view: panel, alpha: (displayClose || buttons.isEmpty) ? 0.0 : 1.0)\n"
+        "        }\n\n"
+        "        var removeKeys: [Button.Content.Key] = []\n",
+        "MAX call panel",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = components / "ContentOverlayButton.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "                context.setFillColor(UIColor(rgb: 0xFF3B30).cgColor)\n",
+        "                context.setFillColor(UIColor(rgb: AorusMaxInterface.isEnabled ? 0xd9345f : 0xFF3B30).cgColor)\n",
+        "MAX hang-up colour",
+    )
+    text = _edit(
+        text,
+        "        self.addSubview(self.textView)\n",
+        "        self.addSubview(self.textView)\n"
+        f"        // {MARK}: MAX's call buttons carry no titles.\n"
+        "        self.textView.isHidden = AorusMaxInterface.isEnabled\n",
+        "MAX call button titles",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: the call's buttons in MAX's capsule")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -754,6 +1073,9 @@ def patch_max_interface(tg: Path) -> None:
     patch_welcome(tg)
     patch_intro_palette(tg)
     patch_tour(tg)
+    patch_attachment_panel(tg)
+    patch_recording(tg)
+    patch_call_buttons(tg)
 
 
 if __name__ == "__main__":
