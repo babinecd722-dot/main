@@ -65,6 +65,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
     private let leftButtonNode: AorusClassicNavigationButtonNode
     private let rightButtonNode: AorusClassicNavigationButtonNode
     private var rightButtonNodeUpdated = false
+    /// The MAXimal interface draws a chat's avatar — the first of the screen's trailing buttons,
+    /// when it is `AorusMaxLeadingNavigationNode` — before the title, next to the back arrow, and
+    /// the rest of the trailing buttons where they were.
+    private let aorusLeadingButtonNode: AorusClassicNavigationButtonNode
+    private var aorusLeadingItem: UIBarButtonItem?
+    private var aorusTrailingItems: [UIBarButtonItem] = []
 
     /// A screen's own words for its back button.
     public var customBackButtonText: String?
@@ -141,6 +147,8 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
 
             self.leftButtonNode.view.removeFromSuperview()
             self.rightButtonNode.view.removeFromSuperview()
+            self.aorusLeadingButtonNode.view.removeFromSuperview()
+            self.aorusLeadingItem = nil
 
             if let item = value {
                 self.title = item.title
@@ -419,6 +427,14 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         }
         self.rightButtonNodeUpdated = true
 
+        var leadingItem: UIBarButtonItem?
+        if AorusMaxInterface.isEnabled, let first = items.first, first.customDisplayNode is AorusMaxLeadingNavigationNode {
+            leadingItem = first
+            items.removeFirst()
+        }
+        self.aorusTrailingItems = items
+        self.updateLeadingButton(leadingItem, animated: animated)
+
         if !items.isEmpty {
             if self.rightButtonNode.isEmpty {
                 self.rightButtonNode.updateItems(items, animated: false)
@@ -435,6 +451,28 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             }
             self.rightButtonNode.view.removeFromSuperview()
             self.rightButtonNode.updateItems([], animated: false)
+        }
+    }
+
+    private func updateLeadingButton(_ item: UIBarButtonItem?, animated: Bool) {
+        if self.aorusLeadingItem === item {
+            return
+        }
+        self.aorusLeadingItem = item
+        if let item {
+            self.aorusLeadingButtonNode.updateItems([item], animated: false)
+            if self.aorusLeadingButtonNode.view.superview == nil {
+                self.buttonsContainerNode.view.addSubview(self.aorusLeadingButtonNode.view)
+                if animated {
+                    self.aorusLeadingButtonNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
+                }
+            }
+        } else {
+            if animated, self.aorusLeadingButtonNode.view.superview != nil {
+                self.fadeOutSnapshot(of: self.aorusLeadingButtonNode.view)
+            }
+            self.aorusLeadingButtonNode.view.removeFromSuperview()
+            self.aorusLeadingButtonNode.updateItems([], animated: false)
         }
     }
 
@@ -465,6 +503,8 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         self.backButtonArrow.isUserInteractionEnabled = false
         self.leftButtonNode = AorusClassicNavigationButtonNode()
         self.rightButtonNode = AorusClassicNavigationButtonNode()
+        self.aorusLeadingButtonNode = AorusClassicNavigationButtonNode()
+        self.aorusLeadingButtonNode.hitTestSlop = UIEdgeInsets(top: -4.0, left: -4.0, bottom: -4.0, right: -4.0)
         self.rightButtonNode.hitTestSlop = UIEdgeInsets(top: -4.0, left: -4.0, bottom: -4.0, right: -10.0)
 
         self.clippingNode = SparseNode()
@@ -546,6 +586,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             guard let self, let item = self.item else {
                 return
             }
+            if self.aorusLeadingItem != nil {
+                if index < self.aorusTrailingItems.count {
+                    self.aorusTrailingItems[index].performActionOnTarget()
+                }
+                return
+            }
             if let rightBarButtonItems = item.rightBarButtonItems, !rightBarButtonItems.isEmpty {
                 if index < rightBarButtonItems.count {
                     rightBarButtonItems[index].performActionOnTarget()
@@ -555,6 +601,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             }
         }
         self.rightButtonNode.requestUpdate = { [weak self] in
+            self?.requestLayout()
+        }
+        self.aorusLeadingButtonNode.pressed = { [weak self] _ in
+            self?.aorusLeadingItem?.performActionOnTarget()
+        }
+        self.aorusLeadingButtonNode.requestUpdate = { [weak self] in
             self?.requestLayout()
         }
     }
@@ -579,6 +631,8 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         self.leftButtonNode.disabledColor = theme.disabledButtonColor
         self.rightButtonNode.color = theme.buttonColor
         self.rightButtonNode.disabledColor = theme.disabledButtonColor
+        self.aorusLeadingButtonNode.color = theme.buttonColor
+        self.aorusLeadingButtonNode.disabledColor = theme.disabledButtonColor
         self.backButtonArrow.image = navigationBarBackArrowImage(color: theme.buttonColor)
         if let title = self.title {
             self.titleNode.attributedText = NSAttributedString(string: title, font: AorusClassicNavigationBar.titleFont, textColor: theme.primaryTextColor)
@@ -715,6 +769,19 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             }
             self.leftButtonNode.alpha = 1.0
             transition.updateFrame(node: self.leftButtonNode, frame: CGRect(origin: CGPoint(x: leftButtonInset, y: contentVerticalOrigin + floor((nominalHeight - leftButtonSize.height) / 2.0)), size: leftButtonSize))
+        }
+
+        if self.aorusLeadingButtonNode.view.superview != nil {
+            // MAX's avatar, just after the back arrow; the title follows it.
+            let leadingSize = self.aorusLeadingButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
+            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + 30.0 : leftTitleInset + 4.0
+            var leadingTransition = transition
+            if self.aorusLeadingButtonNode.frame.width.isZero {
+                leadingTransition = .immediate
+            }
+            self.aorusLeadingButtonNode.alpha = 1.0
+            leadingTransition.updateFrame(node: self.aorusLeadingButtonNode, frame: CGRect(origin: CGPoint(x: leadingX, y: contentVerticalOrigin + floor((nominalHeight - leadingSize.height) / 2.0)), size: leadingSize))
+            leftTitleInset = max(leftTitleInset, leadingX + leadingSize.width + 4.0)
         }
 
         let badgeSize = self.badgeNode.measure(CGSize(width: 200.0, height: 100.0))
@@ -930,14 +997,14 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
     }
 
     public func animateButtonsIn(duration: Double) {
-        for node in [self.backButtonNode, self.rightButtonNode] as [ASDisplayNode] {
+        for node in [self.backButtonNode, self.rightButtonNode, self.aorusLeadingButtonNode] as [ASDisplayNode] {
             node.layer.animateAlpha(from: 0.0, to: node.alpha, duration: duration)
         }
         self.backButtonArrow.layer.animateAlpha(from: 0.0, to: self.backButtonArrow.alpha, duration: duration)
     }
 
     public func rightButtonView(for item: UIBarButtonItem) -> UIView? {
-        return self.rightButtonNode.itemView(for: item)
+        return self.rightButtonNode.itemView(for: item) ?? self.aorusLeadingButtonNode.itemView(for: item)
     }
 
     public func navigationButtonContextContainer(sourceView: UIView) -> ContextExtractableContainer? {
@@ -974,6 +1041,9 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             if let titleView = self.titleView, titleView.superview != nil {
                 titleView.accessibilityFrame = UIAccessibility.convertToScreenCoordinates(titleView.bounds, in: titleView)
                 accessibilityElements.append(titleView)
+            }
+            if self.aorusLeadingButtonNode.supernode != nil {
+                addAccessibilityChildren(of: self.aorusLeadingButtonNode, container: self, to: &accessibilityElements)
             }
             if self.rightButtonNode.supernode != nil {
                 addAccessibilityChildren(of: self.rightButtonNode, container: self, to: &accessibilityElements)

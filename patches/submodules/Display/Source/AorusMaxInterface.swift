@@ -16,6 +16,12 @@ import AppBundle
 /// While it is on, every other change AorusGram makes to how the app looks steps aside: the
 /// person's bubble and message look, the icon style, plugin colours, AMOLED, the custom font,
 /// square avatars, the status-bar badge and the tab bar's colours and order. MAX is one look.
+/// A custom bar item MAX draws before the title instead of among the trailing buttons: a chat's
+/// avatar, next to the back arrow. The old interface's bar reads it from the first trailing item
+/// while the MAXimal interface is on.
+public protocol AorusMaxLeadingNavigationNode: AnyObject {
+}
+
 public enum AorusMaxInterface {
     /// The switch the settings write.
     public static let key = "aorusgram_max_interface"

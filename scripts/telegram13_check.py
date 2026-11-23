@@ -481,8 +481,13 @@ def main():
         subprocess.run([str(work / "lottie-tests")], check=True)
         if platform.system() == "Darwin":
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-            font = args.telegram_source / "submodules/Display/Source/Font.swift"
-            subprocess.run([args.swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(font)], check=True)
+            # Font.swift reads the MAXimal interface's switch through the licence bridge, as every
+            # AorusGram preference in Display is read: it is checked with that module's source, the
+            # way the tab model is (tab_settings_check.py).
+            font = work / "Font.swift"
+            font.write_text((args.telegram_source / "submodules/Display/Source/Font.swift").read_text().replace("import AorusFeatureAccess\n", ""))
+            access = Path(__file__).resolve().parent.parent / "patches/submodules/AorusFeatureAccess/Sources/AorusProtectedAccess.swift"
+            subprocess.run([args.swiftc, "-typecheck", "-warnings-as-errors", "-module-cache-path", str(work / "cache"), "-sdk", sdk, "-target", "arm64-apple-ios15.0", str(access), str(font)], check=True)
             button = work / "RoundButton.m"
             button.write_text(button_test_source(args.telegram_source))
             subprocess.run(["xcrun", "clang", "-fobjc-arc", "-fsyntax-only", "-Werror", "-Wdeprecated-declarations", "-isysroot", sdk, "-target", "arm64-apple-ios15.0", str(button)], check=True)

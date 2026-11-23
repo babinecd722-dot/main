@@ -1056,7 +1056,75 @@ def patch_call_buttons(tg: Path) -> None:
         "MAX call button titles",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: the call's buttons in MAX's capsule")
+
+    # The screen above the buttons: MAX puts the name and the status over a larger avatar in the
+    # middle of the screen, instead of under it.
+    path = tg / "submodules/TelegramUI/Components/Calls/CallScreen/Sources/PrivateCallScreen.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        let collapsedAvatarSize: CGFloat = 136.0\n",
+        f"        // {MARK}: MAX's avatar is larger, in the middle of the screen.\n"
+        "        let collapsedAvatarSize: CGFloat = AorusMaxInterface.isEnabled ? 180.0 : 136.0\n",
+        "MAX call avatar size",
+    )
+    text = _edit(
+        text,
+        "size: collapsedAvatarSize * 0.5), y: max(params.insets.top + 8.0, floor(params.size.height * 0.49) - 39.0 - collapsedAvatarSize)), size: CGSize(width: collapsedAvatarSize, height: collapsedAvatarSize))\n".replace("size: collapsedAvatarSize * 0.5)", "collapsedAvatarSize * 0.5)"),
+        "collapsedAvatarSize * 0.5), y: AorusMaxInterface.isEnabled ? max(params.insets.top + 132.0, floor(params.size.height * 0.46 - collapsedAvatarSize * 0.5)) : max(params.insets.top + 8.0, floor(params.size.height * 0.49) - 39.0 - collapsedAvatarSize)), size: CGSize(width: collapsedAvatarSize, height: collapsedAvatarSize))\n",
+        "MAX call avatar position",
+    )
+    text = _edit(
+        text,
+        "            titleY = collapsedAvatarFrame.maxY + 39.0\n",
+        f"            // {MARK}: the name and the status over the avatar.\n"
+        "            titleY = AorusMaxInterface.isEnabled ? max(params.insets.top + 56.0, collapsedAvatarFrame.minY - 48.0 - titleSize.height - statusSize.height) : collapsedAvatarFrame.maxY + 39.0\n",
+        "MAX call title position",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # MAX's call opens with a chevron in a round button, to put the call away.
+    path = tg / "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/BackButtonView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.addTarget(self, action: #selector(self.pressed), for: .touchUpInside)\n    }\n",
+        "        self.addTarget(self, action: #selector(self.pressed), for: .touchUpInside)\n"
+        f"        // {MARK}: MAX's chevron, pointing down.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.iconView.image = generateImage(CGSize(width: 22.0, height: 22.0), rotatedContext: { size, context in\n"
+        "                context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "                context.setStrokeColor(UIColor.white.cgColor)\n"
+        "                context.setLineWidth(2.2)\n"
+        "                context.setLineCap(.round)\n"
+        "                context.setLineJoin(.round)\n"
+        "                context.move(to: CGPoint(x: 5.0, y: 8.0))\n"
+        "                context.addLine(to: CGPoint(x: 11.0, y: 14.0))\n"
+        "                context.addLine(to: CGPoint(x: 17.0, y: 8.0))\n"
+        "                context.strokePath()\n"
+        "            })\n"
+        "        }\n"
+        "    }\n",
+        "MAX call chevron",
+    )
+    text = _edit(
+        text,
+        "    func update(text: String) -> CGSize {\n",
+        "    func update(text: String) -> CGSize {\n"
+        f"        // {MARK}: the chevron in a round button, as MAX's call draws it.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            return self.updateCircle(text: text, diameter: 40.0)\n"
+        "        }\n",
+        "MAX call back circle",
+    )
+    text = _edit(
+        text,
+        "            self.iconView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((diameter - iconSize.width) * 0.5) - 1.0, y:",
+        "            self.iconView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((diameter - iconSize.width) * 0.5) - (AorusMaxInterface.isEnabled ? 0.0 : 1.0), y:",
+        "MAX call chevron centre",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: the call's buttons in MAX's capsule, its name over a larger avatar, MAX's chevron")
 
 
 def patch_chat_header(tg: Path) -> None:
@@ -1104,6 +1172,311 @@ def patch_chat_header(tg: Path) -> None:
     print("MaxInterface: chat headers start from the left")
 
 
+_MAX_CHAT_HEADER = """
+
+// AorusGram: MAX interface. A chat's header as MAX draws it: the avatar before the name (the old
+// interface's bar draws an `AorusMaxLeadingNavigationNode` there), then, at the trailing edge,
+// MAX's call button for a person and its menu — search, sound, the chat's info and clearing.
+extension AorusGhostAvatarNavigationNode: AorusMaxLeadingNavigationNode {
+}
+
+extension ChatControllerImpl {
+    func aorusMaxHeaderItems(presentationInterfaceState: ChatPresentationInterfaceState) -> [UIBarButtonItem] {
+        let color = presentationInterfaceState.theme.rootController.navigationBar.buttonColor
+        var items: [UIBarButtonItem] = []
+        if case .peer = self.chatLocation, let user = presentationInterfaceState.renderedPeer?.peer as? TelegramUser, user.botInfo == nil, user.id != self.context.account.peerId {
+            let callItem: UIBarButtonItem
+            if let current = self.aorusMaxCallItem {
+                callItem = current
+            } else {
+                callItem = UIBarButtonItem(image: AorusMaxInterface.glyph("call_24")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(self.aorusMaxCallPressed))
+                self.aorusMaxCallItem = callItem
+            }
+            callItem.accessibilityLabel = presentationInterfaceState.strings.PeerInfo_ButtonCall
+            items.append(callItem)
+        }
+        let moreButton: MoreHeaderButton
+        let moreItem: UIBarButtonItem
+        if let currentButton = self.aorusMaxMoreButton, let currentItem = self.aorusMaxMoreItem {
+            moreButton = currentButton
+            moreItem = currentItem
+        } else {
+            moreButton = MoreHeaderButton(color: color)
+            moreButton.isUserInteractionEnabled = true
+            moreButton.onPressed = { [weak self, weak moreButton] in
+                guard let self, let moreButton else {
+                    return
+                }
+                self.aorusMaxOpenMoreMenu(sourceNode: moreButton.containerNode, gesture: nil)
+            }
+            moreButton.contextAction = { [weak self] sourceNode, gesture in
+                self?.aorusMaxOpenMoreMenu(sourceNode: sourceNode, gesture: gesture)
+            }
+            moreItem = UIBarButtonItem(customDisplayNode: moreButton)!
+            self.aorusMaxMoreButton = moreButton
+            self.aorusMaxMoreItem = moreItem
+        }
+        moreItem.accessibilityLabel = presentationInterfaceState.strings.Common_More
+        if self.aorusMaxMoreColor != color {
+            self.aorusMaxMoreColor = color
+            moreButton.setContent(.image(generateTintedImage(image: AorusMaxInterface.glyph("dots_vertical_24"), color: color)))
+        }
+        items.append(moreItem)
+        return items
+    }
+
+    @objc func aorusMaxCallPressed() {
+        guard case let .peer(peerId) = self.chatLocation else {
+            return
+        }
+        self.controllerInteraction?.callPeer(peerId, false)
+    }
+
+    func aorusMaxOpenMoreMenu(sourceNode: ASDisplayNode, gesture: ContextGesture?) {
+        guard case let .peer(peerId) = self.chatLocation else {
+            return
+        }
+        let strings = self.presentationData.strings
+        let isMuted = self.presentationInterfaceState.peerIsMuted
+        var items: [ContextMenuItem] = []
+        items.append(.action(ContextMenuActionItem(text: strings.Common_Search, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.contextMenu.primaryColor)
+        }, action: { [weak self] _, f in
+            f(.dismissWithoutContent)
+            self?.navigationButtonAction(.search(hasTags: false))
+        })))
+        items.append(.action(ContextMenuActionItem(text: isMuted ? strings.ChatList_Context_Unmute : strings.ChatList_Context_Mute, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: isMuted ? "Chat/Context Menu/Unmute" : "Chat/Context Menu/Muted"), color: theme.contextMenu.primaryColor)
+        }, action: { [weak self] _, f in
+            f(.default)
+            guard let self else {
+                return
+            }
+            let _ = self.context.engine.peers.togglePeerMuted(peerId: peerId, threadId: self.chatLocation.threadId).startStandalone()
+        })))
+        items.append(.action(ContextMenuActionItem(text: strings.Conversation_Info, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.contextMenu.primaryColor)
+        }, action: { [weak self] _, f in
+            f(.dismissWithoutContent)
+            self?.navigationButtonAction(.openChatInfo(expandAvatar: false, section: nil))
+        })))
+        items.append(.separator)
+        items.append(.action(ContextMenuActionItem(text: strings.DialogList_ClearHistoryConfirmation, textColor: .destructive, icon: { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor)
+        }, action: { [weak self] _, f in
+            f(.dismissWithoutContent)
+            self?.navigationButtonAction(.clearHistory)
+        })))
+        let source: ContextContentSource = .reference(ChatControllerContextReferenceContentSource(controller: self, sourceView: sourceNode.view, insets: .zero))
+        let contextController = makeContextController(presentationData: self.presentationData, source: source, items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
+        self.presentInGlobalOverlay(contextController)
+    }
+}
+"""
+
+
+def patch_chat_header_buttons(tg: Path) -> None:
+    """MAX's chat header: the avatar moves before the name (the old interface's bar draws it next
+    to the back arrow), and MAX's call and menu buttons take the trailing edge."""
+    sources = tg / "submodules/TelegramUI/Sources"
+    path = sources / "ChatController.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    var moreBarButton: MoreHeaderButton\n",
+        "    var moreBarButton: MoreHeaderButton\n"
+        f"    // {MARK}: the call and menu buttons of MAX's chat header.\n"
+        "    var aorusMaxCallItem: UIBarButtonItem?\n"
+        "    var aorusMaxMoreButton: MoreHeaderButton?\n"
+        "    var aorusMaxMoreItem: UIBarButtonItem?\n"
+        "    var aorusMaxMoreColor: UIColor?\n",
+        "MAX header button storage",
+    )
+    text = text.rstrip("\n") + "\n" + _MAX_CHAT_HEADER
+    path.write_text(text, encoding="utf-8")
+
+    path = sources / "Chat/UpdateChatPresentationInterfaceState.swift"
+    text = _read(path)
+    text = _edit(text, "        let rightBarButtons: [UIBarButtonItem]\n", "        var rightBarButtons: [UIBarButtonItem]\n", "MAX right buttons mutable")
+    text = _edit(
+        text,
+        "        var rightBarButtonsUpdated = false\n",
+        f"        // {MARK}: after the avatar, which the bar draws before the name, MAX's call and\n"
+        "        // menu buttons.\n"
+        "        if AorusMaxInterface.isEnabled, let chatInfoItem = self.chatInfoNavigationButton?.buttonItem, rightBarButtons.first === chatInfoItem, chatInfoItem.customDisplayNode is AorusMaxLeadingNavigationNode {\n"
+        "            rightBarButtons += self.aorusMaxHeaderItems(presentationInterfaceState: presentationInterfaceState)\n"
+        "        }\n"
+        "        var rightBarButtonsUpdated = false\n",
+        "MAX header buttons",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: the chat header's avatar before the name, MAX's call and menu after it")
+
+
+_MAX_INPUT_PANEL = """
+
+// AorusGram: MAX interface. MAX's message panel: its smile on the left — the keyboard while the
+// stickers are open — and its paperclip on the right, where Telegram keeps the sticker button.
+// The two buttons keep their places in the panel and trade what they draw and what they do.
+extension ChatTextInputPanelNode {
+    private static var aorusMaxGlyphs: [String: UIImage] = [:]
+
+    static func aorusMaxGlyph(_ name: String) -> UIImage? {
+        if let image = ChatTextInputPanelNode.aorusMaxGlyphs[name] {
+            return image
+        }
+        guard let image = AorusMaxInterface.glyph(name)?.withRenderingMode(.alwaysTemplate) else {
+            return nil
+        }
+        ChatTextInputPanelNode.aorusMaxGlyphs[name] = image
+        return image
+    }
+
+    /// Whether the left button is MAX's smile: not while it deletes a recording, changes a
+    /// message's media or does a screen's own thing.
+    func aorusMaxLeftTogglesStickers(state: ChatPresentationInterfaceState) -> Bool {
+        guard AorusMaxInterface.isEnabled, self.customLeftAction == nil, state.interfaceState.mediaDraftState == nil else {
+            return false
+        }
+        if let editMessageState = state.editMessageState, case let .media(value) = editMessageState.content, !value.isEmpty {
+            return false
+        }
+        return true
+    }
+
+    /// Whether an accessory button is MAX's paperclip.
+    func aorusMaxIsAttachAccessory(_ item: ChatTextInputAccessoryItem) -> Bool {
+        guard AorusMaxInterface.isEnabled, self.customLeftAction == nil, case let .input(_, inputMode) = item else {
+            return false
+        }
+        if case .bot = inputMode {
+            return false
+        }
+        return true
+    }
+
+    func aorusMaxToggleStickers() {
+        guard let state = self.presentationInterfaceState else {
+            return
+        }
+        if case .media = state.inputMode {
+            self.interfaceInteraction?.updateInputModeAndDismissedButtonKeyboardMessageId({ state in
+                return (.text, state.keyboardButtonsMessage?.id)
+            })
+        } else {
+            var isEnabled = true
+            for (item, _) in self.accessoryItemButtons {
+                if case let .input(itemIsEnabled, _) = item {
+                    isEnabled = itemIsEnabled
+                }
+            }
+            if isEnabled {
+                self.interfaceInteraction?.openStickers()
+            } else {
+                self.interfaceInteraction?.displayRestrictedInfo(.stickers, .tooltip)
+            }
+        }
+    }
+}
+"""
+
+
+def patch_input_panel(tg: Path) -> None:
+    """MAX's message panel: the smile on the left (the keyboard while the stickers are open) and
+    the paperclip on the right, in place of Telegram's attach button and sticker button."""
+    sources = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources"
+
+    path = sources / "AccessoryItemIconButton.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    let tintMask = UIView()\n",
+        "    let tintMask = UIView()\n"
+        f"    // {MARK}: this button is MAX's paperclip, where Telegram keeps the stickers.\n"
+        "    var aorusMaxAttach = false\n",
+        "MAX paperclip flag",
+    )
+    text = _edit(
+        text,
+        "            let aorusStill = AccessoryItemIconButton.aorusStillImage(item: item)\n",
+        "            let aorusStill = (self.aorusMaxAttach ? AccessoryItemIconButton.aorusMaxAttachImage(item: item) : nil) ?? AccessoryItemIconButton.aorusStillImage(item: item)\n",
+        "MAX paperclip image",
+    )
+    text = _edit(
+        text,
+        "    /// AorusGram: the icon a plugin put in place of an animated one, or nil to animate.\n",
+        f"    /// {MARK}: MAX's paperclip for the button that switches the stickers on and off.\n"
+        "    private static func aorusMaxAttachImage(item: ChatTextInputAccessoryItem) -> UIImage? {\n"
+        "        guard case let .input(_, inputMode) = item else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        if case .bot = inputMode {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return AorusMaxInterface.glyph(\"attachment_24\")?.withRenderingMode(.alwaysTemplate)\n"
+        "    }\n\n"
+        "    /// AorusGram: the icon a plugin put in place of an animated one, or nil to animate.\n",
+        "MAX paperclip helper",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = sources / "ChatTextInputPanelNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            button.updateLayout(item: item, size: buttonSize)\n",
+        "            button.aorusMaxAttach = self.aorusMaxIsAttachAccessory(item)\n"
+        "            button.updateLayout(item: item, size: buttonSize)\n",
+        "MAX paperclip accessory",
+    )
+    text = _edit(
+        text,
+        "            let dismissedButtonMessageUpdated = ",
+        f"            // {MARK}: the left button is MAX's smile, or the keyboard while the stickers are open.\n"
+        "            if self.aorusMaxLeftTogglesStickers(state: interfaceState) {\n"
+        "                let aorusMaxShowsKeyboard: Bool\n"
+        "                if case .media = interfaceState.inputMode {\n"
+        "                    aorusMaxShowsKeyboard = true\n"
+        "                } else {\n"
+        "                    aorusMaxShowsKeyboard = false\n"
+        "                }\n"
+        "                let aorusMaxImage = ChatTextInputPanelNode.aorusMaxGlyph(aorusMaxShowsKeyboard ? \"keyboard_outline_24\" : \"smile_square_24\")\n"
+        "                if self.attachmentButtonIcon.image !== aorusMaxImage {\n"
+        "                    self.attachmentButtonIcon.image = aorusMaxImage\n"
+        "                }\n"
+        "                self.attachmentButtonIcon.tintColor = interfaceState.theme.chat.inputPanel.panelControlColor\n"
+        "            }\n\n"
+        "            let dismissedButtonMessageUpdated = ",
+        "MAX left button glyph",
+    )
+    text = _edit(
+        text,
+        "    @objc func attachmentButtonPressed() {\n",
+        "    @objc func attachmentButtonPressed() {\n"
+        f"        // {MARK}: the left button switches the stickers on and off.\n"
+        "        if let state = self.presentationInterfaceState, self.aorusMaxLeftTogglesStickers(state: state) {\n"
+        "            self.aorusMaxToggleStickers()\n"
+        "            return\n"
+        "        }\n",
+        "MAX left button action",
+    )
+    text = _edit(
+        text,
+        "            if currentButton === button {\n                switch item {\n",
+        "            if currentButton === button {\n"
+        f"                // {MARK}: MAX's paperclip opens the attach menu.\n"
+        "                if self.aorusMaxIsAttachAccessory(item) {\n"
+        "                    self.displayAttachmentMenu()\n"
+        "                    break\n"
+        "                }\n"
+        "                switch item {\n",
+        "MAX paperclip action",
+    )
+    text = text.rstrip("\n") + "\n" + _MAX_INPUT_PANEL
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: the message panel's smile on the left and paperclip on the right")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -1122,6 +1495,8 @@ def patch_max_interface(tg: Path) -> None:
     patch_recording(tg)
     patch_call_buttons(tg)
     patch_chat_header(tg)
+    patch_chat_header_buttons(tg)
+    patch_input_panel(tg)
 
 
 if __name__ == "__main__":
