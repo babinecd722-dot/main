@@ -305,7 +305,8 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         let actualText = text ?? ""
         if self.badgeNode.text != actualText {
             self.badgeNode.text = actualText
-            self.badgeNode.isHidden = actualText.isEmpty
+            // MAX keeps no count beside its back arrow.
+            self.badgeNode.isHidden = actualText.isEmpty || AorusMaxInterface.isEnabled
             self.backButtonNode.manualAlpha = self.badgeNode.isHidden ? 1.0 : 0.0
             self.invalidateCalculatedLayout()
             self.requestLayout()
@@ -1473,7 +1474,8 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
         node.alpha = self.manualAlpha
         node.item = nil
         node.image = nil
-        node.text = text
+        // The MAXimal interface's back button is MAX's arrow alone.
+        node.text = isBack && AorusMaxInterface.isEnabled ? "" : text
         node.bold = false
         node.isEnabled = true
         node.node = nil

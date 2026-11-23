@@ -1059,6 +1059,51 @@ def patch_call_buttons(tg: Path) -> None:
     print("MaxInterface: the call's buttons in MAX's capsule")
 
 
+def patch_chat_header(tg: Path) -> None:
+    """A chat's header as MAX draws it: the name and the status under it start from the left,
+    next to the back arrow (the classic bar shows MAX's arrow alone), instead of in the middle."""
+    path = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "let activitySize = self.activityNode.updateLayout(CGSize(width: size.width - titleSideInset * 2.0, height: size.height), alignment: .center)\n",
+        "let activitySize = self.activityNode.updateLayout(CGSize(width: size.width - titleSideInset * 2.0, height: size.height), alignment: AorusMaxInterface.isEnabled ? .left : .center)\n",
+        "MAX status alignment",
+    )
+    text = _edit(
+        text,
+        "            if titleFrame.size.width < size.width {\n"
+        "                titleFrame.origin.x = floor((size.width - titleFrame.width) / 2.0)\n"
+        "            }\n",
+        "            if titleFrame.size.width < size.width {\n"
+        "                titleFrame.origin.x = floor((size.width - titleFrame.width) / 2.0)\n"
+        "            }\n"
+        f"            // {MARK}: MAX's name starts from the left.\n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                titleFrame.origin.x = titleSideInset + leftIconWidth\n"
+        "            }\n",
+        "MAX title alone",
+    )
+    text = _edit(
+        text,
+        "            titleFrame.origin.x = max(titleFrame.origin.x, leftIconWidth)\n",
+        "            titleFrame.origin.x = max(titleFrame.origin.x, leftIconWidth)\n"
+        f"            // {MARK}: MAX's name and status start from the left.\n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                titleFrame.origin.x = titleSideInset + leftIconWidth\n"
+        "            }\n",
+        "MAX title with status",
+    )
+    text = _edit(
+        text,
+        "activityFrame = CGRect(origin: CGPoint(x: titleFrame.minX + floor((titleFrame.width - activitySize.width) / 2.0), y:",
+        "activityFrame = CGRect(origin: CGPoint(x: AorusMaxInterface.isEnabled ? titleFrame.minX : titleFrame.minX + floor((titleFrame.width - activitySize.width) / 2.0), y:",
+        "MAX status position",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: chat headers start from the left")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -1076,6 +1121,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_attachment_panel(tg)
     patch_recording(tg)
     patch_call_buttons(tg)
+    patch_chat_header(tg)
 
 
 if __name__ == "__main__":

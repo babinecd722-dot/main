@@ -405,6 +405,8 @@ public enum AorusPluginIconValues {
         ("file_24", ["Item List/Icons/File", "Chat/Context Menu/File"]),
         ("ico_gif_24", ["Item List/Icons/Gif"]),
         ("current_location_24", ["Item List/Icons/Location"]),
+        // The profile's QR code, top left as MAX puts it.
+        ("qr_code_24", ["Settings/QrIcon"]),
         // The video-message recorder's buttons.
         ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip"]),
         // The call's buttons.

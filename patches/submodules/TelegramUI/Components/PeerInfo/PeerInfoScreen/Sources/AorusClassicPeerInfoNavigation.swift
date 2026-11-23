@@ -277,8 +277,12 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 accessibilityText = presentationData.strings.Common_Back
                 icon = navigationBarBackArrowImage(color: .white)
             case .edit:
-                text = presentationData.strings.Common_Edit
-                accessibilityText = text
+                // The MAXimal interface edits a profile from MAX's pencil.
+                text = AorusMaxInterface.isEnabled ? "" : presentationData.strings.Common_Edit
+                accessibilityText = presentationData.strings.Common_Edit
+                if AorusMaxInterface.isEnabled {
+                    icon = AorusMaxInterface.glyph("edit_outline_24")?.withRenderingMode(.alwaysTemplate)
+                }
             case .cancel:
                 text = presentationData.strings.Common_Cancel
                 accessibilityText = text
