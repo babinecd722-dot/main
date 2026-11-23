@@ -13,8 +13,7 @@ over it:
 - MAX's space pattern is the built-in wallpaper wherever the person has not chosen one;
 - the tab bar is MAX's: Contacts, Calls, Chats and Profile, with MAX's tab animations;
 - the chat list's header is MAX's: a large title and the round search and compose buttons;
-- the Profile tab opens with MAX's cards; services MAX has and Telegram does not are drawn and
-  do nothing;
+- the Profile tab prioritizes messaging and privacy settings;
 - the first MAX run shows a tour of the interface.
 
 Every edit is anchored on Telegram's own text and fails the build when its anchor is missing.
@@ -188,6 +187,14 @@ def patch_tab_bar(tg: Path) -> None:
         "MAX tab animations",
         count=2,
     )
+    text = _edit(
+        text,
+        '                    } else if let selectedIndex = self.selectedIndex, self.tabBarItems[selectedIndex].item.aorusTabIdentifier == "wall" {\n',
+        '                    } else if let selectedIndex = self.selectedIndex,\n'
+        '                              let tabIdentifier = self.tabBarItems[selectedIndex].item.aorusTabIdentifier,\n'
+        '                              tabIdentifier == "wall" || (AorusMaxInterface.isEnabled && !self.reduceMotion && tabIdentifier == "settings") {\n',
+        "MAX profile selection animation",
+    )
     path.write_text(text, encoding="utf-8")
 
     path = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
@@ -271,17 +278,33 @@ def patch_tab_bar(tg: Path) -> None:
     text = _edit(text, helper_anchor, helper + helper_anchor, "MAX contacts tab factory")
     path.write_text(text, encoding="utf-8")
 
-    # Settings is MAX's Profile, under MAX's own glyph even with several accounts.
+    # Keep the profile glyph consistent across accounts and motion settings.
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     text = _read(path)
+    profile_tab_item = "            let tabBarItem: Signal<(String, UIImage?, UIImage?, String?, String?, Bool, Bool), NoError> = combineLatest("
+    text = _edit(
+        text,
+        profile_tab_item,
+        '            let aorusProfileSymbolConfig = UIImage.SymbolConfiguration(pointSize: 24.0, weight: .regular)\n'
+        '            let aorusProfileIcon = AorusMaxInterface.isEnabled ? UIImage(systemName: "person.crop.circle", withConfiguration: aorusProfileSymbolConfig) : nil\n'
+        '            let aorusSelectedProfileIcon = AorusMaxInterface.isEnabled ? UIImage(systemName: "person.crop.circle.fill", withConfiguration: aorusProfileSymbolConfig) : nil\n'
+        "\n" + profile_tab_item,
+        "MAX profile symbols",
+    )
     text = _edit(
         text,
         "                return (presentationData.strings.Settings_Title, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? icon, hasWarning ? \"!\" : otherAccountsBadge, hasWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, accountTabBarAvatar != nil, presentationData.reduceMotion)\n",
-        f"                // {MARK}: the tab is Profile, under MAX's glyph.\n"
+        f"                // {MARK}: keep the Profile tab recognizable across accounts.\n"
         "                let aorusTabAvatar = AorusMaxInterface.isEnabled ? nil : accountTabBarAvatar\n"
         "                let aorusTabTitle = AorusMaxInterface.isEnabled ? aorusL(\"Профиль\", \"Profile\") : presentationData.strings.Settings_Title\n"
-        "                return (aorusTabTitle, aorusTabAvatar?.0 ?? icon, aorusTabAvatar?.1 ?? icon, hasWarning ? \"!\" : otherAccountsBadge, hasWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, aorusTabAvatar != nil, presentationData.reduceMotion)\n",
+        "                return (aorusTabTitle, aorusTabAvatar?.0 ?? aorusProfileIcon ?? icon, aorusTabAvatar?.1 ?? aorusSelectedProfileIcon ?? icon, hasWarning ? \"!\" : otherAccountsBadge, hasWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, aorusTabAvatar != nil, presentationData.reduceMotion)\n",
         "Profile tab",
+    )
+    text = _edit(
+        text,
+        '                    strongSelf.tabBarItem.animationName = isAvatar || reduceMotion ? nil : "TabSettings"\n',
+        '                    strongSelf.tabBarItem.animationName = AorusMaxInterface.isEnabled || isAvatar || reduceMotion ? nil : "TabSettings"\n',
+        "MAX profile animation source",
     )
     path.write_text(text, encoding="utf-8")
     print("MaxInterface: tab bar of Contacts, Calls, Chats and Profile with MAX's animations")
@@ -336,17 +359,19 @@ def patch_chat_list_header(tg: Path) -> None:
 
 
 def patch_profile(tg: Path) -> None:
-    """The Profile tab as MAX lays it out: MAX's services first — Gosuslugi with the Digital ID,
-    and Sferum, which Telegram does not have and which are drawn and do nothing — then the
-    settings MAX opens with, notifications, privacy and the rest, under MAX's names."""
-    # The services' cards (AorusMaxProfileItems.swift) are copied in by the workflow's inject step.
+    """Prioritize the usable settings and shortcuts in the MAX profile."""
     sources = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
     if not (sources / "AorusMaxProfileItems.swift").is_file():
         raise RuntimeError("MaxInterface: AorusMaxProfileItems.swift was not copied into PeerInfoScreen")
 
     path = sources / "PeerInfoSettingsItems.swift"
     text = _read(path)
-    text = _edit(text, "enum SettingsSection: Int, CaseIterable {\n    case edit\n", "enum SettingsSection: Int, CaseIterable {\n    case aorusMaxServices\n    case aorusMaxSferum\n    case edit\n", "MAX service sections")
+    text = _edit(
+        text,
+        "    case shortcuts\n    case advanced\n",
+        "    case aorusMaxPreferences\n    case aorusMaxFavorites\n    case shortcuts\n    case advanced\n",
+        "MAX profile sections",
+    )
     # MAX's names for the rows it has.
     for old, new in (
         ("text: presentationData.strings.Settings_NotificationsAndSounds,", "text: AorusMaxInterface.isEnabled ? aorusL(\"Уведомления\", \"Notifications\") : presentationData.strings.Settings_NotificationsAndSounds,"),
@@ -357,23 +382,87 @@ def patch_profile(tg: Path) -> None:
     text = _edit(
         text,
         "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n    for section in SettingsSection.allCases {\n        if let sectionItems = items[section], !sectionItems.isEmpty {\n            result.append((section, sectionItems))\n        }\n    }\n    return result\n}\n\nfunc settingsEditingItems(",
-        f"    // {MARK}: MAX's services over its profile, then the settings MAX opens with —\n"
-        "    // notifications, privacy and the rest — before the shortcuts. Calls and contacts are\n"
-        "    // tabs of MAX's own, so their rows are not repeated here.\n"
         "    if AorusMaxInterface.isEnabled {\n"
-        "        items[.aorusMaxServices] = [PeerInfoScreenAorusMaxServiceItem(id: 0, kind: .gosuslugi), PeerInfoScreenAorusMaxServiceItem(id: 1, kind: .digitalId)]\n"
-        "        items[.aorusMaxSferum] = [PeerInfoScreenAorusMaxServiceItem(id: 0, kind: .sferum)]\n"
-        "        let aorusMaxAdvanced = items[.advanced] ?? []\n"
-        "        let aorusMaxShortcuts = (items[.shortcuts] ?? []).filter { $0.id != AnyHashable(2) && $0.id != AnyHashable(21) }\n"
-        "        items[.shortcuts] = aorusMaxAdvanced\n"
-        "        items[.advanced] = aorusMaxShortcuts\n"
+        "        aorusMaxReorderProfileSections(&items)\n"
         "    }\n"
-        "    \n"
+        "\n"
         "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n    for section in SettingsSection.allCases {\n        if let sectionItems = items[section], !sectionItems.isEmpty {\n            result.append((section, sectionItems))\n        }\n    }\n    return result\n}\n\nfunc settingsEditingItems(",
         "MAX profile order",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: MAX's services and order on the Profile tab")
+    print("MaxInterface: profile settings grouped by use")
+
+
+def patch_privacy(tg: Path) -> None:
+    """Group Telegram's live account protection and contact privacy controls."""
+    path = tg / "submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    case linkHandling\n}\n",
+        "    case linkHandling\n    case aorusAccountProtection\n    case aorusContactPrivacy\n}\n",
+        "MAX privacy sections",
+    )
+    text = _edit(
+        text,
+        "    var section: ItemListSectionId {\n        switch self {\n",
+        """    var section: ItemListSectionId {
+        if AorusMaxInterface.isEnabled {
+            switch self {
+            case .passcode, .twoStepVerification, .passkeys:
+                return PrivacyAndSecuritySection.aorusAccountProtection.rawValue
+            case .voiceCallPrivacy, .phoneNumberPrivacy, .messagePrivacy, .groupPrivacy, .groupPrivacyFooter:
+                return PrivacyAndSecuritySection.aorusContactPrivacy.rawValue
+            default:
+                break
+            }
+        }
+        switch self {
+""",
+        "MAX privacy section membership",
+    )
+    text = _edit(
+        text,
+        "    static func <(lhs: PrivacyAndSecurityEntry, rhs: PrivacyAndSecurityEntry) -> Bool {\n        return lhs.stableId < rhs.stableId\n    }\n",
+        """    private var aorusMaxSortOrder: Int32 {
+        switch self {
+        case .passcode:
+            return -8
+        case .twoStepVerification:
+            return -7
+        case .passkeys:
+            return -6
+        case .voiceCallPrivacy:
+            return -5
+        case .phoneNumberPrivacy:
+            return -4
+        case .messagePrivacy:
+            return -3
+        case .groupPrivacy:
+            return -2
+        case .groupPrivacyFooter:
+            return -1
+        default:
+            return self.stableId
+        }
+    }
+
+    static func <(lhs: PrivacyAndSecurityEntry, rhs: PrivacyAndSecurityEntry) -> Bool {
+        if AorusMaxInterface.isEnabled {
+            return lhs.aorusMaxSortOrder < rhs.aorusMaxSortOrder
+        }
+        return lhs.stableId < rhs.stableId
+    }
+""",
+        "MAX privacy control order",
+    )
+    text = _edit(
+        text,
+        "    return entries\n}\n\nclass PrivacyAndSecurityControllerImpl:",
+        "    return AorusMaxInterface.isEnabled ? entries.sorted() : entries\n}\n\nclass PrivacyAndSecurityControllerImpl:",
+        "MAX privacy sorted entries",
+    )
+    path.write_text(text, encoding="utf-8")
 
 
 # MARK: - Hints and calls
@@ -741,6 +830,7 @@ def patch_tour(tg: Path) -> None:
 
 
 _MAX_ATTACH_TABS = """            // AorusGram: MAX interface: the tabs of MAX's attach drawer.
+            var usesMaxGlyph = false
             if AorusMaxInterface.isEnabled {
                 var maxGlyph: String?
                 switch component.type {
@@ -778,6 +868,7 @@ _MAX_ATTACH_TABS = """            // AorusGram: MAX interface: the tabs of MAX's
                     break
                 }
                 if let maxGlyph {
+                    usesMaxGlyph = true
                     imageName = "AorusMax/" + maxGlyph
                     animationName = nil
                     animationScale = 1.0
@@ -789,11 +880,26 @@ _MAX_ATTACH_TABS = """            // AorusGram: MAX interface: the tabs of MAX's
 
 
 def patch_attachment_panel(tg: Path) -> None:
-    """The attach menu's tabs as MAX's drawer draws them: MAX's names (Галерея, Файл, Место,
-    Контакт, Опрос, Деньги) over MAX's filled glyphs, drawn still and tinted as Telegram tints
-    its own — the selected one in the accent. A tab MAX has no glyph for keeps Telegram's."""
     path = tg / "submodules/AttachmentUI/Sources/AttachmentPanel.swift"
     text = _read(path)
+    text = _edit(
+        text,
+        "    public let animationName: String?\n",
+        "    public let animateSelection: Bool\n",
+        "attachment glyph animation state",
+    )
+    text = _edit(text, "fileReference: FileMediaReference?, animationName: String?", "fileReference: FileMediaReference?, animateSelection: Bool", "attachment glyph initialization")
+    text = _edit(text, "        self.animationName = animationName\n", "        self.animateSelection = animateSelection\n", "attachment glyph animation initialization")
+    text = _edit(text, "        if lhs.animationName != rhs.animationName {\n", "        if lhs.animateSelection != rhs.animateSelection {\n", "attachment glyph animation comparison")
+    text = _edit(
+        text,
+        "            self.component = component\n\n            return availableSize\n",
+        "            if component.animateSelection && self.component?.animateSelection != true {\n"
+        "                self.layer.animateScale(from: 0.82, to: 1.0, duration: 0.26, timingFunction: kCAMediaTimingFunctionSpring)\n"
+        "            }\n"
+        "            self.component = component\n\n            return availableSize\n",
+        "attachment glyph selection animation",
+    )
     text = _edit(
         text,
         "        return { context in\n            let name: String\n            let imageName: String\n",
@@ -802,8 +908,125 @@ def patch_attachment_panel(tg: Path) -> None:
     )
     anchor = "            let tintColor: UIColor\n            switch component.style {\n"
     text = _edit(text, anchor, _MAX_ATTACH_TABS + anchor, "MAX attach tabs")
+    text = _edit(
+        text,
+        "                        animationName: nil,\n",
+        "                        animateSelection: usesMaxGlyph && component.isAnimating && !UIAccessibility.isReduceMotionEnabled && !component.context.sharedContext.currentPresentationData.with { $0.reduceMotion },\n",
+        "MAX attachment animation policy",
+    )
+    text = _edit(
+        text,
+        "            buttonView.accessibilityTraits = [.button]\n",
+        "            buttonView.accessibilityTraits = AorusMaxInterface.isEnabled && i == self.selectedIndex ? [.button, .selected] : [.button]\n",
+        "MAX selected attachment accessibility",
+        count=2,
+    )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: the attach menu's tabs in MAX's names and glyphs")
+    print("MaxInterface: attachment tabs with selection feedback")
+
+
+def patch_media_picker(tg: Path) -> None:
+    path = tg / "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            let selectedSize = self.selectedButtonNode.update(count: count)\n",
+        "            let selectedSize = self.selectedButtonNode.update(\n"
+        "                count: count,\n"
+        "                accessibilityLabel: self.presentationData.strings.Attachment_SelectedMedia(count),\n"
+        "                animated: !self.presentationData.reduceMotion && !UIAccessibility.isReduceMotionEnabled\n"
+        "            )\n",
+        "gallery selected media count",
+    )
+    text = _edit(
+        text,
+        "            self.containerView.addSubnode(background)\n",
+        "            self.containerView.addSubnode(background)\n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                self.containerView.addSubnode(self.icon)\n"
+        "                self.containerView.addSubnode(self.label)\n"
+        "                self.containerView.addSubview(self.button)\n"
+        "            }\n",
+        "MAX gallery selected media button hierarchy",
+    )
+    text = _edit(
+        text,
+        "    func update(count: Int32) -> CGSize {\n        self.count = count\n",
+        "    func update(count: Int32, accessibilityLabel: String? = nil, animated: Bool = false) -> CGSize {\n"
+        "        if AorusMaxInterface.isEnabled && !self.glass {\n"
+        "            if let accessibilityLabel {\n"
+        "                self.button.accessibilityLabel = accessibilityLabel\n"
+        "            }\n"
+        "            if count > 0 && count != self.count && animated {\n"
+        "                self.icon.layer.animateScale(from: 0.72, to: 1.0, duration: 0.25, timingFunction: kCAMediaTimingFunctionSpring)\n"
+        "            }\n"
+        "        }\n"
+        "        self.count = count\n",
+        "MAX gallery selection feedback",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: an actionable gallery selection count with icon feedback")
+
+
+def patch_drawing_layout(tg: Path) -> None:
+    folder = tg / "submodules/DrawingUI/Sources"
+    path = folder / "DrawingScreen.swift"
+    text = _read(path)
+    mode_start = "                // Between the back and Done buttons,"
+    back_start = "                let backButton = backButton.update(\n"
+    back_add = "                context.add(backButton\n"
+    mode_index = text.index(mode_start)
+    back_index = text.index(back_start, mode_index)
+    back_add_index = text.index(back_add, back_index)
+    text = text[:mode_index] + text[back_index:back_add_index] + "\n" + text[mode_index:back_index] + text[back_add_index:]
+    text = _edit(
+        text,
+        "                let modeConstrainedWidth: CGFloat\n                if component.sourceHint == .storyEditor {\n",
+        "                let modeConstrainedWidth: CGFloat\n"
+        "                let modeMinX = max(leftEdge, backButtonPosition.x + backButton.size.width / 2.0 + 8.0)\n"
+        "                let modeMaxX = min(rightEdge, doneButtonPosition.x - doneButton.size.width / 2.0 - 8.0)\n"
+        "                if AorusMaxInterface.isEnabled {\n"
+        "                    modeConstrainedWidth = max(0.0, modeMaxX - modeMinX)\n"
+        "                } else if component.sourceHint == .storyEditor {\n",
+        "MAX drawing selector width between its adjacent buttons",
+    )
+    text = _edit(
+        text,
+        "                let modeCenterX: CGFloat = controlsCenterX\n",
+        "                let modeCenterX = AorusMaxInterface.isEnabled ? (modeMinX + modeMaxX) / 2.0 : controlsCenterX\n",
+        "MAX drawing selector center",
+    )
+    text = _edit(
+        text,
+        "                    availableSize: CGSize(width: availableWidth - 84.0 - bottomControlsStripInset, height: 44.0),\n",
+        "                    availableSize: CGSize(width: AorusMaxInterface.isEnabled ? max(0.0, rightEdge - leftEdge - 116.0) : availableWidth - 84.0 - bottomControlsStripInset, height: 44.0),\n",
+        "MAX drawing text row spacing",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = folder / "TextSettingsComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            buttonSize.width += 20.0\n",
+        "            buttonSize.width += 20.0\n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                buttonSize.width = min(buttonSize.width, availableSize.width)\n"
+        "            }\n",
+        "MAX font picker width constraint",
+    )
+    text = _edit(
+        text,
+        "            let presentFontPicker = component.presentFontPicker\n",
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                let occupiedWidth = offset + (component.toggleKeyboard == nil ? 0.0 : 47.0)\n"
+        "                fontAvailableWidth = max(0.0, context.availableSize.width - occupiedWidth - 20.0)\n"
+        "            }\n"
+        "            let presentFontPicker = component.presentFontPicker\n",
+        "MAX font picker space after the formatting controls",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: drawing and text controls laid out within their available slots")
 
 _MAX_LOCK_PANEL = """
 
@@ -1132,10 +1355,21 @@ def patch_chat_header(tg: Path) -> None:
     next to the back arrow (the classic bar shows MAX's arrow alone), instead of in the middle."""
     path = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
     text = _read(path)
+    primary_navigation_color = "titleTheme.rootController.navigationBar.primaryTextColor"
+    text = _edit(text, primary_navigation_color, "aorusTitleColor", "MAX title color usage", count=12)
     text = _edit(
         text,
-        "let activitySize = self.activityNode.updateLayout(CGSize(width: size.width - titleSideInset * 2.0, height: size.height), alignment: .center)\n",
-        "let activitySize = self.activityNode.updateLayout(CGSize(width: size.width - titleSideInset * 2.0, height: size.height), alignment: AorusMaxInterface.isEnabled ? .left : .center)\n",
+        "                let titleTheme = self.theme\n",
+        "                let titleTheme = self.theme\n"
+        "                let aorusTitleColor = AorusMaxInterface.isEnabled ? (titleTheme.overallDarkAppearance ? UIColor.white : UIColor.black) : " + primary_navigation_color + "\n",
+        "MAX title foreground",
+    )
+    text = _edit(
+        text,
+        "        let activitySize = self.activityNode.updateLayout(CGSize(width: size.width - titleSideInset * 2.0, height: size.height), alignment: .center)\n",
+        "        let aorusLeadingTitle = AorusMaxInterface.isEnabled\n"
+        "        let activityWidth = size.width - titleSideInset * 2.0\n"
+        "        let activitySize = self.activityNode.updateLayout(CGSize(width: aorusLeadingTitle ? max(0.0, activityWidth - leftIconWidth - 3.0) : activityWidth, height: size.height), alignment: aorusLeadingTitle ? .left : .center)\n",
         "MAX status alignment",
     )
     text = _edit(
@@ -1147,7 +1381,7 @@ def patch_chat_header(tg: Path) -> None:
         "                titleFrame.origin.x = floor((size.width - titleFrame.width) / 2.0)\n"
         "            }\n"
         f"            // {MARK}: MAX's name starts from the left.\n"
-        "            if AorusMaxInterface.isEnabled {\n"
+        "            if aorusLeadingTitle {\n"
         "                titleFrame.origin.x = titleSideInset + leftIconWidth\n"
         "            }\n",
         "MAX title alone",
@@ -1157,7 +1391,7 @@ def patch_chat_header(tg: Path) -> None:
         "            titleFrame.origin.x = max(titleFrame.origin.x, leftIconWidth)\n",
         "            titleFrame.origin.x = max(titleFrame.origin.x, leftIconWidth)\n"
         f"            // {MARK}: MAX's name and status start from the left.\n"
-        "            if AorusMaxInterface.isEnabled {\n"
+        "            if aorusLeadingTitle {\n"
         "                titleFrame.origin.x = titleSideInset + leftIconWidth\n"
         "            }\n",
         "MAX title with status",
@@ -1165,11 +1399,39 @@ def patch_chat_header(tg: Path) -> None:
     text = _edit(
         text,
         "activityFrame = CGRect(origin: CGPoint(x: titleFrame.minX + floor((titleFrame.width - activitySize.width) / 2.0), y:",
-        "activityFrame = CGRect(origin: CGPoint(x: AorusMaxInterface.isEnabled ? titleFrame.minX : titleFrame.minX + floor((titleFrame.width - activitySize.width) / 2.0), y:",
+        "activityFrame = CGRect(origin: CGPoint(x: aorusLeadingTitle ? titleFrame.minX : titleFrame.minX + floor((titleFrame.width - activitySize.width) / 2.0), y:",
         "MAX status position",
     )
+    text = _edit(
+        text,
+        "            titleTransition.updateFrameAdditiveToCenter(node: self.activityNode, frame: activityFrame.offsetBy(dx: activitySize.width * 0.5, dy: 0.0))\n",
+        "            let activityNodeFrame = aorusLeadingTitle ? activityFrame : activityFrame.offsetBy(dx: activitySize.width * 0.5, dy: 0.0)\n"
+        "            titleTransition.updateFrameAdditiveToCenter(node: self.activityNode, frame: activityNodeFrame)\n",
+        "MAX status frame",
+    )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: chat headers start from the left")
+
+    path = path.with_name("ChatTitleComponent.swift")
+    text = _read(path)
+    text = _edit(
+        text,
+        "    public let activities: Activities?\n",
+        "    private var aorusTitleColor: UIColor {\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            return self.theme.overallDarkAppearance ? .white : .black\n"
+        "        }\n"
+        "        return self.theme.chat.inputPanel.panelControlColor\n"
+        "    }\n\n"
+        "    public let activities: Activities?\n",
+        "MAX component title foreground",
+    )
+    for old, new in (
+        ("titleColor: component.theme.chat.inputPanel.panelControlColor, titleTintLayers:", "titleColor: component.aorusTitleColor, titleTintLayers:"),
+        ("                    color: component.theme.chat.inputPanel.panelControlColor,\n                    items: titleSegments,", "                    color: component.aorusTitleColor,\n                    items: titleSegments,"),
+    ):
+        text = _edit(text, old, new, "MAX component title color usage")
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: chat headers use readable titles and leading alignment")
 
 
 _MAX_CHAT_HEADER = """
@@ -1484,6 +1746,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_tab_bar(tg)
     patch_chat_list_header(tg)
     patch_profile(tg)
+    patch_privacy(tg)
     patch_hints(tg)
     patch_lock_hint(tg)
     patch_video_message_screen(tg)
@@ -1492,6 +1755,8 @@ def patch_max_interface(tg: Path) -> None:
     patch_intro_palette(tg)
     patch_tour(tg)
     patch_attachment_panel(tg)
+    patch_media_picker(tg)
+    patch_drawing_layout(tg)
     patch_recording(tg)
     patch_call_buttons(tg)
     patch_chat_header(tg)

@@ -203,7 +203,26 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.action?(self.contextSourceNode, nil)
     }
 
+    override func accessibilityActivate() -> Bool {
+        guard AorusMaxInterface.isEnabled, self.isEnabled, self.action != nil else {
+            return super.accessibilityActivate()
+        }
+        self.pressed()
+        return true
+    }
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if AorusMaxInterface.isEnabled {
+            guard self.isEnabled, self.isUserInteractionEnabled, !self.isHidden, self.alpha > 0.01 else {
+                return nil
+            }
+            if self.key == .back {
+                return self.bounds.contains(point) ? self.view : nil
+            }
+            if !self.containerNode.isGestureEnabled, self.bounds.contains(point) {
+                return self.view
+            }
+        }
         var boundingRect = self.bounds
         if self.textNode.alpha != 0.0 {
             boundingRect = boundingRect.union(self.textNode.frame)
@@ -227,7 +246,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         transition.updateStrokeColor(layer: self.backIconLayer, strokeColor: self.contentsColor)
 
         switch self.key {
-        case .back:
+        case .back where !AorusMaxInterface.isEnabled:
             transition.updateAlpha(layer: self.textNode.layer, alpha: canBeExpanded ? 1.0 : 0.0)
             transition.updateTransformScale(node: self.textNode, scale: canBeExpanded ? 1.0 : 0.001)
 
@@ -249,6 +268,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
 
     func update(key: PeerInfoHeaderNavigationButtonKey, presentationData: PresentationData, height: CGFloat) -> CGSize {
         let transition: ContainedViewLayoutTransition = .immediate
+        let isMaxBack = AorusMaxInterface.isEnabled && key == .back
 
         var iconOffset = CGPoint()
         switch key {
@@ -273,9 +293,14 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             var animationState: AorusClassicMoreIconNodeState = .more
             switch key {
             case .back:
-                text = presentationData.strings.Common_Back
                 accessibilityText = presentationData.strings.Common_Back
-                icon = navigationBarBackArrowImage(color: .white)
+                if isMaxBack {
+                    text = ""
+                    icon = UIImage(systemName: "chevron.backward", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
+                } else {
+                    text = presentationData.strings.Common_Back
+                    icon = navigationBarBackArrowImage(color: .white)
+                }
             case .edit:
                 // The MAXimal interface edits a profile from MAX's pencil.
                 text = AorusMaxInterface.isEnabled ? "" : presentationData.strings.Common_Edit
@@ -391,7 +416,15 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.textNode.position = textFrame.center
         self.textNode.bounds = CGRect(origin: CGPoint(), size: textFrame.size)
 
-        if let animationNode = self.animationNode {
+        if isMaxBack {
+            let size = CGSize(width: 44.0, height: height)
+            self.containerNode.frame = CGRect(origin: .zero, size: size)
+            self.contextSourceNode.frame = self.containerNode.bounds
+            self.iconNode.bounds = CGRect(origin: .zero, size: self.iconNode.image?.size ?? .zero)
+            self.iconNode.position = self.contextSourceNode.bounds.center
+            self.backIconLayer.isHidden = true
+            resultSize = size
+        } else if let animationNode = self.animationNode {
             let animationSize = CGSize(width: 30.0, height: 30.0)
 
             animationNode.frame = CGRect(origin: CGPoint(x: inset, y: floor((height - animationSize.height) / 2.0)), size: animationSize).offsetBy(dx: iconOffset.x, dy: iconOffset.y)
@@ -465,7 +498,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
 
         for (_, button) in self.leftButtonNodes {
             button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: canBeExpanded, transition: transition)
-            transition.updateSublayerTransformOffset(layer: button.layer, offset: CGPoint(x: canBeExpanded ? -8.0 : 0.0, y: 0.0))
+            transition.updateSublayerTransformOffset(layer: button.layer, offset: CGPoint(x: canBeExpanded && !AorusMaxInterface.isEnabled ? -8.0 : 0.0, y: 0.0))
         }
 
         var accumulatedRightButtonOffset: CGFloat = canBeExpanded ? 16.0 : 0.0
@@ -491,6 +524,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
 
     func update(size: CGSize, presentationData: PresentationData, leftButtons: [PeerInfoHeaderNavigationButtonSpec], rightButtons: [PeerInfoHeaderNavigationButtonSpec], expandFraction: CGFloat, shouldAnimateIn: Bool, transition: ContainedViewLayoutTransition) {
         let sideInset: CGFloat = 24.0
+        let leadingInset: CGFloat = AorusMaxInterface.isEnabled ? 12.0 : sideInset
         let expandedSideInset: CGFloat = 16.0
 
         let maximumExpandOffset: CGFloat = 14.0
@@ -499,8 +533,8 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
         if self.currentLeftButtons != leftButtons || presentationData.strings !== self.presentationData?.strings {
             self.currentLeftButtons = leftButtons
 
-            var nextRegularButtonOrigin = sideInset
-            var nextExpandedButtonOrigin = sideInset
+            var nextRegularButtonOrigin = leadingInset
+            var nextExpandedButtonOrigin = leadingInset
             for spec in leftButtons.reversed() {
                 let buttonNode: AorusClassicPeerInfoNavigationButton
                 var wasAdded = false
@@ -547,7 +581,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                     transition.updateAlpha(node: buttonNode, alpha: alphaFactor * alphaFactor)
                     buttonNode.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: .immediate)
 
-                    transition.updateSublayerTransformOffset(layer: buttonNode.layer, offset: CGPoint(x: canBeExpanded ? -8.0 : 0.0, y: 0.0))
+                    transition.updateSublayerTransformOffset(layer: buttonNode.layer, offset: CGPoint(x: canBeExpanded && !AorusMaxInterface.isEnabled ? -8.0 : 0.0, y: 0.0))
                 } else {
                     transition.updateFrameAdditiveToCenter(node: buttonNode, frame: buttonFrame)
                     transition.updateAlpha(node: buttonNode, alpha: alphaFactor * alphaFactor)
@@ -565,8 +599,8 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                 }
             }
         } else {
-            var nextRegularButtonOrigin = sideInset
-            var nextExpandedButtonOrigin = sideInset
+            var nextRegularButtonOrigin = leadingInset
+            var nextExpandedButtonOrigin = leadingInset
             for spec in leftButtons.reversed() {
                 if let buttonNode = self.leftButtonNodes[spec.key] {
                     let buttonSize = buttonNode.bounds.size

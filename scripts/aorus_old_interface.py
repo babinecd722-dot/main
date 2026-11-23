@@ -2897,6 +2897,10 @@ _PROFILE_CLASSIC_SCREEN_EDITS = (
      "            self?.performNavigationButtonAction?(key, nil, nil)\n"
      "        }\n"
      "        self.headerNode.aorusClassicNavigationButtonContainer?.performAction = { [weak self] key, source, gesture in\n"
+     "            if AorusMaxInterface.isEnabled, key == .back, let navigationBar = self?.controller?.navigationBar {\n"
+     "                navigationBar.backPressed()\n"
+     "                return\n"
+     "            }\n"
      "            self?.performNavigationButtonAction?(key, source, gesture) // " + MARK + "\n"
      "        }\n",
      "profile classic button actions"),
@@ -2929,10 +2933,11 @@ _PROFILE_CLASSIC_SCREEN_EDITS = (
      "                // over the normal one, and 12.0's back button while nothing else is on the left.\n"
      "                var leftNavigationButtons = navigationSets.normal.left.map { PeerInfoHeaderNavigationButtonSpec(key: $0, isForExpandedView: false) } + navigationSets.expanded.left.map { PeerInfoHeaderNavigationButtonSpec(key: $0, isForExpandedView: true) }\n"
      "                let rightNavigationButtons = navigationSets.normal.right.map { PeerInfoHeaderNavigationButtonSpec(key: $0, isForExpandedView: false) } + navigationSets.expanded.right.map { PeerInfoHeaderNavigationButtonSpec(key: $0, isForExpandedView: true) }\n"
-     "                if leftNavigationButtons.isEmpty, self.controller?.previousItem != nil {\n"
+     "                let showsBack = AorusMaxInterface.isEnabled ? !self.state.isEditing : leftNavigationButtons.isEmpty\n"
+     "                if showsBack, self.controller?.previousItem != nil {\n"
      "                    leftNavigationButtons.append(PeerInfoHeaderNavigationButtonSpec(key: .back, isForExpandedView: false))\n"
      "                }\n"
-     "                let aorusButtonsSize = CGSize(width: layout.size.width - layout.safeInsets.left * 2.0, height: navigationBarHeight)\n"
+     "                let aorusButtonsSize = CGSize(width: AorusMaxInterface.isEnabled ? navigationButtonsWidth : layout.size.width - layout.safeInsets.left * 2.0, height: navigationBarHeight)\n"
      "                transition.updateFrame(node: aorusClassicNavigationButtonContainer, frame: CGRect(origin: CGPoint(x: layout.safeInsets.left, y: layout.navigationBarStatusBarHeight ?? 0.0), size: aorusButtonsSize))\n"
      "                aorusClassicNavigationButtonContainer.update(size: aorusButtonsSize, presentationData: self.presentationData, leftButtons: leftNavigationButtons, rightButtons: rightNavigationButtons, expandFraction: effectiveAreaExpansionFraction, shouldAnimateIn: animateHeader, transition: transition)\n"
      "            }\n",
@@ -3036,6 +3041,16 @@ def _patch_classic_profile(tg: Path) -> None:
          "            transition.updateAlpha(node: aorusClassicNavigationButtonContainer, alpha: (self.customNavigationContentNode != nil || isSearching) ? 0.0 : 1.0)\n"
          "        }\n",
          "profile classic buttons while searching"),
+        ("    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {\n"
+         "        guard let result = super.hitTest(point, with: event) else {\n",
+         "    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {\n"
+         "        if AorusMaxInterface.isEnabled, !self.isSearching, self.customNavigationContentNode == nil,\n"
+         "           let navigationButtons = self.aorusClassicNavigationButtonContainer,\n"
+         "           let result = navigationButtons.view.hitTest(self.view.convert(point, to: navigationButtons.view), with: event) {\n"
+         "            return result\n"
+         "        }\n"
+         "        guard let result = super.hitTest(point, with: event) else {\n",
+         "MAX profile header control hit testing"),
         ("        if let subtitleRatingView = self.subtitleRating?.view, let result = subtitleRatingView.hitTest(self.view.convert(point, to: subtitleRatingView), with: event) {\n"
          "            return result\n"
          "        }\n",

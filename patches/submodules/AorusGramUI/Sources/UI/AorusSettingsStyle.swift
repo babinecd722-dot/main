@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CoreImage
 import Display
 import SwiftSignalKit
 import TelegramPresentationData
@@ -156,6 +157,21 @@ private final class AorusSettingsIconCache {
     }
 }
 
+private let aorusMaxSettingsGlyph: UIImage? = {
+    guard let source = AorusMaxInterface.glyph("max_solid_themed"), let image = source.cgImage else {
+        return nil
+    }
+    // The bundled mark is a 24%-opacity watermark. Restore the mask coverage before tinting.
+    let input = CIImage(cgImage: image)
+    let opaqueMask = input.applyingFilter("CIColorMatrix", parameters: [
+        "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 255.0 / 61.0)
+    ])
+    guard let mask = CIContext().createCGImage(opaqueMask, from: input.extent) else {
+        return nil
+    }
+    return UIImage(cgImage: mask, scale: source.scale, orientation: source.imageOrientation)
+}()
+
 private func aorusSettingsGlyph(_ glyph: AorusSettingsIcon.Glyph, pointSize: CGFloat) -> UIImage? {
     switch glyph {
     case let .symbol(name):
@@ -168,7 +184,7 @@ private func aorusSettingsGlyph(_ glyph: AorusSettingsIcon.Glyph, pointSize: CGF
     case .ghost:
         return AorusGlyphs.ghost(size: pointSize * 1.3)
     case .maxLogo:
-        return AorusMaxInterface.glyph("max_solid_themed")
+        return aorusMaxSettingsGlyph ?? UIImage(systemName: "bubble.left.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: .regular))
     }
 }
 
