@@ -119,8 +119,11 @@ public enum AorusPluginIconValues {
             setAppBundleImageResolver(AorusBundleIconResolver())
             UIImage.aorusInstallSymbolResolver()
             memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { _ in
+                let keepMaxCache = AorusPluginIconValues.isMaxRun
                 lock.lock()
-                cache.removeAll()
+                if !keepMaxCache {
+                    cache.removeAll()
+                }
                 unchanged.removeAll()
                 ownCache.removeAll()
                 symbolCache.removeAll()
@@ -266,6 +269,9 @@ public enum AorusPluginIconValues {
     }
 
     fileprivate static func systemSymbol(name: String, load: () -> UIImage?) -> UIImage? {
+        if isMaxRun {
+            return load()
+        }
         let previous = Thread.current.threadDictionary[renderingKey]
         Thread.current.threadDictionary[renderingKey] = true
         let image = load()
@@ -277,6 +283,9 @@ public enum AorusPluginIconValues {
     /// Configuration often arrives after UIImage(systemName:). Apply it to the original
     /// vector first; configuring an already rasterized bitmap cannot resize its glyph.
     fileprivate static func configuredSymbol(_ image: UIImage, load: (UIImage) -> UIImage?) -> UIImage? {
+        if isMaxRun {
+            return nil
+        }
         guard let source = objc_getAssociatedObject(image, &symbolSourceKey) as? SymbolSource else { return nil }
         let previous = Thread.current.threadDictionary[renderingKey]
         Thread.current.threadDictionary[renderingKey] = true
@@ -327,13 +336,28 @@ public enum AorusPluginIconValues {
 
     // MARK: - The MAXimal interface
 
-    /// Whether this run draws the MAXimal interface (`AorusMaxInterface`). Read once, as the
-    /// run's interface is, from the same two keys AppBundle's launch flag reads: this file is
-    /// built on its own as well, where nothing else of the app is.
-    private static let isMaxRun: Bool = {
+    private static let maxFlagLock = NSLock()
+    private static var maxRunLatched = false
+    private static var tableWasMaxRun = false
+
+    /// Whether this run draws the MAXimal interface (`AorusMaxInterface`). Latches true once
+    /// the entitlement authority is installed so calls during early app launch never freeze false.
+    private static var isMaxRun: Bool {
+        maxFlagLock.lock()
+        let latched = maxRunLatched
+        maxFlagLock.unlock()
+        if latched {
+            return true
+        }
         let defaults = UserDefaults.standard
-        return !defaults.bool(forKey: "__LOCK_KEY__") && defaults.bool(forKey: "aorusgram_max_interface")
-    }()
+        if !defaults.bool(forKey: "__LOCK_KEY__") && defaults.bool(forKey: "aorusgram_max_interface") {
+            maxFlagLock.lock()
+            maxRunLatched = true
+            maxFlagLock.unlock()
+            return true
+        }
+        return false
+    }
 
     /// MAX's glyph (from its asset catalogue, under `AorusMax/`) for each of Telegram's icons it
     /// stands in for. Each is fitted into the original's box and drawn in the original's colour,
@@ -342,12 +366,12 @@ public enum AorusPluginIconValues {
         ("message_fill_28", ["Chat List/Tabs/IconChats"]),
         ("call_fill_28", ["Chat List/Tabs/IconCalls"]),
         ("chats_fill_28", ["Chat List/Tabs/IconContacts"]),
-        ("profile_round_24", ["Chat List/Tabs/IconSettings"]),
+        ("settings_fill_28", ["Chat List/Tabs/IconSettings"]),
         ("verification_16_background", ["Chat List/PeerVerifiedIconBackground"]),
         ("verification_16_foreground", ["Chat List/PeerVerifiedIconForeground"]),
         ("verification_24_background", ["Peer Info/VerifiedIconBackground"]),
         ("verification_24_foreground", ["Peer Info/VerifiedIconForeground"]),
-        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add", "Media Editor/Add"]),
+        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add", "Media Editor/Add", "Item List/Icons/Add"]),
         ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search"]),
         ("attachment_24", ["Chat/Input/Text/IconAttachment"]),
         ("microphone_on_24", ["Chat/Input/Text/IconMicrophone", "Item List/Icons/Microphone"]),
@@ -356,65 +380,75 @@ public enum AorusPluginIconValues {
         ("keyboard_outline_24", ["Chat/Input/Text/AccessoryIconKeyboard"]),
         ("send_24", ["Chat/Input/Text/SendIcon", "Media Editor/Send"]),
         ("ic_suggest_commands_24", ["Chat/Input/Text/AccessoryIconCommands"]),
-        ("clock_24", ["Chat/Input/Text/AccessoryIconSchedule", "Chat/Context Menu/Schedule", "Chat/Context Menu/Time", "Chat/Context Menu/Timer", "Item List/Icons/Clock", "Item List/Icons/Timer"]),
+        ("clock_24", ["Chat/Input/Text/AccessoryIconSchedule", "Chat/Context Menu/Schedule", "Chat/Context Menu/Time", "Chat/Context Menu/Timer", "Item List/Icons/Clock", "Item List/Icons/Timer", "Item List/Icons/LastSeen", "Item List/Icons/Away"]),
         ("pin_on_fill_16", ["Chat List/PeerPinnedIcon"]),
         ("notifications_off_fill_16", ["Chat List/PeerMutedIcon"]),
-        ("new_story_32", ["Chat List/AddStoryIcon"]),
+        ("new_story_32", ["Chat List/AddStoryIcon", "Item List/Icons/Stories"]),
         ("reply_24", ["Chat/Context Menu/Reply"]),
         ("copy_24", ["Chat/Context Menu/Copy"]),
-        ("forward_24", ["Chat/Context Menu/Forward"]),
+        ("forward_24", ["Chat/Context Menu/Forward", "Item List/Icons/NoForward"]),
         ("delete_24", ["Chat/Context Menu/Delete", "Item List/Icons/Delete"]),
-        ("edit_24", ["Chat/Context Menu/Edit", "Chat/Context Menu/Pencil"]),
+        ("edit_24", ["Chat/Context Menu/Edit", "Chat/Context Menu/Pencil", "Item List/Icons/RichText"]),
         ("pin_on_24", ["Chat/Context Menu/Pin"]),
         ("pin_off_24", ["Chat/Context Menu/Unpin"]),
-        ("multi_select_24", ["Chat/Context Menu/Select"]),
-        ("report_24", ["Chat/Context Menu/Report"]),
-        ("info_24", ["Chat/Context Menu/Info"]),
-        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link", "Media Editor/Link"]),
+        ("multi_select_24", ["Chat/Context Menu/Select", "Item List/Icons/Multiple"]),
+        ("report_24", ["Chat/Context Menu/Report", "Item List/Icons/Flag"]),
+        ("info_24", ["Chat/Context Menu/Info", "Item List/Icons/Intro"]),
+        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link", "Item List/Icons/BusinessLink", "Media Editor/Link"]),
         ("save_to_gallery_24", ["Chat/Context Menu/Save", "Media Editor/SaveIcon"]),
-        ("archive_24", ["Chat/Context Menu/Archive", "Chat/Context Menu/Unarchive"]),
-        ("share_24_iOS", ["Chat/Context Menu/Share"]),
+        ("archive_24", ["Chat/Context Menu/Archive", "Chat/Context Menu/Unarchive", "Item List/Icons/ArchivedSticker"]),
+        ("share_24_iOS", ["Chat/Context Menu/Share", "Item List/Icons/Share", "Item List/Icons/Upload"]),
         ("download_24", ["Chat/Context Menu/Download", "Item List/Icons/Download"]),
         ("clear_history_24", ["Chat/Context Menu/Clear", "Chat/Context Menu/ClearMessages"]),
         ("show_24", ["Chat/Context Menu/Eye", "Item List/Icons/View"]),
         ("leave_chat_24", ["Chat/Context Menu/Logout"]),
-        ("favorites_star_24", ["Chat/Context Menu/Fave"]),
+        ("favorites_star_24", ["Chat/Context Menu/Fave", "Item List/Icons/Stars", "Item List/Icons/Gift"]),
+        ("filled_star_20", ["Item List/Icons/Premium"]),
         ("add_to_folder_24", ["Chat/Context Menu/AddToFolder"]),
         ("exclude_from_folder_24", ["Chat/Context Menu/RemoveFromFolder"]),
-        ("block_24", ["Chat/Context Menu/Ban", "Item List/Icons/Block"]),
-        ("smile_24", ["Chat/Context Menu/Smile", "Item List/Icons/Emoji"]),
-        ("message_24", ["Chat/Context Menu/Message", "Item List/Icons/Chat", "Item List/Icons/Messages"]),
+        ("block_24", ["Chat/Context Menu/Ban", "Item List/Icons/Block", "Item List/Icons/NoAds"]),
+        ("smile_24", ["Chat/Context Menu/Smile", "Item List/Icons/Emoji", "Item List/Icons/Status", "Item List/Icons/Cake"]),
+        ("message_24", ["Chat/Context Menu/Message", "Item List/Icons/Chat", "Item List/Icons/Messages", "Item List/Icons/Email"]),
         ("call_24", ["Chat/Context Menu/Call", "Chat/Context Menu/PhoneCall"]),
         ("videocam_on_24", ["Chat/Context Menu/VideoCall", "Item List/Icons/Video"]),
         ("profile_24", ["Chat/Context Menu/User", "Item List/Icons/Profile", "Item List/Icons/Member"]),
-        ("add_contact_24", ["Chat/Context Menu/AddUser"]),
-        ("folder_24", ["Chat/Context Menu/Folder", "Item List/Icons/Folder"]),
+        ("add_contact_24", ["Chat/Context Menu/AddUser", "Item List/Icons/Requests"]),
+        ("folder_24", ["Chat/Context Menu/Folder", "Item List/Icons/Folder", "Item List/Icons/Topics"]),
         ("settings_24", ["Chat/Context Menu/Settings", "Item List/Icons/Settings"]),
         ("notifications_off_24", ["Chat/Context Menu/Muted", "Chat/Context Menu/Mute2d"]),
         ("notifications_on_24", ["Chat/Context Menu/Unmute", "Item List/Icons/Notifications"]),
-        ("privacy_24", ["Chat/Context Menu/Lock", "Item List/Icons/Privacy"]),
-        ("favorites_24", ["Item List/Icons/SavedMessages"]),
+        ("privacy_24", ["Chat/Context Menu/Lock", "Item List/Icons/Privacy", "Item List/Icons/LockBubble"]),
+        ("favorites_24", ["Item List/Icons/SavedMessages", "Item List/Icons/Tag"]),
         ("devices_24", ["Item List/Icons/Devices"]),
+        ("battery_and_network_24", ["Item List/Icons/PowerSaving", "Item List/Icons/Wifi"]),
         ("globe_language_24", ["Item List/Icons/Language", "Item List/Icons/Translation", "Chat/Context Menu/Translate"]),
-        ("customization_24", ["Item List/Icons/Appearance", "Item List/Icons/Brush"]),
+        ("customization_24", ["Item List/Icons/Appearance", "Item List/Icons/Brush", "Item List/Icons/Backdrop", "Item List/Icons/Gradient", "Item List/Icons/Icons"]),
         ("memory_24", ["Item List/Icons/Data"]),
-        ("mobile_24", ["Item List/Icons/Phone", "Item List/Icons/ChangePhone"]),
-        ("user_defence_24", ["Item List/Icons/Proxy"]),
-        ("case_24", ["Item List/Icons/Business"]),
-        ("users_24", ["Item List/Icons/Group", "Item List/Icons/Members"]),
+        ("mobile_24", ["Item List/Icons/Phone", "Item List/Icons/ChangePhone", "Item List/Icons/Cellular"]),
+        ("user_defence_24", ["Item List/Icons/Proxy", "Item List/Icons/FaceId", "Item List/Icons/AntiSpam"]),
+        ("case_24", ["Item List/Icons/Business", "Item List/Icons/Case"]),
+        ("users_24", ["Item List/Icons/Group", "Item List/Icons/Members", "Item List/Icons/Affiliate"]),
         ("megaphone_24", ["Item List/Icons/Channel"]),
-        ("bot_24", ["Item List/Icons/Bot"]),
+        ("bot_24", ["Item List/Icons/Bot", "Item List/Icons/Chatbot"]),
         ("administrator_24", ["Item List/Icons/Admin"]),
-        ("chart_24", ["Item List/Icons/Stats"]),
-        ("wallet_24", ["Item List/Icons/Balance"]),
+        ("chart_24", ["Item List/Icons/Stats", "Item List/Icons/Pie"]),
+        ("wallet_24", ["Item List/Icons/Balance", "Item List/Icons/Earn", "Item List/Icons/Earnings", "Item List/Icons/Gram"]),
         ("support_24", ["Item List/Icons/Support"]),
         ("help_outline_24", ["Item List/Icons/Faq"]),
-        ("lamp_24", ["Item List/Icons/Tips"]),
+        ("lamp_24", ["Item List/Icons/Tips", "Item List/Icons/AITools"]),
         ("key_24", ["Item List/Icons/Key"]),
         ("photo_24", ["Item List/Icons/Photo", "Chat/Attach Menu/Camera"]),
         ("file_24", ["Item List/Icons/File", "Chat/Context Menu/File"]),
         ("ico_gif_24", ["Item List/Icons/Gif"]),
         ("current_location_24", ["Item List/Icons/Location", "Chat/Attach Menu/Location", "Media Editor/LocationSmall"]),
+        ("heart_28", ["Chat List/ReactionsBadgeIcon", "Item List/Icons/Reactions"]),
+        ("play_fill_24", ["Item List/Icons/Play"]),
+        ("done_round_24", ["Item List/Icons/Checkbox"]),
+        ("warning_24", ["Item List/Icons/Warning"]),
+        ("handup_fill_28", ["Item List/Icons/Hand"]),
+        ("flame_24", ["Item List/Icons/Effect", "Item List/Icons/MessageEffect", "Item List/Icons/TrendingSticker"]),
+        ("refresh_24", ["Item List/Icons/Update", "Item List/Icons/Shuffle"]),
+        ("voice_speed_2x_24", ["Item List/Icons/Speed", "Item List/Icons/X2"]),
         // MAX's original editor tools and text backgrounds, also used by the gallery toolbar.
         ("brush_28", ["Media Editor/Pencil", "Chat/Context Menu/Draw"]),
         ("type_28", ["Media Editor/AddText"]),
@@ -429,7 +463,7 @@ public enum AorusPluginIconValues {
         ("text_no_bg_28", ["Media Editor/TextDefault"]),
         ("text_bg_28", ["Media Editor/TextFilled"]),
         ("text_transparent_bg_28", ["Media Editor/TextSemi"]),
-        ("picture_24", ["Chat/Context Menu/Image", "Media Editor/AddImage"]),
+        ("picture_24", ["Chat/Context Menu/Image", "Media Editor/AddImage", "Item List/Icons/Wallpaper"]),
         ("ic_music_24", ["Media Editor/Audio", "Media Editor/AudioSmall", "Media Editor/SmallAudio"]),
         ("back_24_ios", ["Chat/Context Menu/Back", "Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"]),
         // The profile's QR code, top left as MAX puts it.
@@ -458,7 +492,6 @@ public enum AorusPluginIconValues {
         ("delete_24", ["Chat/Context Menu/Delete", "Item List/Icons/Delete", "Chat/Input/Accessory Panels/MessageSelectionTrash"]),
         ("report_24", ["Chat/Context Menu/Report", "Chat/Input/Accessory Panels/MessageSelectionReport"]),
         ("mention_24", ["Chat List/MentionBadgeIcon"]),
-        ("heart_28", ["Chat List/ReactionsBadgeIcon"]),
         ("privacy_24", ["Chat List/StatusLockIcon"]),
         // The video-message recorder's buttons.
         ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip", "Camera/FlipIcon"]),
@@ -526,13 +559,23 @@ public enum AorusPluginIconValues {
                 AorusPluginIconValues.layersMayHaveChanged()
             })
         }
-        if let table {
+        let maxNow = isMaxRun
+        if let table, tableWasMaxRun == maxNow {
             return table
         }
+        let hadTable = table != nil
+        tableWasMaxRun = maxNow
         let raw = storedLayers()
         rawLayers = raw
         let built = merge(raw)
         table = built
+        if hadTable {
+            revisionValue += 1
+            cache.removeAll()
+            unchanged.removeAll()
+            ownCache.removeAll()
+            symbolCache.removeAll()
+        }
         return built
     }
 

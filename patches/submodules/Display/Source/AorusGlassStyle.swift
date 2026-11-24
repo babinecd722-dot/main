@@ -176,7 +176,8 @@ public struct AorusGlassStyle: Equatable {
         var style = AorusGlassStyle()
         style.material = .solid
         style.isDark = dark
-        style.classicBlur = true
+        // MAX panels are opaque flat surfaces rather than translucent blurred panes.
+        style.classicBlur = !AorusMaxInterface.isEnabled
         if let color = menu ? AorusOldInterface.menuColor(dark: dark) : AorusOldInterface.panelColor(dark: dark) {
             style.fill = [color]
         }
@@ -297,14 +298,18 @@ public struct AorusGlassOutlines {
             self.borderWidth = pixel
             let points = AorusGlassOutlines.pixelPoints(rect: body, corners: drawnCorners, pixel: pixel, arrow: arrow)
             self.outline = AorusGlassOutlines.polygon(points)
-            switch style.line {
-            case .solid:
-                let ring = CGMutablePath()
-                ring.addPath(self.outline)
-                ring.addPath(AorusGlassOutlines.polygon(AorusGlassOutlines.offset(points, by: pixel)))
-                self.border = ring
-            case .dashed, .dotted:
-                self.border = AorusGlassOutlines.polygon(AorusGlassOutlines.offset(points, by: pixel * 0.5))
+            if style.border.isEmpty {
+                self.border = self.outline
+            } else {
+                switch style.line {
+                case .solid:
+                    let ring = CGMutablePath()
+                    ring.addPath(self.outline)
+                    ring.addPath(AorusGlassOutlines.polygon(AorusGlassOutlines.offset(points, by: pixel)))
+                    self.border = ring
+                case .dashed, .dotted:
+                    self.border = AorusGlassOutlines.polygon(AorusGlassOutlines.offset(points, by: pixel * 0.5))
+                }
             }
             self.signature = points.count
         } else {
@@ -312,14 +317,18 @@ public struct AorusGlassOutlines {
             self.pixel = 0.0
             self.borderWidth = width
             self.outline = AorusGlassOutlines.smoothPath(rect: body, corners: drawnCorners, arrow: arrow)
-            switch style.line {
-            case .solid:
-                let ring = CGMutablePath()
-                ring.addPath(self.outline)
-                ring.addPath(AorusGlassOutlines.smoothPath(rect: body.insetBy(dx: width, dy: width), corners: drawnCorners.inset(width), arrow: arrow.map { AorusGlassOutlines.inset($0, by: width) }))
-                self.border = ring
-            case .dashed, .dotted:
-                self.border = AorusGlassOutlines.smoothPath(rect: body.insetBy(dx: width * 0.5, dy: width * 0.5), corners: drawnCorners.inset(width * 0.5), arrow: arrow.map { AorusGlassOutlines.inset($0, by: width * 0.5) })
+            if style.border.isEmpty {
+                self.border = self.outline
+            } else {
+                switch style.line {
+                case .solid:
+                    let ring = CGMutablePath()
+                    ring.addPath(self.outline)
+                    ring.addPath(AorusGlassOutlines.smoothPath(rect: body.insetBy(dx: width, dy: width), corners: drawnCorners.inset(width), arrow: arrow.map { AorusGlassOutlines.inset($0, by: width) }))
+                    self.border = ring
+                case .dashed, .dotted:
+                    self.border = AorusGlassOutlines.smoothPath(rect: body.insetBy(dx: width * 0.5, dy: width * 0.5), corners: drawnCorners.inset(width * 0.5), arrow: arrow.map { AorusGlassOutlines.inset($0, by: width * 0.5) })
+                }
             }
             // A corner too small to curve is drawn as two lines rather than an arc, and a path
             // with an arc does not move into one without.
@@ -576,6 +585,13 @@ public final class AorusGlassDecorationView: UIView {
     /// The old interface's blur beneath a translucent plate, cut to the pane.
     private var classicBlurView: UIVisualEffectView?
     private let classicBlurMask = CAShapeLayer()
+    private var classicBlurIsDark: Bool?
+    private var lastSize: CGSize?
+    private var lastCorners: AorusGlassCorners?
+    private var lastStyle: AorusGlassStyle?
+    private var lastFill: [UIColor]?
+    private var lastTint: UIColor?
+    private var isFlatPlate = false
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
@@ -612,7 +628,63 @@ public final class AorusGlassDecorationView: UIView {
     /// rather than by the glass itself; either may be empty.
     public func update(style: AorusGlassStyle, outlines: AorusGlassOutlines, fill: [UIColor], tint: UIColor?, transition: ContainedViewLayoutTransition, styleChanged: Bool) {
         let size = outlines.size
+        if !styleChanged,
+           self.lastSize == size,
+           self.lastCorners == outlines.corners,
+           self.lastStyle == style,
+           self.lastFill == fill,
+           self.lastTint == tint {
+            return
+        }
+        self.lastSize = size
+        self.lastCorners = outlines.corners
+        self.lastStyle = style
+        self.lastFill = fill
+        self.lastTint = tint
+
         let bounds = CGRect(origin: CGPoint(), size: size)
+        // Fast path for flat single-color rounded rects (every MAX surface): avoid offscreen
+        // CAShapeLayer masks and gradient/blur passes completely.
+        let uniformCorners = outlines.corners.topLeft == outlines.corners.topRight
+            && outlines.corners.topLeft == outlines.corners.bottomLeft
+            && outlines.corners.topLeft == outlines.corners.bottomRight
+        if !style.classicBlur
+            && !style.isPixel
+            && tint == nil
+            && style.shine <= 0.0
+            && style.border.isEmpty
+            && fill.count == 1
+            && uniformCorners
+            && outlines.bodyTop == 0.0
+            && !AorusRGBColors.isAnimated(fill[0]) {
+            self.signature = outlines.signature
+            if let blurView = self.classicBlurView {
+                self.classicBlurView = nil
+                self.classicBlurIsDark = nil
+                blurView.removeFromSuperview()
+            }
+            if !self.isFlatPlate {
+                self.isFlatPlate = true
+                self.fillLayer.isHidden = true
+                self.tintLayer.isHidden = true
+                self.shineLayer.isHidden = true
+                self.borderContainer.isHidden = true
+                self.borderGradient.removeAnimation(forKey: "aorusMotion")
+                AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: [])
+                AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [])
+                AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: [])
+                self.layer.cornerCurve = .continuous
+            }
+            self.backgroundColor = fill[0]
+            transition.updateCornerRadius(layer: self.layer, cornerRadius: outlines.corners.topLeft)
+            return
+        }
+        if self.isFlatPlate {
+            self.isFlatPlate = false
+            self.backgroundColor = nil
+            self.layer.cornerRadius = 0.0
+        }
+
         // A change of shape the outline can move through goes with the pane; one that adds or
         // drops a step is drawn as it is.
         let pathTransition: ContainedViewLayoutTransition = self.signature == outlines.signature ? transition : .immediate
@@ -640,13 +712,18 @@ public final class AorusGlassDecorationView: UIView {
                 blurView.layer.mask = self.classicBlurMask
                 self.insertSubview(blurView, at: 0)
                 self.classicBlurView = blurView
+                self.classicBlurIsDark = nil
             }
-            blurView.effect = UIBlurEffect(style: style.isDark ? .dark : .light)
+            if self.classicBlurIsDark != style.isDark {
+                self.classicBlurIsDark = style.isDark
+                blurView.effect = UIBlurEffect(style: style.isDark ? .dark : .light)
+            }
             transition.updateFrame(view: blurView, frame: bounds)
             transition.updateFrame(layer: self.classicBlurMask, frame: bounds)
             aorusGlassSetPath(self.classicBlurMask, outlines.outline, transition: pathTransition)
         } else if let blurView = self.classicBlurView {
             self.classicBlurView = nil
+            self.classicBlurIsDark = nil
             blurView.removeFromSuperview()
         }
 
@@ -1137,8 +1214,16 @@ public final class AorusGlassSurface: NSObject {
         let tint: UIColor? = self.drawnPlainly && (style.replacesGlass || !self.materialTakes || style.tint.map(AorusRGBColors.isAnimated) == true) ? style.tint : nil
         // With the glass turned off in AorusGram's settings, what surrounds it goes too, as it
         // does around every other pane; a plate is not glass and stays.
-        let glassShown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
-        let shown = size.width >= 1.0 && size.height >= 1.0 && (glassShown || (style.replacesGlass && self.drawnPlainly))
+        let shown: Bool
+        if size.width >= 1.0 && size.height >= 1.0 {
+            if style.replacesGlass && self.drawnPlainly {
+                shown = true
+            } else {
+                shown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
+            }
+        } else {
+            shown = false
+        }
         let edged = shown && !style.border.isEmpty
         let decorated = shown && (!fill.isEmpty || tint != nil || style.shine > 0.0 || (edged && !self.edgesOnTop))
         let overlaid = edged && self.edgesOnTop

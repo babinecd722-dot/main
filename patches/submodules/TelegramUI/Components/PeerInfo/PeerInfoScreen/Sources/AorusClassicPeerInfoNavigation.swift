@@ -173,7 +173,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.backIconLayer.isHidden = true
         self.backIconLayer.path = try? convertSvgPath("M10.5,2 L1.5,11 L10.5,20 ")
 
-        self.backgroundNode = NavigationBackgroundNode(color: .clear, enableBlur: true)
+        self.backgroundNode = NavigationBackgroundNode(color: .clear, enableBlur: !AorusMaxInterface.isEnabled)
 
         super.init(pointerStyle: .insetRectangle(-8.0, 2.0))
 
@@ -295,7 +295,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 accessibilityText = presentationData.strings.Common_Back
                 if isMaxBack {
                     text = ""
-                    icon = AorusMaxInterface.glyph("back_24_ios")?.withRenderingMode(.alwaysTemplate)
+                    icon = AorusMaxInterface.templateGlyph("back_24_ios")
                 } else {
                     text = presentationData.strings.Common_Back
                     icon = navigationBarBackArrowImage(color: .white)
@@ -305,7 +305,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 text = AorusMaxInterface.isEnabled ? "" : presentationData.strings.Common_Edit
                 accessibilityText = presentationData.strings.Common_Edit
                 if AorusMaxInterface.isEnabled {
-                    icon = AorusMaxInterface.glyph("edit_outline_24")?.withRenderingMode(.alwaysTemplate)
+                    icon = AorusMaxInterface.templateGlyph("edit_24")
                 }
             case .cancel:
                 text = presentationData.strings.Common_Cancel
@@ -348,7 +348,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             case .qrCode:
                 text = ""
                 accessibilityText = presentationData.strings.PeerInfo_QRCode_Title
-                icon = PresentationResourcesRootController.navigationQrCodeIcon(presentationData.theme)
+                icon = AorusMaxInterface.isEnabled ? AorusMaxInterface.templateGlyph("qr_code_24") : PresentationResourcesRootController.navigationQrCodeIcon(presentationData.theme)
             case .moreSearchSort:
                 text = ""
                 accessibilityText = ""
@@ -491,8 +491,14 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
     var performAction: ((PeerInfoHeaderNavigationButtonKey, ContextReferenceContentNode?, ContextGesture?) -> Void)?
 
     func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, canBeExpanded: Bool, transition: ContainedViewLayoutTransition) {
-        self.backgroundContentColor = backgroundContentColor
-        self.contentsColor = contentsColor
+        if AorusMaxInterface.isEnabled && canBeExpanded {
+            let dark = self.presentationData?.theme.overallDarkAppearance ?? true
+            self.backgroundContentColor = .clear
+            self.contentsColor = AorusMaxInterface.palette(dark: dark).glyph
+        } else {
+            self.backgroundContentColor = backgroundContentColor
+            self.contentsColor = contentsColor
+        }
         self.canBeExpanded = canBeExpanded
 
         for (_, button) in self.leftButtonNodes {
@@ -522,6 +528,17 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
     }
 
     func update(size: CGSize, presentationData: PresentationData, leftButtons: [PeerInfoHeaderNavigationButtonSpec], rightButtons: [PeerInfoHeaderNavigationButtonSpec], expandFraction: CGFloat, shouldAnimateIn: Bool, transition: ContainedViewLayoutTransition) {
+        let darkChanged = self.presentationData?.theme.overallDarkAppearance != presentationData.theme.overallDarkAppearance
+        if AorusMaxInterface.isEnabled && self.canBeExpanded && darkChanged {
+            self.backgroundContentColor = .clear
+            self.contentsColor = AorusMaxInterface.palette(dark: presentationData.theme.overallDarkAppearance).glyph
+            for (_, button) in self.leftButtonNodes {
+                button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: transition)
+            }
+            for (_, button) in self.rightButtonNodes {
+                button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: transition)
+            }
+        }
         let sideInset: CGFloat = 24.0
         let leadingInset: CGFloat = AorusMaxInterface.isEnabled ? 12.0 : sideInset
         let expandedSideInset: CGFloat = 16.0

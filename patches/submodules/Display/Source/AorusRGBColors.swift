@@ -11,6 +11,7 @@ public enum AorusRGBColors {
     private static var colorKey: UInt8 = 0
     private static var imageKey: UInt8 = 0
     private static var tintKey: UInt8 = 0
+    private static var hasAnyCreated = false
     private static let alphaDigits = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
 
     private final class Color: NSObject {
@@ -29,6 +30,7 @@ public enum AorusRGBColors {
 
     public static func color(_ token: String, offset: Double = 0.0) -> UIColor? {
         guard isRGB(token) else { return nil }
+        hasAnyCreated = true
         let alpha: CGFloat = token == "RGB" ? 1.0 : CGFloat(UInt8(token.suffix(2), radix: 16)!) / 255.0
         let metadata = Color(offset: offset, alpha: alpha)
         let color = sample(metadata, time: 0.0)
@@ -37,10 +39,14 @@ public enum AorusRGBColors {
     }
 
     private static func metadata(_ color: UIColor) -> Color? {
+        guard hasAnyCreated else { return nil }
         return objc_getAssociatedObject(color, &colorKey) as? Color
     }
 
-    public static func isAnimated(_ color: UIColor) -> Bool { metadata(color) != nil }
+    public static func isAnimated(_ color: UIColor) -> Bool {
+        guard hasAnyCreated else { return false }
+        return metadata(color) != nil
+    }
 
     public static func sameSource(_ lhs: UIColor?, _ rhs: UIColor?) -> Bool {
         switch (lhs, rhs) {
@@ -51,11 +57,12 @@ public enum AorusRGBColors {
     }
 
     public static func sameSource(_ lhs: UIColor, _ rhs: UIColor) -> Bool {
+        guard hasAnyCreated else { return lhs.isEqual(rhs) }
         return lhs.isEqual(rhs) && metadata(lhs)?.offset == metadata(rhs)?.offset && metadata(lhs)?.alpha == metadata(rhs)?.alpha
     }
 
     public static func withAlpha(_ color: UIColor, multipliedBy alpha: CGFloat) -> UIColor {
-        guard let source = metadata(color) else { return color.withAlphaComponent(color.cgColor.alpha * alpha) }
+        guard hasAnyCreated, let source = metadata(color) else { return color.withAlphaComponent(color.cgColor.alpha * alpha) }
         let value = Color(offset: source.offset, alpha: source.alpha * alpha)
         let result = sample(value, time: 0.0)
         objc_setAssociatedObject(result, &colorKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -64,7 +71,7 @@ public enum AorusRGBColors {
 
     /// A native tinted bitmap already contains the colour's opacity in its alpha mask.
     public static func maskInk(_ color: UIColor) -> UIColor {
-        guard let source = metadata(color) else { return color }
+        guard hasAnyCreated, let source = metadata(color) else { return color }
         return withAlpha(color, multipliedBy: source.alpha > 0.0 ? 1.0 / source.alpha : 1.0)
     }
 
@@ -74,13 +81,14 @@ public enum AorusRGBColors {
     }
 
     public static func resolved(_ color: UIColor, time: Double = CACurrentMediaTime()) -> UIColor {
-        guard let source = metadata(color) else { return color }
+        guard hasAnyCreated, let source = metadata(color) else { return color }
         return sample(source, time: UIAccessibility.isReduceMotionEnabled ? 0.0 : time)
     }
 
     /// Replaces an earlier RGB animation as well as removing it when a fixed colour is chosen.
     public static func animate(_ layer: CALayer, keyPath: String, colors: [UIColor]) {
         assert(Thread.isMainThread)
+        guard hasAnyCreated else { return }
         Clock.shared.register(layer, keyPath: keyPath, colors: colors)
         applyAnimation(layer, keyPath: keyPath, colors: colors)
     }
@@ -107,6 +115,7 @@ public enum AorusRGBColors {
     }
 
     public static func prepareText(_ text: NSAttributedString) -> NSAttributedString {
+        guard hasAnyCreated else { return text }
         var result: NSMutableAttributedString?
         text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, range, _ in
             guard let color = value as? UIColor, let source = metadata(color) else { return }
@@ -118,7 +127,7 @@ public enum AorusRGBColors {
     }
 
     public static func hasRGB(_ text: NSAttributedString?) -> Bool {
-        guard let text else { return false }
+        guard hasAnyCreated, let text else { return false }
         var found = false
         text.enumerateAttribute(textAttribute, in: NSRange(location: 0, length: text.length)) { value, _, stop in
             if value != nil { found = true; stop.pointee = true }
@@ -127,6 +136,10 @@ public enum AorusRGBColors {
     }
 
     public static func drawRun(_ run: CTRun, context: CGContext, range: CFRange) {
+        guard hasAnyCreated else {
+            CTRunDraw(run, context, range)
+            return
+        }
         let attributes = CTRunGetAttributes(run) as NSDictionary
         if let source = attributes[textAttribute.rawValue] as? Color {
             context.saveGState()
@@ -145,12 +158,14 @@ public enum AorusRGBColors {
 
     public static func untrack(_ owner: AnyObject) {
         assert(Thread.isMainThread)
+        guard hasAnyCreated else { return }
         Clock.shared.untrack(owner)
     }
 
     /// The sent/read glyphs keep their native size, shape, pixel style and status animations.
     /// The caller leaves its image empty while the gradient owns the same alpha mask.
     public static func drawImage(on layer: CALayer, image: UIImage?, color: UIColor?) -> Bool {
+        guard hasAnyCreated else { return false }
         guard let image, let color, metadata(color) != nil else {
             if let overlay = objc_getAssociatedObject(layer, &imageKey) as? CAGradientLayer {
                 animate(overlay, keyPath: "colors", colors: [])
@@ -180,6 +195,10 @@ public enum AorusRGBColors {
 
     /// Template images keep their native stretch points, tiling, geometry and animations.
     public static func tintImage(_ view: UIImageView, color: UIColor) {
+        guard hasAnyCreated else {
+            view.tintColor = color
+            return
+        }
         guard isAnimated(color), let image = view.image, image.renderingMode == .alwaysTemplate else {
             if let overlay = objc_getAssociatedObject(view, &tintKey) as? AorusRGBGradientView {
                 overlay.update(colors: [], mask: nil)

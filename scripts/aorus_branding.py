@@ -21837,8 +21837,16 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
         let tint: UIColor? = drawnPlainly && (style.replacesGlass || self.nativeView == nil || style.tint.map(AorusRGBColors.isAnimated) == true) ? style.tint : nil
         // With the glass turned off in AorusGram's settings, what surrounds the glass goes with
         // it; a plate is not glass and stays.
-        let glassShown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
-        let shown = request.isVisible && (style.replacesGlass || glassShown) && size.width >= 1.0 && size.height >= 1.0
+        let shown: Bool
+        if request.isVisible && size.width >= 1.0 && size.height >= 1.0 {
+            if style.replacesGlass {
+                shown = true
+            } else {
+                shown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
+            }
+        } else {
+            shown = false
+        }
         let decorated = shown && (!fill.isEmpty || tint != nil || !style.border.isEmpty || style.shine > 0.0)
         let haloed = shown && (style.shadow > 0.0 || style.glow != nil)
         // The corners Telegram asked for: the outlines round them as the style says, as the
@@ -26528,13 +26536,27 @@ private enum AorusRuntimeFont {
     private static let importedFontsKey = "aorusgram_font_imported_fonts"
     private static let keychainService = "AorusGramFont"
     private static var didRegisterImported = false
-    // The MAXimal interface draws in the system font, as MAX does. Read once, as the run's
-    // interface is: the same two keys the launch flag in AppBundle reads, here because this
-    // file is built on its own as well.
-    private static let isMaxRun: Bool = {
+    private static let choiceLock = NSLock()
+    private static var didProbeKeychain = false
+    private static var maxRunLatched = false
+    // The MAXimal interface draws in the system font, as MAX does. Latches true once the
+    // entitlement authority is installed so early launch calls cannot permanently freeze false.
+    private static var isMaxRun: Bool {
+        choiceLock.lock()
+        let latched = maxRunLatched
+        choiceLock.unlock()
+        if latched {
+            return true
+        }
         let defaults = UserDefaults.standard
-        return !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface")
-    }()
+        if !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface") {
+            choiceLock.lock()
+            maxRunLatched = true
+            choiceLock.unlock()
+            return true
+        }
+        return false
+    }
 
     private struct ImportedFontRecord: Codable {
         let id: String
@@ -26605,7 +26627,13 @@ private enum AorusRuntimeFont {
             }
             return value
         }
-        if let value = keychainString(account: "choice"), !value.isEmpty {
+        choiceLock.lock()
+        let alreadyProbed = didProbeKeychain
+        if !alreadyProbed {
+            didProbeKeychain = true
+        }
+        choiceLock.unlock()
+        if !alreadyProbed, let value = keychainString(account: "choice"), !value.isEmpty {
             let resolved = value == "imported" ? (importedRecords().first?.id ?? value) : value
             UserDefaults.standard.set(resolved, forKey: choiceKey)
             return resolved

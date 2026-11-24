@@ -439,6 +439,12 @@ public enum AorusMaxInterface {
         return cache
     }()
 
+    private static let tintedGlyphCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 128
+        return cache
+    }()
+
     /// One of the pictures the MAX screens draw (`patches/assets/max/images`), cached in memory.
     public static func picture(_ name: String) -> UIImage? {
         let key = name as NSString
@@ -475,6 +481,61 @@ public enum AorusMaxInterface {
         }
         AorusMaxInterface.templateGlyphCache.setObject(image, forKey: key)
         return image
+    }
+
+    /// One of MAX's glyphs pre-tinted in the appearance's ink and centred on a settings-row box
+    /// (`30x30pt`), for layer-backed `ASImageNode`s that do not apply `tintColor` to template images.
+    public static func tintedGlyph(_ name: String, dark: Bool, canvasSize: CGFloat = 30.0, glyphSide: CGFloat = 24.0) -> UIImage? {
+        let key = "\(name)|\(dark ? 1 : 0)|\(Int(canvasSize))|\(Int(glyphSide))" as NSString
+        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
+            return cached
+        }
+        guard let source = AorusMaxInterface.glyph(name),
+              let tinted = generateTintedImage(image: source, color: AorusMaxInterface.palette(dark: dark).glyph) else {
+            return nil
+        }
+        let result = generateImage(CGSize(width: canvasSize, height: canvasSize), rotatedContext: { size, context in
+            context.clear(CGRect(origin: CGPoint(), size: size))
+            let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
+            UIGraphicsPushContext(context)
+            tinted.draw(in: rect)
+            UIGraphicsPopContext()
+        })?.withRenderingMode(.alwaysOriginal)
+        if let result {
+            AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
+        }
+        return result
+    }
+
+    /// MAX's Gosuslugi Digital ID shield glyph shaded with its blue-to-crimson gradient.
+    public static func digitalIdGradientGlyph(canvasSize: CGFloat = 30.0, glyphSide: CGFloat = 28.0) -> UIImage? {
+        let key = "__digital_id_grad__|\(Int(canvasSize))|\(Int(glyphSide))" as NSString
+        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
+            return cached
+        }
+        guard let source = AorusMaxInterface.glyph("digital_id_tab_28"), let cgMask = source.cgImage else {
+            return nil
+        }
+        let result = generateImage(CGSize(width: canvasSize, height: canvasSize), contextGenerator: { size, context in
+            context.clear(CGRect(origin: CGPoint(), size: size))
+            let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
+            context.saveGState()
+            context.clip(to: rect, mask: cgMask)
+            let colors = [UIColor(rgb: 0x0a7df7).cgColor, UIColor(rgb: 0xee3f58).cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.0, 1.0]) {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: rect.minX, y: rect.maxY),
+                    end: CGPoint(x: rect.maxX, y: rect.minY),
+                    options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+                )
+            }
+            context.restoreGState()
+        })?.withRenderingMode(.alwaysOriginal)
+        if let result {
+            AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
+        }
+        return result
     }
 
     /// The name the chat list asks for its round search button; the header draws the circle.

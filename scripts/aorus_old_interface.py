@@ -778,7 +778,7 @@ _CHAT_LIST_CLASSIC_BACKGROUND = '''            if AorusOldInterface.isEnabled {
                     aorusBackgroundView = current
                     aorusSeparatorLayer = currentSeparator
                 } else {
-                    aorusBackgroundView = BlurredBackgroundView(color: component.theme.rootController.navigationBar.blurredBackgroundColor, enableBlur: true)
+                    aorusBackgroundView = BlurredBackgroundView(color: component.theme.rootController.navigationBar.blurredBackgroundColor, enableBlur: !AorusMaxInterface.isEnabled)
                     aorusBackgroundView.isUserInteractionEnabled = false
                     aorusSeparatorLayer = SimpleLayer()
                     self.contentView.insertSubview(aorusBackgroundView, at: 0)
@@ -847,7 +847,15 @@ def _patch_bars(tg: Path) -> None:
         "chat list header fields",
     )
     anchor = "            self.edgeEffectView.update(content: nil, blur: true, alpha: ChatListNavigationBar.View.edgeEffectTintAlpha, rect: edgeEffectFrame, edge: .top, edgeSize: min(ChatListNavigationBar.View.edgeEffectEdgeLength, edgeEffectHeight), transition: transition)\n"
-    text = _edit(text, anchor, anchor + _CHAT_LIST_CLASSIC_BACKGROUND, "chat list header background")
+    text = _edit(
+        text,
+        anchor,
+        "            if !AorusOldInterface.isEnabled {\n"
+        "                self.edgeEffectView.update(content: nil, blur: true, alpha: ChatListNavigationBar.View.edgeEffectTintAlpha, rect: edgeEffectFrame, edge: .top, edgeSize: min(ChatListNavigationBar.View.edgeEffectEdgeLength, edgeEffectHeight), transition: transition)\n"
+        "            }\n"
+        + _CHAT_LIST_CLASSIC_BACKGROUND,
+        "chat list header background",
+    )
     text = _edit(
         text,
         "            self.edgeEffectView.isHidden = !component.hasEdgeEffect\n",
@@ -1055,15 +1063,36 @@ def _patch_classic_icons(tg: Path) -> None:
     text = _edit(text, "@interface UIImage (AppBundle)\n", _APP_BUNDLE_FLAG_H + "@interface UIImage (AppBundle)\n", "app bundle flag declaration")
     header.write_text(text, encoding="utf-8")
 
+    sets = sorted(path for path in _CLASSIC_ICONS.rglob("*.imageset") if path.is_dir())
+    if len(sets) < 39:
+        raise RuntimeError(f"OldInterface: only {len(sets)} classic icons found")
+    classic_names = [
+        imageset.relative_to(_CLASSIC_ICONS).with_suffix("").as_posix().replace("\\", "\\\\").replace('"', '\\"')
+        for imageset in sets
+    ]
+    classic_set_items = ",\n".join(f'            @"{name}"' for name in classic_names)
+    classic_set_fn = (
+        "static NSSet<NSString *> *aorusClassicIconNames(void) {\n"
+        "    static NSSet<NSString *> *names = nil;\n"
+        "    static dispatch_once_t onceToken;\n"
+        "    dispatch_once(&onceToken, ^{\n"
+        "        names = [NSSet setWithArray:@[\n"
+        + classic_set_items
+        + "\n        ]];\n"
+        "    });\n"
+        "    return names;\n"
+        "}\n\n"
+    )
+
     source = tg / "submodules/AppBundle/Sources/AppBundle/AppBundle.m"
     text = _read(source)
-    text = _edit(text, "@implementation UIImage (AppBundle)\n", _APP_BUNDLE_FLAG_M + "@implementation UIImage (AppBundle)\n", "app bundle flag")
+    text = _edit(text, "@implementation UIImage (AppBundle)\n", _APP_BUNDLE_FLAG_M + classic_set_fn + "@implementation UIImage (AppBundle)\n", "app bundle flag")
     text = _edit(
         text,
         "    UIImage *image = [UIImage imageNamed:bundleImageName inBundle:getAppBundle() compatibleWithTraitCollection:nil];\n",
         "    // AorusGram: old interface: 12.0's drawing of an icon 12.9.2 drew anew.\n"
         "    UIImage *image = nil;\n"
-        "    if (aorusOldInterfaceIsEnabled()) {\n"
+        "    if (aorusOldInterfaceIsEnabled() && [aorusClassicIconNames() containsObject:bundleImageName]) {\n"
         "        image = [UIImage imageNamed:[@\"AorusClassic/\" stringByAppendingString:bundleImageName] inBundle:getAppBundle() compatibleWithTraitCollection:nil];\n"
         "    }\n"
         "    if (image == nil) {\n"
@@ -1076,9 +1105,6 @@ def _patch_classic_icons(tg: Path) -> None:
     catalogue = tg / "submodules/TelegramUI/Images.xcassets"
     if not catalogue.is_dir():
         raise RuntimeError("OldInterface: the asset catalogue is missing")
-    sets = sorted(path for path in _CLASSIC_ICONS.rglob("*.imageset") if path.is_dir())
-    if len(sets) < 39:
-        raise RuntimeError(f"OldInterface: only {len(sets)} classic icons found")
     root = catalogue / "AorusClassic"
     for imageset in sets:
         relative = imageset.relative_to(_CLASSIC_ICONS)
@@ -2857,7 +2883,7 @@ _PROFILE_CLASSIC_SEPARATOR_ALPHA = """        if AorusOldInterface.isEnabled {
             if !self.isSettings && aorusSeparatorAlpha == 1.0 && aorusSecondarySeparatorAlpha < 1.0 {
                 aorusSeparatorAlpha = aorusSecondarySeparatorAlpha
             }
-            if self.customNavigationContentNode != nil || state.isEditing {
+            if self.customNavigationContentNode != nil || state.isEditing || (AorusMaxInterface.isEnabled && self.isSettings) {
                 aorusSeparatorAlpha = 0.0
             }
             self.aorusClassicSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor
@@ -2867,14 +2893,16 @@ _PROFILE_CLASSIC_SEPARATOR_ALPHA = """        if AorusOldInterface.isEnabled {
 
 _PROFILE_CLASSIC_EDITING_BAR = """        if AorusOldInterface.isEnabled {
             // AorusGram: old interface: while editing, 12.0's blurred bar with its line.
-            self.aorusClassicEditingSeparatorNode.backgroundColor = presentationData.theme.rootController.navigationBar.separatorColor
-            self.aorusClassicEditingBackgroundNode.updateColor(color: presentationData.theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
-            let aorusEditingBackgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: navigationHeight))
-            transition.updateFrame(node: self.aorusClassicEditingBackgroundNode, frame: aorusEditingBackgroundFrame)
-            self.aorusClassicEditingBackgroundNode.update(size: aorusEditingBackgroundFrame.size, transition: transition)
-            transition.updateFrame(node: self.aorusClassicEditingSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: aorusEditingBackgroundFrame.maxY), size: CGSize(width: width, height: UIScreenPixel)))
-            transition.updateAlpha(node: self.aorusClassicEditingBackgroundNode, alpha: editingBackgroundAlpha)
-            transition.updateAlpha(node: self.aorusClassicEditingSeparatorNode, alpha: editingBackgroundAlpha)
+            if editingBackgroundAlpha > 0.001 || self.aorusClassicEditingBackgroundNode.alpha > 0.001 {
+                self.aorusClassicEditingSeparatorNode.backgroundColor = presentationData.theme.rootController.navigationBar.separatorColor
+                self.aorusClassicEditingBackgroundNode.updateColor(color: presentationData.theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
+                let aorusEditingBackgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: navigationHeight))
+                transition.updateFrame(node: self.aorusClassicEditingBackgroundNode, frame: aorusEditingBackgroundFrame)
+                self.aorusClassicEditingBackgroundNode.update(size: aorusEditingBackgroundFrame.size, transition: transition)
+                transition.updateFrame(node: self.aorusClassicEditingSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: aorusEditingBackgroundFrame.maxY), size: CGSize(width: width, height: UIScreenPixel)))
+                transition.updateAlpha(node: self.aorusClassicEditingBackgroundNode, alpha: editingBackgroundAlpha)
+                transition.updateAlpha(node: self.aorusClassicEditingSeparatorNode, alpha: editingBackgroundAlpha)
+            }
         }
 """
 
@@ -3012,7 +3040,7 @@ def _patch_classic_profile(tg: Path) -> None:
          "            navigationTransition.updateAlpha(layer: self.backgroundBannerView.layer, alpha: backgroundBannerAlpha)\n"
          "            if AorusOldInterface.isEnabled {\n"
          "                // " + MARK + ": the header's colour while it is open, the bar's once it has closed.\n"
-         "                self.aorusClassicBackgroundNode.updateColor(color: presentationData.theme.rootController.navigationBar.opaqueBackgroundColor.mixedWith(presentationData.theme.list.blocksBackgroundColor, alpha: 1.0 - innerBackgroundTransitionFraction), forceKeepBlur: true, transition: transition)\n"
+         "                self.aorusClassicBackgroundNode.updateColor(color: presentationData.theme.rootController.navigationBar.opaqueBackgroundColor.mixedWith(presentationData.theme.list.blocksBackgroundColor, alpha: 1.0 - innerBackgroundTransitionFraction), forceKeepBlur: !AorusMaxInterface.isEnabled, transition: transition)\n"
          "                navigationTransition.updateAlpha(node: self.aorusClassicBackgroundNode, alpha: state.isEditing ? 0.0 : 1.0)\n"
          "            }\n",
          "profile classic background colour"),

@@ -111,7 +111,7 @@ def install_assets(tg: Path) -> None:
                 count += 1
     for name in (
         "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json",
-        "AorusMaxRecordLock.json", "AorusMaxRecordPause.json", "AorusMaxSafeModeLock.json",
+        "AorusMaxRecordLock.json", "AorusMaxRecordPause.json", "AorusMaxSafeModeLock.json", "AorusMaxDigitalId.json",
         "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
         "AorusMaxSentMessage.aiff", "AorusMaxMessageIn.m4a", "AorusMaxVoStart.m4a",
         "AorusMaxDialTone.m4a", "AorusMaxCallEnd.m4a", "AorusMaxBusy.m4a", "AorusMaxReconnect.m4a",
@@ -186,15 +186,47 @@ def patch_wallpaper(tg: Path) -> None:
 
 
 def patch_tab_bar(tg: Path) -> None:
-    """MAX's tab animations, and its four tabs: Contacts, Calls, Chats and Profile."""
+    """MAX's tab animations (30pt, matching MAX's 28pt glyphs), and its four tabs: Contacts, Calls, Chats and Settings."""
     path = tg / "submodules/TabBarUI/Sources/TabBarNode.swift"
     text = _read(path)
+    text = _edit(
+        text,
+        'imageRect = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - imageSize.width) / 2.0), y: centered ? floor((size.height - imageSize.height) / 2.0) : 0.0), size: imageSize)',
+        'imageRect = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - imageSize.width) / 2.0), y: centered ? floor((size.height - imageSize.height) / 2.0) : (AorusMaxInterface.isEnabled && imageSize.height <= 28.0 ? 1.0 : 0.0)), size: imageSize)',
+        "MAX static tab icon vertical alignment",
+    )
+    text = _edit(
+        text,
+        'let animationSize: Int = Int(51.0 * UIScreen.main.scale)',
+        'let animationSize: Int = Int((AorusMaxInterface.isEnabled ? 30.0 : 51.0) * UIScreen.main.scale)',
+        "MAX tab animation pixel size",
+        count=2,
+    )
     text = _edit(
         text,
         'AnimatedStickerNodeLocalFileSource(name: item.item.animationName ?? "")',
         'AnimatedStickerNodeLocalFileSource(name: AorusMaxInterface.tabAnimationName(item.item.animationName) ?? "")',
         "MAX tab animations",
         count=2,
+    )
+    text = _edit(
+        text,
+        'node.animationNode.updateLayout(size: CGSize(width: 51.0, height: 51.0))',
+        'node.animationNode.updateLayout(size: AorusMaxInterface.isEnabled ? CGSize(width: 30.0, height: 30.0) : CGSize(width: 51.0, height: 51.0))',
+        "MAX tab animation layout size",
+        count=2,
+    )
+    text = _edit(
+        text,
+        'node.animationNode.frame = CGRect(origin: CGPoint(x: -10.0 - UIScreenPixel, y: -4.0 - UIScreenPixel), size: CGSize(width: 51.0, height: 51.0))',
+        'node.animationNode.frame = AorusMaxInterface.isEnabled ? CGRect(origin: CGPoint(x: 0.0 - UIScreenPixel, y: 2.0 - UIScreenPixel), size: CGSize(width: 30.0, height: 30.0)) : CGRect(origin: CGPoint(x: -10.0 - UIScreenPixel, y: -4.0 - UIScreenPixel), size: CGSize(width: 51.0, height: 51.0))',
+        "MAX horizontal tab animation frame",
+    )
+    text = _edit(
+        text,
+        'node.animationNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((nodeSize.width - 51.0) / 2.0), y: -10.0 - UIScreenPixel).offsetBy(dx: animationOffset.x, dy: animationOffset.y), size: CGSize(width: 51.0, height: 51.0))',
+        'node.animationNode.frame = AorusMaxInterface.isEnabled ? CGRect(origin: CGPoint(x: floorToScreenPixels((nodeSize.width - 30.0) / 2.0), y: 0.0 - UIScreenPixel).offsetBy(dx: animationOffset.x, dy: animationOffset.y), size: CGSize(width: 30.0, height: 30.0)) : CGRect(origin: CGPoint(x: floorToScreenPixels((nodeSize.width - 51.0) / 2.0), y: -10.0 - UIScreenPixel).offsetBy(dx: animationOffset.x, dy: animationOffset.y), size: CGSize(width: 51.0, height: 51.0))',
+        "MAX vertical tab animation frame",
     )
     path.write_text(text, encoding="utf-8")
 
@@ -204,7 +236,7 @@ def patch_tab_bar(tg: Path) -> None:
         text,
         "        // Created even when hidden, like the calls tab: `updateRootControllers` shows and hides it.\n        let newsController = NewsScreen(context: self.context)\n",
         "        // Created even when hidden, like the calls tab: `updateRootControllers` shows and hides it.\n        let newsController = NewsScreen(context: self.context)\n"
-        f"        // {MARK}: the tab bar is MAX's — Contacts, Calls, Chats and Profile, in that order.\n"
+        f"        // {MARK}: the tab bar is MAX's — Contacts, Calls, Chats and Settings, in that order.\n"
         "        let aorusMaxContactsController: ContactsController? = AorusMaxInterface.isEnabled ? self.aorusMaxContactsTab() : nil\n",
         "MAX contacts tab",
     )
@@ -266,8 +298,8 @@ def patch_tab_bar(tg: Path) -> None:
         "    private func aorusMaxContactsTab() -> ContactsController {\n"
         "        let controller = ContactsController(context: self.context)\n"
         "        let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }\n"
-        "        controller.tabBarItem.title = AorusMaxInterface.localizedString(\"SETTINGS_CONTACTS\", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.Contacts_Title\n"
-        "        let icon = UIImage(bundleImageName: \"Chat List/Tabs/IconContacts\")\n"
+        "        controller.tabBarItem.title = AorusMaxInterface.localizedString(\"TAB_CONTACTS\", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.Contacts_Title\n"
+        "        let icon = AorusMaxInterface.templateGlyph(\"chats_fill_28\") ?? UIImage(bundleImageName: \"Chat List/Tabs/IconContacts\")\n"
         "        controller.tabBarItem.image = icon\n"
         "        controller.tabBarItem.selectedImage = icon\n"
         "        controller.tabBarItem.animationName = \"TabContacts\"\n"
@@ -301,34 +333,34 @@ def patch_tab_bar(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Keep the profile glyph consistent across accounts and play MAX's original Settings Lottie.
+    # MAX 26.17.3 Tab 4: Settings («Настройки») with matching gear icon (`settings_fill_28`) and Settings.json Lottie.
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
     text = _read(path)
     profile_tab_item = "            let tabBarItem: Signal<(String, UIImage?, UIImage?, String?, String?, Bool, Bool), NoError> = combineLatest("
     text = _edit(
         text,
         profile_tab_item,
-        '            let aorusProfileIcon = AorusMaxInterface.isEnabled ? AorusMaxInterface.templateGlyph("profile_round_24") : nil\n'
+        '            let aorusProfileIcon = AorusMaxInterface.isEnabled ? AorusMaxInterface.templateGlyph("settings_fill_28") : nil\n'
         "\n" + profile_tab_item,
-        "MAX original profile glyph",
+        "MAX original settings gear glyph",
     )
     text = _edit(
         text,
         "                return (presentationData.strings.Settings_Title, accountTabBarAvatar?.0 ?? icon, accountTabBarAvatar?.1 ?? icon, hasWarning ? \"!\" : otherAccountsBadge, hasWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, accountTabBarAvatar != nil, presentationData.reduceMotion)\n",
-        f"                // {MARK}: keep the Profile tab recognizable across accounts.\n"
+        f"                // {MARK}: keep the Settings tab consistent across accounts with MAX's gear icon.\n"
         "                let aorusTabAvatar = AorusMaxInterface.isEnabled ? nil : accountTabBarAvatar\n"
-        "                let aorusTabTitle = AorusMaxInterface.isEnabled ? aorusL(\"Профиль\", \"Profile\") : presentationData.strings.Settings_Title\n"
+        "                let aorusTabTitle = AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString(\"TAB_SETTINGS\", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.Settings_Title) : presentationData.strings.Settings_Title\n"
         "                return (aorusTabTitle, aorusTabAvatar?.0 ?? aorusProfileIcon ?? icon, aorusTabAvatar?.1 ?? aorusProfileIcon ?? icon, hasWarning ? \"!\" : otherAccountsBadge, hasWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, aorusTabAvatar != nil, presentationData.reduceMotion)\n",
-        "Profile tab",
+        "Settings tab",
     )
     text = _edit(
         text,
         '                    strongSelf.tabBarItem.animationName = isAvatar || reduceMotion ? nil : "TabSettings"\n',
         '                    strongSelf.tabBarItem.animationName = (isAvatar && !AorusMaxInterface.isEnabled) || reduceMotion ? nil : "TabSettings"\n',
-        "MAX profile animation source",
+        "MAX settings animation source",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: tab bar of Contacts, Calls, Chats and Profile with all 4 original MAX animations")
+    print("MaxInterface: tab bar of Contacts, Calls, Chats and Settings with 30pt original MAX animations")
 
 
 # MARK: - Chat list header
@@ -380,7 +412,8 @@ def patch_chat_list_header(tg: Path) -> None:
 
 
 def patch_profile(tg: Path) -> None:
-    """Prioritize the usable settings and shortcuts in the MAX profile with MAX's original labels."""
+    """Prioritize the usable settings and shortcuts in the MAX profile with MAX's original labels,
+    Gosuslugi / Digital ID card, clean QR+Edit header (no Search), and disjoint section item IDs."""
     sources = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
     if not (sources / "AorusMaxProfileItems.swift").is_file():
         raise RuntimeError("MaxInterface: AorusMaxProfileItems.swift was not copied into PeerInfoScreen")
@@ -389,19 +422,42 @@ def patch_profile(tg: Path) -> None:
     text = _read(path)
     text = _edit(
         text,
-        "    case shortcuts\n    case advanced\n",
-        "    case aorusMaxPreferences\n    case aorusMaxFavorites\n    case shortcuts\n    case advanced\n",
+        "    case aorusGram\n",
+        "    case aorusMaxGosuslugi\n    case aorusGram\n",
+        "MAX Gosuslugi top section",
+    )
+    text = _edit(
+        text,
+        "    case wallet\n",
+        "    case aorusMaxPreferences\n    case aorusMaxFavorites\n    case wallet\n",
         "MAX profile sections",
     )
+    # Assign disjoint IDs when MAX merges items from .shortcuts and .advanced into shared cards
+    # so PeerInfoScreen's per-section item dictionary never collides on id 1 or id 3.
+    for old_id, new_id, label in (
+        ("items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1,", "items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 101 : 1,", "SavedMessages id"),
+        ("items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2,", "items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 102 : 2,", "RecentCalls id"),
+        ("items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 21,", "items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 121 : 21,", "Contacts id"),
+        ("items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 3,", "items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 103 : 3,", "Devices id"),
+        ("items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 4,", "items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 104 : 4,", "ChatFolders id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 0,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 200 : 0,", "Notifications id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 1,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 201 : 1,", "Privacy id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 2,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 202 : 2,", "DataAndStorage id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 3,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 203 : 3,", "Appearance id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 6,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 206 : 6,", "PowerSaving id"),
+        ("items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 4,", "items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: AorusMaxInterface.isEnabled ? 204 : 4,", "AppLanguage id"),
+    ):
+        text = _edit(text, old_id, new_id, f"MAX disjoint {label}")
     # MAX's authentic labels from Localizable_{ru,en}.json for the settings rows.
     for old, key, max_fallback, default_val in (
         ("text: presentationData.strings.Settings_NotificationsAndSounds,", "NOTIFICATIONS_SETTINGS_TITLE", "presentationData.strings.Settings_NotificationsAndSounds", "presentationData.strings.Settings_NotificationsAndSounds"),
-        ("text: presentationData.strings.Settings_PrivacySettings,", "PRIVACY_SETTINGS_TITLE", "presentationData.strings.Settings_PrivacySettings", "presentationData.strings.Settings_PrivacySettings"),
+        ("text: presentationData.strings.Settings_PrivacySettings,", "SETTINGS_PRIVACY_ROW_TITLE", "presentationData.strings.Settings_PrivacySettings", "presentationData.strings.Settings_PrivacySettings"),
         ("text: presentationData.strings.Settings_SavedMessages,", "SAVED_MESSAGES", "presentationData.strings.Settings_SavedMessages", "presentationData.strings.Settings_SavedMessages"),
         ("text: presentationData.strings.Settings_ChatFolders,", "FOLDERS_SETTINGS_TITLE", 'aorusL("Папки", "Folders")', "presentationData.strings.Settings_ChatFolders"),
         ("text: presentationData.strings.Settings_Appearance,", "APPEARANCE_SETTINGS_TITLE", "presentationData.strings.Settings_Appearance", "presentationData.strings.Settings_Appearance"),
         ("text: presentationData.strings.Settings_ChatSettings,", "SETTINGS_MEMORY_TITLE", "presentationData.strings.Settings_ChatSettings", "presentationData.strings.Settings_ChatSettings"),
         ("text: presentationData.strings.Settings_Devices,", "DEVICES", "presentationData.strings.Settings_Devices", "presentationData.strings.Settings_Devices"),
+        ("text: presentationData.strings.Settings_PowerSaving,", "SETTINGS_BATTERY_AND_NETWORK_TITLE", "presentationData.strings.Settings_PowerSaving", "presentationData.strings.Settings_PowerSaving"),
         ("text: presentationData.strings.Settings_AppLanguage,", "APP_LANGUAGE", "presentationData.strings.Settings_AppLanguage", "presentationData.strings.Settings_AppLanguage"),
         ("text: presentationData.strings.Settings_Support,", "SETTINGS_SUPPORT_TITLE", "presentationData.strings.Settings_Support", "presentationData.strings.Settings_Support"),
     ):
@@ -411,8 +467,11 @@ def patch_profile(tg: Path) -> None:
         text,
         "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n    for section in SettingsSection.allCases {\n        if let sectionItems = items[section], !sectionItems.isEmpty {\n            result.append((section, sectionItems))\n        }\n    }\n    return result\n}\n\nfunc settingsEditingItems(",
         "    if AorusMaxInterface.isEnabled {\n"
+        "        let aorusMaxDigitalIdTitle = AorusMaxInterface.localizedString(\"TAB_DigitalID\", languageCode: presentationData.strings.baseLanguageCode) ?? \"Цифровой ID\"\n"
+        "        items[.aorusMaxGosuslugi] = [AorusMaxGosuslugiItem(title: aorusMaxDigitalIdTitle, action: { interaction.openSettings(.passport) })]\n"
         "        let aorusMaxMessagesTitle = AorusMaxInterface.localizedString(\"MESSAGES_SETTINGS_TITLE\", languageCode: presentationData.strings.baseLanguageCode) ?? aorusL(\"Сообщения\", \"Messages\")\n"
-        "        items[.aorusMaxPreferences] = [PeerInfoScreenDisclosureItem(id: \"aorusMaxMessages\", text: aorusMaxMessagesTitle, icon: AorusMaxInterface.templateGlyph(\"message_24\"), action: { interaction.openSettings(.aorusMaxMessages) })]\n"
+        "        let aorusMaxMessagesIcon = AorusMaxInterface.tintedGlyph(\"message_24\", dark: presentationData.theme.overallDarkAppearance)\n"
+        "        items[.aorusMaxPreferences] = [PeerInfoScreenDisclosureItem(id: \"aorusMaxMessages\", text: aorusMaxMessagesTitle, icon: aorusMaxMessagesIcon, action: { interaction.openSettings(.aorusMaxMessages) })]\n"
         "        aorusMaxReorderProfileSections(&items)\n"
         "    }\n"
         "\n"
@@ -420,9 +479,31 @@ def patch_profile(tg: Path) -> None:
         "MAX profile order",
     )
     path.write_text(text, encoding="utf-8")
+
+    # Hide internal row dividers inside MAX grouped settings cards to match MAX's pure card look.
+    path = sources / "ListItems/PeerInfoScreenDisclosureItem.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.bottomSeparatorNode.isHidden = hasBottomCorners\n",
+        "        self.bottomSeparatorNode.isHidden = hasBottomCorners || AorusMaxInterface.isEnabled\n",
+        "MAX settings card without row separators",
+    )
+    path.write_text(text, encoding="utf-8")
+
     path = sources / "PeerInfoScreen.swift"
     text = _read(path)
     text = _edit(text, "    case dataAndStorage\n", "    case aorusMaxMessages\n    case dataAndStorage\n", "MAX messages destination")
+    # MAX Settings header has only QR (left) and Edit pencil (right), with no Search magnifying glass.
+    text = _edit(
+        text,
+        "            var navigationSets = peerInfoNavigationButtonSets(navigationFlags)\n",
+        "            var navigationSets = peerInfoNavigationButtonSets(navigationFlags)\n"
+        "            if AorusMaxInterface.isEnabled && self.isSettings && !self.state.isEditing {\n"
+        "                navigationSets.normal.right = navigationSets.normal.right.filter { $0 != .search }\n"
+        "            }\n",
+        "MAX settings header without Search button",
+    )
     path.write_text(text, encoding="utf-8")
 
     path = sources / "PeerInfoScreenSettingsActions.swift"
@@ -442,7 +523,7 @@ def patch_profile(tg: Path) -> None:
     text = _read(path)
     text = _edit(text, "let title: String = presentationData.strings.Settings_QuickReactionSetup_Title", 'let title: String = AorusMaxInterface.isEnabled ? presentationData.strings.Settings_Privacy_Messages : presentationData.strings.Settings_QuickReactionSetup_Title', "MAX message settings title")
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: profile preferences and native message reaction settings")
+    print("MaxInterface: profile preferences, Gosuslugi card, clean QR+Edit header and native message settings")
 
 
 def patch_privacy(tg: Path) -> None:
@@ -541,7 +622,7 @@ def patch_privacy(tg: Path) -> None:
     text = _edit(text, "    case privacyHeader(PresentationTheme, String)\n", "    case aorusMaxSafeMode(PresentationTheme, Bool, Bool)\n    case aorusMaxSafeModeInfo(PresentationTheme, String)\n    case privacyHeader(PresentationTheme, String)\n", "MAX safe mode entries")
     text = _edit(text, "            case .blockedPeers:\n                return 1\n", "            case .aorusMaxSafeMode:\n                return 100\n            case .aorusMaxSafeModeInfo:\n                return 101\n            case .blockedPeers:\n                return 1\n", "MAX safe mode stable identity")
     text = _edit(text, "        switch lhs {\n            case let .privacyHeader", "        switch lhs {\n            case let .aorusMaxSafeMode(theme, value, enabled):\n                if case let .aorusMaxSafeMode(otherTheme, otherValue, otherEnabled) = rhs { return theme === otherTheme && value == otherValue && enabled == otherEnabled }\n                return false\n            case let .aorusMaxSafeModeInfo(theme, text):\n                if case let .aorusMaxSafeModeInfo(otherTheme, otherText) = rhs { return theme === otherTheme && text == otherText }\n                return false\n            case let .privacyHeader", "MAX safe mode updates")
-    text = _edit(text, "        switch self {\n            case let .privacyHeader(_, text):", "        switch self {\n            case let .aorusMaxSafeMode(_, value, enabled):\n                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: AorusMaxInterface.templateGlyph(\"privacy_24\"), title: aorusL(\"Безопасный режим\", \"Safe Mode\"), value: value, enabled: enabled, sectionId: self.section, style: .blocks, updated: { value in arguments.aorusMaxToggleSafeMode?(value) })\n            case let .aorusMaxSafeModeInfo(_, text):\n                return ItemListTextItem(presentationData: presentationData, text: .markdown(text), sectionId: self.section, linkAction: { _ in arguments.aorusMaxToggleSafeMode?(false) })\n            case let .privacyHeader(_, text):", "MAX safe mode switch")
+    text = _edit(text, "        switch self {\n            case let .privacyHeader(_, text):", "        switch self {\n            case let .aorusMaxSafeMode(_, value, enabled):\n                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, icon: AorusMaxInterface.tintedGlyph(\"privacy_24\", dark: presentationData.theme.overallDarkAppearance), title: aorusL(\"Безопасный режим\", \"Safe Mode\"), value: value, enabled: enabled, sectionId: self.section, style: .blocks, updated: { value in arguments.aorusMaxToggleSafeMode?(value) })\n            case let .aorusMaxSafeModeInfo(_, text):\n                return ItemListTextItem(presentationData: presentationData, text: .markdown(text), sectionId: self.section, linkAction: { _ in arguments.aorusMaxToggleSafeMode?(false) })\n            case let .privacyHeader(_, text):", "MAX safe mode switch")
     text = _edit(text, "    var updatingAccountTimeoutValue: Int32? = nil\n", "    var aorusMaxSafeModeUpdating = false\n    var updatingAccountTimeoutValue: Int32? = nil\n", "MAX safe mode pending state")
     text = _edit(text, "    appConfiguration: AppConfiguration\n) -> [PrivacyAndSecurityEntry]", "    appConfiguration: AppConfiguration,\n    aorusMaxSafeMode: Bool,\n    aorusMaxCanRestore: Bool\n) -> [PrivacyAndSecurityEntry]", "MAX safe mode value argument")
     text = _edit(text, "    var entries: [PrivacyAndSecurityEntry] = []\n", "    var entries: [PrivacyAndSecurityEntry] = []\n    if AorusMaxInterface.isEnabled {\n        entries.append(.aorusMaxSafeMode(presentationData.theme, aorusMaxSafeMode, privacySettings != nil && !state.aorusMaxSafeModeUpdating))\n        var text = state.aorusMaxSafeModeUpdating ? presentationData.strings.Channel_NotificationLoading : [presentationData.strings.Privacy_Calls, presentationData.strings.PrivacySettings_PhoneNumber, presentationData.strings.PrivacySettings_InviteItem].joined(separator: \" · \")\n        if aorusMaxCanRestore && !aorusMaxSafeMode && !state.aorusMaxSafeModeUpdating { text += \"\\n[\" + presentationData.strings.Undo_Undo + \"](restore)\" }\n        entries.append(.aorusMaxSafeModeInfo(presentationData.theme, text))\n    }\n", "MAX safe mode scope and progress")
@@ -2195,8 +2276,8 @@ def patch_chat_list_geometry(tg: Path) -> None:
         "        transition.updateFrame(node: self.scrollNode, frame: CGRect(origin: CGPoint(x: AorusMaxInterface.isEnabled ? containerSideInset + 16.0 : 0.0, y: 0.0), size: backgroundSize))\n",
         "MAX folder strip frame",
     )
-    text = _edit(text, "self.selectedBackgroundNode.image = generateStretchableFilledCircleImage(diameter: 36.0, color: presentationData.theme.chatList.itemHighlightedBackgroundColor)", "self.selectedBackgroundNode.image = generateStretchableFilledCircleImage(diameter: AorusMaxInterface.isEnabled ? 2.0 : 36.0, color: AorusMaxInterface.isEnabled ? AorusMaxInterface.palette(dark: presentationData.theme.overallDarkAppearance).primaryText : presentationData.theme.chatList.itemHighlightedBackgroundColor)", "MAX folder underline")
-    text = _edit(text, "let selectedBackgroundFrame = CGRect(origin: CGPoint(x: selectedFrame.minX - 10.0, y: selectedFrame.minY - floor((36.0 - selectedFrame.height) * 0.5)), size: CGSize(width: selectedFrame.width + 10.0 * 2.0, height: 36.0))", "let selectedBackgroundFrame = AorusMaxInterface.isEnabled ? CGRect(x: selectedFrame.minX, y: backgroundSize.height - 2.0, width: selectedFrame.width, height: 2.0) : CGRect(origin: CGPoint(x: selectedFrame.minX - 10.0, y: selectedFrame.minY - floor((36.0 - selectedFrame.height) * 0.5)), size: CGSize(width: selectedFrame.width + 10.0 * 2.0, height: 36.0))", "MAX folder underline position")
+    text = _edit(text, "self.selectedBackgroundNode.image = generateStretchableFilledCircleImage(diameter: 36.0, color: presentationData.theme.chatList.itemHighlightedBackgroundColor)", "self.selectedBackgroundNode.image = generateStretchableFilledCircleImage(diameter: AorusMaxInterface.isEnabled ? 3.0 : 36.0, color: AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : presentationData.theme.chatList.itemHighlightedBackgroundColor)", "MAX folder underline")
+    text = _edit(text, "let selectedBackgroundFrame = CGRect(origin: CGPoint(x: selectedFrame.minX - 10.0, y: selectedFrame.minY - floor((36.0 - selectedFrame.height) * 0.5)), size: CGSize(width: selectedFrame.width + 10.0 * 2.0, height: 36.0))", "let selectedBackgroundFrame = AorusMaxInterface.isEnabled ? CGRect(x: selectedFrame.minX, y: backgroundSize.height - 3.0, width: selectedFrame.width, height: 3.0) : CGRect(origin: CGPoint(x: selectedFrame.minX - 10.0, y: selectedFrame.minY - floor((36.0 - selectedFrame.height) * 0.5)), size: CGSize(width: selectedFrame.width + 10.0 * 2.0, height: 36.0))", "MAX folder underline position")
     path.write_text(text, encoding="utf-8")
 
 
@@ -2233,7 +2314,7 @@ def patch_privacy_screen(tg: Path) -> None:
             case let .aorusMaxMore(_, title):
                 return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: { arguments.aorusMaxOpenAdvanced?() })
             case let .aorusMaxSafeMode""", "MAX privacy content controls")
-    text = _edit(text, "icon: PresentationResourcesSettings.lockOrange, title: text, label: value,", 'icon: AorusMaxInterface.isEnabled ? AorusMaxInterface.glyph("key_24") : PresentationResourcesSettings.lockOrange, title: text, label: value, labelStyle: AorusMaxInterface.isEnabled ? .detailText : .text,', "MAX password source glyph")
+    text = _edit(text, "icon: PresentationResourcesSettings.lockOrange, title: text, label: value,", 'icon: AorusMaxInterface.isEnabled ? AorusMaxInterface.tintedGlyph("key_24", dark: presentationData.theme.overallDarkAppearance) : PresentationResourcesSettings.lockOrange, title: text, label: value, labelStyle: AorusMaxInterface.isEnabled ? .detailText : .text,', "MAX password source glyph")
     text = _edit(text, "icon: PresentationResourcesSettings.block, title: text, label: value, sectionId: self.section,", 'icon: AorusMaxInterface.isEnabled ? nil : PresentationResourcesSettings.block, title: text, label: value, additionalDetailLabel: AorusMaxInterface.isEnabled ? AorusMaxInterface.localizedString("PRIVACY_SETTINGS_BLACKLIST_FOOTER", languageCode: presentationData.strings.baseLanguageCode) : nil, sectionId: self.section,', "MAX blacklist details")
     text = _edit(text, "                    arguments.openActiveSessions()\n", "                    if AorusMaxInterface.isEnabled { arguments.aorusMaxOpenDevices?() } else { arguments.openActiveSessions() }\n", "MAX device sessions destination")
     for case in ("voiceCallPrivacy", "phoneNumberPrivacy", "groupPrivacy"):
@@ -2588,6 +2669,54 @@ def patch_sounds(tg: Path) -> None:
     print("MaxInterface: authentic MAX sounds wired for messages, voice recording and calls")
 
 
+def patch_inner_settings_titles(tg: Path) -> None:
+    """Use MAX's authentic titles on inner settings screens so navigation headers match the Settings cards."""
+    edits = (
+        (
+            "submodules/SettingsUI/Sources/Notifications/NotificationsAndSoundsController.swift",
+            "title: .text(presentationData.strings.Notifications_Title)",
+            'title: .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("NOTIFICATIONS_SETTINGS_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.Notifications_Title) : presentationData.strings.Notifications_Title)',
+            "MAX notifications screen title",
+        ),
+        (
+            "submodules/SettingsUI/Sources/Themes/ThemeSettingsController.swift",
+            "title: .text(presentationData.strings.Appearance_Title)",
+            'title: .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("APPEARANCE_SETTINGS_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.Appearance_Title) : presentationData.strings.Appearance_Title)',
+            "MAX appearance screen title",
+        ),
+        (
+            "submodules/SettingsUI/Sources/Data and Storage/DataAndStorageSettingsController.swift",
+            "title: .text(presentationData.strings.ChatSettings_Title)",
+            'title: .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("SETTINGS_MEMORY_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.ChatSettings_Title) : presentationData.strings.ChatSettings_Title)',
+            "MAX storage screen title",
+        ),
+        (
+            "submodules/ChatListUI/Sources/ChatListFilterPresetListController.swift",
+            "title: .text(presentationData.strings.ChatListFolderSettings_Title)",
+            'title: .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.ChatListFolderSettings_Title) : presentationData.strings.ChatListFolderSettings_Title)',
+            "MAX folders screen title",
+        ),
+        (
+            "submodules/SettingsUI/Sources/Privacy and Security/Recent Sessions/RecentSessionsController.swift",
+            "title = .text(presentationData.strings.AuthSessions_DevicesTitle)",
+            'title = .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("DEVICES", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.AuthSessions_DevicesTitle) : presentationData.strings.AuthSessions_DevicesTitle)',
+            "MAX devices screen title",
+        ),
+        (
+            "submodules/SettingsUI/Sources/Data and Storage/EnergySavingSettingsScreen.swift",
+            "title: .text(presentationData.strings.PowerSavingScreen_Title)",
+            'title: .text(AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("SETTINGS_BATTERY_AND_NETWORK_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? presentationData.strings.PowerSavingScreen_Title) : presentationData.strings.PowerSavingScreen_Title)',
+            "MAX power saving screen title",
+        ),
+    )
+    for rel, old, new, what in edits:
+        path = tg / rel
+        text = _read(path)
+        text = _edit(text, old, new, what)
+        path.write_text(text, encoding="utf-8")
+    print("MaxInterface: inner settings screens use authentic MAX navigation titles")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -2595,6 +2724,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_tab_bar(tg)
     patch_chat_list_header(tg)
     patch_profile(tg)
+    patch_inner_settings_titles(tg)
     patch_privacy(tg)
     patch_privacy_screen(tg)
     patch_safe_mode_intro(tg)

@@ -40,7 +40,7 @@ def main():
         for resource in (
             "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json",
             "AorusMaxTabProfile.json", "AorusMaxRecordLock.json", "AorusMaxRecordPause.json",
-            "AorusMaxSafeModeLock.json", "AorusMaxStringsRu.json", "AorusMaxStringsEn.json",
+            "AorusMaxSafeModeLock.json", "AorusMaxDigitalId.json", "AorusMaxStringsRu.json", "AorusMaxStringsEn.json",
             "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
             "AorusMaxSentMessage.aiff", "AorusMaxMessageIn.m4a", "AorusMaxVoStart.m4a",
             "AorusMaxDialTone.m4a", "AorusMaxReconnect.m4a", "AorusMaxBusy.m4a", "AorusMaxCallEnd.m4a",
