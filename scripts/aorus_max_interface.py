@@ -592,7 +592,7 @@ def patch_privacy(tg: Path) -> None:
                 |> then(context.engine.privacy.updateSelectiveAccountPrivacySettings(type: .groupInvitations, settings: invitationSettings))
                 |> then(context.engine.privacy.updatePhoneNumberDiscovery(value: discovery))
                 if let sensitive {
-                    update = update |> then(updateRemoteContentSettingsConfiguration(postbox: context.account.postbox, network: context.account.network, sensitiveContentEnabled: sensitive) |> mapToSignal { _ -> Signal<Void, NoError> in .complete() })
+                    update = update |> then(updateRemoteContentSettingsConfiguration(postbox: context.account.postbox, network: context.account.network, sensitiveContentEnabled: sensitive) |> mapToSignal { _ -> Signal<Void, NoError> in })
                 }
                 return update |> mapToSignal { _ -> Signal<(AccountPrivacySettings, ContentSettingsConfiguration), NoError> in .complete() } |> then(combineLatest(context.engine.privacy.requestAccountPrivacySettings(), contentSettingsConfiguration(network: context.account.network)))
                 |> map { actual, actualContent -> (AccountPrivacySettings, ContentSettingsConfiguration)? in
@@ -2310,7 +2310,7 @@ def patch_privacy_screen(tg: Path) -> None:
             sheet?.dismissAnimated()
             updateState { state in var state = state; state.aorusMaxSafeModeUpdating = true; return state }
             let update = updateRemoteContentSettingsConfiguration(postbox: context.account.postbox, network: context.account.network, sensitiveContentEnabled: value)
-            |> mapToSignal { _ -> Signal<Bool, NoError> in .complete() }
+            |> mapToSignal { _ -> Signal<Bool, NoError> in }
             |> then(.single(true))
             |> timeout(30.0, queue: .mainQueue(), alternate: .single(false))
             |> deliverOnMainQueue
