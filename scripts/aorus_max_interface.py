@@ -2098,7 +2098,8 @@ def patch_camera_input(tg: Path) -> None:
     text = _edit(text, anchor, insertion + anchor, "MAX camera between paperclip and microphone")
     text += r'''
 extension ChatTextInputPanelNode {
-    private func aorusMaxHasCamera(_ state: ChatPresentationInterfaceState) -> Bool {
+    private func aorusMaxHasCamera(_ state: ChatPresentationInterfaceState?) -> Bool {
+        guard let state else { return false }
         return AorusMaxInterface.isEnabled && self.aorusMaxOpenCamera != nil && self.customLeftAction == nil && state.interfaceState.editMessage == nil && self.aorusMaxLeftTogglesStickers(state: state)
     }
 

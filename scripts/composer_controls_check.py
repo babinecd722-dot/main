@@ -8,6 +8,7 @@ from telegram13_list_check import block
 
 def check_controls(tg: Path, swiftc: str) -> None:
     panel = (tg / 'submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift').read_text()
+    check_max_camera(panel, swiftc)
     metrics = block(panel, '    private func calculateTextFieldMetrics(')
     assert 'textFieldInsets.right += max(0.0, sendActionControlsWidth - 39.0)' in metrics
     assert 'actionControlsWidth: AorusOldInterface.isEnabled ? 0.0 : sendActionControlsWidth)' in metrics
@@ -101,6 +102,60 @@ for old in [false, true] {
 print("Gallery, paid composer and tab bounds: \\(checks) assertions passed")
 '''
     with tempfile.TemporaryDirectory(prefix='aorus-composer-controls-') as directory:
+        work = Path(directory)
+        (work / 'main.swift').write_text(source)
+        subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(work / 'main.swift'), '-o', str(work / 'tests')], check=True)
+        subprocess.run([str(work / 'tests')], check=True)
+
+
+def check_max_camera(panel: str, swiftc: str) -> None:
+    # Compile the installed camera predicate and both measurement expressions. The
+    # rich editor can be initialized before its optional presentation state exists.
+    state = re.search(r'    private var presentationInterfaceState: ChatPresentationInterfaceState\?[^\n]*', panel).group(0)
+    reserves = re.findall(r'var accessoryButtonsWidth: CGFloat = (self\.aorusMaxHasCamera\([^\n]+)', panel)
+    assert len(reserves) == 2, 'both native measurement paths must reserve the camera slot'
+    source = '''import Foundation
+enum AorusMaxInterface { static var isEnabled = false }
+struct ChatPresentationInterfaceState {
+    struct InterfaceState { var editMessage: Int?; var mediaDraftState: Int? }
+    struct EditMessageState { enum Content { case text, media([Int]) }; var content: Content }
+    var interfaceState: InterfaceState
+    var editMessageState: EditMessageState?
+}
+final class Panel {
+    var aorusMaxOpenCamera: (() -> Void)?
+    var customLeftAction: (() -> Void)?
+''' + state + '\n' + block(panel, '    private func aorusMaxHasCamera(') + '\n' + block(panel, '    func aorusMaxLeftTogglesStickers(') + '''
+    func initializingWidth(_ state: ChatPresentationInterfaceState?) -> CGFloat {
+        self.presentationInterfaceState = state
+        return ''' + reserves[0] + '''
+    }
+    func layoutWidth(_ interfaceState: ChatPresentationInterfaceState) -> CGFloat {
+        return ''' + reserves[1] + '''
+    }
+}
+var checks = 0
+func expect(_ value: Bool, _ message: String) { checks += 1; precondition(value, message) }
+let panel = Panel()
+for flags in 0..<32 {
+    let enabled = flags & 1 != 0, connected = flags & 2 != 0
+    let custom = flags & 4 != 0, editing = flags & 8 != 0, recording = flags & 16 != 0
+    AorusMaxInterface.isEnabled = enabled
+    panel.aorusMaxOpenCamera = connected ? {} : nil
+    panel.customLeftAction = custom ? {} : nil
+    expect(panel.initializingWidth(nil) == 0, "uninitialized presentation never reserves a camera slot")
+    for edit in 0..<3 {
+        let state = ChatPresentationInterfaceState(
+            interfaceState: .init(editMessage: editing ? 1 : nil, mediaDraftState: recording ? 1 : nil),
+            editMessageState: edit == 0 ? nil : .init(content: .media(edit == 1 ? [] : [1])))
+        let expected: CGFloat = enabled && connected && !custom && !editing && !recording && edit != 2 ? 44 : 0
+        expect(panel.initializingWidth(state) == expected, "optional initialization measurement follows camera visibility")
+        expect(panel.layoutWidth(state) == expected, "live measurement reserves the same slot")
+    }
+}
+print("MAX camera optional state and measurement paths: \\(checks) assertions passed")
+'''
+    with tempfile.TemporaryDirectory(prefix='aorus-max-camera-') as directory:
         work = Path(directory)
         (work / 'main.swift').write_text(source)
         subprocess.run([swiftc, '-warnings-as-errors', '-module-cache-path', str(work / 'cache'), str(work / 'main.swift'), '-o', str(work / 'tests')], check=True)
