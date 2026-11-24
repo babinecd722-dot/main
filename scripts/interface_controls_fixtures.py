@@ -5,25 +5,30 @@ from round_video_uikit_fixtures import declaration
 
 
 def native_item_list_radii(source: str) -> tuple[str, str]:
-    """Read the stock radii before or after our classic/Interface 2.0 patches."""
+    """Read the stock radii behind the classic, MAX and Interface 2.0 guards."""
     try:
         body = declaration(source, 'public static func cornersImage(')
     except (ValueError, IndexError) as exc:
         raise RuntimeError('Native ItemList corner reference changed') from exc
     # The classic patch adds a guard to the native glass branch. Interface 2.0
     # and the classic interface are mutually exclusive; its native radii remain
-    # the same. Accept these two known expressions, never an arbitrary condition.
+    # the same. MAX wraps that expression in its own fixed-radius branch. These
+    # fixtures exercise the stock/Interface 2.0 policy, so read MAX's fallback.
+    # Accept only the known guards and numeric radii, never an arbitrary condition.
     radii = re.search(
-        r'\blet\s+cornerRadius\s*:\s*CGFloat\s*=\s*glass'
+        r'\blet\s+cornerRadius\s*:\s*CGFloat\s*=\s*'
+        r'(?:AorusMaxInterface\.isEnabled\s*\?\s*(?P<max>[0-9]+(?:\.[0-9]+)?)\s*:\s*\(\s*)?'
+        r'glass'
         r'(?:\s*&&\s*!AorusOldInterface\.isEnabled)?\s*\?\s*'
-        r'([0-9]+(?:\.[0-9]+)?)\s*:\s*([0-9]+(?:\.[0-9]+)?)'
+        r'(?P<glass>[0-9]+(?:\.[0-9]+)?)\s*:\s*(?P<plain>[0-9]+(?:\.[0-9]+)?)'
+        r'(?(max)\s*\))'
         r'[ \t]*;?[ \t]*(?://[^\n]*)?(?=\n|$)', body)
     rounded_path = re.search(
         r'UIBezierPath\s*\(\s*roundedRect:\s*bounds\s*,\s*byRoundingCorners:\s*corners\s*,'
         r'\s*cornerRadii:\s*CGSize\s*\(\s*width:\s*cornerRadius\s*,\s*height:\s*cornerRadius\s*\)', body)
     if radii is None or rounded_path is None:
         raise RuntimeError('Native ItemList corner reference changed')
-    return radii[1], radii[2]
+    return radii['glass'], radii['plain']
 
 
 def interface_controls_source(repo: Path, tg: Path) -> str:

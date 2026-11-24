@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from interface_controls_fixtures import native_item_list_radii
 from aorus_old_interface import _patch_list_corners
 from interface_v2_patch import _patch_corner_wedges
+from aorus_max_interface import patch_settings_surfaces
 
 SOURCE = '''enum NativeList {
     public static func cornersImage(_ theme: PresentationTheme, top: Bool, bottom: Bool, glass: Bool = false) -> UIImage? {
@@ -50,6 +51,38 @@ class NativeCornerReferenceTests(unittest.TestCase):
 
     def test_values_are_read_not_hardcoded(self):
         self.assertEqual(native_item_list_radii(SOURCE.replace('26.0 : 11.0', '37.0 : 9.0')), ('37.0', '9.0'))
+
+    def test_actual_max_patch_preserves_the_native_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift'
+            path.parent.mkdir(parents=True)
+            path.write_text(SOURCE)
+            disclosure = root / 'submodules/ItemListUI/Sources/Items/ItemListDisclosureItem.swift'
+            disclosure.parent.mkdir(parents=True)
+            disclosure.write_text('''                    verticalInset = 11.0
+font: detailFont, textColor: additionalDetailColor), backgroundColor: nil, maximumNumberOfLines: 1,
+''')
+            _patch_list_corners(root)
+            _patch_corner_wedges(root)
+            patch_settings_surfaces(root)
+            installed = path.read_text()
+            self.assertIn('AorusMaxInterface.isEnabled ? 16.0 : (glass && !AorusOldInterface.isEnabled ? 26.0 : 11.0)', installed)
+            self.assertEqual(native_item_list_radii(installed), ('26.0', '11.0'))
+            self.assertEqual(native_item_list_radii(installed.replace('26.0 : 11.0', '37.0 : 9.0')), ('37.0', '9.0'))
+            _patch_list_corners(root)
+            _patch_corner_wedges(root)
+            self.assertEqual(path.read_text(), installed)
+
+    def test_unknown_max_condition_fails(self):
+        for expression in (
+            'AorusMaxInterface.isEnabled && unknownMode ? 16.0 : (glass ? 26.0 : 11.0)',
+            'AorusMaxInterface.isEnabled ? 16.0 + adjustment : (glass ? 26.0 : 11.0)',
+            'AorusMaxInterface.isEnabled ? 16.0 : (glass && unknownMode ? 26.0 : 11.0)',
+            'AorusMaxInterface.isEnabled ? 16.0 : (glass ? 26.0 : 11.0 + adjustment)',
+        ):
+            with self.subTest(expression=expression), self.assertRaises(RuntimeError):
+                native_item_list_radii(SOURCE.replace('glass ? 26.0 : 11.0', expression))
 
     def test_unknown_condition_fails(self):
         with self.assertRaises(RuntimeError):
