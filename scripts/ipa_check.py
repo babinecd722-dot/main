@@ -39,9 +39,11 @@ def main():
         # error, only a tab with no animation, a chat with no wallpaper or an alert with no icon.
         for resource in (
             "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json",
-            "AorusMaxRecordLock.json", "AorusMaxRecordPause.json",
+            "AorusMaxTabProfile.json", "AorusMaxRecordLock.json", "AorusMaxRecordPause.json",
             "AorusMaxSafeModeLock.json", "AorusMaxStringsRu.json", "AorusMaxStringsEn.json",
             "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
+            "AorusMaxSentMessage.aiff", "AorusMaxMessageIn.m4a", "AorusMaxVoStart.m4a",
+            "AorusMaxDialTone.m4a", "AorusMaxReconnect.m4a", "AorusMaxBusy.m4a", "AorusMaxCallEnd.m4a",
             "MaxIcon@2x.png", "MaxIcon@3x.png",
         ):
             if app_root + "/" + resource not in archive.namelist():

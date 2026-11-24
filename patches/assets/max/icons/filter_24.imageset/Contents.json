@@ -2,7 +2,18 @@
   "images": [
     {
       "idiom": "universal",
-      "filename": "filter_24.pdf"
+      "scale": "1x",
+      "filename": "filter_24.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "2x",
+      "filename": "filter_24@2x.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "3x",
+      "filename": "filter_24@3x.png"
     }
   ],
   "info": {
@@ -10,7 +21,6 @@
     "version": 1
   },
   "properties": {
-    "preserves-vector-representation": true,
     "template-rendering-intent": "template"
   }
 }

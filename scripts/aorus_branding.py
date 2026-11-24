@@ -19988,10 +19988,9 @@ _AORUS_PLUGIN_THEME_HELPER = r'''
 // the same instance -- the rest of the app compares themes by identity.
 private final class AorusPluginThemeCache {
     let lock = NSLock()
-    weak var source: PresentationTheme?
+    var entries = NSMapTable<PresentationTheme, PresentationTheme>.weakToStrongObjects()
     var revision = -1
     var iconRevision = -1
-    var result: PresentationTheme?
 }
 
 private let aorusPluginThemeCache = AorusPluginThemeCache()
@@ -20001,13 +20000,27 @@ private let aorusPluginThemeCache = AorusPluginThemeCache()
 private let aorusPluginThemeSources = NSMapTable<PresentationTheme, PresentationTheme>.weakToStrongObjects()
 private let aorusPluginThemeSourcesLock = NSLock()
 
-/// The theme the app would draw with the look as it is stored now, for a screen that shows the
-/// look before the app is redrawn with it: made from the same theme as the one on screen.
-public func aorusPluginPreviewTheme(_ shown: PresentationTheme) -> PresentationTheme {
+/// Registers a derived theme (such as MAX's intro wrapper) back to its original base theme so
+/// callers that inspect the underlying theme always unwrap cleanly.
+func aorusRegisterDerivedTheme(_ derived: PresentationTheme, from source: PresentationTheme) {
+    aorusPluginThemeSourcesLock.lock()
+    let original = aorusPluginThemeSources.object(forKey: source) ?? source
+    aorusPluginThemeSources.setObject(original, forKey: derived)
+    aorusPluginThemeSourcesLock.unlock()
+}
+
+/// The underlying Telegram theme before plugin or MAX appearance overrides were applied.
+public func aorusOriginalPresentationTheme(_ shown: PresentationTheme) -> PresentationTheme {
     aorusPluginThemeSourcesLock.lock()
     let source = aorusPluginThemeSources.object(forKey: shown) ?? shown
     aorusPluginThemeSourcesLock.unlock()
-    return aorusApplyPluginAppearance(source)
+    return source
+}
+
+/// The theme the app would draw with the look as it is stored now, for a screen that shows the
+/// look before the app is redrawn with it: made from the same theme as the one on screen.
+public func aorusPluginPreviewTheme(_ shown: PresentationTheme) -> PresentationTheme {
+    return aorusApplyPluginAppearance(aorusOriginalPresentationTheme(shown))
 }
 
 // A bubble's colours with another shadow. The theme's own `withUpdated` keeps the shadow it
@@ -20064,7 +20077,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     }
     let cache = aorusPluginThemeCache
     cache.lock.lock()
-    if cache.source === theme, cache.revision == revision, cache.iconRevision == iconRevision, let result = cache.result {
+    if cache.revision == revision, cache.iconRevision == iconRevision, let result = cache.entries.object(forKey: theme) {
         cache.lock.unlock()
         return aorusRecordCurrentTheme(result)
     }
@@ -20328,10 +20341,12 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
 
     let result = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: contextMenu, inAppNotification: inAppNotification, chart: theme.chart, preview: theme.preview)
     cache.lock.lock()
-    cache.source = theme
-    cache.revision = revision
-    cache.iconRevision = iconRevision
-    cache.result = result
+    if cache.revision != revision || cache.iconRevision != iconRevision {
+        cache.entries.removeAllObjects()
+        cache.revision = revision
+        cache.iconRevision = iconRevision
+    }
+    cache.entries.setObject(result, forKey: theme)
     cache.lock.unlock()
     aorusPluginThemeSourcesLock.lock()
     aorusPluginThemeSources.setObject(theme, forKey: result)
@@ -20928,7 +20943,8 @@ def patch_plugin_icons(tg: Path) -> None:
                 "    private let animationView: ComponentView<Empty>\n"
                 "    /// AorusGram: the microphone or camera a plugin replaced, shown still over the\n"
                 "    /// animation, which is drawn clear while it is there.\n"
-                "    private var aorusStillIconView: UIImageView?\n",
+                "    private var aorusStillIconView: UIImageView?\n"
+                "    private var aorusStillIconCache: (name: String, color: UInt32, revision: Int, image: UIImage)?\n",
             ),
             (
                 "        if let animationOutput = self.animationOutput {\n"
@@ -20942,7 +20958,19 @@ def patch_plugin_icons(tg: Path) -> None:
                 "        // and copied into the glass's mask the way the animation's frames are.\n"
                 "        if let view = self.animationView.view as? LottieComponent.View {\n"
                 "            let aorusName = self.mode == .audio ? \"Chat/Input/Text/IconMicrophone\" : \"Chat/Input/Text/IconVideo\"\n"
-                "            if let aorusIcon = AorusPluginIconValues.stillImage(aorusName), let aorusStill = generateTintedImage(image: aorusIcon, color: animationTintColor) {\n"
+                "            let aorusTintRgb = animationTintColor.argb\n"
+                "            let aorusIconRev = AorusPluginIconValues.revision\n"
+                "            let aorusStill: UIImage?\n"
+                "            if let cached = self.aorusStillIconCache, cached.name == aorusName, cached.color == aorusTintRgb, cached.revision == aorusIconRev {\n"
+                "                aorusStill = cached.image\n"
+                "            } else if let aorusIcon = AorusPluginIconValues.stillImage(aorusName), let tinted = generateTintedImage(image: aorusIcon, color: animationTintColor) {\n"
+                "                self.aorusStillIconCache = (aorusName, aorusTintRgb, aorusIconRev, tinted)\n"
+                "                aorusStill = tinted\n"
+                "            } else {\n"
+                "                self.aorusStillIconCache = nil\n"
+                "                aorusStill = nil\n"
+                "            }\n"
+                "            if let aorusStill {\n"
                 "                let aorusView: UIImageView\n"
                 "                if let current = self.aorusStillIconView {\n"
                 "                    aorusView = current\n"
@@ -20954,11 +20982,15 @@ def patch_plugin_icons(tg: Path) -> None:
                 "                if aorusView.superview !== view {\n"
                 "                    view.addSubview(aorusView)\n"
                 "                }\n"
-                "                aorusView.image = aorusStill\n"
+                "                if aorusView.image !== aorusStill {\n"
+                "                    aorusView.image = aorusStill\n"
+                "                }\n"
                 "                aorusView.frame = CGRect(origin: CGPoint(x: floor((animationFrame.width - aorusStill.size.width) / 2.0), y: floor((animationFrame.height - aorusStill.size.height) / 2.0)), size: aorusStill.size)\n"
                 "                view.setMonochromaticEffect(tintColor: .clear)\n"
                 "                view.output = nil\n"
-                "                self.animationOutput?.image = aorusStill\n"
+                "                if self.animationOutput?.image !== aorusStill {\n"
+                "                    self.animationOutput?.image = aorusStill\n"
+                "                }\n"
                 "            } else if let aorusView = self.aorusStillIconView {\n"
                 "                self.aorusStillIconView = nil\n"
                 "                aorusView.removeFromSuperview()\n"
@@ -21117,6 +21149,9 @@ _AORUS_MESSAGE_LOOK_HELPERS = r"""
 // is built from, so a change redraws every message with the new theme.
 
 private func aorusMessageNameFont(_ size: CGFloat) -> UIFont {
+    if AorusMaxInterface.isEnabled {
+        return Font.semibold(size)
+    }
     switch AorusPluginAppearanceValues.string("message.nameWeight", dark: false, in: AorusPluginAppearanceValues.current()) {
     case "regular":
         return Font.regular(size)
@@ -21130,6 +21165,9 @@ private func aorusMessageNameFont(_ size: CGFloat) -> UIFont {
 }
 
 private func aorusMessageRankText(_ text: String) -> String {
+    if AorusMaxInterface.isEnabled {
+        return text
+    }
     switch AorusPluginAppearanceValues.string("message.rankCase", dark: false, in: AorusPluginAppearanceValues.current()) {
     case "upper":
         return text.uppercased()
@@ -21141,10 +21179,16 @@ private func aorusMessageRankText(_ text: String) -> String {
 }
 
 private func aorusMessageRankColor(dark: Bool) -> UIColor? {
+    if AorusMaxInterface.isEnabled {
+        return nil
+    }
     return AorusPluginAppearanceValues.color("message.rank", dark: dark, in: AorusPluginAppearanceValues.current())
 }
 
 private func aorusMessageRankPlate() -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return true
+    }
     return AorusPluginAppearanceValues.flag("message.rankPlate", in: AorusPluginAppearanceValues.current()) ?? true
 }
 """
@@ -21180,7 +21224,7 @@ def patch_message_look(tg: Path) -> None:
             "        let translateToLanguage = item.associatedData.translateToLanguage\n"
             "        var isSummarized = false\n",
             "        // AorusGram: the names and titles over group messages as the person set them.\n"
-            "        let aorusLook = AorusPluginAppearanceValues.current()\n"
+            "        let aorusLook = AorusMaxInterface.isEnabled ? [:] : AorusPluginAppearanceValues.current()\n"
             "        if incoming, !aorusLook.isEmpty {\n"
             "            var aorusInGroup = item.message.peers[item.message.id.peerId] is TelegramGroup\n"
             "            if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .group = channel.info {\n"
@@ -21255,6 +21299,9 @@ _AORUS_MESSAGE_LAYOUT_HELPERS = r"""
 // set them in AorusGram → Interface → Message Settings, or a plugin through `aorus.appearance`.
 
 private func aorusMessageWidthShare() -> CGFloat? {
+    if AorusMaxInterface.isEnabled {
+        return nil
+    }
     guard let share = AorusPluginAppearanceValues.number("bubble.width", in: AorusPluginAppearanceValues.current()) else {
         return nil
     }
@@ -21262,6 +21309,9 @@ private func aorusMessageWidthShare() -> CGFloat? {
 }
 
 private func aorusMessageHidesAvatar(_ message: Message) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return false
+    }
     guard AorusPluginAppearanceValues.flag("message.hideAvatar", in: AorusPluginAppearanceValues.current()) == true else {
         return false
     }
@@ -21278,6 +21328,9 @@ private func aorusMessageHidesAvatar(_ message: Message) -> Bool {
 // Telegram draws a bubble's outline only over a picture or a gradient, so on a plain colour
 // the one chosen here was never drawn at all.
 private func aorusBubbleDrawsOutline(_ type: ChatMessageBackgroundType, dark: Bool) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return false
+    }
     let side: String
     switch type {
     case .none:
@@ -21302,6 +21355,9 @@ _AORUS_MESSAGE_GRADIENT_MASK_HELPER = r"""
 // wallpaper and Message Settings' preview already use, cuts the gradient by the bubble's own
 // shape and paints nothing around it.
 private func aorusBubbleGradientNeedsMask(dark: Bool) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return true
+    }
     let values = AorusPluginAppearanceValues.current()
     if values.isEmpty {
         return false
@@ -21321,6 +21377,9 @@ _AORUS_MESSAGE_AVATAR_HELPER = r"""
 // Message Settings or a plugin asked for it. The bubble leaves no room for one either.
 // This module sees Postbox's message only through TelegramCore's name for it.
 private func aorusHidesGroupAvatar(_ message: EngineRawMessage) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return false
+    }
     guard AorusPluginAppearanceValues.flag("message.hideAvatar", in: AorusPluginAppearanceValues.current()) == true else {
         return false
     }
@@ -21340,6 +21399,9 @@ _AORUS_MESSAGE_SHADOW_HELPER = r"""
 // wallpaper. Telegram draws a bubble's shadow only over a picture or a gradient, so on a plain
 // colour the one chosen here was never drawn.
 private func aorusBubbleDrawsShadow(_ type: ChatMessageBackgroundType) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return false
+    }
     let side: String
     switch type {
     case .none:
@@ -21362,6 +21424,9 @@ _AORUS_MESSAGE_SEE_THROUGH_HELPER = r"""
 
 // How much of a bubble the person, or a plugin, left opaque: 1 while nothing is set.
 private func aorusBubbleOpacity(incoming: Bool) -> CGFloat {
+    if AorusMaxInterface.isEnabled {
+        return 1.0
+    }
     let key = incoming ? "bubble.incoming.opacity" : "bubble.outgoing.opacity"
     guard let opacity = AorusPluginAppearanceValues.number(key, in: AorusPluginAppearanceValues.current()) else {
         return 1.0
@@ -21374,6 +21439,9 @@ private func aorusBubbleOpacity(incoming: Bool) -> CGFloat {
 // wallpaper instead, which drew a see-through bubble as a flat, murky one with none of the
 // wallpaper's pattern in it.
 private func aorusBubbleSeeThrough(_ theme: PresentationTheme, incoming: Bool) -> Bool {
+    if AorusMaxInterface.isEnabled {
+        return false
+    }
     let values = AorusPluginAppearanceValues.current()
     if values.isEmpty {
         return false
@@ -21393,6 +21461,9 @@ _AORUS_MESSAGE_TEXT_FONT_HELPER = r"""
 
 // AorusGram: the weight message text is set in, from Message Settings or a plugin.
 private func aorusMessageTextFont(_ size: CGFloat) -> UIFont {
+    if AorusMaxInterface.isEnabled {
+        return Font.regular(size)
+    }
     switch AorusPluginAppearanceValues.string("message.textWeight", dark: false, in: AorusPluginAppearanceValues.current()) {
     case "light":
         return Font.with(size: size, weight: .light)

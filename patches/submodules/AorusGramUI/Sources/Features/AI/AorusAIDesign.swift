@@ -64,8 +64,9 @@ struct AorusAIPalette {
     var onAccent: UIColor
 
     static func resolve(_ theme: PresentationTheme) -> AorusAIPalette {
-        let list = theme.list
-        let isDark = theme.overallDarkAppearance
+        let baseTheme = AorusMaxInterface.isEnabled ? aorusOriginalPresentationTheme(theme) : theme
+        let list = baseTheme.list
+        let isDark = baseTheme.overallDarkAppearance
         let label = list.itemPrimaryTextColor
         // The card colour has to be opaque, and `itemBlocksBackgroundColor` is not always
         // one. Interface 2.0 replaces it with a marker at 1/255 alpha — the settings lists
@@ -79,7 +80,7 @@ struct AorusAIPalette {
         // panel over content", which is exactly what these are, and Interface 2.0 leaves it
         // alone. On every ordinary theme the block colour is already opaque and this is not
         // reached, so nothing about them changes.
-        let elevated = AorusAIPalette.opaque(list.itemBlocksBackgroundColor, fallback: theme.actionSheet.opaqueItemBackgroundColor)
+        let elevated = AorusAIPalette.opaque(list.itemBlocksBackgroundColor, fallback: baseTheme.actionSheet.opaqueItemBackgroundColor)
         return AorusAIPalette(
             isDark: isDark,
             background: list.blocksBackgroundColor,

@@ -432,8 +432,15 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             leadingItem = first
             items.removeFirst()
         }
+        let trailingUnchanged = self.aorusTrailingItems.count == items.count
+            && zip(self.aorusTrailingItems, items).allSatisfy { $0 === $1 }
         self.aorusTrailingItems = items
         self.updateLeadingButton(leadingItem, animated: animated)
+
+        if trailingUnchanged && !items.isEmpty && self.rightButtonNode.view.superview != nil {
+            self.rightButtonNodeUpdated = false
+            return
+        }
 
         if !items.isEmpty {
             if self.rightButtonNode.isEmpty {

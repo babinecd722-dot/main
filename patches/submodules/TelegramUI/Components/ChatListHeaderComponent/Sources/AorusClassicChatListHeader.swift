@@ -736,8 +736,8 @@ private final class AorusClassicChatListContentView: UIView {
 
             let chatListTitleOffset: CGFloat
             if AorusMaxInterface.isEnabled && backTitle == nil {
-                // AorusGram: MAX interface: MAX's large title stands on the left of its header.
-                chatListTitleOffset = leftOffset + 2.0 - titleContentRect.minX - floor((size.width - chatListTitleContentSize.width) / 2.0)
+                // AorusGram: MAX interface: MAX's large title stands on the left at x=20.
+                chatListTitleOffset = leftOffset + 4.0 - titleContentRect.minX - floor((size.width - chatListTitleContentSize.width) / 2.0)
             } else if chatListTitle.activity {
                 chatListTitleOffset = 0.0
             } else {

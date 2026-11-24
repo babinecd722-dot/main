@@ -148,6 +148,9 @@ public enum AorusPluginIconValues {
     /// Whether the icon Telegram knows as `name` is replaced or styled. Places that animate an
     /// icon show it still while this is true.
     public static func affects(_ name: String) -> Bool {
+        if isMaxRun {
+            return maxIconsByTarget[name] != nil
+        }
         let table = currentTable()
         if table.isEmpty {
             return false
@@ -173,6 +176,9 @@ public enum AorusPluginIconValues {
     public static func own(_ image: UIImage?, named name: String) -> UIImage? {
         guard let image else {
             return nil
+        }
+        if isMaxRun && maxIconsByTarget[name] == nil {
+            return image
         }
         lock.lock()
         let table = tableLocked()
@@ -427,15 +433,41 @@ public enum AorusPluginIconValues {
         ("ic_music_24", ["Media Editor/Audio", "Media Editor/AudioSmall", "Media Editor/SmallAudio"]),
         ("back_24_ios", ["Chat/Context Menu/Back", "Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"]),
         // The profile's QR code, top left as MAX puts it.
-        ("qr_code_24", ["Settings/QrIcon"]),
+        ("qr_code_24", ["Settings/QrIcon", "Settings/QrButtonIcon", "Settings/ScanQr", "Navigation/ScanQr"]),
+        // Navigation bar glyphs.
+        ("cross_24", ["Media Editor/Close", "Navigation/Close"]),
+        ("check_24", ["Media Editor/Done", "Media Editor/Apply", "Media Gallery/Check", "Chat/Context Menu/Check", "Navigation/Done"]),
+        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add", "Media Editor/Add", "Navigation/Add"]),
+        ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search", "Navigation/Search"]),
+        ("share_24_iOS", ["Chat/Context Menu/Share", "Navigation/Share", "Chat/Input/Accessory Panels/MessageSelectionAction"]),
+        ("info_24", ["Chat/Context Menu/Info", "Navigation/Info"]),
+        ("help_outline_24", ["Item List/Icons/Faq", "Navigation/Question"]),
+        // Peer Info action buttons.
+        ("call_fill_24", ["Peer Info/ButtonCall"]),
+        ("videocam_on_fill_24", ["Peer Info/ButtonVideo"]),
+        ("message_fill_24", ["Peer Info/ButtonMessage"]),
+        ("notifications_off_24", ["Chat/Context Menu/Muted", "Chat/Context Menu/Mute2d", "Peer Info/ButtonMute"]),
+        ("notifications_on_24", ["Chat/Context Menu/Unmute", "Item List/Icons/Notifications", "Peer Info/ButtonUnmute"]),
+        ("dots_horizontal_24", ["Peer Info/ButtonMore"]),
+        ("leave_chat_24", ["Chat/Context Menu/Logout", "Peer Info/ButtonLeave"]),
+        ("add_contact_24", ["Chat/Context Menu/AddUser", "Peer Info/ButtonAddMember"]),
+        ("microphone_on_fill_24", ["Peer Info/ButtonVoiceChat"]),
+        // Chat input accessory panels & message selection bar.
+        ("edit_24", ["Chat/Context Menu/Edit", "Chat/Context Menu/Pencil", "Chat/Input/Accessory Panels/EditIcon"]),
+        ("forward_24", ["Chat/Context Menu/Forward", "Chat/Input/Accessory Panels/ForwardIcon", "Chat/Input/Accessory Panels/MessageSelectionForward"]),
+        ("delete_24", ["Chat/Context Menu/Delete", "Item List/Icons/Delete", "Chat/Input/Accessory Panels/MessageSelectionTrash"]),
+        ("report_24", ["Chat/Context Menu/Report", "Chat/Input/Accessory Panels/MessageSelectionReport"]),
+        ("mention_24", ["Chat List/MentionBadgeIcon"]),
+        ("heart_28", ["Chat List/ReactionsBadgeIcon"]),
+        ("privacy_24", ["Chat List/StatusLockIcon"]),
         // The video-message recorder's buttons.
         ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip", "Camera/FlipIcon"]),
+        ("flash_fill_on_32", ["Camera/VideoMessageFlash"]),
         // The call's buttons.
         ("sound_on_fill_32", ["Call/Speaker"]),
         ("microphone_off_fill_32", ["Call/Mute"]),
         ("videocam_on_fill_32", ["Call/Video"]),
         ("phone_off_fill_32", ["Call/End"]),
-        ("flash_fill_on_32", ["Camera/VideoMessageFlash"]),
     ]
 
     private static let maxGlyphLayer: [String: Any] = {
@@ -448,6 +480,24 @@ public enum AorusPluginIconValues {
             ] as [String: Any]
         }
         return layer
+    }()
+
+    /// Pre-indexed immutable target table for MAX runs so unmapped icons and SF Symbols return
+    /// immediately without touching `lock`.
+    private static let maxIconsByTarget: [String: [String: Any]] = {
+        var result: [String: [String: Any]] = [:]
+        result.reserveCapacity(maxGlyphs.count * 2)
+        for entry in maxGlyphs {
+            let spec: [String: Any] = [
+                "kind": "tintedAsset",
+                "asset": "AorusMax/" + entry.glyph,
+                "targets": entry.targets
+            ]
+            for target in entry.targets {
+                result[target] = spec
+            }
+        }
+        return result
     }()
 
     private static func storedLayers() -> NSDictionary {
@@ -537,6 +587,9 @@ public enum AorusPluginIconValues {
 
     /// The icon to show for `name`, or nil to show Telegram's own.
     static func resolve(name: String, original: UIImage) -> UIImage? {
+        if isMaxRun && maxIconsByTarget[name] == nil {
+            return nil
+        }
         lock.lock()
         let table = tableLocked()
         if table.isEmpty {
@@ -707,23 +760,26 @@ public enum AorusPluginIconValues {
         var green = 0.0
         var blue = 0.0
         var weight = 0.0
-        for row in 0 ..< height {
-            let rowStart = row * bytesPerRow
-            for column in 0 ..< width {
-                let offset = rowStart + column * 4
-                let alpha = pixels[offset + 3]
-                if alpha < 16 {
-                    continue
+        pixels.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return }
+            for row in 0 ..< height {
+                let rowPtr = base.advanced(by: row * bytesPerRow)
+                for column in 0 ..< width {
+                    let offset = column * 4
+                    let alpha = rowPtr[offset + 3]
+                    if alpha < 16 {
+                        continue
+                    }
+                    if column < minX { minX = column }
+                    if column > maxX { maxX = column }
+                    if row < minY { minY = row }
+                    if row > maxY { maxY = row }
+                    // Premultiplied: the sums divided by the total alpha are the plain colour.
+                    red += Double(rowPtr[offset])
+                    green += Double(rowPtr[offset + 1])
+                    blue += Double(rowPtr[offset + 2])
+                    weight += Double(alpha)
                 }
-                if column < minX { minX = column }
-                if column > maxX { maxX = column }
-                if row < minY { minY = row }
-                if row > maxY { maxY = row }
-                // Premultiplied: the sums divided by the total alpha are the plain colour.
-                red += Double(pixels[offset])
-                green += Double(pixels[offset + 1])
-                blue += Double(pixels[offset + 2])
-                weight += Double(alpha)
             }
         }
         guard maxX >= minX, maxY >= minY, weight > 0.0 else {
@@ -733,6 +789,24 @@ public enum AorusPluginIconValues {
         let bounds = CGRect(x: CGFloat(minX) / pixelScale, y: CGFloat(minY) / pixelScale, width: CGFloat(maxX - minX + 1) / pixelScale, height: CGFloat(maxY - minY + 1) / pixelScale)
         let color = UIColor(red: CGFloat(min(1.0, red / weight)), green: CGFloat(min(1.0, green / weight)), blue: CGFloat(min(1.0, blue / weight)), alpha: 1.0)
         return Ink(bounds: bounds, color: color)
+    }
+
+    private static var assetInkCache: [String: CGRect] = [:]
+
+    private static func cachedAssetInk(named name: String, glyph: UIImage) -> CGRect? {
+        lock.lock()
+        if let cached = assetInkCache[name] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        guard let measured = ink(of: glyph)?.bounds else {
+            return nil
+        }
+        lock.lock()
+        assetInkCache[name] = measured
+        lock.unlock()
+        return measured
     }
 
     private static func drawSpec(_ spec: [String: Any], original: UIImage, size: CGSize, scale: CGFloat) -> UIImage? {
@@ -829,6 +903,30 @@ public enum AorusPluginIconValues {
                     context.setFillColor(color.cgColor)
                     context.fillPath(using: evenOdd ? .evenOdd : .winding)
                 }
+            })
+        case "tintedAsset":
+            guard let name = spec["asset"] as? String,
+                  let glyph = UIImage(named: name, in: getAppBundle(), compatibleWith: nil),
+                  glyph.size.width > 0.0, glyph.size.height > 0.0 else {
+                return nil
+            }
+            let glyphInk = cachedAssetInk(named: name, glyph: glyph) ?? CGRect(origin: .zero, size: glyph.size)
+            guard let rect = fitted(pictureSize: glyph.size, pictureInk: glyphInk) else {
+                return nil
+            }
+            return generateImage(size, opaque: false, scale: scale, rotatedContext: { size, context in
+                let canvas = CGRect(origin: CGPoint(), size: size)
+                context.clear(canvas)
+                context.interpolationQuality = .high
+                context.saveGState()
+                place(context)
+                UIGraphicsPushContext(context)
+                glyph.draw(in: rect)
+                UIGraphicsPopContext()
+                context.restoreGState()
+                context.setBlendMode(.sourceIn)
+                context.setFillColor(color.cgColor)
+                context.fill(canvas)
             })
         default:
             guard let source = sourceImage(for: spec, kind: kind, color: color, target: target, scale: scale), let sourceInk = ink(of: source) else {

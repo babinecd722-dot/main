@@ -44,7 +44,8 @@ private final class AorusSettingsThemeCache {
 }
 
 private func aorusBuildSettingsTheme(_ theme: PresentationTheme) -> PresentationTheme {
-    let dark = theme.overallDarkAppearance
+    let base = AorusMaxInterface.isEnabled ? aorusOriginalPresentationTheme(theme) : theme
+    let dark = base.overallDarkAppearance
     let page = dark ? UIColor(rgb: 0x000000) : UIColor(rgb: 0xf2f2f7)
     let block = dark ? UIColor(rgb: 0x1c1c1e) : UIColor(rgb: 0xffffff)
     let pressed = dark ? UIColor(rgb: 0x2c2c2e) : UIColor(rgb: 0xe5e5ea)
@@ -53,7 +54,7 @@ private func aorusBuildSettingsTheme(_ theme: PresentationTheme) -> Presentation
     let secondary = UIColor(rgb: 0x8e8e93)
     let header = dark ? UIColor(rgb: 0x8e8e93) : UIColor(rgb: 0x6d6d72)
     let arrow = dark ? UIColor(rgb: 0x5a5a5f) : UIColor(rgb: 0xc4c4c7)
-    let list = theme.list.withUpdated(
+    let list = base.list.withUpdated(
         blocksBackgroundColor: page,
         modalBlocksBackgroundColor: page,
         plainBackgroundColor: page,
@@ -68,9 +69,9 @@ private func aorusBuildSettingsTheme(_ theme: PresentationTheme) -> Presentation
         sectionHeaderTextColor: header,
         freeTextColor: header
     )
-    let result = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: dark, intro: theme.intro, passcode: theme.passcode, rootController: theme.rootController, list: list, chatList: theme.chatList, chat: theme.chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)
-    result.forceSync = theme.forceSync
-    result.starGift = theme.starGift
+    let result = PresentationTheme(name: base.name, index: base.index, referenceTheme: base.referenceTheme, overallDarkAppearance: dark, intro: base.intro, passcode: base.passcode, rootController: base.rootController, list: list, chatList: base.chatList, chat: base.chat, actionSheet: base.actionSheet, contextMenu: base.contextMenu, inAppNotification: base.inAppNotification, chart: base.chart, preview: base.preview)
+    result.forceSync = base.forceSync
+    result.starGift = base.starGift
     return result
 }
 

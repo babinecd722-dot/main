@@ -2,7 +2,18 @@
   "images": [
     {
       "idiom": "universal",
-      "filename": "text_bg_28.pdf"
+      "scale": "1x",
+      "filename": "text_bg_28.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "2x",
+      "filename": "text_bg_28@2x.png"
+    },
+    {
+      "idiom": "universal",
+      "scale": "3x",
+      "filename": "text_bg_28@3x.png"
     }
   ],
   "info": {
@@ -10,7 +21,6 @@
     "version": 1
   },
   "properties": {
-    "preserves-vector-representation": true,
     "template-rendering-intent": "template"
   }
 }
