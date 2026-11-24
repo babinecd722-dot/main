@@ -1165,6 +1165,7 @@ final class AorusClassicNavigationBarBadgeNode: ASDisplayNode {
 /// One button of the classic bar: a word in 12.0's system font, an icon, or a screen's own node.
 private final class AorusClassicNavigationButtonItemNode: ImmediateTextNode {
     var requestUpdate: (() -> Void)?
+    var manualAccessibilityLabel: String?
 
     private func fontForCurrentState() -> UIFont {
         return self.bold ? UIFont.boldSystemFont(ofSize: 17.0) : UIFont.systemFont(ofSize: 17.0)
@@ -1314,6 +1315,8 @@ private final class AorusClassicNavigationButtonItemNode: ImmediateTextNode {
         get {
             if let item = self.item, let accessibilityLabel = item.accessibilityLabel {
                 return accessibilityLabel
+            } else if self.item == nil, let manualAccessibilityLabel = self.manualAccessibilityLabel {
+                return manualAccessibilityLabel
             } else {
                 return self.attributedText?.string
             }
@@ -1546,10 +1549,14 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
         node.image = nil
         // The MAXimal interface's back button is MAX's arrow alone.
         node.text = isBack && AorusMaxInterface.isEnabled ? "" : text
+        node.manualAccessibilityLabel = isBack && AorusMaxInterface.isEnabled ? text : nil
         node.bold = false
         node.isEnabled = true
         node.node = nil
         node.hitTestSlop = isBack ? UIEdgeInsets(top: 0.0, left: -20.0, bottom: 0.0, right: 0.0) : UIEdgeInsets()
+        if isBack && AorusMaxInterface.isEnabled {
+            node.hitTestSlop.left = -27.0
+        }
 
         if self.nodes.count > 1 {
             for i in 1 ..< self.nodes.count {
@@ -1571,6 +1578,7 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
             }
             node.alpha = self.manualAlpha
             node.item = items[i]
+            node.manualAccessibilityLabel = nil
             if let classicTitle = AorusOldInterface.classicTitle(items[i].title) {
                 // 12.0's word where 13 draws a cross or a tick.
                 node.image = nil
@@ -1621,6 +1629,10 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
 
             node.aorusLayoutTransition = transition
             var nodeSize = node.updateLayout(constrainedSize)
+            if self.isBack && AorusMaxInterface.isEnabled {
+                // The arrow is drawn separately. Keep its otherwise empty button measurable.
+                nodeSize.width = max(17.0, nodeSize.width)
+            }
             nodeSize.width = ceil(nodeSize.width)
             nodeSize.height = ceil(nodeSize.height)
             totalHeight = max(totalHeight, nodeSize.height)
@@ -1638,7 +1650,16 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         if self.nodes.count == 1 {
-            if self.bounds.contains(point) {
+            if AorusMaxInterface.isEnabled && (self.isHidden || self.alpha < 0.01 || !self.isUserInteractionEnabled) {
+                return nil
+            }
+            let bounds: CGRect
+            if self.isBack && AorusMaxInterface.isEnabled {
+                bounds = self.bounds.inset(by: self.nodes[0].hitTestSlop)
+            } else {
+                bounds = self.bounds
+            }
+            if bounds.contains(point) {
                 return self.nodes[0].view.hitTest(self.view.convert(point, to: self.nodes[0].view), with: event)
             } else {
                 return nil

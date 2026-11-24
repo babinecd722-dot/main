@@ -126,8 +126,8 @@ public enum AorusMaxInterface {
         // Bars: the page's own colour, no line under them, white glyphs and titles.
         pair("header.background", "16181b", "ffffff")
         pair("header.separator", "16181b", "ffffff")
-        pair("header.buttons", "e1e3e6", "2c2d2e")
-        pair("header.title", "e1e3e6", "000000")
+        pair("header.buttons", "ffffff", "2c2d2e")
+        pair("header.title", "ffffff", "000000")
         pair("header.subtitle", "8c8e94", "818c99")
         both("header.accent", "0a7df7")
         both("header.controls", "0a7df7")
@@ -322,6 +322,23 @@ public enum AorusMaxInterface {
         return table
     }()
 
+    private static let originalStrings: [String: [String: String]] = {
+        var result: [String: [String: String]] = [:]
+        for (language, suffix) in [("ru", "Ru"), ("en", "En")] {
+            if let path = getAppBundle().path(forResource: "AorusMaxStrings" + suffix, ofType: "json"),
+               let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+               let strings = (try? JSONSerialization.jsonObject(with: data)) as? [String: String] {
+                result[language] = strings
+            }
+        }
+        return result
+    }()
+
+    public static func localizedString(_ key: String, languageCode: String) -> String? {
+        let language = languageCode.lowercased().hasPrefix("ru") ? "ru" : "en"
+        return self.originalStrings[language]?[key] ?? self.originalStrings["en"]?[key]
+    }
+
     // MARK: - Tab bar
 
     /// MAX's own animation for a tab's icon, in place of Telegram's; nil keeps Telegram's.
@@ -337,7 +354,7 @@ public enum AorusMaxInterface {
         case "TabContacts":
             return "AorusMaxTabContacts"
         case "TabSettings":
-            return "AorusMaxTabProfile"
+            return nil
         default:
             return name
         }

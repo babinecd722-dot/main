@@ -38,8 +38,9 @@ def main():
         # The MAXimal interface's own resources (patches/assets/max): a missing one costs no build
         # error, only a tab with no animation, a chat with no wallpaper or an alert with no icon.
         for resource in (
-            "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json", "AorusMaxTabProfile.json",
+            "AorusMaxTabChats.json", "AorusMaxTabCalls.json", "AorusMaxTabContacts.json",
             "AorusMaxRecordLock.json", "AorusMaxRecordPause.json",
+            "AorusMaxSafeModeLock.json", "AorusMaxStringsRu.json", "AorusMaxStringsEn.json",
             "AorusMaxWallpaperDark.jpg", "AorusMaxWallpaperLight.jpg", "AorusMaxAppIconPreview.png",
             "MaxIcon@2x.png", "MaxIcon@3x.png",
         ):

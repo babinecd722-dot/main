@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Safe Mode": "Modalità sicura",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversazione non è ancora salvata: l'archivio non è disponibile. Il salvataggio verrà ritentato automaticamente.",
         "The answer is too large to show": "La risposta è troppo grande per essere mostrata",
         "Couldn't load the settings. Nothing was changed. Try again.": "Impossibile caricare le impostazioni. Non è stato modificato nulla. Riprova.",
@@ -1318,6 +1319,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Safe Mode": "Tryb bezpieczny",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Rozmowa nie jest jeszcze zapisana: pamięć jest niedostępna. Zapis zostanie ponowiony automatycznie.",
         "The answer is too large to show": "Odpowiedź jest zbyt duża, by ją wyświetlić",
         "Couldn't load the settings. Nothing was changed. Try again.": "Nie udało się wczytać ustawień. Nic nie zostało zmienione. Spróbuj ponownie.",
@@ -2583,6 +2585,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Safe Mode": "Veilige modus",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Het gesprek is nog niet opgeslagen: de opslag is niet beschikbaar. Opslaan wordt automatisch opnieuw geprobeerd.",
         "The answer is too large to show": "Het antwoord is te groot om te tonen",
         "Couldn't load the settings. Nothing was changed. Try again.": "De instellingen konden niet worden geladen. Er is niets gewijzigd. Probeer het opnieuw.",
@@ -3848,6 +3851,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Safe Mode": "Mode segur",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversa encara no s'ha desat: l'emmagatzematge no està disponible. Es tornarà a provar de desar automàticament.",
         "The answer is too large to show": "La resposta és massa gran per mostrar-la",
         "Couldn't load the settings. Nothing was changed. Try again.": "No s'ha pogut carregar la configuració. No s'ha canviat res. Torna-ho a provar.",
@@ -5113,6 +5117,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Safe Mode": "Mode Aman",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Percakapan belum tersimpan: penyimpanan tidak tersedia. Penyimpanan akan dicoba lagi secara otomatis.",
         "The answer is too large to show": "Jawaban terlalu besar untuk ditampilkan",
         "Couldn't load the settings. Nothing was changed. Try again.": "Pengaturan tidak dapat dimuat. Tidak ada yang diubah. Coba lagi.",
@@ -6378,6 +6383,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Safe Mode": "Mod Selamat",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Perbualan belum disimpan: storan tidak tersedia. Penyimpanan akan dicuba semula secara automatik.",
         "The answer is too large to show": "Jawapan terlalu besar untuk dipaparkan",
         "Couldn't load the settings. Nothing was changed. Try again.": "Tetapan tidak dapat dimuatkan. Tiada apa-apa yang diubah. Cuba lagi.",
@@ -7643,6 +7649,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Safe Mode": "Бяспечны рэжым",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Размова яшчэ не захавана: сховішча недаступнае. Захаванне паўторыцца само.",
         "The answer is too large to show": "Адказ занадта вялікі, каб яго паказаць",
         "Couldn't load the settings. Nothing was changed. Try again.": "Не ўдалося загрузіць налады. Нічога не змянілася. Паспрабуйце яшчэ раз.",
@@ -8908,6 +8915,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Safe Mode": "Xavfsiz rejim",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Suhbat hali saqlanmadi: xotira mavjud emas. Saqlash avtomatik ravishda qayta urinib ko‘riladi.",
         "The answer is too large to show": "Javob ko‘rsatish uchun juda katta",
         "Couldn't load the settings. Nothing was changed. Try again.": "Sozlamalarni yuklab bo‘lmadi. Hech narsa o‘zgarmadi. Qaytadan urinib ko‘ring.",
@@ -10173,6 +10181,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Safe Mode": "안전 모드",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "대화가 아직 저장되지 않았습니다. 저장소를 사용할 수 없습니다. 저장은 자동으로 다시 시도됩니다.",
         "The answer is too large to show": "답변이 너무 커서 표시할 수 없습니다",
         "Couldn't load the settings. Nothing was changed. Try again.": "설정을 불러오지 못했습니다. 변경된 내용은 없습니다. 다시 시도하세요.",
@@ -11438,6 +11447,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Safe Mode": "الوضع الآمن",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "لم تُحفظ المحادثة بعد: التخزين غير متاح. ستُعاد محاولة الحفظ تلقائيًا.",
         "The answer is too large to show": "الإجابة أكبر من أن تُعرض",
         "Couldn't load the settings. Nothing was changed. Try again.": "تعذّر تحميل الإعدادات. لم يتغيّر شيء. حاول مرة أخرى.",
@@ -12703,6 +12713,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Safe Mode": "حالت امن",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "گفتگو هنوز ذخیره نشده است: فضای ذخیره‌سازی در دسترس نیست. ذخیره خودکار دوباره امتحان می‌شود.",
         "The answer is too large to show": "پاسخ برای نمایش بیش از حد بزرگ است",
         "Couldn't load the settings. Nothing was changed. Try again.": "بارگیری تنظیمات ممکن نشد. چیزی تغییر نکرد. دوباره تلاش کنید.",
@@ -13968,6 +13979,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Safe Mode": "Қауіпсіз режим",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Әңгіме әлі сақталмады: жад қолжетімсіз. Сақтау автоматты түрде қайталанады.",
         "The answer is too large to show": "Жауап көрсету үшін тым үлкен",
         "Couldn't load the settings. Nothing was changed. Try again.": "Баптауларды жүктеу мүмкін болмады. Ештеңе өзгерген жоқ. Қайталап көріңіз.",
@@ -15233,6 +15245,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Safe Mode": "安全模式",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "对话尚未保存：存储不可用。将自动重试保存。",
         "The answer is too large to show": "回答过大，无法显示",
         "Couldn't load the settings. Nothing was changed. Try again.": "无法载入设置。未做任何更改。请重试。",
@@ -16499,6 +16512,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Safe Mode": "安全模式",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "對話尚未儲存：儲存空間無法使用。將自動重試儲存。",
         "The answer is too large to show": "回答過大，無法顯示",
         "Couldn't load the settings. Nothing was changed. Try again.": "無法載入設定。未做任何變更。請再試一次。",
@@ -17764,6 +17778,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Safe Mode": "セーフモード",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "会話はまだ保存されていません。ストレージを利用できません。保存は自動的に再試行されます。",
         "The answer is too large to show": "回答が大きすぎて表示できません",
         "Couldn't load the settings. Nothing was changed. Try again.": "設定を読み込めませんでした。何も変更されていません。もう一度お試しください。",
@@ -19029,6 +19044,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Safe Mode": "Turvatila",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Keskustelua ei ole vielä tallennettu: tallennustila ei ole käytettävissä. Tallennusta yritetään automaattisesti uudelleen.",
         "The answer is too large to show": "Vastaus on liian suuri näytettäväksi",
         "Couldn't load the settings. Nothing was changed. Try again.": "Asetuksia ei voitu ladata. Mitään ei muutettu. Yritä uudelleen.",
@@ -20294,6 +20310,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Safe Mode": "מצב בטוח",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "השיחה עדיין לא נשמרה: האחסון אינו זמין. השמירה תנוסה שוב באופן אוטומטי.",
         "The answer is too large to show": "התשובה גדולה מכדי להציג אותה",
         "Couldn't load the settings. Nothing was changed. Try again.": "לא ניתן לטעון את ההגדרות. דבר לא השתנה. נסו שוב.",
@@ -21559,6 +21576,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Safe Mode": "Sigurni način rada",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Razgovor još nije spremljen: pohrana nije dostupna. Spremanje će se automatski ponoviti.",
         "The answer is too large to show": "Odgovor je prevelik za prikaz",
         "Couldn't load the settings. Nothing was changed. Try again.": "Postavke nije moguće učitati. Ništa nije promijenjeno. Pokušajte ponovno.",
@@ -22824,6 +22842,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Safe Mode": "Безбедни режим",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Разговор још није сачуван: складиште није доступно. Чување ће се аутоматски поновити.",
         "The answer is too large to show": "Одговор је превелик за приказ",
         "Couldn't load the settings. Nothing was changed. Try again.": "Подешавања није могуће учитати. Ништа није промењено. Покушајте поново.",
@@ -24089,6 +24108,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Safe Mode": "Bezpečný režim",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konverzace ještě není uložena: úložiště není dostupné. Uložení se automaticky zopakuje.",
         "The answer is too large to show": "Odpověď je příliš velká na zobrazení",
         "Couldn't load the settings. Nothing was changed. Try again.": "Nastavení se nepodařilo načíst. Nic se nezměnilo. Zkuste to znovu.",
@@ -25354,6 +25374,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Safe Mode": "Bezpečný režim",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konverzácia ešte nie je uložená: úložisko nie je dostupné. Uloženie sa automaticky zopakuje.",
         "The answer is too large to show": "Odpoveď je príliš veľká na zobrazenie",
         "Couldn't load the settings. Nothing was changed. Try again.": "Nastavenia sa nepodarilo načítať. Nič sa nezmenilo. Skúste to znova.",
@@ -26619,6 +26640,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Safe Mode": "Mod sigur",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Conversația nu este încă salvată: spațiul de stocare nu este disponibil. Salvarea va fi reîncercată automat.",
         "The answer is too large to show": "Răspunsul este prea mare pentru a fi afișat",
         "Couldn't load the settings. Nothing was changed. Try again.": "Setările nu au putut fi încărcate. Nu s-a schimbat nimic. Încercați din nou.",
@@ -27884,6 +27906,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Safe Mode": "Biztonságos mód",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "A beszélgetés még nincs mentve: a tárhely nem érhető el. A mentést automatikusan újrapróbálja.",
         "The answer is too large to show": "A válasz túl nagy a megjelenítéshez",
         "Couldn't load the settings. Nothing was changed. Try again.": "A beállításokat nem sikerült betölteni. Semmi sem változott. Próbálja újra.",
@@ -29149,6 +29172,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Safe Mode": "Sikker modus",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Samtalen er ikke lagret ennå: lagringen er utilgjengelig. Lagringen prøves på nytt automatisk.",
         "The answer is too large to show": "Svaret er for stort til å vises",
         "Couldn't load the settings. Nothing was changed. Try again.": "Kunne ikke laste inn innstillingene. Ingenting ble endret. Prøv igjen.",
@@ -30414,6 +30438,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Safe Mode": "Säkert läge",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Konversationen är inte sparad än: lagringen är inte tillgänglig. Sparandet försöks igen automatiskt.",
         "The answer is too large to show": "Svaret är för stort för att visas",
         "Couldn't load the settings. Nothing was changed. Try again.": "Det gick inte att läsa in inställningarna. Inget ändrades. Försök igen.",
@@ -31679,6 +31704,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Safe Mode": "Chế độ an toàn",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Cuộc trò chuyện chưa được lưu: bộ nhớ không khả dụng. Việc lưu sẽ tự động được thử lại.",
         "The answer is too large to show": "Câu trả lời quá lớn để hiển thị",
         "Couldn't load the settings. Nothing was changed. Try again.": "Không thể tải cài đặt. Không có gì thay đổi. Hãy thử lại.",
@@ -32944,6 +32970,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Safe Mode": "Безпечний режим",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Розмову ще не збережено: сховище недоступне. Збереження повториться автоматично.",
         "The answer is too large to show": "Відповідь завелика, щоб її показати",
         "Couldn't load the settings. Nothing was changed. Try again.": "Не вдалося завантажити налаштування. Нічого не змінилося. Спробуйте ще раз.",
@@ -34218,6 +34245,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Safe Mode": "Modo seguro",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversación aún no se ha guardado: el almacenamiento no está disponible. Se volverá a intentar guardar automáticamente.",
         "The answer is too large to show": "La respuesta es demasiado grande para mostrarla",
         "Couldn't load the settings. Nothing was changed. Try again.": "No se pudo cargar la configuración. No se cambió nada. Inténtalo de nuevo.",
@@ -35492,6 +35520,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Safe Mode": "Modo seguro",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "A conversa ainda não foi salva: o armazenamento está indisponível. O salvamento será tentado novamente de forma automática.",
         "The answer is too large to show": "A resposta é grande demais para ser exibida",
         "Couldn't load the settings. Nothing was changed. Try again.": "Não foi possível carregar as configurações. Nada foi alterado. Tente novamente.",
@@ -36766,6 +36795,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Safe Mode": "Sicherer Modus",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Das Gespräch ist noch nicht gespeichert: Der Speicher ist nicht verfügbar. Das Speichern wird automatisch erneut versucht.",
         "The answer is too large to show": "Die Antwort ist zu groß, um sie anzuzeigen",
         "Couldn't load the settings. Nothing was changed. Try again.": "Die Einstellungen konnten nicht geladen werden. Es wurde nichts geändert. Versuche es erneut.",
@@ -38040,6 +38070,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Safe Mode": "Mode sécurisé",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "La conversation n'est pas encore enregistrée : le stockage est indisponible. L'enregistrement sera retenté automatiquement.",
         "The answer is too large to show": "La réponse est trop volumineuse pour être affichée",
         "Couldn't load the settings. Nothing was changed. Try again.": "Impossible de charger les réglages. Rien n'a été modifié. Réessayez.",
@@ -39314,6 +39345,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Safe Mode": "Güvenli Mod",
         "The conversation isn't saved yet: storage is unavailable. Saving will be retried automatically.": "Sohbet henüz kaydedilmedi: depolama kullanılamıyor. Kaydetme otomatik olarak yeniden denenecek.",
         "The answer is too large to show": "Yanıt gösterilemeyecek kadar büyük",
         "Couldn't load the settings. Nothing was changed. Try again.": "Ayarlar yüklenemedi. Hiçbir şey değişmedi. Tekrar deneyin.",

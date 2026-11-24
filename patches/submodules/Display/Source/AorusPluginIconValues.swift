@@ -336,15 +336,19 @@ public enum AorusPluginIconValues {
         ("message_fill_28", ["Chat List/Tabs/IconChats"]),
         ("call_fill_28", ["Chat List/Tabs/IconCalls"]),
         ("chats_fill_28", ["Chat List/Tabs/IconContacts"]),
-        ("profile_tab_28", ["Chat List/Tabs/IconSettings"]),
-        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add"]),
+        ("profile_round_24", ["Chat List/Tabs/IconSettings"]),
+        ("verification_16_background", ["Chat List/PeerVerifiedIconBackground"]),
+        ("verification_16_foreground", ["Chat List/PeerVerifiedIconForeground"]),
+        ("verification_24_background", ["Peer Info/VerifiedIconBackground"]),
+        ("verification_24_foreground", ["Peer Info/VerifiedIconForeground"]),
+        ("plus_24", ["Chat List/ComposeIcon", "Chat List/AddIcon", "Chat/Context Menu/Add", "Media Editor/Add"]),
         ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search"]),
         ("attachment_24", ["Chat/Input/Text/IconAttachment"]),
         ("microphone_on_24", ["Chat/Input/Text/IconMicrophone", "Item List/Icons/Microphone"]),
         ("video_message_24", ["Chat/Input/Text/IconVideo"]),
-        ("smile_square_24", ["Chat/Input/Text/AccessoryIconStickers", "Chat/Context Menu/Sticker", "Item List/Icons/Sticker"]),
+        ("smile_square_24", ["Chat/Input/Text/AccessoryIconStickers", "Chat/Context Menu/Sticker", "Item List/Icons/Sticker", "Chat/Input/Media/EntityInputEmojiIcon"]),
         ("keyboard_outline_24", ["Chat/Input/Text/AccessoryIconKeyboard"]),
-        ("send_24", ["Chat/Input/Text/SendIcon"]),
+        ("send_24", ["Chat/Input/Text/SendIcon", "Media Editor/Send"]),
         ("ic_suggest_commands_24", ["Chat/Input/Text/AccessoryIconCommands"]),
         ("clock_24", ["Chat/Input/Text/AccessoryIconSchedule", "Chat/Context Menu/Schedule", "Chat/Context Menu/Time", "Chat/Context Menu/Timer", "Item List/Icons/Clock", "Item List/Icons/Timer"]),
         ("pin_on_fill_16", ["Chat List/PeerPinnedIcon"]),
@@ -360,8 +364,8 @@ public enum AorusPluginIconValues {
         ("multi_select_24", ["Chat/Context Menu/Select"]),
         ("report_24", ["Chat/Context Menu/Report"]),
         ("info_24", ["Chat/Context Menu/Info"]),
-        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link"]),
-        ("save_to_gallery_24", ["Chat/Context Menu/Save"]),
+        ("link_24", ["Chat/Context Menu/Link", "Item List/Icons/Link", "Media Editor/Link"]),
+        ("save_to_gallery_24", ["Chat/Context Menu/Save", "Media Editor/SaveIcon"]),
         ("archive_24", ["Chat/Context Menu/Archive", "Chat/Context Menu/Unarchive"]),
         ("share_24_iOS", ["Chat/Context Menu/Share"]),
         ("download_24", ["Chat/Context Menu/Download", "Item List/Icons/Download"]),
@@ -404,11 +408,28 @@ public enum AorusPluginIconValues {
         ("photo_24", ["Item List/Icons/Photo", "Chat/Attach Menu/Camera"]),
         ("file_24", ["Item List/Icons/File", "Chat/Context Menu/File"]),
         ("ico_gif_24", ["Item List/Icons/Gif"]),
-        ("current_location_24", ["Item List/Icons/Location"]),
+        ("current_location_24", ["Item List/Icons/Location", "Chat/Attach Menu/Location", "Media Editor/LocationSmall"]),
+        // MAX's original editor tools and text backgrounds, also used by the gallery toolbar.
+        ("brush_28", ["Media Editor/Pencil", "Chat/Context Menu/Draw"]),
+        ("type_28", ["Media Editor/AddText"]),
+        ("draw_sticker_24", ["Media Editor/AddSticker", "Chat/Context Menu/AddSticker"]),
+        ("filter_24", ["Media Editor/Adjustments"]),
+        ("crop_24", ["Media Editor/Crop"]),
+        ("rotate_24", ["Media Editor/Rotate", "Editor/Rotate"]),
+        ("mirror_24", ["Media Editor/Mirror", "Media Editor/Flip"]),
+        ("undo_24", ["Media Editor/Undo", "Media Editor/CutoutUndo"]),
+        ("check_24", ["Media Editor/Done", "Media Editor/Apply", "Media Gallery/Check", "Chat/Context Menu/Check"]),
+        ("cross_24", ["Media Editor/Close"]),
+        ("text_no_bg_28", ["Media Editor/TextDefault"]),
+        ("text_bg_28", ["Media Editor/TextFilled"]),
+        ("text_transparent_bg_28", ["Media Editor/TextSemi"]),
+        ("picture_24", ["Chat/Context Menu/Image", "Media Editor/AddImage"]),
+        ("ic_music_24", ["Media Editor/Audio", "Media Editor/AudioSmall", "Media Editor/SmallAudio"]),
+        ("back_24_ios", ["Chat/Context Menu/Back", "Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"]),
         // The profile's QR code, top left as MAX puts it.
         ("qr_code_24", ["Settings/QrIcon"]),
         // The video-message recorder's buttons.
-        ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip"]),
+        ("change_camera_24", ["Camera/VideoMessageFlip", "Call/Flip", "Camera/FlipIcon"]),
         // The call's buttons.
         ("sound_on_fill_32", ["Call/Speaker"]),
         ("microphone_off_fill_32", ["Call/Mute"]),
@@ -885,7 +906,7 @@ public enum AorusPluginIconValues {
             guard let name = spec["asset"] as? String, let glyph = UIImage(named: name, in: getAppBundle(), compatibleWith: nil), glyph.size.width > 0.0, glyph.size.height > 0.0 else {
                 return nil
             }
-            return generateImage(glyph.size, opaque: false, scale: glyph.scale, rotatedContext: { size, context in
+            return generateImage(glyph.size, opaque: false, scale: max(scale, glyph.scale), rotatedContext: { size, context in
                 let bounds = CGRect(origin: CGPoint(), size: size)
                 context.clear(bounds)
                 UIGraphicsPushContext(context)

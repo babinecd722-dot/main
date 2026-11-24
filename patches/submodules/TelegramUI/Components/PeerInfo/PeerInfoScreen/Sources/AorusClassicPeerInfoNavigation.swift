@@ -216,11 +216,10 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             guard self.isEnabled, self.isUserInteractionEnabled, !self.isHidden, self.alpha > 0.01 else {
                 return nil
             }
-            if self.key == .back {
-                return self.bounds.contains(point) ? self.view : nil
-            }
-            if !self.containerNode.isGestureEnabled, self.bounds.contains(point) {
-                return self.view
+            if !self.containerNode.isGestureEnabled {
+                let horizontalInset = max(0.0, (44.0 - self.bounds.width) * 0.5)
+                let verticalInset = max(0.0, (44.0 - self.bounds.height) * 0.5)
+                return self.bounds.insetBy(dx: -horizontalInset, dy: -verticalInset).contains(point) ? self.view : nil
             }
         }
         var boundingRect = self.bounds
@@ -296,7 +295,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 accessibilityText = presentationData.strings.Common_Back
                 if isMaxBack {
                     text = ""
-                    icon = UIImage(systemName: "chevron.backward", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .semibold))?.withRenderingMode(.alwaysTemplate)
+                    icon = AorusMaxInterface.glyph("back_24_ios")?.withRenderingMode(.alwaysTemplate)
                 } else {
                     text = presentationData.strings.Common_Back
                     icon = navigationBarBackArrowImage(color: .white)
