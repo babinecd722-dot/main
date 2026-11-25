@@ -2,8 +2,10 @@ import Foundation
 import UIKit
 import AsyncDisplayKit
 import Display
+import SwiftSignalKit
 import AccountContext
 import TelegramPresentationData
+import ItemListUI
 
 /// MAX's top Gosuslugi / Digital ID card on the Settings screen (1:1 with MAX's profile layout):
 /// centered two-tone «госуслуги» wordmark above the «Цифровой ID» disclosure row with the
@@ -151,13 +153,118 @@ private final class AorusMaxGosuslugiItemNode: PeerInfoScreenItemNode {
     }
 }
 
+final class AorusMaxTelegramServiceEntry {
+    let title: String
+    let label: String
+    let icon: UIImage?
+    let action: (() -> Void)?
+
+    init(title: String, label: String, icon: UIImage?, action: (() -> Void)?) {
+        self.title = title
+        self.label = label
+        self.icon = icon
+        self.action = action
+    }
+}
+
+private final class AorusMaxTelegramServicesArguments {
+    let open: (Int) -> Void
+
+    init(open: @escaping (Int) -> Void) {
+        self.open = open
+    }
+}
+
+private enum AorusMaxTelegramServicesEntry: ItemListNodeEntry {
+    case item(Int, String, String, UIImage?)
+
+    var section: ItemListSectionId {
+        return 0
+    }
+
+    var stableId: Int32 {
+        switch self {
+        case let .item(index, _, _, _):
+            return Int32(index)
+        }
+    }
+
+    static func == (lhs: AorusMaxTelegramServicesEntry, rhs: AorusMaxTelegramServicesEntry) -> Bool {
+        switch lhs {
+        case let .item(lhsIndex, lhsTitle, lhsLabel, _):
+            if case let .item(rhsIndex, rhsTitle, rhsLabel, _) = rhs {
+                return lhsIndex == rhsIndex && lhsTitle == rhsTitle && lhsLabel == rhsLabel
+            }
+            return false
+        }
+    }
+
+    static func < (lhs: AorusMaxTelegramServicesEntry, rhs: AorusMaxTelegramServicesEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! AorusMaxTelegramServicesArguments
+        switch self {
+        case let .item(index, title, label, icon):
+            return ItemListDisclosureItem(
+                presentationData: presentationData,
+                systemStyle: .glass,
+                icon: icon,
+                title: title,
+                label: label,
+                sectionId: self.section,
+                style: .blocks,
+                action: {
+                    arguments.open(index)
+                }
+            )
+        }
+    }
+}
+
+func aorusMaxTelegramServicesController(context: AccountContext, title: String, entries: [AorusMaxTelegramServiceEntry]) -> ViewController {
+    let arguments = AorusMaxTelegramServicesArguments(open: { index in
+        if index >= 0 && index < entries.count {
+            entries[index].action?()
+        }
+    })
+    let signal = context.sharedContext.presentationData
+    |> deliverOnMainQueue
+    |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let listEntries: [AorusMaxTelegramServicesEntry] = entries.enumerated().map { index, entry in
+            return .item(index, entry.title, entry.label, entry.icon)
+        }
+        let controllerState = ItemListControllerState(
+            presentationData: ItemListPresentationData(presentationData),
+            title: .text(title),
+            leftNavigationButton: nil,
+            rightNavigationButton: nil,
+            backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back),
+            animateChanges: false
+        )
+        let listState = ItemListNodeState(
+            presentationData: ItemListPresentationData(presentationData),
+            entries: listEntries,
+            style: .blocks,
+            animateChanges: false
+        )
+        return (controllerState, (listState, arguments))
+    }
+    return ItemListController(context: context, state: signal)
+}
+
 // MAX distributes client settings into two primary cards on the Settings tab:
-// 1. Notifications, Privacy, Messages, Favorites, Folders
+// 1. Notifications, Security, Messages, Favorites, Folders
 // 2. Appearance, Storage, Devices, Power and Data Saving, App Language
-// Disjoint item IDs (`101..121` for shortcuts, `200..206` for advanced) prevent PeerInfoScreen's
-// per-section node dictionary from colliding when items from both sections share one card.
-// Contacts (id 121) and Recent Calls (id 102) move out because they are Tabs 1 and 2 in MAX.
-func aorusMaxReorderProfileSections(_ items: inout [SettingsSection: [PeerInfoScreenItem]]) {
+// Telegram-only items (Premium, Stars, My TON, Business, Gifts, Watch, Proxy, FAQ, Tips) are
+// grouped cleanly into a single «More» sub-screen so MAX's root Settings screen stays 1:1 clean
+// while keeping AorusGram & AI Companion untouched and preserving 100% of Telegram functionality.
+func aorusMaxReorderProfileSections(
+    _ items: inout [SettingsSection: [PeerInfoScreenItem]],
+    presentationData: PresentationData,
+    openExtras: @escaping ([AorusMaxTelegramServiceEntry]) -> Void
+) {
     let advanced = items[.advanced] ?? []
     let shortcuts = items[.shortcuts] ?? []
     let byAdvancedId: [AnyHashable: PeerInfoScreenItem] = Dictionary(uniqueKeysWithValues: advanced.map { ($0.id, $0) })
@@ -181,13 +288,56 @@ func aorusMaxReorderProfileSections(_ items: inout [SettingsSection: [PeerInfoSc
 
     let movedShortcuts: Set<AnyHashable> = [101, 102, 103, 104, 121]
     let movedAdvanced: Set<AnyHashable> = [200, 201, 202, 203, 204, 206]
-    items[.shortcuts] = shortcuts.filter { !movedShortcuts.contains($0.id) }
-    items[.advanced] = advanced.filter { !movedAdvanced.contains($0.id) }
-    // Digital ID card above already opens Telegram Passport; avoid showing a duplicate Passport row.
-    if let extra = items[.extra], !extra.isEmpty {
-        items[.extra] = extra.filter { $0.id != AnyHashable(0) }
+
+    var extraEntries: [AorusMaxTelegramServiceEntry] = []
+    func collect(_ list: [PeerInfoScreenItem]) {
+        for raw in list {
+            if let disclosure = raw as? PeerInfoScreenDisclosureItem {
+                extraEntries.append(AorusMaxTelegramServiceEntry(
+                    title: disclosure.text,
+                    label: disclosure.label.text,
+                    icon: disclosure.icon,
+                    action: disclosure.action
+                ))
+            }
+        }
     }
-    // Editing remains available from the pencil in the profile header.
+
+    collect(items[.payment] ?? [])
+    collect((items[.extra] ?? []).filter { $0.id != AnyHashable(0) })
+    collect(items[.proxy] ?? [])
+    collect(items[.apps] ?? [])
+    collect(shortcuts.filter { !movedShortcuts.contains($0.id) })
+    collect(advanced.filter { !movedAdvanced.contains($0.id) })
+
+    let support = items[.support] ?? []
+    var keptSupport: [PeerInfoScreenItem] = []
+    for item in support {
+        if item.id == AnyHashable(0) {
+            keptSupport.append(item)
+        } else {
+            collect([item])
+        }
+    }
+    if !extraEntries.isEmpty {
+        let moreIcon = AorusMaxInterface.tintedGlyph("dots_horizontal_24", dark: presentationData.theme.overallDarkAppearance)
+        keptSupport.insert(PeerInfoScreenDisclosureItem(
+            id: "aorusMaxTelegramExtras",
+            text: presentationData.strings.Common_More,
+            icon: moreIcon,
+            action: {
+                openExtras(extraEntries)
+            }
+        ), at: 0)
+    }
+    items[.support] = keptSupport
+
+    items[.payment] = []
+    items[.extra] = []
+    items[.proxy] = []
+    items[.apps] = []
+    items[.shortcuts] = []
+    items[.advanced] = []
     items[.edit] = []
     items[.myProfile] = []
 }

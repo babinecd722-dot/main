@@ -390,7 +390,7 @@ public enum AorusMaxInterface {
             return ("AorusMaxBusy", "m4a")
         case "voip_end.mp3", "voip_fail.mp3", "voip_group_left.mp3":
             return ("AorusMaxCallEnd", "m4a")
-        case "note.m4a", "100.m4a", "voip_group_joined.mp3":
+        case "note.m4a", "100.m4a", "voip_group_joined.mp3", "voip_group_unmuted.mp3", "voip_group_recording_started.mp3":
             return ("AorusMaxNote", "m4a")
         default:
             return nil
@@ -670,7 +670,9 @@ public enum AorusMaxInterface {
         return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
             context.clear(CGRect(origin: CGPoint(), size: size))
             context.setFillColor(fill.cgColor)
-            context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
+            let roundedPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(), size: size), cornerRadius: 11.0).cgPath
+            context.addPath(roundedPath)
+            context.fillPath()
             if let glyph, let tinted = generateTintedImage(image: glyph, color: ink) {
                 let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
                 UIGraphicsPushContext(context)

@@ -145,6 +145,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
     private let backgroundNode: NavigationBackgroundNode
 
     private var key: PeerInfoHeaderNavigationButtonKey?
+    private var maxGlyphName: String?
     // The icon packs draw the bar's icons again when they change.
     private var iconRevision = -1
 
@@ -241,10 +242,17 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.backgroundNode.updateColor(color: backgroundColor, transition: transition)
 
         transition.updateTintColor(layer: self.textNode.layer, color: self.contentsColor)
-        transition.updateTintColor(view: self.iconNode.view, color: self.contentsColor)
+        if let maxGlyphName = self.maxGlyphName, AorusMaxInterface.isEnabled {
+            self.iconNode.layer.layerTintColor = nil
+            self.iconNode.image = generateTintedImage(image: AorusMaxInterface.glyph(maxGlyphName), color: self.contentsColor)
+        } else {
+            transition.updateTintColor(view: self.iconNode.view, color: self.contentsColor)
+        }
         transition.updateStrokeColor(layer: self.backIconLayer, strokeColor: self.contentsColor)
 
         switch self.key {
+        case .back where AorusMaxInterface.isEnabled:
+            transition.updateLineWidth(layer: self.backIconLayer, lineWidth: 2.4)
         case .back where !AorusMaxInterface.isEnabled:
             transition.updateAlpha(layer: self.textNode.layer, alpha: canBeExpanded ? 1.0 : 0.0)
             transition.updateTransformScale(node: self.textNode, scale: canBeExpanded ? 1.0 : 0.001)
@@ -282,6 +290,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         if self.key != key || self.iconRevision != AorusPluginIconValues.revision {
             self.key = key
             self.iconRevision = AorusPluginIconValues.revision
+            self.maxGlyphName = nil
 
             let text: String
             var accessibilityText: String
@@ -295,7 +304,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 accessibilityText = presentationData.strings.Common_Back
                 if isMaxBack {
                     text = ""
-                    icon = AorusMaxInterface.templateGlyph("back_24_ios")
+                    icon = nil
                 } else {
                     text = presentationData.strings.Common_Back
                     icon = navigationBarBackArrowImage(color: .white)
@@ -305,7 +314,8 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 text = AorusMaxInterface.isEnabled ? "" : presentationData.strings.Common_Edit
                 accessibilityText = presentationData.strings.Common_Edit
                 if AorusMaxInterface.isEnabled {
-                    icon = AorusMaxInterface.templateGlyph("edit_24")
+                    self.maxGlyphName = "edit_24"
+                    icon = generateTintedImage(image: AorusMaxInterface.glyph("edit_24"), color: self.contentsColor)
                 }
             case .cancel:
                 text = presentationData.strings.Common_Cancel
@@ -348,7 +358,12 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             case .qrCode:
                 text = ""
                 accessibilityText = presentationData.strings.PeerInfo_QRCode_Title
-                icon = AorusMaxInterface.isEnabled ? AorusMaxInterface.templateGlyph("qr_code_24") : PresentationResourcesRootController.navigationQrCodeIcon(presentationData.theme)
+                if AorusMaxInterface.isEnabled {
+                    self.maxGlyphName = "qr_code_24"
+                    icon = generateTintedImage(image: AorusMaxInterface.glyph("qr_code_24"), color: self.contentsColor)
+                } else {
+                    icon = PresentationResourcesRootController.navigationQrCodeIcon(presentationData.theme)
+                }
             case .moreSearchSort:
                 text = ""
                 accessibilityText = ""
@@ -371,7 +386,11 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             self.textNode.attributedText = NSAttributedString(string: text, font: font, textColor: .white)
             transition.updateTintColor(layer: self.textNode.layer, color: self.contentsColor)
             self.iconNode.image = icon
-            transition.updateTintColor(view: self.iconNode.view, color: self.contentsColor)
+            if self.maxGlyphName != nil {
+                self.iconNode.layer.layerTintColor = nil
+            } else {
+                transition.updateTintColor(view: self.iconNode.view, color: self.contentsColor)
+            }
 
             if isAnimation {
                 self.iconNode.isHidden = true
@@ -388,7 +407,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 transition.updateTintColor(layer: animationNode.imageNode.layer, color: self.contentsColor)
                 animationNode.enqueueState(animationState, animated: !isFirstTime)
             } else {
-                self.iconNode.isHidden = false
+                self.iconNode.isHidden = isMaxBack
                 if let current = self.animationNode {
                     self.animationNode = nil
                     current.removeFromSupernode()
@@ -416,13 +435,15 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.textNode.bounds = CGRect(origin: CGPoint(), size: textFrame.size)
 
         if isMaxBack {
-            let glyphSize = self.iconNode.image?.size ?? CGSize(width: 24.0, height: 24.0)
-            let size = CGSize(width: max(28.0, glyphSize.width), height: height)
+            let size = CGSize(width: 36.0, height: height)
             self.containerNode.frame = CGRect(origin: .zero, size: size)
             self.contextSourceNode.frame = self.containerNode.bounds
-            self.iconNode.bounds = CGRect(origin: .zero, size: glyphSize)
-            self.iconNode.position = self.contextSourceNode.bounds.center
-            self.backIconLayer.isHidden = true
+            self.iconNode.isHidden = true
+            self.backIconLayer.isHidden = false
+            self.backIconLayer.lineWidth = 2.4
+            self.backIconLayer.strokeColor = self.contentsColor.cgColor
+            self.backIconLayer.bounds = CGRect(origin: .zero, size: CGSize(width: 12.0, height: 22.0))
+            self.backIconLayer.position = CGPoint(x: floor(size.width * 0.5) - 1.0, y: floor(height * 0.5))
             resultSize = size
         } else if let animationNode = self.animationNode {
             let animationSize = CGSize(width: 30.0, height: 30.0)
@@ -435,7 +456,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             resultSize = size
         } else if let image = self.iconNode.image {
             let iconSize = AorusMaxInterface.isEnabled && (key == .qrCode || key == .edit) ? CGSize(width: 24.0, height: 24.0) : image.size
-            let buttonWidth = AorusMaxInterface.isEnabled ? max(28.0, iconSize.width) : iconSize.width + inset * 2.0
+            let buttonWidth = AorusMaxInterface.isEnabled ? 36.0 : iconSize.width + inset * 2.0
             let iconFrame = CGRect(
                 origin: CGPoint(x: floor((buttonWidth - iconSize.width) * 0.5), y: floor((height - iconSize.height) / 2.0)),
                 size: iconSize
@@ -467,7 +488,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
 
         let diameter: CGFloat = AorusMaxInterface.isEnabled ? 36.0 : 32.0
         let backgroundWidth: CGFloat
-        if self.iconNode.image != nil || self.animationNode != nil {
+        if isMaxBack || self.iconNode.image != nil || self.animationNode != nil {
             backgroundWidth = diameter
         } else {
             backgroundWidth = max(diameter, resultSize.width + 12.0 * 2.0)
@@ -555,7 +576,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                 button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: transition)
             }
         }
-        let sideInset: CGFloat = AorusMaxInterface.isEnabled ? 16.0 : 24.0
+        let sideInset: CGFloat = AorusMaxInterface.isEnabled ? 12.0 : 24.0
         let leadingInset: CGFloat = sideInset
         let expandedSideInset: CGFloat = 16.0
 
