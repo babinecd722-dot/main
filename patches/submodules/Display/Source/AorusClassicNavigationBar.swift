@@ -180,7 +180,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
                     }
                     self.updateRightButton(animated: animated)
                     self.invalidateCalculatedLayout()
-                    self.requestLayout()
+                    if self.validLayout != nil && !self.bounds.size.width.isZero {
+                        self.requestedLayout = true
+                        self.layout()
+                    } else {
+                        self.requestLayout()
+                    }
                 }
                 self.itemRightButtonsListenerKey = item.addSetMultipleRightBarButtonItemsListener { [weak self] _, animated in
                     guard let self else {
@@ -188,7 +193,12 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
                     }
                     self.updateRightButton(animated: animated)
                     self.invalidateCalculatedLayout()
-                    self.requestLayout()
+                    if self.validLayout != nil && !self.bounds.size.width.isZero {
+                        self.requestedLayout = true
+                        self.layout()
+                    } else {
+                        self.requestLayout()
+                    }
                 }
                 self.itemBadgeListenerKey = item.addSetBadgeListener { [weak self] text in
                     self?.updateBadgeText(text: text)
@@ -225,6 +235,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
     }
 
     public private(set) var titleView: UIView?
+    private weak var aorusLaidOutTitleView: UIView?
 
     private func setTitleView(_ titleView: UIView?) {
         if self.titleView === titleView {
@@ -235,6 +246,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             previous.removeFromSuperview()
         }
         self.titleView = titleView
+        self.aorusLaidOutTitleView = nil
         if let titleView {
             self.buttonsContainerNode.view.insertSubview(titleView, at: 0)
             if let titleView = titleView as? NavigationBarTitleView {
@@ -443,7 +455,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         }
 
         if !items.isEmpty {
-            if self.rightButtonNode.isEmpty {
+            if self.rightButtonNode.isEmpty || self.rightButtonNode.itemCount == items.count {
                 self.rightButtonNode.updateItems(items, animated: false)
             } else {
                 self.rightButtonNode.updateItems([], animated: animated)
@@ -831,9 +843,11 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         }
 
         if let titleView = self.titleView {
+            let isFirstTitleLayout = self.aorusLaidOutTitleView !== titleView || titleView.frame.isEmpty
+            self.aorusLaidOutTitleView = titleView
             if let titleView = titleView as? NavigationBarTitleView {
                 var titleViewTransition = transition
-                if titleView.frame.isEmpty {
+                if isFirstTitleLayout || AorusMaxInterface.isEnabled {
                     titleViewTransition = .immediate
                 }
                 let titleSize = titleView.updateLayout(availableSize: CGSize(width: size.width - leftTitleInset - rightTitleInset, height: nominalHeight), transition: titleViewTransition)
@@ -858,7 +872,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
                     titleFrame.origin.x = leftTitleInset + floorToScreenPixels((size.width - leftTitleInset - rightTitleInset - titleFrame.width) * 0.5)
                 }
                 var titleViewTransition = transition
-                if titleView.frame.isEmpty {
+                if isFirstTitleLayout || AorusMaxInterface.isEnabled {
                     titleViewTransition = .immediate
                     titleView.frame = titleFrame
                 }
@@ -1675,6 +1689,10 @@ final class AorusClassicNavigationButtonNode: ContextControllerSourceNode {
         } else {
             return super.hitTest(point, with: event)
         }
+    }
+
+    var itemCount: Int {
+        return self.items.count
     }
 
     var isEmpty: Bool {

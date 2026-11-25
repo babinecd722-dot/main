@@ -395,18 +395,27 @@ def patch_chat_list_header(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # The title: MAX's large one (~30-32pt semibold), set where the chat list's title is drawn.
+    # The title: MAX's large one (~30-32pt semibold) on Chats, while Contacts keeps standard 17pt semibold.
     path = tg / "submodules/TelegramUI/Components/ChatListTitleView/Sources/ChatListTitleView.swift"
     text = _read(path)
     text = _edit(
         text,
         "private let titleFont = Font.with(size: 17.0, design: .regular, weight: .semibold, traits: [.monospacedNumbers])\n",
-        f"// {MARK}: MAX's title over its chat list is large (SPEC §4).\n"
-        "private let titleFont = Font.with(size: AorusMaxInterface.isEnabled ? 30.0 : 17.0, design: .regular, weight: .semibold, traits: [.monospacedNumbers])\n",
-        "MAX chat list title size",
+        f"// {MARK}: MAX's title over its chat list is large (SPEC §4); Contacts keeps standard 17pt.\n"
+        "private let titleFont = Font.with(size: 17.0, design: .regular, weight: .semibold, traits: [.monospacedNumbers])\n"
+        "private let aorusMaxLargeTitleFont = Font.with(size: 30.0, design: .regular, weight: .semibold, traits: [.monospacedNumbers])\n",
+        "MAX chat list title font constant",
+    )
+    text = _edit(
+        text,
+        "self.titleNode.attributedText = NSAttributedString(string: self.title.text, font: titleFont, textColor: self.theme.rootController.navigationBar.primaryTextColor)",
+        "let aorusTitleFont = (AorusMaxInterface.isEnabled && self.title.text != self.strings.Contacts_Title) ? aorusMaxLargeTitleFont : titleFont\n"
+        "            self.titleNode.attributedText = NSAttributedString(string: self.title.text, font: aorusTitleFont, textColor: self.theme.rootController.navigationBar.primaryTextColor)",
+        "MAX chat list vs Contacts title font",
+        count=2,
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: chat list header with MAX's 30pt title and round buttons")
+    print("MaxInterface: chat list header with MAX's 30pt title (Contacts kept at 17pt) and rounded buttons")
 
 
 # MARK: - Profile
@@ -1756,10 +1765,14 @@ def patch_call_buttons(tg: Path) -> None:
         "    private var currentContentViewIsSelected: Bool?\n"
         "    private var aorusMaxMicClipView: UIView?\n"
         "    private var aorusMaxMicFillView: UIImageView?\n"
+        "    private var aorusMaxMicEqualizerState: (visible: Bool, level: Float)?\n"
         "\n"
         "    func aorusMaxUpdateMicEqualizer(visible: Bool, level: Float) {\n"
         "        guard AorusMaxInterface.isEnabled else { return }\n"
-        "        if !visible {\n"
+        "        self.aorusMaxMicEqualizerState = (visible, level)\n"
+        "        let effectiveVisible = visible && self.currentContentViewIsSelected != true\n"
+        "        let boundsSize = self.contentView.bounds.size\n"
+        "        if !effectiveVisible || boundsSize.width < 1.0 || boundsSize.height < 1.0 {\n"
         "            self.aorusMaxMicClipView?.isHidden = true\n"
         "            return\n"
         "        }\n"
@@ -1782,7 +1795,6 @@ def patch_call_buttons(tg: Path) -> None:
         "        }\n"
         "        clipView.isHidden = false\n"
         "        let glyphSide: CGFloat = 32.0\n"
-        "        let boundsSize = self.contentView.bounds.size\n"
         "        let glyphOrigin = CGPoint(x: floor((boundsSize.width - glyphSide) * 0.5), y: floor((boundsSize.height - glyphSide) * 0.5))\n"
         "        let normalized = min(1.0, max(0.0, CGFloat(level) / 1.4))\n"
         "        let fillFraction: CGFloat = 0.42 + 0.58 * normalized\n"
@@ -1791,6 +1803,15 @@ def patch_call_buttons(tg: Path) -> None:
         "        fillView.frame = CGRect(x: 0.0, y: -(glyphSide - clipHeight), width: glyphSide, height: glyphSide)\n"
         "    }\n",
         "MAX call microphone green audio level equalizer",
+    )
+    text = _edit(
+        text,
+        "        transition.setFrame(view: self.contentView, frame: CGRect(origin: CGPoint(), size: size))\n",
+        "        transition.setFrame(view: self.contentView, frame: CGRect(origin: CGPoint(), size: size))\n"
+        "        if let eq = self.aorusMaxMicEqualizerState {\n"
+        "            self.aorusMaxUpdateMicEqualizer(visible: eq.visible && !isSelected && isEnabled, level: eq.level)\n"
+        "        }\n",
+        "MAX call mic equalizer layout sync",
     )
     path.write_text(text, encoding="utf-8")
 
@@ -2299,6 +2320,28 @@ def patch_profile_header_metrics(tg: Path) -> None:
     )
     text = _edit(
         text,
+        "            if peer.effectiveProfileColor != nil {\n"
+        "                hasBackground = true\n"
+        "            }\n",
+        "            if !AorusMaxInterface.isEnabled, peer.effectiveProfileColor != nil {\n"
+        "                hasBackground = true\n"
+        "            }\n",
+        "MAX profile flat header height without colored cover",
+    )
+    text = _edit(
+        text,
+        "        let regularNavigationContentsAccentColor: UIColor = (aorusOverlayPalette || peer?.effectiveProfileColor != nil) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor\n",
+        "        let regularNavigationContentsAccentColor: UIColor = (aorusOverlayPalette || (!AorusMaxInterface.isEnabled && peer?.effectiveProfileColor != nil)) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor\n",
+        "MAX profile nav accent color on flat canvas",
+    )
+    text = _edit(
+        text,
+        "        let regularNavigationContentsPrimaryColor: UIColor = (aorusOverlayPalette || peer?.effectiveProfileColor != nil) ? aorusOverlayInk : presentationData.theme.list.itemPrimaryTextColor\n",
+        "        let regularNavigationContentsPrimaryColor: UIColor = (aorusOverlayPalette || (!AorusMaxInterface.isEnabled && peer?.effectiveProfileColor != nil)) ? aorusOverlayInk : presentationData.theme.list.itemPrimaryTextColor\n",
+        "MAX profile title/back ink on flat canvas",
+    )
+    text = _edit(
+        text,
         "        let regularContentButtonForegroundColor: UIColor = (aorusOverlayPalette || peer?.effectiveProfileColor != nil) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor\n",
         "        let regularContentButtonForegroundColor: UIColor = AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : ((aorusOverlayPalette || peer?.effectiveProfileColor != nil) ? aorusOverlayInk : presentationData.theme.list.itemAccentColor)\n",
         "MAX profile action button ink",
@@ -2318,6 +2361,20 @@ def patch_profile_header_metrics(tg: Path) -> None:
         "            let backgroundColors = self.context.peerNameColors.getProfile(profileColor, dark: presentationData.theme.overallDarkAppearance)\n"
         "            regularNavigationContentsSecondaryColor =",
         "MAX profile without Telegram colored cover banner",
+    )
+    text = _edit(
+        text,
+        "            if let status = peer?.emojiStatus, case let .starGift(_, _, _, _, _, innerColor, outerColor, patternColorValue, _) = status.content {\n",
+        "            if !AorusMaxInterface.isEnabled, let status = peer?.emojiStatus, case let .starGift(_, _, _, _, _, innerColor, outerColor, patternColorValue, _) = status.content {\n",
+        "MAX profile rating colors without star gift banner",
+    )
+    text = _edit(
+        text,
+        "            } else if let profileColor = peer?.effectiveProfileColor {\n"
+        "                ratingBackgroundColor =",
+        "            } else if !AorusMaxInterface.isEnabled, let profileColor = peer?.effectiveProfileColor {\n"
+        "                ratingBackgroundColor =",
+        "MAX profile rating colors without colored banner",
     )
     text = _edit(
         text,
@@ -2519,6 +2576,20 @@ def patch_chat_list_geometry(tg: Path) -> None:
         "        }\n"
         "        var folderUserIds = Set<EnginePeer.Id>()\n",
         "MAX built-in Unread and Channels folder tabs",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # Synthetic MAX folder tabs (id >= 90000: Unread / Channels) are local and do not exist in
+    # Telegram's server filter list; prevent ChatListNode.resetFilter() from wiping them back to nil.
+    path = tg / "submodules/ChatListUI/Sources/Node/ChatListNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    private func resetFilter() {\n"
+        "        if let chatListFilter = self.chatListFilter, chatListFilter.id != Int32.max {\n",
+        "    private func resetFilter() {\n"
+        "        if let chatListFilter = self.chatListFilter, chatListFilter.id != Int32.max, !(AorusMaxInterface.isEnabled && chatListFilter.id >= 90000) {\n",
+        "MAX built-in folder tabs retain local filter predicate",
     )
     path.write_text(text, encoding="utf-8")
 
@@ -3683,6 +3754,327 @@ def patch_empty_states(tg: Path) -> None:
     print("MaxInterface: empty dialog greeting and blocked list empty state use authentic MAX assets")
 
 
+def patch_menus_and_sheets(tg: Path) -> None:
+    """Style all popup menus, context menus, modal bottom sheets (Gifts, Collectible Usernames,
+    Share, Premium, Stars), action sheets, and alerts in MAX's sleek dark rounded surface style."""
+    # 1. Context menus (long-press / tap / username / gift / 3-dots popups): opaque MAX dark
+    #    #23252A (light #FFFFFF), generous 20pt corners, and 12pt rounded row highlight.
+    path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            if AorusOldInterface.isEnabled {\n"
+        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
+        "                switch presentation {\n"
+        "                case .modal:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
+        "                case .inline:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: true)\n"
+        "                case .additional:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor.withMultipliedAlpha(0.5), enableBlur: true)\n"
+        "                }\n"
+        "            }\n"
+        "            self.contentContainer.update(size: size, cornerRadius: AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)\n",
+        f"            // {MARK}: opaque MAX dark rounded popup menu without muddy system blur.\n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
+        "                self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
+        "            } else if AorusOldInterface.isEnabled {\n"
+        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
+        "                switch presentation {\n"
+        "                case .modal:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
+        "                case .inline:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: true)\n"
+        "                case .additional:\n"
+        "                    self.contentContainer.updateClassicTheme(color: menuColor.withMultipliedAlpha(0.5), enableBlur: true)\n"
+        "                }\n"
+        "            }\n"
+        "            let aorusMenuCornerRadius: CGFloat = AorusMaxInterface.isEnabled ? min(20.0, size.height * 0.5) : (AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5))\n"
+        "            self.contentContainer.update(size: size, cornerRadius: aorusMenuCornerRadius, isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)\n",
+        "MAX opaque rounded context menu container",
+    )
+    text = _edit(
+        text,
+        "                let aorusHighlightInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 10.0 // AorusGram: old interface\n"
+        "                let highlightFrame = CGRect(origin: CGPoint(x: aorusHighlightInset, y: highlightedItemFrame.minY), size: CGSize(width: combinedSize.width - aorusHighlightInset * 2.0, height: highlightedItemFrame.height))\n"
+        "                highlightTransition.setFrame(view: self.highlightedItemBackgroundView, frame: highlightFrame)\n"
+        "                highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: AorusOldInterface.isEnabled ? 0.0 : min(20.0, highlightFrame.height * 0.5))\n",
+        "                let aorusHighlightInset: CGFloat = AorusMaxInterface.isEnabled ? 6.0 : (AorusOldInterface.isEnabled ? 0.0 : 10.0) // AorusGram: old interface\n"
+        "                let highlightFrame = CGRect(origin: CGPoint(x: aorusHighlightInset, y: highlightedItemFrame.minY), size: CGSize(width: combinedSize.width - aorusHighlightInset * 2.0, height: highlightedItemFrame.height))\n"
+        "                highlightTransition.setFrame(view: self.highlightedItemBackgroundView, frame: highlightFrame)\n"
+        "                highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: AorusMaxInterface.isEnabled ? 12.0 : (AorusOldInterface.isEnabled ? 0.0 : min(20.0, highlightFrame.height * 0.5)))\n",
+        "MAX rounded context menu row highlight",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 2. Modal bottom sheets (GiftViewScreen, CollectibleItemInfoScreen / username info, Stars,
+    #    Premium, Reactions, QR): 24pt rounded corners and flat opaque #1C1F22 / #FFFFFF surface.
+    path = tg / "submodules/Components/SheetComponent/Sources/SheetComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            case .legacy:\n"
+        "                topCornerRadius = 12.0\n"
+        "                bottomCornerRadius = 12.0\n",
+        "            case .legacy:\n"
+        "                topCornerRadius = AorusMaxInterface.isEnabled ? 24.0 : 12.0\n"
+        "                bottomCornerRadius = AorusMaxInterface.isEnabled ? 24.0 : 12.0\n",
+        "MAX 24pt rounded modal sheet corners",
+    )
+    text = _edit(
+        text,
+        "            case let .blur(style):\n"
+        "                blurEffectStyle = style == .dark ? .dark : .light\n"
+        "                self.backgroundView.isHidden = true\n"
+        "                if self.effectView == nil {\n"
+        "                    let effectView = SheetBackgroundBlurView()\n"
+        "                    self.backgroundView.superview?.insertSubview(effectView, aboveSubview: self.backgroundView)\n"
+        "                    self.effectView = effectView\n"
+        "                }\n",
+        "            case let .blur(style):\n"
+        "                if AorusMaxInterface.isEnabled {\n"
+        "                    backgroundColor = style == .dark ? UIColor(rgb: 0x1c1f22) : UIColor(rgb: 0xffffff)\n"
+        "                    self.backgroundView.isHidden = false\n"
+        "                    self.effectView?.removeFromSuperview()\n"
+        "                    self.effectView = nil\n"
+        "                } else {\n"
+        "                    blurEffectStyle = style == .dark ? .dark : .light\n"
+        "                    self.backgroundView.isHidden = true\n"
+        "                    if self.effectView == nil {\n"
+        "                        let effectView = SheetBackgroundBlurView()\n"
+        "                        self.backgroundView.superview?.insertSubview(effectView, aboveSubview: self.backgroundView)\n"
+        "                        self.effectView = effectView\n"
+        "                    }\n"
+        "                }\n",
+        "MAX flat opaque modal sheet surface instead of blur",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 3. Resizable bottom sheets (Gift auctions, Media/Story sheets, Bot/Business sheets): 24pt corners.
+    path = tg / "submodules/Components/ResizableSheetComponent/Sources/ResizableSheetComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "AorusOldInterface.isEnabled ? 12.0 : 40.0",
+        "AorusMaxInterface.isEnabled ? 24.0 : (AorusOldInterface.isEnabled ? 12.0 : 40.0)",
+        "MAX 24pt rounded resizable sheet corners",
+        count=6,
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 4. Action sheets (ActionSheetController): 20pt MAX rounded cards, flat opaque surface (no blur).
+    path = tg / "submodules/Display/Source/ActionSheetItemGroupNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.centerDimView.image = generateStretchableFilledCircleImage(radius: 16.0, color: nil, backgroundColor: self.theme.dimColor)\n",
+        "        let aorusSheetRadius: CGFloat = AorusMaxInterface.isEnabled ? 20.0 : 16.0\n"
+        "        self.centerDimView.image = generateStretchableFilledCircleImage(radius: aorusSheetRadius, color: nil, backgroundColor: self.theme.dimColor)\n",
+        "MAX action sheet centerDim radius",
+    )
+    text = _edit(
+        text,
+        "        self.clippingNode.cornerRadius = 16.0\n",
+        "        self.clippingNode.cornerRadius = aorusSheetRadius\n",
+        "MAX action sheet clippingNode radius",
+    )
+    text = _edit(
+        text,
+        "        if style.replacesGlass {\n"
+        "            self.backgroundEffectView.effect = nil\n"
+        "        } else if #available(iOS 26.0, *), self.aorusTelegramEffect is UIGlassEffect {\n"
+        "            let effect = self.aorusSurface.glassEffect(defaultClear: false, defaultTint: nil)\n"
+        "            effect?.isInteractive = false\n"
+        "            self.backgroundEffectView.effect = effect\n"
+        "            takesTint = true\n"
+        "        } else {\n"
+        "            self.backgroundEffectView.effect = self.aorusTelegramEffect\n"
+        "        }\n"
+        "        self.aorusSurface.materialTakes = takesTint\n"
+        "        self.backgroundEffectView.layer.cornerRadius = style.clipRadius(self.aorusEffectCornerRadius)\n"
+        "        self.clippingNode.cornerRadius = style.clipRadius(16.0)\n"
+        "        // The dim laid around the sheet leaves a hole the shape of the sheet.\n"
+        "        self.centerDimView.image = style.surroundImage(radius: 16.0, color: self.theme.dimColor) ?? generateStretchableFilledCircleImage(radius: 16.0, color: nil, backgroundColor: self.theme.dimColor)\n",
+        "        let aorusRadius: CGFloat = AorusMaxInterface.isEnabled ? 20.0 : 16.0\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.backgroundEffectView.effect = nil\n"
+        "            self.clippingNode.backgroundColor = self.theme.opaqueItemBackgroundColor\n"
+        "        } else if style.replacesGlass {\n"
+        "            self.backgroundEffectView.effect = nil\n"
+        "        } else if #available(iOS 26.0, *), self.aorusTelegramEffect is UIGlassEffect {\n"
+        "            let effect = self.aorusSurface.glassEffect(defaultClear: false, defaultTint: nil)\n"
+        "            effect?.isInteractive = false\n"
+        "            self.backgroundEffectView.effect = effect\n"
+        "            takesTint = true\n"
+        "        } else {\n"
+        "            self.backgroundEffectView.effect = self.aorusTelegramEffect\n"
+        "        }\n"
+        "        self.aorusSurface.materialTakes = takesTint\n"
+        "        self.backgroundEffectView.layer.cornerRadius = style.clipRadius(self.aorusEffectCornerRadius)\n"
+        "        self.clippingNode.cornerRadius = style.clipRadius(aorusRadius)\n"
+        "        // The dim laid around the sheet leaves a hole the shape of the sheet.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.centerDimView.image = generateStretchableFilledCircleImage(radius: 20.0, color: nil, backgroundColor: self.theme.dimColor)\n"
+        "        } else {\n"
+        "            self.centerDimView.image = style.surroundImage(radius: 16.0, color: self.theme.dimColor) ?? generateStretchableFilledCircleImage(radius: 16.0, color: nil, backgroundColor: self.theme.dimColor)\n"
+        "        }\n",
+        "MAX opaque rounded action sheet surface",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 5. Inline tap/tooltip popups (ContextMenuContainerNode): opaque MAX card, 14pt corners.
+    path = tg / "submodules/Display/Source/ContextMenuContainerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if style.replacesGlass {\n"
+        "            effectView.effect = nil\n"
+        "        } else if #available(iOS 26.0, *), self.aorusTelegramEffect is UIGlassEffect {\n",
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            effectView.effect = nil\n"
+        "            self.containerNode.backgroundColor = AorusMaxInterface.palette(dark: self.aorusSurface.isDark).card\n"
+        "        } else if style.replacesGlass {\n"
+        "            effectView.effect = nil\n"
+        "        } else if #available(iOS 26.0, *), self.aorusTelegramEffect is UIGlassEffect {\n",
+        "MAX opaque tooltip menu surface",
+    )
+    text = _edit(
+        text,
+        "            let cornerRadius: CGFloat = 10.0\n",
+        "            let cornerRadius: CGFloat = AorusMaxInterface.isEnabled ? 14.0 : 10.0\n",
+        "MAX tooltip menu corner radius",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 6. Modal alerts (AlertControllerNode): 20pt MAX rounded cards, flat opaque surface.
+    path = tg / "submodules/Display/Source/AlertControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.containerNode.layer.cornerRadius = 14.0\n",
+        "        self.containerNode.layer.cornerRadius = AorusMaxInterface.isEnabled ? 20.0 : 14.0\n",
+        "MAX alert corner radius",
+    )
+    text = _edit(
+        text,
+        "        self.effectView = UIVisualEffectView(effect: UIBlurEffect(style: theme.backgroundType == .light ? .light : .dark))\n",
+        "        self.effectView = UIVisualEffectView(effect: AorusMaxInterface.isEnabled ? nil : UIBlurEffect(style: theme.backgroundType == .light ? .light : .dark))\n",
+        "MAX flat opaque alert surface",
+    )
+    text = _edit(
+        text,
+        "        self.effectView.effect = UIBlurEffect(style: theme.backgroundType == .light ? .light : .dark)\n",
+        "        self.effectView.effect = AorusMaxInterface.isEnabled ? nil : UIBlurEffect(style: theme.backgroundType == .light ? .light : .dark)\n",
+        "MAX flat opaque alert theme update",
+    )
+    text = _edit(
+        text,
+        "            self.centerDimView.image = generateStretchableFilledCircleImage(radius: 16.0, color: nil, backgroundColor: UIColor(white: 0.0, alpha: 0.5))\n",
+        "            self.centerDimView.image = generateStretchableFilledCircleImage(radius: AorusMaxInterface.isEnabled ? 20.0 : 16.0, color: nil, backgroundColor: UIColor(white: 0.0, alpha: 0.5))\n",
+        "MAX alert dim cutout radius",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 7. Share sheet (tapping @username / sharing links & posts): 20pt MAX rounded corners.
+    path = tg / "submodules/ShareController/Sources/ShareControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        let roundedBackground = generateStretchableFilledCircleImage(radius: 16.0, color: aorusSheetFill)\n"
+        "        let highlightedRoundedBackground = generateStretchableFilledCircleImage(radius: 16.0, color: aorusSheetHighlight)\n",
+        "        let aorusShareRadius: CGFloat = AorusMaxInterface.isEnabled ? 20.0 : 16.0\n"
+        "        let roundedBackground = generateStretchableFilledCircleImage(radius: aorusShareRadius, color: aorusSheetFill)\n"
+        "        let highlightedRoundedBackground = generateStretchableFilledCircleImage(radius: aorusShareRadius, color: aorusSheetHighlight)\n",
+        "MAX 20pt rounded ShareController sheet",
+        count=2,
+    )
+    text = _edit(
+        text,
+        "        let halfRoundedBackground = generateImage(CGSize(width: 32.0, height: 32.0), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            context.setFillColor(aorusSheetFill.cgColor)\n"
+        "            context.fillEllipse(in: CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height)))\n"
+        "            context.fill(CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height / 2.0)))\n"
+        "        })?.stretchableImage(withLeftCapWidth: 16, topCapHeight: 1)\n"
+        "        \n"
+        "        let highlightedHalfRoundedBackground = generateImage(CGSize(width: 32.0, height: 32.0), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            context.setFillColor(aorusSheetHighlight.cgColor)\n"
+        "            context.fillEllipse(in: CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height)))\n"
+        "            context.fill(CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height / 2.0)))\n"
+        "        })?.stretchableImage(withLeftCapWidth: 16, topCapHeight: 1)\n",
+        "        let aorusShareDiameter = aorusShareRadius * 2.0\n"
+        "        let aorusShareCap = Int(aorusShareRadius)\n"
+        "        let halfRoundedBackground = generateImage(CGSize(width: aorusShareDiameter, height: aorusShareDiameter), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            context.setFillColor(aorusSheetFill.cgColor)\n"
+        "            context.fillEllipse(in: CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height)))\n"
+        "            context.fill(CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height / 2.0)))\n"
+        "        })?.stretchableImage(withLeftCapWidth: aorusShareCap, topCapHeight: 1)\n"
+        "        \n"
+        "        let highlightedHalfRoundedBackground = generateImage(CGSize(width: aorusShareDiameter, height: aorusShareDiameter), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "            context.setFillColor(aorusSheetHighlight.cgColor)\n"
+        "            context.fillEllipse(in: CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height)))\n"
+        "            context.fill(CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height / 2.0)))\n"
+        "        })?.stretchableImage(withLeftCapWidth: aorusShareCap, topCapHeight: 1)\n",
+        "MAX 20pt rounded ShareController footer cap",
+        count=2,
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 8. Toast overlays (UndoOverlayControllerNode): flat opaque MAX dark card with 16pt corners.
+    path = tg / "submodules/UndoUI/Sources/UndoOverlayControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if aorusGlassToast {\n"
+        "            self.panelNode.backgroundColor = .clear\n"
+        "        } else if presentationData.theme.overallDarkAppearance && !(self.appearance?.isBlurred == true) {\n"
+        "            self.panelNode.backgroundColor = presentationData.theme.rootController.tabBar.backgroundColor\n"
+        "        } else {\n"
+        "            self.panelNode.backgroundColor = .clear\n"
+        "        }\n"
+        "        self.panelNode.clipsToBounds = true\n"
+        "        self.panelNode.cornerRadius = AorusOldInterface.isEnabled ? 14.0 : 25.0 // AorusGram: old interface\n",
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.panelNode.backgroundColor = UIColor(rgb: 0x23252a)\n"
+        "        } else if aorusGlassToast {\n"
+        "            self.panelNode.backgroundColor = .clear\n"
+        "        } else if presentationData.theme.overallDarkAppearance && !(self.appearance?.isBlurred == true) {\n"
+        "            self.panelNode.backgroundColor = presentationData.theme.rootController.tabBar.backgroundColor\n"
+        "        } else {\n"
+        "            self.panelNode.backgroundColor = .clear\n"
+        "        }\n"
+        "        self.panelNode.clipsToBounds = true\n"
+        "        self.panelNode.cornerRadius = AorusOldInterface.isEnabled ? 14.0 : 25.0 // AorusGram: old interface\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.panelNode.cornerRadius = 16.0\n"
+        "        }\n",
+        "MAX opaque rounded toast panel",
+    )
+    text = _edit(
+        text,
+        "            self.effectView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))\n",
+        "            self.effectView = UIVisualEffectView(effect: AorusMaxInterface.isEnabled ? nil : UIBlurEffect(style: .dark))\n",
+        "MAX toast without live UIBlurEffect",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 9. Profile action button context preview background: opaque in MAX (no live blur).
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            let background = NavigationBackgroundNode(color: self.contextMenuBackgroundColor, enableBlur: true, enableSaturation: false)\n",
+        "            let background = NavigationBackgroundNode(color: self.contextMenuBackgroundColor, enableBlur: !AorusMaxInterface.isEnabled, enableSaturation: false)\n",
+        "MAX profile action button context preview without blur",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: all popup menus, modal sheets (Gifts/Username/Share), action sheets, toasts, and alerts styled in MAX dark rounded look")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -3718,6 +4110,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_sounds(tg)
     patch_qr_screens(tg)
     patch_empty_states(tg)
+    patch_menus_and_sheets(tg)
     patch_performance_isolation(tg)
 
 

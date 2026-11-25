@@ -134,7 +134,10 @@ def _auxiliary_panels(tg: Path) -> None:
             signature = thirteen_two
             body = body.replace(
                 "        guard let size = self.validLayout else {\n            return\n        }\n",
-                "        let size = containerSize ?? CGSize(width: availableWidth, height: 44.0)\n",
+                "        let size = CGSize(width: availableWidth, height: containerSize?.height ?? 44.0)\n",
+            ).replace(
+                "        let tabSelectorFrame = CGRect(origin: CGPoint(x: floor((size.width - tabSelectorSize.width) / 2.0), y: floor((size.height - tabSelectorSize.height) / 2.0)), size: tabSelectorSize)\n",
+                "        let frameSize = containerSize ?? tabSelectorSize\n        let tabSelectorFrame = CGRect(origin: CGPoint(x: floor((frameSize.width - tabSelectorSize.width) / 2.0), y: floor((frameSize.height - tabSelectorSize.height) / 2.0)), size: tabSelectorSize)\n",
             )
             finish = "            return tabSelectorSize\n"
         if "import TabSelectorComponent\n" not in text:

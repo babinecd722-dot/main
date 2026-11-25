@@ -297,7 +297,7 @@ public enum AorusMaxInterface {
         pair("emojiPanel.sectionText", "7e8085", "818c99")
 
         // Sheets, menus and banners.
-        pair("sheet.background", "23252a", "ffffff")
+        pair("sheet.background", "1c1f22", "ffffff")
         pair("sheet.pressed", "2c2e33", "e8eaed")
         pair("sheet.separator", "2e3036", "e7e8ec")
         both("sheet.action", "0a7df7")
@@ -309,10 +309,10 @@ public enum AorusMaxInterface {
         pair("sheet.input", "2c2e33", "f2f3f5")
         pair("sheet.inputText", "ffffff", "000000")
         both("sheet.dim", "00000066")
-        pair("menu.background", "2b2d31", "ffffff")
-        pair("menu.item", "2b2d31", "ffffff")
-        pair("menu.pressed", "35373c", "e8eaed")
-        pair("menu.separator", "35373c", "e7e8ec")
+        pair("menu.background", "23252a", "ffffff")
+        pair("menu.item", "23252a", "ffffff")
+        pair("menu.pressed", "2c2e33", "e8eaed")
+        pair("menu.separator", "2e3036", "e7e8ec")
         pair("menu.text", "ffffff", "000000")
         pair("menu.secondaryText", "99a2ad", "818c99")
         pair("menu.destructive", "ff3347", "e64646")

@@ -267,8 +267,8 @@ func aorusMaxReorderProfileSections(
 ) {
     let advanced = items[.advanced] ?? []
     let shortcuts = items[.shortcuts] ?? []
-    let byAdvancedId: [AnyHashable: PeerInfoScreenItem] = Dictionary(uniqueKeysWithValues: advanced.map { ($0.id, $0) })
-    let byShortcutId: [AnyHashable: PeerInfoScreenItem] = Dictionary(uniqueKeysWithValues: shortcuts.map { ($0.id, $0) })
+    let byAdvancedId: [AnyHashable: PeerInfoScreenItem] = Dictionary(advanced.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let byShortcutId: [AnyHashable: PeerInfoScreenItem] = Dictionary(shortcuts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
     var primaryCard: [PeerInfoScreenItem] = []
     if let notifications = byAdvancedId[AnyHashable(200)] { primaryCard.append(notifications) }
