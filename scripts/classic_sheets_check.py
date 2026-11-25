@@ -107,7 +107,7 @@ def native_menu_source(tg):
     if 'BlurredBackgroundView(color: nil)' not in source:
         raise RuntimeError('Classic menu must use the exported Display background class')
     background = block((tg / 'submodules/Display/Source/NavigationBackgroundView.swift').read_text(), 'open class BlurredBackgroundView:')
-    background = background.replace('ContainedViewLayoutTransition', 'AorusClassicMenuFixtureTransition').replace('ControlledTransitionAnimator', 'AorusClassicMenuFixtureAnimator')
+    background = background.replace('ContainedViewLayoutTransition', 'AorusClassicMenuFixtureTransition').replace('ControlledTransitionAnimator', 'AorusClassicMenuFixtureAnimator').replace('AorusMaxInterface.isEnabled', 'false')
     source = source.replace('private final class', 'final class').replace('LensTransitionContainerProtocol', 'AorusClassicMenuFixtureProtocol').replace('LensTransitionContainerEffectView', 'UIView').replace('ComponentTransition', 'AorusClassicMenuFixtureTransition')
     effect = block(text, 'public final class LensTransitionContainer:')
     check_initializer_order(effect, 'LensTransitionContainer')
