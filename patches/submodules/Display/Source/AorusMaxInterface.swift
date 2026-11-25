@@ -384,13 +384,13 @@ public enum AorusMaxInterface {
             return ("AorusMaxDialTone", "m4a")
         case "voip_incoming.mp3", "voip_ringing.mp3":
             return ("AorusMaxIncomingCall", "m4a")
-        case "voip_connecting.mp3":
+        case "voip_connecting.mp3", "voip_group_connecting.mp3":
             return ("AorusMaxReconnect", "m4a")
         case "voip_busy.mp3":
             return ("AorusMaxBusy", "m4a")
-        case "voip_end.mp3", "voip_fail.mp3":
+        case "voip_end.mp3", "voip_fail.mp3", "voip_group_left.mp3":
             return ("AorusMaxCallEnd", "m4a")
-        case "note.m4a", "100.m4a":
+        case "note.m4a", "100.m4a", "voip_group_joined.mp3":
             return ("AorusMaxNote", "m4a")
         default:
             return nil

@@ -30,6 +30,8 @@
   "CONTACTS_ONLY": "могут контакты",
   "CONTACT_INVITE_BTN": "Пригласить",
   "DEVICES": "Устройства",
+  "EMPTY_DIALOG_PANEL_SUBTITLE": "Напишите сообщение или отправьте этот стикер",
+  "EMPTY_DIALOG_PANEL_TITLE": "Сообщений пока нет",
   "FEEDBACK_SUPPORT": "Помощь",
   "FOLDERS_SETTINGS_TEMPLATES_CHANNELS": "Каналы",
   "FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME": "Новые",

@@ -501,6 +501,21 @@ public enum AorusPluginIconValues {
         ("microphone_off_fill_32", ["Call/Mute"]),
         ("videocam_on_fill_32", ["Call/Video"]),
         ("phone_off_fill_32", ["Call/End"]),
+        // Call List tab & history indicators.
+        ("call_24", ["Call List/CallIcon"]),
+        ("outgoing_call_fill_16", ["Call List/OutgoingIcon"]),
+        ("outgoing_video_call_fill_16", ["Call List/OutgoingVideoIcon"]),
+        ("info_24", ["Call List/InfoButton"]),
+        ("plus_24", ["Call List/NewCallListIcon"]),
+        ("warning_24", ["Call List/AlertIcon", "Call List/AlertAccentIcon"]),
+        // Security, passcode, and appearance sub-screens.
+        ("privacy_policy_24", ["Settings/PasscodeIntroIcon"]),
+        ("user_defence_24", ["Settings/PasscodeFaceId", "Settings/PasscodeTouchId", "Settings/FaceVerification"]),
+        ("customization_24", ["Settings/EditTheme", "Settings/CreateThemeIcon", "Settings/WallpaperAdjustments"]),
+        ("refresh_24", ["Settings/Refresh", "Settings/Reset"]),
+        ("edit_24", ["Settings/SetUsername"]),
+        ("photo_24", ["Settings/SetAvatar"]),
+        ("devices_24", ["Settings/RecentSessionsPlaceholder"]),
     ]
 
     private static let maxGlyphLayer: [String: Any] = {

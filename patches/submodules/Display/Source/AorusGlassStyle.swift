@@ -648,6 +648,9 @@ public final class AorusGlassDecorationView: UIView {
     override public init(frame: CGRect) {
         super.init(frame: frame)
         self.isUserInteractionEnabled = false
+        if !AorusMaxInterface.isEnabled {
+            _ = self.ensureDecorative()
+        }
     }
 
     required public init?(coder: NSCoder) {
@@ -722,12 +725,13 @@ public final class AorusGlassDecorationView: UIView {
         self.lastTint = tint
 
         let bounds = CGRect(origin: CGPoint(), size: size)
-        // Fast path for flat single-color rounded rects (every MAX surface): avoid offscreen
-        // CAShapeLayer masks and gradient/blur passes completely.
+        // Fast path strictly for MAX flat single-color rounded rects: avoids offscreen
+        // CAShapeLayer masks and gradient/blur passes without touching Interface 2.0 or custom glass.
         let uniformCorners = outlines.corners.topLeft == outlines.corners.topRight
             && outlines.corners.topLeft == outlines.corners.bottomLeft
             && outlines.corners.topLeft == outlines.corners.bottomRight
-        if !style.classicBlur
+        if AorusMaxInterface.isEnabled
+            && !style.classicBlur
             && !style.isPixel
             && tint == nil
             && style.shine <= 0.0

@@ -30,6 +30,8 @@
   "CONTACTS_ONLY": "My Contacts",
   "CONTACT_INVITE_BTN": "Invite",
   "DEVICES": "Devices",
+  "EMPTY_DIALOG_PANEL_SUBTITLE": "Write a message or send this sticker",
+  "EMPTY_DIALOG_PANEL_TITLE": "No Messages Yet",
   "FEEDBACK_SUPPORT": "Help",
   "FOLDERS_SETTINGS_TEMPLATES_CHANNELS": "Channels",
   "FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME": "New",
