@@ -3759,51 +3759,33 @@ def patch_menus_and_sheets(tg: Path) -> None:
     Share, Premium, Stars), action sheets, and alerts in MAX's sleek dark rounded surface style."""
     # 1. Context menus (long-press / tap / username / gift / 3-dots popups): opaque MAX dark
     #    #23252A (light #FFFFFF), generous 20pt corners, and 12pt rounded row highlight.
+    #    Uses an early-return / post-override so aorus_old_interface.py's exact lines stay intact on replay.
     path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
     text = _read(path)
     text = _edit(
         text,
         "            if AorusOldInterface.isEnabled {\n"
-        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
-        "                switch presentation {\n"
-        "                case .modal:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
-        "                case .inline:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: true)\n"
-        "                case .additional:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor.withMultipliedAlpha(0.5), enableBlur: true)\n"
-        "                }\n"
-        "            }\n"
-        "            self.contentContainer.update(size: size, cornerRadius: AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)\n",
+        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n",
         f"            // {MARK}: opaque MAX dark rounded popup menu without muddy system blur.\n"
         "            if AorusMaxInterface.isEnabled {\n"
         "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
         "                self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
-        "            } else if AorusOldInterface.isEnabled {\n"
-        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n"
-        "                switch presentation {\n"
-        "                case .modal:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: false)\n"
-        "                case .inline:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor, enableBlur: true)\n"
-        "                case .additional:\n"
-        "                    self.contentContainer.updateClassicTheme(color: menuColor.withMultipliedAlpha(0.5), enableBlur: true)\n"
-        "                }\n"
+        "                self.contentContainer.update(size: size, cornerRadius: min(20.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)\n"
+        "                return\n"
         "            }\n"
-        "            let aorusMenuCornerRadius: CGFloat = AorusMaxInterface.isEnabled ? min(20.0, size.height * 0.5) : (AorusOldInterface.isEnabled ? min(14.0, size.height * 0.5) : min(30.0, size.height * 0.5))\n"
-        "            self.contentContainer.update(size: size, cornerRadius: aorusMenuCornerRadius, isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)\n",
+        "            if AorusOldInterface.isEnabled {\n"
+        "                let menuColor = presentationData.theme.contextMenu.backgroundColor\n",
         "MAX opaque rounded context menu container",
     )
     text = _edit(
         text,
-        "                let aorusHighlightInset: CGFloat = AorusOldInterface.isEnabled ? 0.0 : 10.0 // AorusGram: old interface\n"
-        "                let highlightFrame = CGRect(origin: CGPoint(x: aorusHighlightInset, y: highlightedItemFrame.minY), size: CGSize(width: combinedSize.width - aorusHighlightInset * 2.0, height: highlightedItemFrame.height))\n"
-        "                highlightTransition.setFrame(view: self.highlightedItemBackgroundView, frame: highlightFrame)\n"
         "                highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: AorusOldInterface.isEnabled ? 0.0 : min(20.0, highlightFrame.height * 0.5))\n",
-        "                let aorusHighlightInset: CGFloat = AorusMaxInterface.isEnabled ? 6.0 : (AorusOldInterface.isEnabled ? 0.0 : 10.0) // AorusGram: old interface\n"
-        "                let highlightFrame = CGRect(origin: CGPoint(x: aorusHighlightInset, y: highlightedItemFrame.minY), size: CGSize(width: combinedSize.width - aorusHighlightInset * 2.0, height: highlightedItemFrame.height))\n"
-        "                highlightTransition.setFrame(view: self.highlightedItemBackgroundView, frame: highlightFrame)\n"
-        "                highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: AorusMaxInterface.isEnabled ? 12.0 : (AorusOldInterface.isEnabled ? 0.0 : min(20.0, highlightFrame.height * 0.5)))\n",
+        "                highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: AorusOldInterface.isEnabled ? 0.0 : min(20.0, highlightFrame.height * 0.5))\n"
+        "                if AorusMaxInterface.isEnabled {\n"
+        "                    let maxHighlightFrame = CGRect(origin: CGPoint(x: 6.0, y: highlightedItemFrame.minY), size: CGSize(width: combinedSize.width - 12.0, height: highlightedItemFrame.height))\n"
+        "                    highlightTransition.setFrame(view: self.highlightedItemBackgroundView, frame: maxHighlightFrame)\n"
+        "                    highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: 12.0)\n"
+        "                }\n",
         "MAX rounded context menu row highlight",
     )
     path.write_text(text, encoding="utf-8")
