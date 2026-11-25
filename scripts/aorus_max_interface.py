@@ -3881,7 +3881,7 @@ def patch_menus_and_sheets(tg: Path) -> None:
         "        let aorusRadius: CGFloat = AorusMaxInterface.isEnabled ? 20.0 : 16.0\n"
         "        if AorusMaxInterface.isEnabled {\n"
         "            self.backgroundEffectView.effect = nil\n"
-        "            self.clippingNode.backgroundColor = self.theme.opaqueItemBackgroundColor\n"
+        "            self.clippingNode.backgroundColor = self.theme.itemBackgroundColor\n"
         "        } else if style.replacesGlass {\n"
         "            self.backgroundEffectView.effect = nil\n"
         "        } else if #available(iOS 26.0, *), self.aorusTelegramEffect is UIGlassEffect {\n"
