@@ -544,21 +544,20 @@ def patch_profile(tg: Path) -> None:
             item_path.write_text(item_text, encoding="utf-8")
 
     # Give profile action buttons (Call / Video / Mute / Search / More) MAX's 16pt corners while
-    # preserving the verbatim OldInterface expression checked by verify_aorus_branding.py.
+    # preserving the exact OldInterface expression (including trailing `))`) checked by
+    # verify_aorus_branding.py and patch_old_interface replay.
     btn_path = sources / "PeerInfoHeaderButtonNode.swift"
     btn_text = _read(btn_path)
     btn_text = _edit(
         btn_text,
         "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))\n",
-        "        let aorusBaseButtonRadius = min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5)\n"
-        "        let aorusButtonRadius = AorusMaxInterface.isEnabled ? min(16.0, backgroundFrame.height * 0.5) : aorusBaseButtonRadius\n"
-        "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : aorusButtonRadius)\n",
+        "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : (AorusMaxInterface.isEnabled ? min(backgroundFrame.height * 0.5, 16.0) : min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5)))\n",
         "MAX profile action button corner radius",
     )
     btn_text = _edit(
         btn_text,
         "        self.referenceNode.contextMenuSourcePath = UIBezierPath(roundedRect: backgroundFrame, cornerRadius: min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))\n",
-        "        self.referenceNode.contextMenuSourcePath = UIBezierPath(roundedRect: backgroundFrame, cornerRadius: aorusButtonRadius)\n",
+        "        self.referenceNode.contextMenuSourcePath = UIBezierPath(roundedRect: backgroundFrame, cornerRadius: AorusMaxInterface.isEnabled ? min(backgroundFrame.height * 0.5, 16.0) : min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))\n",
         "MAX profile action button context menu radius",
     )
     btn_path.write_text(btn_text, encoding="utf-8")
