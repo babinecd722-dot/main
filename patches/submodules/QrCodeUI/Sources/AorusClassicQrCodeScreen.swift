@@ -183,6 +183,7 @@ public final class AorusClassicQrCodeScreen: ViewController {
         private let qrButtonNode: HighlightTrackingButtonNode
         private let qrImageNode: TransformImageNode
         private let qrIconNode: AnimatedStickerNode
+        private var aorusMaxQrLogoNode: ASImageNode?
         private var qrCodeSize: Int?
         private let buttonNode: SolidRoundedButtonNode
         private var proxyLinkControl: UISegmentedControl?
@@ -252,7 +253,7 @@ public final class AorusClassicQrCodeScreen: ViewController {
             self.cancelButton = HighlightableButtonNode()
             self.cancelButton.setTitle(self.presentationData.strings.Common_Done, with: Font.bold(17.0), with: accentColor, for: .normal)
 
-            self.buttonNode = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(theme: self.presentationData.theme), height: 52.0, cornerRadius: 11.0)
+            self.buttonNode = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(theme: self.presentationData.theme), height: 52.0, cornerRadius: AorusMaxInterface.isEnabled ? 16.0 : 11.0)
 
             self.textNode = ImmediateTextNode()
             self.textNode.maximumNumberOfLines = 3
@@ -264,8 +265,18 @@ public final class AorusClassicQrCodeScreen: ViewController {
             self.qrImageNode.cornerRadius = 16.0
 
             self.qrIconNode = DefaultAnimatedStickerNodeImpl()
-            self.qrIconNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "PlaneLogo"), width: 240, height: 240, playbackMode: .loop, mode: .direct(cachePathPrefix: nil))
-            self.qrIconNode.visibility = true
+            if AorusMaxInterface.isEnabled {
+                let logoNode = ASImageNode()
+                logoNode.displayWithoutProcessing = true
+                logoNode.displaysAsynchronously = false
+                logoNode.image = AorusMaxInterface.qrBadgeImage(diameter: 56.0, fillColor: AorusMaxInterface.accent)
+                self.aorusMaxQrLogoNode = logoNode
+                self.qrIconNode.isHidden = true
+                self.qrIconNode.visibility = false
+            } else {
+                self.qrIconNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "PlaneLogo"), width: 240, height: 240, playbackMode: .loop, mode: .direct(cachePathPrefix: nil))
+                self.qrIconNode.visibility = true
+            }
 
             super.init()
 
@@ -289,6 +300,9 @@ public final class AorusClassicQrCodeScreen: ViewController {
             self.contentContainerNode.addSubnode(self.textNode)
             self.contentContainerNode.addSubnode(self.qrImageNode)
             self.contentContainerNode.addSubnode(self.qrIconNode)
+            if let logoNode = self.aorusMaxQrLogoNode {
+                self.contentContainerNode.addSubnode(logoNode)
+            }
             self.contentContainerNode.addSubnode(self.qrButtonNode)
 
             self.textNode.attributedText = NSAttributedString(string: text, font: Font.regular(14.0), textColor: secondaryTextColor)
@@ -309,7 +323,8 @@ public final class AorusClassicQrCodeScreen: ViewController {
                 self.contentContainerNode.view.addSubview(control)
                 self.qrIconNode.visibility = false
                 self.qrIconNode.isHidden = true
-                let shareLinkButton = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(backgroundColor: accentColor.withMultipliedAlpha(0.1), foregroundColor: accentColor), height: 52.0, cornerRadius: 11.0)
+                self.aorusMaxQrLogoNode?.isHidden = true
+                let shareLinkButton = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(backgroundColor: accentColor.withMultipliedAlpha(0.1), foregroundColor: accentColor), height: 52.0, cornerRadius: AorusMaxInterface.isEnabled ? 16.0 : 11.0)
                 shareLinkButton.title = presentationData.strings.SocksProxySetup_ShareLink
                 shareLinkButton.pressed = { [weak self] in
                     guard let self else { return }
@@ -329,11 +344,16 @@ public final class AorusClassicQrCodeScreen: ViewController {
                 if highlighted {
                     strongSelf.qrImageNode.alpha = 0.4
                     strongSelf.qrIconNode.alpha = 0.4
+                    strongSelf.aorusMaxQrLogoNode?.alpha = 0.4
                 } else {
                     strongSelf.qrImageNode.layer.animateAlpha(from: strongSelf.qrImageNode.alpha, to: 1.0, duration: 0.2)
                     strongSelf.qrImageNode.alpha = 1.0
                     strongSelf.qrIconNode.layer.animateAlpha(from: strongSelf.qrIconNode.alpha, to: 1.0, duration: 0.2)
                     strongSelf.qrIconNode.alpha = 1.0
+                    if let logoNode = strongSelf.aorusMaxQrLogoNode {
+                        logoNode.layer.animateAlpha(from: logoNode.alpha, to: 1.0, duration: 0.2)
+                        logoNode.alpha = 1.0
+                    }
                 }
             }
         }
@@ -482,6 +502,10 @@ public final class AorusClassicQrCodeScreen: ViewController {
                 self.qrIconNode.updateLayout(size: cutoutFrame.size)
                 transition.updateBounds(node: self.qrIconNode, bounds: CGRect(origin: CGPoint(), size: cutoutFrame.size))
                 transition.updatePosition(node: self.qrIconNode, position: imageFrame.center.offsetBy(dx: 0.0, dy: -1.0))
+                if let logoNode = self.aorusMaxQrLogoNode {
+                    transition.updateBounds(node: logoNode, bounds: CGRect(origin: CGPoint(), size: cutoutFrame.size))
+                    transition.updatePosition(node: logoNode, position: imageFrame.center)
+                }
             }
 
             let inset: CGFloat = 32.0

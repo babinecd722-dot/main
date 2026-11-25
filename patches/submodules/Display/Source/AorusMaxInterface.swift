@@ -232,6 +232,8 @@ public enum AorusMaxInterface {
         both("bubble.outgoing.link", "ffffff")
         both("bubble.outgoing.accent", "ffffff")
         both("bubble.outgoing.mediaControl", "ffffff")
+        both("bubble.outgoing.mediaControlInner", "6d51ca")
+        pair("bubble.incoming.mediaControlInner", "36384f", "ffffff")
         both("bubble.outgoing.fileTitle", "ffffff")
         both("bubble.outgoing.fileDescription", "d9ccf5")
         both("bubble.outgoing.reaction", "ffffff33")
@@ -376,14 +378,20 @@ public enum AorusMaxInterface {
             return ("AorusMaxMessageIn", "m4a")
         case "begin_record.mp3":
             return ("AorusMaxVoStart", "m4a")
+        case "end_record.mp3":
+            return ("AorusMaxVoStop", "m4a")
         case "voip_ringback.mp3":
             return ("AorusMaxDialTone", "m4a")
+        case "voip_incoming.mp3", "voip_ringing.mp3":
+            return ("AorusMaxIncomingCall", "m4a")
         case "voip_connecting.mp3":
             return ("AorusMaxReconnect", "m4a")
         case "voip_busy.mp3":
             return ("AorusMaxBusy", "m4a")
         case "voip_end.mp3", "voip_fail.mp3":
             return ("AorusMaxCallEnd", "m4a")
+        case "note.m4a", "100.m4a":
+            return ("AorusMaxNote", "m4a")
         default:
             return nil
         }
@@ -507,26 +515,54 @@ public enum AorusMaxInterface {
         return result
     }
 
-    /// MAX's Gosuslugi Digital ID shield glyph shaded with its blue-to-crimson gradient.
-    public static func digitalIdGradientGlyph(canvasSize: CGFloat = 30.0, glyphSide: CGFloat = 28.0) -> UIImage? {
-        let key = "__digital_id_grad__|\(Int(canvasSize))|\(Int(glyphSide))" as NSString
+    /// Measured MAX settings row metrics from the official MAX 26.17.3 profile reference.
+    public static let settingsRowIconOffset: CGFloat = 4.0
+    public static let settingsRowTextInset: CGFloat = 57.0
+    public static let settingsRowVerticalPadding: CGFloat = 31.0
+
+    /// MAX's Gosuslugi Digital ID emblem: the open-left hexagon with two horizontal bars inside,
+    /// stroked in Gosuslugi's vertical blue-to-crimson gradient (1:1 with MAX's profile card).
+    public static func digitalIdGradientGlyph(canvasSize: CGFloat = 30.0, glyphSide: CGFloat = 26.0) -> UIImage? {
+        let key = "__digital_id_hex__|\(Int(canvasSize))|\(Int(glyphSide))" as NSString
         if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
             return cached
         }
-        guard let source = AorusMaxInterface.glyph("digital_id_tab_28"), let cgMask = source.cgImage else {
-            return nil
-        }
-        let result = generateImage(CGSize(width: canvasSize, height: canvasSize), contextGenerator: { size, context in
-            context.clear(CGRect(origin: CGPoint(), size: size))
-            let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
+        let result = generateImage(CGSize(width: canvasSize, height: canvasSize), rotatedContext: { size, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            let scale = glyphSide / 24.0
+            let ox = (size.width - glyphSide) * 0.5
+            let oy = (size.height - glyphSide) * 0.5
+            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                return CGPoint(x: ox + x * scale, y: oy + y * scale)
+            }
+            let strokeWidth = 2.0 * scale
+            let hex = CGMutablePath()
+            hex.move(to: pt(2.6, 8.2))
+            hex.addLine(to: pt(11.1, 3.0))
+            hex.addQuadCurve(to: pt(12.9, 3.0), control: pt(12.0, 2.45))
+            hex.addLine(to: pt(20.6, 7.6))
+            hex.addQuadCurve(to: pt(21.4, 9.1), control: pt(21.4, 8.1))
+            hex.addLine(to: pt(21.4, 14.9))
+            hex.addQuadCurve(to: pt(20.6, 16.4), control: pt(21.4, 15.9))
+            hex.addLine(to: pt(12.9, 21.0))
+            hex.addQuadCurve(to: pt(11.1, 21.0), control: pt(12.0, 21.55))
+            hex.addLine(to: pt(2.6, 15.8))
+
+            let strokedHex = hex.copy(strokingWithWidth: strokeWidth, lineCap: .round, lineJoin: .round, miterLimit: 4.0)
+            let barTop = CGPath(roundedRect: CGRect(x: ox + 1.8 * scale, y: oy + 9.4 * scale, width: 9.0 * scale, height: 2.0 * scale), cornerWidth: 1.0 * scale, cornerHeight: 1.0 * scale, transform: nil)
+            let barBottom = CGPath(roundedRect: CGRect(x: ox + 1.8 * scale, y: oy + 12.6 * scale, width: 12.6 * scale, height: 2.0 * scale), cornerWidth: 1.0 * scale, cornerHeight: 1.0 * scale, transform: nil)
+
             context.saveGState()
-            context.clip(to: rect, mask: cgMask)
-            let colors = [UIColor(rgb: 0x0a7df7).cgColor, UIColor(rgb: 0xee3f58).cgColor] as CFArray
+            context.addPath(strokedHex)
+            context.addPath(barTop)
+            context.addPath(barBottom)
+            context.clip()
+            let colors = [UIColor(rgb: 0x2d8ae6).cgColor, UIColor(rgb: 0xe5285a).cgColor] as CFArray
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.0, 1.0]) {
                 context.drawLinearGradient(
                     gradient,
-                    start: CGPoint(x: rect.minX, y: rect.maxY),
-                    end: CGPoint(x: rect.maxX, y: rect.minY),
+                    start: CGPoint(x: size.width * 0.5, y: oy + 2.0 * scale),
+                    end: CGPoint(x: size.width * 0.5, y: oy + 22.0 * scale),
                     options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
                 )
             }
@@ -536,6 +572,42 @@ public enum AorusMaxInterface {
             AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
         }
         return result
+    }
+
+    /// MAX's authentic swirl mark (`logo_54px`) rendered crisp white on transparent at `pixelSide`
+    /// for QR code overlays (QrStudio, ChatQrCodeScreen, AorusClassicQrCodeScreen).
+    /// Uses pure CoreGraphics so it is safe on QrStudio's concurrent decode queue.
+    public static func qrLogoCGImage(pixelSide: Int) -> CGImage? {
+        guard pixelSide > 0, let source = AorusMaxInterface.glyph("logo_54px"), let cgMask = source.cgImage else {
+            return nil
+        }
+        let size = CGSize(width: CGFloat(pixelSide), height: CGFloat(pixelSide))
+        let inset = floor(CGFloat(pixelSide) * 0.14)
+        let drawRect = CGRect(x: inset, y: inset, width: max(1.0, size.width - inset * 2.0), height: max(1.0, size.height - inset * 2.0))
+        return generateImage(size, contextGenerator: { _, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            context.clip(to: drawRect, mask: cgMask)
+            context.setFillColor(UIColor.white.cgColor)
+            context.fill(drawRect)
+        }, opaque: false, scale: 1.0)?.cgImage
+    }
+
+    /// MAX's authentic swirl emblem inside an accent disc for classic QR sheets.
+    public static func qrBadgeImage(diameter: CGFloat = 56.0, fillColor: UIColor = AorusMaxInterface.accent) -> UIImage? {
+        guard let source = AorusMaxInterface.glyph("logo_54px"),
+              let tinted = generateTintedImage(image: source, color: .white) else {
+            return nil
+        }
+        return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            context.setFillColor(fillColor.cgColor)
+            context.fillEllipse(in: CGRect(origin: .zero, size: size))
+            let side = floor(diameter * 0.62)
+            let rect = CGRect(x: (size.width - side) * 0.5, y: (size.height - side) * 0.5, width: side, height: side)
+            UIGraphicsPushContext(context)
+            tinted.draw(in: rect)
+            UIGraphicsPopContext()
+        })?.withRenderingMode(.alwaysOriginal)
     }
 
     /// The name the chat list asks for its round search button; the header draws the circle.

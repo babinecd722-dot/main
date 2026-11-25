@@ -184,8 +184,29 @@ public struct AorusGlassStyle: Equatable {
         return style
     }
 
+    private static let maxLightStyle: AorusGlassStyle = {
+        var style = AorusGlassStyle()
+        style.material = .solid
+        style.isDark = false
+        style.classicBlur = false
+        style.fill = [UIColor(rgb: 0xffffff)]
+        return style
+    }()
+
+    private static let maxDarkStyle: AorusGlassStyle = {
+        var style = AorusGlassStyle()
+        style.material = .solid
+        style.isDark = true
+        style.classicBlur = false
+        style.fill = [UIColor(rgb: 0x23252a)]
+        return style
+    }()
+
     /// The style in force for panes drawn for a dark or a light appearance.
     public static func current(dark: Bool) -> AorusGlassStyle {
+        if AorusMaxInterface.isEnabled {
+            return dark ? AorusGlassStyle.maxDarkStyle : AorusGlassStyle.maxLightStyle
+        }
         if AorusOldInterface.isEnabled {
             return AorusGlassStyle.classic(dark: dark)
         }
@@ -570,21 +591,50 @@ private func aorusGlassSetShadowPath(_ layer: CALayer, _ path: CGPath, transitio
 /// What a pane draws beside its glass and beneath what it holds: the plate a solid or pixel pane
 /// is made of or the colour laid over glass, the tint, the highlight and the outline.
 public final class AorusGlassDecorationView: UIView {
-    private let fillLayer = CAGradientLayer()
-    private let fillMask = CAShapeLayer()
-    private let tintLayer = CAShapeLayer()
-    private let shineLayer = CAGradientLayer()
-    private let shineMask = CAShapeLayer()
-    /// The light caught by the pane's rim: brightest along the top edge, fading down the sides.
-    private let shineRim = CAGradientLayer()
-    private let shineRimMask = CAShapeLayer()
-    private let borderContainer = CALayer()
-    private let borderMask = CAShapeLayer()
-    private let borderGradient = CAGradientLayer()
+    private final class DecorativeLayers {
+        let fillLayer = CAGradientLayer()
+        let fillMask = CAShapeLayer()
+        let tintLayer = CAShapeLayer()
+        let shineLayer = CAGradientLayer()
+        let shineMask = CAShapeLayer()
+        /// The light caught by the pane's rim: brightest along the top edge, fading down the sides.
+        let shineRim = CAGradientLayer()
+        let shineRimMask = CAShapeLayer()
+        let borderContainer = CALayer()
+        let borderMask = CAShapeLayer()
+        let borderGradient = CAGradientLayer()
+        let classicBlurMask = CAShapeLayer()
+
+        init(hostLayer: CALayer) {
+            self.fillMask.fillColor = UIColor.black.cgColor
+            self.fillLayer.mask = self.fillMask
+            self.fillLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+            self.fillLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+            hostLayer.addSublayer(self.fillLayer)
+            hostLayer.addSublayer(self.tintLayer)
+            self.shineMask.fillColor = UIColor.black.cgColor
+            self.shineLayer.mask = self.shineMask
+            self.shineLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
+            self.shineLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
+            // Inside the pane's own mask, so only the inner half of the stroked rim shows.
+            self.shineRimMask.fillColor = nil
+            self.shineRimMask.strokeColor = UIColor.black.cgColor
+            self.shineRimMask.lineWidth = 2.0
+            self.shineRim.mask = self.shineRimMask
+            self.shineRim.startPoint = CGPoint(x: 0.5, y: 0.0)
+            self.shineRim.endPoint = CGPoint(x: 0.5, y: 1.0)
+            self.shineLayer.addSublayer(self.shineRim)
+            hostLayer.addSublayer(self.shineLayer)
+            self.borderContainer.mask = self.borderMask
+            self.borderContainer.addSublayer(self.borderGradient)
+            hostLayer.addSublayer(self.borderContainer)
+        }
+    }
+
+    private var decorative: DecorativeLayers?
     private var signature: Int?
     /// The old interface's blur beneath a translucent plate, cut to the pane.
     private var classicBlurView: UIVisualEffectView?
-    private let classicBlurMask = CAShapeLayer()
     private var classicBlurIsDark: Bool?
     private var lastSize: CGSize?
     private var lastCorners: AorusGlassCorners?
@@ -592,36 +642,65 @@ public final class AorusGlassDecorationView: UIView {
     private var lastFill: [UIColor]?
     private var lastTint: UIColor?
     private var isFlatPlate = false
+    private var flatCornerRadius: CGFloat = -1.0
+    private var flatColor: UIColor?
 
     override public init(frame: CGRect) {
         super.init(frame: frame)
         self.isUserInteractionEnabled = false
-        self.fillMask.fillColor = UIColor.black.cgColor
-        self.fillLayer.mask = self.fillMask
-        self.fillLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
-        self.fillLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
-        self.layer.addSublayer(self.fillLayer)
-        self.layer.addSublayer(self.tintLayer)
-        self.shineMask.fillColor = UIColor.black.cgColor
-        self.shineLayer.mask = self.shineMask
-        self.shineLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
-        self.shineLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
-        // Inside the pane's own mask, so only the inner half of the stroked rim shows.
-        self.shineRimMask.fillColor = nil
-        self.shineRimMask.strokeColor = UIColor.black.cgColor
-        self.shineRimMask.lineWidth = 2.0
-        self.shineRim.mask = self.shineRimMask
-        self.shineRim.startPoint = CGPoint(x: 0.5, y: 0.0)
-        self.shineRim.endPoint = CGPoint(x: 0.5, y: 1.0)
-        self.shineLayer.addSublayer(self.shineRim)
-        self.layer.addSublayer(self.shineLayer)
-        self.borderContainer.mask = self.borderMask
-        self.borderContainer.addSublayer(self.borderGradient)
-        self.layer.addSublayer(self.borderContainer)
     }
 
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func ensureDecorative() -> DecorativeLayers {
+        if let existing = self.decorative {
+            return existing
+        }
+        let created = DecorativeLayers(hostLayer: self.layer)
+        self.decorative = created
+        return created
+    }
+
+    /// Zero-CGPath fast path for flat single-color rounded surfaces (MAX mode).
+    public func updateFlatPlate(size: CGSize, cornerRadius: CGFloat, color: UIColor, transition: ContainedViewLayoutTransition) {
+        let clampedRadius = min(max(0.0, cornerRadius), min(size.width, size.height) * 0.5)
+        if self.isFlatPlate,
+           self.lastSize == size,
+           self.flatCornerRadius == clampedRadius,
+           let flatColor = self.flatColor,
+           flatColor.isEqual(color) {
+            return
+        }
+        self.lastSize = size
+        self.lastCorners = AorusGlassCorners(radius: clampedRadius)
+        self.lastStyle = nil
+        self.lastFill = [color]
+        self.lastTint = nil
+        self.flatCornerRadius = clampedRadius
+        self.flatColor = color
+        if let blurView = self.classicBlurView {
+            self.classicBlurView = nil
+            self.classicBlurIsDark = nil
+            blurView.removeFromSuperview()
+        }
+        if !self.isFlatPlate {
+            self.isFlatPlate = true
+            if let d = self.decorative {
+                d.fillLayer.isHidden = true
+                d.tintLayer.isHidden = true
+                d.shineLayer.isHidden = true
+                d.borderContainer.isHidden = true
+                d.borderGradient.removeAnimation(forKey: "aorusMotion")
+                AorusRGBColors.animate(d.fillLayer, keyPath: "colors", colors: [])
+                AorusRGBColors.animate(d.tintLayer, keyPath: "fillColor", colors: [])
+                AorusRGBColors.animate(d.borderGradient, keyPath: "colors", colors: [])
+            }
+            self.layer.cornerCurve = .continuous
+        }
+        self.backgroundColor = color
+        transition.updateCornerRadius(layer: self.layer, cornerRadius: clampedRadius)
     }
 
     /// Draws the pane. `fill` is the plate or the colour over glass, `tint` a tint drawn here
@@ -658,6 +737,8 @@ public final class AorusGlassDecorationView: UIView {
             && outlines.bodyTop == 0.0
             && !AorusRGBColors.isAnimated(fill[0]) {
             self.signature = outlines.signature
+            self.flatCornerRadius = outlines.corners.topLeft
+            self.flatColor = fill[0]
             if let blurView = self.classicBlurView {
                 self.classicBlurView = nil
                 self.classicBlurIsDark = nil
@@ -665,14 +746,16 @@ public final class AorusGlassDecorationView: UIView {
             }
             if !self.isFlatPlate {
                 self.isFlatPlate = true
-                self.fillLayer.isHidden = true
-                self.tintLayer.isHidden = true
-                self.shineLayer.isHidden = true
-                self.borderContainer.isHidden = true
-                self.borderGradient.removeAnimation(forKey: "aorusMotion")
-                AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: [])
-                AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [])
-                AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: [])
+                if let d = self.decorative {
+                    d.fillLayer.isHidden = true
+                    d.tintLayer.isHidden = true
+                    d.shineLayer.isHidden = true
+                    d.borderContainer.isHidden = true
+                    d.borderGradient.removeAnimation(forKey: "aorusMotion")
+                    AorusRGBColors.animate(d.fillLayer, keyPath: "colors", colors: [])
+                    AorusRGBColors.animate(d.tintLayer, keyPath: "fillColor", colors: [])
+                    AorusRGBColors.animate(d.borderGradient, keyPath: "colors", colors: [])
+                }
                 self.layer.cornerCurve = .continuous
             }
             self.backgroundColor = fill[0]
@@ -681,9 +764,13 @@ public final class AorusGlassDecorationView: UIView {
         }
         if self.isFlatPlate {
             self.isFlatPlate = false
+            self.flatCornerRadius = -1.0
+            self.flatColor = nil
             self.backgroundColor = nil
             self.layer.cornerRadius = 0.0
         }
+
+        let d = self.ensureDecorative()
 
         // A change of shape the outline can move through goes with the pane; one that adds or
         // drops a step is drawn as it is.
@@ -696,7 +783,7 @@ public final class AorusGlassDecorationView: UIView {
         CATransaction.setDisableActions(!styleChanged)
         CATransaction.setAnimationDuration(0.25)
 
-        for layer in [self.fillLayer, self.shineLayer, self.borderContainer, self.fillMask, self.tintLayer, self.shineMask, self.shineRim, self.shineRimMask, self.borderMask] as [CALayer] {
+        for layer in [d.fillLayer, d.shineLayer, d.borderContainer, d.fillMask, d.tintLayer, d.shineMask, d.shineRim, d.shineRimMask, d.borderMask] as [CALayer] {
             transition.updateFrame(layer: layer, frame: bounds)
         }
 
@@ -708,8 +795,8 @@ public final class AorusGlassDecorationView: UIView {
             } else {
                 blurView = UIVisualEffectView(effect: nil)
                 blurView.isUserInteractionEnabled = false
-                self.classicBlurMask.fillColor = UIColor.black.cgColor
-                blurView.layer.mask = self.classicBlurMask
+                d.classicBlurMask.fillColor = UIColor.black.cgColor
+                blurView.layer.mask = d.classicBlurMask
                 self.insertSubview(blurView, at: 0)
                 self.classicBlurView = blurView
                 self.classicBlurIsDark = nil
@@ -719,31 +806,31 @@ public final class AorusGlassDecorationView: UIView {
                 blurView.effect = UIBlurEffect(style: style.isDark ? .dark : .light)
             }
             transition.updateFrame(view: blurView, frame: bounds)
-            transition.updateFrame(layer: self.classicBlurMask, frame: bounds)
-            aorusGlassSetPath(self.classicBlurMask, outlines.outline, transition: pathTransition)
+            transition.updateFrame(layer: d.classicBlurMask, frame: bounds)
+            aorusGlassSetPath(d.classicBlurMask, outlines.outline, transition: pathTransition)
         } else if let blurView = self.classicBlurView {
             self.classicBlurView = nil
             self.classicBlurIsDark = nil
             blurView.removeFromSuperview()
         }
 
-        self.fillLayer.isHidden = fill.isEmpty
+        d.fillLayer.isHidden = fill.isEmpty
         if !fill.isEmpty {
-            self.fillLayer.colors = aorusGlassGradientColors(fill)
-            AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: fill.count == 1 ? [fill[0], fill[0]] : fill)
-            aorusGlassSetPath(self.fillMask, outlines.outline, transition: pathTransition)
+            d.fillLayer.colors = aorusGlassGradientColors(fill)
+            AorusRGBColors.animate(d.fillLayer, keyPath: "colors", colors: fill.count == 1 ? [fill[0], fill[0]] : fill)
+            aorusGlassSetPath(d.fillMask, outlines.outline, transition: pathTransition)
         } else {
-            AorusRGBColors.animate(self.fillLayer, keyPath: "colors", colors: [])
+            AorusRGBColors.animate(d.fillLayer, keyPath: "colors", colors: [])
         }
 
         if let tint {
-            self.tintLayer.isHidden = false
-            self.tintLayer.fillColor = tint.cgColor
-            AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [tint])
-            aorusGlassSetPath(self.tintLayer, outlines.outline, transition: pathTransition)
+            d.tintLayer.isHidden = false
+            d.tintLayer.fillColor = tint.cgColor
+            AorusRGBColors.animate(d.tintLayer, keyPath: "fillColor", colors: [tint])
+            aorusGlassSetPath(d.tintLayer, outlines.outline, transition: pathTransition)
         } else {
-            self.tintLayer.isHidden = true
-            AorusRGBColors.animate(self.tintLayer, keyPath: "fillColor", colors: [])
+            d.tintLayer.isHidden = true
+            AorusRGBColors.animate(d.tintLayer, keyPath: "fillColor", colors: [])
         }
 
         // A pixel pane has no highlight. Light drawn on its flat plate — a row under the top
@@ -753,71 +840,71 @@ public final class AorusGlassDecorationView: UIView {
             // of the pane however tall it is, and a bright line along the rim that fades down
             // the sides. It used to be a band cut off sharp at half height, which read as a
             // stripe drawn across the pane rather than as light on it.
-            self.shineLayer.isHidden = false
+            d.shineLayer.isHidden = false
             let strength = style.shine
             let height = max(1.0, size.height)
             let sheen = min(height * 0.55, 30.0) / height
-            self.shineLayer.colors = [
+            d.shineLayer.colors = [
                 UIColor(white: 1.0, alpha: 0.3 * strength).cgColor,
                 UIColor(white: 1.0, alpha: 0.1 * strength).cgColor,
                 UIColor(white: 1.0, alpha: 0.0).cgColor,
             ]
-            self.shineLayer.locations = [0.0, NSNumber(value: Double(sheen * 0.45)), NSNumber(value: Double(sheen))]
-            aorusGlassSetPath(self.shineMask, outlines.outline, transition: pathTransition)
+            d.shineLayer.locations = [0.0, NSNumber(value: Double(sheen * 0.45)), NSNumber(value: Double(sheen))]
+            aorusGlassSetPath(d.shineMask, outlines.outline, transition: pathTransition)
             let rim = min(height * 0.6, 26.0) / height
-            self.shineRim.colors = [
+            d.shineRim.colors = [
                 UIColor(white: 1.0, alpha: 0.85 * strength).cgColor,
                 UIColor(white: 1.0, alpha: 0.3 * strength).cgColor,
                 UIColor(white: 1.0, alpha: 0.0).cgColor,
                 UIColor(white: 1.0, alpha: 0.0).cgColor,
                 UIColor(white: 1.0, alpha: 0.2 * strength).cgColor,
             ]
-            self.shineRim.locations = [0.0, NSNumber(value: Double(rim * 0.35)), NSNumber(value: Double(rim)), NSNumber(value: Double(max(rim, 1.0 - rim * 0.5))), 1.0]
-            aorusGlassSetPath(self.shineRimMask, outlines.outline, transition: pathTransition)
+            d.shineRim.locations = [0.0, NSNumber(value: Double(rim * 0.35)), NSNumber(value: Double(rim)), NSNumber(value: Double(max(rim, 1.0 - rim * 0.5))), 1.0]
+            aorusGlassSetPath(d.shineRimMask, outlines.outline, transition: pathTransition)
         } else {
-            self.shineLayer.isHidden = true
+            d.shineLayer.isHidden = true
         }
 
         if style.border.isEmpty {
-            self.borderContainer.isHidden = true
-            self.borderGradient.removeAnimation(forKey: "aorusMotion")
-            AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: [])
+            d.borderContainer.isHidden = true
+            d.borderGradient.removeAnimation(forKey: "aorusMotion")
+            AorusRGBColors.animate(d.borderGradient, keyPath: "colors", colors: [])
         } else {
-            self.borderContainer.isHidden = false
+            d.borderContainer.isHidden = false
             let width = outlines.borderWidth
             switch style.line {
             case .solid:
-                self.borderMask.fillRule = .evenOdd
-                self.borderMask.fillColor = UIColor.black.cgColor
-                self.borderMask.strokeColor = nil
-                self.borderMask.lineWidth = 0.0
-                self.borderMask.lineDashPattern = nil
+                d.borderMask.fillRule = .evenOdd
+                d.borderMask.fillColor = UIColor.black.cgColor
+                d.borderMask.strokeColor = nil
+                d.borderMask.lineWidth = 0.0
+                d.borderMask.lineDashPattern = nil
             case .dashed:
-                self.borderMask.fillRule = .nonZero
-                self.borderMask.fillColor = nil
-                self.borderMask.strokeColor = UIColor.black.cgColor
-                self.borderMask.lineWidth = width
-                self.borderMask.lineCap = .butt
-                self.borderMask.lineJoin = .miter
+                d.borderMask.fillRule = .nonZero
+                d.borderMask.fillColor = nil
+                d.borderMask.strokeColor = UIColor.black.cgColor
+                d.borderMask.lineWidth = width
+                d.borderMask.lineCap = .butt
+                d.borderMask.lineJoin = .miter
                 let dash = style.isPixel ? width * 2.0 : max(3.0, width * 3.0)
                 let gap = style.isPixel ? width : max(2.0, width * 2.0)
-                self.borderMask.lineDashPattern = [NSNumber(value: Double(dash)), NSNumber(value: Double(gap))]
+                d.borderMask.lineDashPattern = [NSNumber(value: Double(dash)), NSNumber(value: Double(gap))]
             case .dotted:
-                self.borderMask.fillRule = .nonZero
-                self.borderMask.fillColor = nil
-                self.borderMask.strokeColor = UIColor.black.cgColor
-                self.borderMask.lineWidth = width
-                self.borderMask.lineJoin = .miter
+                d.borderMask.fillRule = .nonZero
+                d.borderMask.fillColor = nil
+                d.borderMask.strokeColor = UIColor.black.cgColor
+                d.borderMask.lineWidth = width
+                d.borderMask.lineJoin = .miter
                 if style.isPixel {
                     // Square dots a pixel apart, as a pixel line would be.
-                    self.borderMask.lineCap = .butt
-                    self.borderMask.lineDashPattern = [NSNumber(value: Double(width)), NSNumber(value: Double(width))]
+                    d.borderMask.lineCap = .butt
+                    d.borderMask.lineDashPattern = [NSNumber(value: Double(width)), NSNumber(value: Double(width))]
                 } else {
-                    self.borderMask.lineCap = .round
-                    self.borderMask.lineDashPattern = [NSNumber(value: 0.001), NSNumber(value: Double(width * 2.4))]
+                    d.borderMask.lineCap = .round
+                    d.borderMask.lineDashPattern = [NSNumber(value: 0.001), NSNumber(value: Double(width * 2.4))]
                 }
             }
-            aorusGlassSetPath(self.borderMask, outlines.border, transition: pathTransition)
+            aorusGlassSetPath(d.borderMask, outlines.border, transition: pathTransition)
 
             var colors = style.border
             if style.borderMotion {
@@ -825,18 +912,18 @@ public final class AorusGlassDecorationView: UIView {
                     // One colour runs as a light passing around the outline.
                     let light = color.mixedWith(.white, alpha: 0.65)
                     colors = [color, color, light, color, color]
-                    self.borderGradient.locations = [0.0, 0.3, 0.5, 0.7, 1.0]
+                    d.borderGradient.locations = [0.0, 0.3, 0.5, 0.7, 1.0]
                 } else {
                     colors.append(colors[0])
-                    self.borderGradient.locations = nil
+                    d.borderGradient.locations = nil
                 }
                 let side = (size.width * size.width + size.height * size.height).squareRoot()
-                self.borderGradient.type = .conic
-                self.borderGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
-                self.borderGradient.endPoint = CGPoint(x: 0.5, y: 0.0)
-                self.borderGradient.bounds = CGRect(origin: CGPoint(), size: CGSize(width: side, height: side))
-                self.borderGradient.position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
-                if self.borderGradient.animation(forKey: "aorusMotion") == nil {
+                d.borderGradient.type = .conic
+                d.borderGradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+                d.borderGradient.endPoint = CGPoint(x: 0.5, y: 0.0)
+                d.borderGradient.bounds = CGRect(origin: CGPoint(), size: CGSize(width: side, height: side))
+                d.borderGradient.position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+                if d.borderGradient.animation(forKey: "aorusMotion") == nil {
                     let motion = CABasicAnimation(keyPath: "transform.rotation.z")
                     motion.fromValue = 0.0
                     motion.toValue = Double.pi * 2.0
@@ -844,19 +931,19 @@ public final class AorusGlassDecorationView: UIView {
                     motion.repeatCount = .infinity
                     motion.timingFunction = CAMediaTimingFunction(name: .linear)
                     motion.isRemovedOnCompletion = false
-                    self.borderGradient.add(motion, forKey: "aorusMotion")
+                    d.borderGradient.add(motion, forKey: "aorusMotion")
                 }
             } else {
-                self.borderGradient.removeAnimation(forKey: "aorusMotion")
-                self.borderGradient.type = .axial
-                self.borderGradient.locations = nil
-                self.borderGradient.startPoint = CGPoint(x: 0.0, y: 0.5)
-                self.borderGradient.endPoint = CGPoint(x: 1.0, y: 0.5)
-                self.borderGradient.bounds = bounds
-                self.borderGradient.position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+                d.borderGradient.removeAnimation(forKey: "aorusMotion")
+                d.borderGradient.type = .axial
+                d.borderGradient.locations = nil
+                d.borderGradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+                d.borderGradient.endPoint = CGPoint(x: 1.0, y: 0.5)
+                d.borderGradient.bounds = bounds
+                d.borderGradient.position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
             }
-            self.borderGradient.colors = aorusGlassGradientColors(colors)
-            AorusRGBColors.animate(self.borderGradient, keyPath: "colors", colors: colors.count == 1 ? [colors[0], colors[0]] : colors)
+            d.borderGradient.colors = aorusGlassGradientColors(colors)
+            AorusRGBColors.animate(d.borderGradient, keyPath: "colors", colors: colors.count == 1 ? [colors[0], colors[0]] : colors)
         }
 
         CATransaction.commit()

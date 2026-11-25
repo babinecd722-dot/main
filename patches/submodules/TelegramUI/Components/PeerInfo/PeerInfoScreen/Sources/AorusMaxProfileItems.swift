@@ -86,7 +86,7 @@ private final class AorusMaxGosuslugiItemNode: PeerInfoScreenItemNode {
 
         let sideInset: CGFloat = 16.0 + safeInsets.left
         let sideInsetRight: CGFloat = 16.0 + safeInsets.right
-        let leftInset: CGFloat = sideInset + 29.0 + 16.0
+        let leftInset: CGFloat = sideInset + AorusMaxInterface.settingsRowTextInset
         let rightInset: CGFloat = sideInsetRight + 18.0
 
         let logo = NSMutableAttributedString()
@@ -101,7 +101,7 @@ private final class AorusMaxGosuslugiItemNode: PeerInfoScreenItemNode {
         let titleSize = self.titleNode.updateLayout(CGSize(width: max(0.0, width - leftInset - rightInset), height: .greatestFiniteMagnitude))
 
         let headerHeight: CGFloat = 52.0
-        let rowHeight: CGFloat = max(56.0, titleSize.height + 32.0)
+        let rowHeight: CGFloat = max(56.0, titleSize.height + AorusMaxInterface.settingsRowVerticalPadding)
         let totalHeight: CGFloat = headerHeight + rowHeight
 
         let logoFrame = CGRect(
@@ -114,7 +114,7 @@ private final class AorusMaxGosuslugiItemNode: PeerInfoScreenItemNode {
         self.iconNode.image = iconImage
         let iconSize = iconImage?.size ?? CGSize(width: 30.0, height: 30.0)
         let iconFrame = CGRect(
-            origin: CGPoint(x: sideInset, y: headerHeight + floorToScreenPixels((rowHeight - iconSize.height) * 0.5)),
+            origin: CGPoint(x: sideInset + AorusMaxInterface.settingsRowIconOffset, y: headerHeight + floorToScreenPixels((rowHeight - iconSize.height) * 0.5)),
             size: iconSize
         )
         transition.updateFrame(node: self.iconNode, frame: iconFrame)
@@ -183,6 +183,10 @@ func aorusMaxReorderProfileSections(_ items: inout [SettingsSection: [PeerInfoSc
     let movedAdvanced: Set<AnyHashable> = [200, 201, 202, 203, 204, 206]
     items[.shortcuts] = shortcuts.filter { !movedShortcuts.contains($0.id) }
     items[.advanced] = advanced.filter { !movedAdvanced.contains($0.id) }
+    // Digital ID card above already opens Telegram Passport; avoid showing a duplicate Passport row.
+    if let extra = items[.extra], !extra.isEmpty {
+        items[.extra] = extra.filter { $0.id != AnyHashable(0) }
+    }
     // Editing remains available from the pencil in the profile header.
     items[.edit] = []
     items[.myProfile] = []

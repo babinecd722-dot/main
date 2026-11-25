@@ -17762,6 +17762,9 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode, AorusNavigationBarRes
     }
 
     private var wantsGhost: Bool {
+        if AorusMaxInterface.isEnabled {
+            return false
+        }
         return self.ghostPeerId != nil && aorusGhostChatButtonIsShown()
     }
 
@@ -19800,22 +19803,24 @@ public enum AorusPluginAppearanceValues {
         if let cached {
             return (cached, cachedRevision)
         }
-        var values = UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
-        // The look the person chose in AorusGram → Interface → Message Settings, kept apart
-        // from the plugins' layers and laid over them: what the person chose wins.
-        if let own = UserDefaults.standard.dictionary(forKey: messageLookKey), !own.isEmpty {
-            values.merge(own, uniquingKeysWith: { _, own in own })
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            return ([:], cachedRevision)
         }
-        // The MAX interface is one look, MAX's own (`AorusMaxInterface.appearance`): it takes
-        // the place of the plugins' layers and of the person's look for the whole run.
+        var values: [String: Any]
         if AorusMaxInterface.isEnabled {
+            // The MAX interface is one look, MAX's own (`AorusMaxInterface.appearance`): it takes
+            // the place of the plugins' layers and of the person's look for the whole run.
             values = AorusMaxInterface.appearance
+        } else {
+            values = UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
+            // The look the person chose in AorusGram → Interface → Message Settings, kept apart
+            // from the plugins' layers and laid over them: what the person chose wins.
+            if let own = UserDefaults.standard.dictionary(forKey: messageLookKey), !own.isEmpty {
+                values.merge(own, uniquingKeysWith: { _, own in own })
+            }
         }
         if let seconds = UserDefaults.standard.object(forKey: "aorusgram_presence_seconds") as? NSNumber {
             values["presence.seconds"] = seconds.boolValue
-        }
-        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
-            values = [:]
         }
         cached = values
         return (values, cachedRevision)
@@ -19851,6 +19856,9 @@ public enum AorusPluginAppearanceValues {
     /// The `glass.` keys in force — what plugins ask of the glass with what the person chose laid
     /// over it — and a number that changes whenever either does.
     public static func glassSnapshot() -> (values: [String: Any], revision: Int) {
+        if AorusMaxInterface.isEnabled {
+            return ([:], 0)
+        }
         lock.lock()
         defer {
             lock.unlock()
@@ -19868,6 +19876,9 @@ public enum AorusPluginAppearanceValues {
         if let glassCached {
             return (glassCached, glassRevision)
         }
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            return ([:], glassRevision)
+        }
         var values = (UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]).filter { $0.key.hasPrefix("glass.") }
         if let own = UserDefaults.standard.dictionary(forKey: glassLookKey), !own.isEmpty {
             // What the person set for both appearances wins over what a plugin set for one: a
@@ -19877,13 +19888,6 @@ public enum AorusPluginAppearanceValues {
                 values[key + "@light"] = nil
             }
             values.merge(own, uniquingKeysWith: { _, own in own })
-        }
-        // MAX draws no glass: its panes are the old interface's flat panels.
-        if AorusMaxInterface.isEnabled {
-            values = [:]
-        }
-        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
-            values = [:]
         }
         glassCached = values
         return (values, glassRevision)
@@ -20248,6 +20252,8 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
             accentTextColor: accent,
             accentControlColor: accent,
             mediaActiveControlColor: pc("mediaControl"),
+            mediaInactiveControlColor: pc("mediaControl")?.withAlphaComponent(0.42),
+            mediaControlInnerBackgroundColor: pc("mediaControlInner"),
             fileTitleColor: pc("fileTitle"),
             fileDescriptionColor: fileDescription,
             fileDurationColor: fileDescription,
@@ -21788,6 +21794,70 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
     }
 
     private func aorusUpdate(_ request: AorusGlassRequest, transition: ComponentTransition, styleChanged: Bool) {
+        if AorusMaxInterface.isEnabled, case let .roundedRect(cornerRadius) = request.shape {
+            self.aorusRequest = request
+            let style = AorusGlassStyle.current(dark: request.isDark)
+            let size = request.size
+            let tintColor = request.tintColor
+            if let innerColor = tintColor.innerColor {
+                let innerBackgroundFrame = CGRect(origin: CGPoint(), size: size).insetBy(dx: tintColor.innerInset, dy: tintColor.innerInset)
+                let innerBackgroundRadius = min(innerBackgroundFrame.width, innerBackgroundFrame.height) * 0.5
+                let innerBackgroundView: UIView
+                var innerBackgroundTransition = transition
+                var animateIn = false
+                if let current = self.innerBackgroundView {
+                    innerBackgroundView = current
+                } else {
+                    innerBackgroundView = UIView()
+                    innerBackgroundTransition = innerBackgroundTransition.withAnimation(.none)
+                    self.innerBackgroundView = innerBackgroundView
+                    self.contentView.insertSubview(innerBackgroundView, at: 0)
+                    innerBackgroundView.frame = innerBackgroundFrame
+                    innerBackgroundView.layer.cornerRadius = innerBackgroundRadius
+                    animateIn = true
+                }
+                innerBackgroundView.backgroundColor = innerColor
+                innerBackgroundTransition.setFrame(view: innerBackgroundView, frame: innerBackgroundFrame)
+                innerBackgroundTransition.setCornerRadius(layer: innerBackgroundView.layer, cornerRadius: innerBackgroundRadius)
+                if animateIn {
+                    transition.animateAlpha(view: innerBackgroundView, from: 0.0, to: 1.0)
+                    transition.animateScale(view: innerBackgroundView, from: 0.001, to: 1.0)
+                }
+            } else if let innerBackgroundView = self.innerBackgroundView {
+                self.innerBackgroundView = nil
+                innerBackgroundView.removeFromSuperview()
+            }
+            self.params = Params(shape: request.shape, isDark: request.isDark, tintColor: tintColor, isInteractive: request.isInteractive, isVisible: false)
+            transition.setFrame(view: self.contentContainer, frame: CGRect(origin: CGPoint(), size: size))
+            let plate = request.isVisible && size.width >= 1.0 && size.height >= 1.0 ? style.plate(for: tintColor, isDark: request.isDark) : []
+            if let color = plate.first, plate.count == 1 {
+                let view: AorusGlassDecorationView
+                var appears = false
+                if let current = self.aorusDecorationView {
+                    view = current
+                } else {
+                    view = AorusGlassDecorationView(frame: CGRect(origin: CGPoint(), size: size))
+                    self.aorusDecorationView = view
+                    appears = true
+                }
+                if view.superview !== self.contentView {
+                    self.contentView.insertSubview(view, at: 0)
+                } else if self.contentView.subviews.first !== view {
+                    self.contentView.sendSubviewToBack(view)
+                }
+                let viewTransition: ComponentTransition = appears ? .immediate : transition
+                viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
+                view.updateFlatPlate(size: size, cornerRadius: cornerRadius, color: color, transition: appears ? .immediate : transition.containedViewLayoutTransition)
+            } else if let view = self.aorusDecorationView {
+                self.aorusDecorationView = nil
+                view.removeFromSuperview()
+            }
+            if let halo = self.aorusHaloView {
+                self.aorusHaloView = nil
+                halo.removeFromSuperview()
+            }
+            return
+        }
         if !self.aorusObservesStyle {
             self.aorusObservesStyle = true
             NotificationCenter.default.addObserver(self, selector: #selector(self.aorusStyleDidChange), name: AorusPluginAppearanceValues.glassDidChangeNotification, object: nil)
@@ -25485,7 +25555,7 @@ def patch_app_badge_switcher(tg: Path) -> None:
     install_settings_logo(tg)
 
     # --- 1. Alternative imagesets ---------------------------------------------
-    for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):
+    for asset in ("AppBadgeATunnel", "AppBadgeTitanium", "AppBadgeMax"):
         _install_badge_imageset(tg, asset)
 
     # --- 2. WindowContent.swift -----------------------------------------------
@@ -25512,9 +25582,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
     methods_anchor = "    private func updateBadgeVisibility() {\n"
     methods_new = (
         "    static func aorusAppBadgeImage() -> UIImage? {\n"
-        "        // The MAXimal interface has no badge of AorusGram's beside the camera.\n"
+        "        // The MAXimal interface shows MAX's own badge inside the Dynamic Island / notch.\n"
         "        if AorusMaxInterface.isEnabled {\n"
-        "            return nil\n"
+        '            return UIImage(bundleImageName: "Components/AppBadgeMax")\n'
         "        }\n"
         '        let choice = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"\n'
         '        if choice == "off" {\n'
@@ -31177,7 +31247,7 @@ def patch_voice_to_text(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
 
     voice_width_block = (
-        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && !AorusMaxInterface.isEnabled {\n"
         "            if firstButton {\n"
         "                firstButton = false\n"
         "                accessoryButtonsWidth += self.accessoryButtonInset\n"
@@ -31315,7 +31385,7 @@ def patch_voice_to_text(tg: Path) -> None:
     place_anchor = "        self.currentTextInputBackgroundWidthOffset = textInputBackgroundWidthOffset\n"
     place_inject = (
         "        // AorusGram: voice-to-text button (left of the accessory buttons)\n"
-        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && !AorusMaxInterface.isEnabled {\n"
         "            let aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)\n"
         "            if let current = self.aorusVoiceButton {\n"
         "                aorusVoiceButton = current\n"

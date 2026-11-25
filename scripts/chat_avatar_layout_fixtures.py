@@ -33,6 +33,7 @@ def chat_avatar_layout_source(tg: Path) -> str:
 private typealias PeerId = Int
 private struct PresentationTheme { var overallDarkAppearance = true }
 private enum AorusOldInterface { static var isEnabled = false }
+private enum AorusMaxInterface { static var isEnabled = false }
 private enum AorusInterfaceV2Run { static var isEnabled = true }
 private func aorusGhostChatButtonIsShown() -> Bool { true }
 private func aorusGhostIsActive(peerId: PeerId) -> Bool { true }
@@ -165,6 +166,7 @@ private extension AorusGhostAvatarNavigationNode {
         'PeerId': 'AvatarLayoutPeerId',
         'PresentationTheme': 'AvatarLayoutTheme',
         'AorusOldInterface': 'AvatarLayoutClassicMode',
+        'AorusMaxInterface': 'AvatarLayoutMaxMode',
         'AorusInterfaceV2Run': 'AvatarLayoutInterfaceMode',
         'ASDisplayNode': 'AvatarLayoutDisplayNode',
         'ASButtonNode': 'AvatarLayoutButtonNode',

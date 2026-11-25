@@ -416,10 +416,11 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
         self.textNode.bounds = CGRect(origin: CGPoint(), size: textFrame.size)
 
         if isMaxBack {
-            let size = CGSize(width: 44.0, height: height)
+            let glyphSize = self.iconNode.image?.size ?? CGSize(width: 24.0, height: 24.0)
+            let size = CGSize(width: max(28.0, glyphSize.width), height: height)
             self.containerNode.frame = CGRect(origin: .zero, size: size)
             self.contextSourceNode.frame = self.containerNode.bounds
-            self.iconNode.bounds = CGRect(origin: .zero, size: self.iconNode.image?.size ?? .zero)
+            self.iconNode.bounds = CGRect(origin: .zero, size: glyphSize)
             self.iconNode.position = self.contextSourceNode.bounds.center
             self.backIconLayer.isHidden = true
             resultSize = size
@@ -433,7 +434,12 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             self.contextSourceNode.frame = CGRect(origin: CGPoint(), size: size)
             resultSize = size
         } else if let image = self.iconNode.image {
-            let iconFrame = CGRect(origin: CGPoint(x: inset, y: floor((height - image.size.height) / 2.0)), size: image.size).offsetBy(dx: iconOffset.x, dy: iconOffset.y)
+            let iconSize = AorusMaxInterface.isEnabled && (key == .qrCode || key == .edit) ? CGSize(width: 24.0, height: 24.0) : image.size
+            let buttonWidth = AorusMaxInterface.isEnabled ? max(28.0, iconSize.width) : iconSize.width + inset * 2.0
+            let iconFrame = CGRect(
+                origin: CGPoint(x: floor((buttonWidth - iconSize.width) * 0.5), y: floor((height - iconSize.height) / 2.0)),
+                size: iconSize
+            ).offsetBy(dx: AorusMaxInterface.isEnabled ? 0.0 : iconOffset.x, dy: iconOffset.y)
             self.iconNode.position = iconFrame.center
             self.iconNode.bounds = CGRect(origin: CGPoint(), size: iconFrame.size)
 
@@ -448,7 +454,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
                 self.backIconLayer.isHidden = true
             }
 
-            let size = CGSize(width: image.size.width + inset * 2.0, height: height)
+            let size = CGSize(width: buttonWidth, height: height)
             self.containerNode.frame = CGRect(origin: CGPoint(), size: size)
             self.contextSourceNode.frame = CGRect(origin: CGPoint(), size: size)
             resultSize = size
@@ -459,7 +465,7 @@ final class AorusClassicPeerInfoNavigationButton: HighlightableButtonNode {
             resultSize = size
         }
 
-        let diameter: CGFloat = 32.0
+        let diameter: CGFloat = AorusMaxInterface.isEnabled ? 36.0 : 32.0
         let backgroundWidth: CGFloat
         if self.iconNode.image != nil || self.animationNode != nil {
             backgroundWidth = diameter
@@ -491,10 +497,15 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
     var performAction: ((PeerInfoHeaderNavigationButtonKey, ContextReferenceContentNode?, ContextGesture?) -> Void)?
 
     func updateContentsColor(backgroundContentColor: UIColor, contentsColor: UIColor, canBeExpanded: Bool, transition: ContainedViewLayoutTransition) {
-        if AorusMaxInterface.isEnabled && canBeExpanded {
+        if AorusMaxInterface.isEnabled {
             let dark = self.presentationData?.theme.overallDarkAppearance ?? true
-            self.backgroundContentColor = .clear
-            self.contentsColor = AorusMaxInterface.palette(dark: dark).glyph
+            if canBeExpanded {
+                self.backgroundContentColor = .clear
+                self.contentsColor = AorusMaxInterface.palette(dark: dark).glyph
+            } else {
+                self.backgroundContentColor = UIColor(rgb: 0x16181b, alpha: 0.42)
+                self.contentsColor = .white
+            }
         } else {
             self.backgroundContentColor = backgroundContentColor
             self.contentsColor = contentsColor
@@ -506,7 +517,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
             transition.updateSublayerTransformOffset(layer: button.layer, offset: CGPoint(x: canBeExpanded && !AorusMaxInterface.isEnabled ? -8.0 : 0.0, y: 0.0))
         }
 
-        var accumulatedRightButtonOffset: CGFloat = canBeExpanded ? 16.0 : 0.0
+        var accumulatedRightButtonOffset: CGFloat = canBeExpanded && !AorusMaxInterface.isEnabled ? 16.0 : 0.0
         for spec in self.currentRightButtons.reversed() {
             guard let button = self.rightButtonNodes[spec.key] else {
                 continue
@@ -514,7 +525,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
             button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: canBeExpanded, transition: transition)
             if !spec.isForExpandedView {
                 transition.updateSublayerTransformOffset(layer: button.layer, offset: CGPoint(x: accumulatedRightButtonOffset, y: 0.0))
-                if self.backgroundContentColor.alpha != 0.0 {
+                if !AorusMaxInterface.isEnabled && self.backgroundContentColor.alpha != 0.0 {
                     accumulatedRightButtonOffset -= 6.0
                 }
             }
@@ -529,9 +540,14 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
 
     func update(size: CGSize, presentationData: PresentationData, leftButtons: [PeerInfoHeaderNavigationButtonSpec], rightButtons: [PeerInfoHeaderNavigationButtonSpec], expandFraction: CGFloat, shouldAnimateIn: Bool, transition: ContainedViewLayoutTransition) {
         let darkChanged = self.presentationData?.theme.overallDarkAppearance != presentationData.theme.overallDarkAppearance
-        if AorusMaxInterface.isEnabled && self.canBeExpanded && darkChanged {
-            self.backgroundContentColor = .clear
-            self.contentsColor = AorusMaxInterface.palette(dark: presentationData.theme.overallDarkAppearance).glyph
+        if AorusMaxInterface.isEnabled && darkChanged {
+            if self.canBeExpanded {
+                self.backgroundContentColor = .clear
+                self.contentsColor = AorusMaxInterface.palette(dark: presentationData.theme.overallDarkAppearance).glyph
+            } else {
+                self.backgroundContentColor = UIColor(rgb: 0x16181b, alpha: 0.42)
+                self.contentsColor = .white
+            }
             for (_, button) in self.leftButtonNodes {
                 button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: transition)
             }
@@ -539,8 +555,8 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                 button.updateContentsColor(backgroundColor: self.backgroundContentColor, contentsColor: self.contentsColor, canBeExpanded: self.canBeExpanded, transition: transition)
             }
         }
-        let sideInset: CGFloat = 24.0
-        let leadingInset: CGFloat = AorusMaxInterface.isEnabled ? 12.0 : sideInset
+        let sideInset: CGFloat = AorusMaxInterface.isEnabled ? 16.0 : 24.0
+        let leadingInset: CGFloat = sideInset
         let expandedSideInset: CGFloat = 16.0
 
         let maximumExpandOffset: CGFloat = 14.0
@@ -579,7 +595,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                 }
                 let buttonFrame = CGRect(origin: CGPoint(x: nextButtonOrigin, y: buttonY), size: buttonSize)
 
-                nextButtonOrigin += buttonSize.width + 4.0
+                nextButtonOrigin += buttonSize.width + (AorusMaxInterface.isEnabled ? 12.0 : 4.0)
                 if spec.isForExpandedView {
                     nextExpandedButtonOrigin = nextButtonOrigin
                 } else {
@@ -628,7 +644,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                         buttonY = expandOffset + (spec.isForExpandedView ? maximumExpandOffset : 0.0)
                     }
                     let buttonFrame = CGRect(origin: CGPoint(x: nextButtonOrigin, y: buttonY), size: buttonSize)
-                    nextButtonOrigin += buttonSize.width + 4.0
+                    nextButtonOrigin += buttonSize.width + (AorusMaxInterface.isEnabled ? 12.0 : 4.0)
                     if spec.isForExpandedView {
                         nextExpandedButtonOrigin = nextButtonOrigin
                     } else {
@@ -651,11 +667,12 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
             }
         }
 
-        var accumulatedRightButtonOffset: CGFloat = self.canBeExpanded ? 16.0 : 0.0
+        var accumulatedRightButtonOffset: CGFloat = self.canBeExpanded && !AorusMaxInterface.isEnabled ? 16.0 : 0.0
+        let rightEdgeInset: CGFloat = AorusMaxInterface.isEnabled ? sideInset : sideInset + 8.0
         if self.currentRightButtons != rightButtons || presentationData.strings !== self.presentationData?.strings {
             self.currentRightButtons = rightButtons
 
-            var nextRegularButtonOrigin = size.width - sideInset - 8.0
+            var nextRegularButtonOrigin = size.width - rightEdgeInset
             var nextExpandedButtonOrigin = size.width - expandedSideInset
             for spec in rightButtons.reversed() {
                 let buttonNode: AorusClassicPeerInfoNavigationButton
@@ -705,7 +722,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
 
                     if !spec.isForExpandedView {
                         transition.updateSublayerTransformOffset(layer: buttonNode.layer, offset: CGPoint(x: accumulatedRightButtonOffset, y: 0.0))
-                        if self.backgroundContentColor.alpha != 0.0 {
+                        if !AorusMaxInterface.isEnabled && self.backgroundContentColor.alpha != 0.0 {
                             accumulatedRightButtonOffset -= 6.0
                         }
                     } else {
@@ -739,7 +756,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                 }
             }
         } else {
-            var nextRegularButtonOrigin = size.width - sideInset - 8.0
+            var nextRegularButtonOrigin = size.width - rightEdgeInset
             var nextExpandedButtonOrigin = size.width - expandedSideInset
 
             for spec in rightButtons.reversed() {

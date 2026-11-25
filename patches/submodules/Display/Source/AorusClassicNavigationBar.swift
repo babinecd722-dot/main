@@ -518,7 +518,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         self.clippingNode.clipsToBounds = true
         self.buttonsContainerNode = SparseNode()
 
-        self.backgroundNode = NavigationBackgroundNode(color: AorusClassicNavigationBar.backgroundColor(theme), enableBlur: theme.aorusClassicEnableBlur)
+        self.backgroundNode = NavigationBackgroundNode(color: AorusClassicNavigationBar.backgroundColor(theme), enableBlur: !AorusMaxInterface.isEnabled && theme.aorusClassicEnableBlur)
         self.additionalContentNode = SparseNode()
         self.customOverBackgroundContentView = SparseContainerView()
 
@@ -652,7 +652,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
     public func updatePresentationData(_ presentationData: NavigationBarPresentationData, transition: ContainedViewLayoutTransition) {
         if presentationData.theme !== self.presentationData.theme || presentationData.strings !== self.presentationData.strings {
             self.presentationData = presentationData
-            self.backgroundNode.updateColor(color: AorusClassicNavigationBar.backgroundColor(presentationData.theme), enableBlur: presentationData.theme.aorusClassicEnableBlur, transition: transition)
+            self.backgroundNode.updateColor(color: AorusClassicNavigationBar.backgroundColor(presentationData.theme), enableBlur: !AorusMaxInterface.isEnabled && presentationData.theme.aorusClassicEnableBlur, transition: transition)
             self.applyTheme()
             self.updateLeftButton(animated: false)
             self.requestLayout()
@@ -762,8 +762,9 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             transition.updateFrame(node: self.backButtonNode, frame: CGRect(origin: CGPoint(x: backButtonInset, y: contentVerticalOrigin + floor((nominalHeight - backButtonSize.height) / 2.0)), size: backButtonSize))
 
             self.backButtonArrow.alpha = 1.0
-            let backButtonArrowSize = CGSize(width: 13.0, height: 22.0)
-            let backButtonArrowFrame = CGRect(origin: CGPoint(x: leftInset + 8.0, y: contentVerticalOrigin + floor((nominalHeight - backButtonArrowSize.height) / 2.0)), size: backButtonArrowSize)
+            let backButtonArrowSize = AorusMaxInterface.isEnabled ? CGSize(width: 24.0, height: 24.0) : CGSize(width: 13.0, height: 22.0)
+            let backButtonArrowX = leftInset + (AorusMaxInterface.isEnabled ? 14.0 : 8.0)
+            let backButtonArrowFrame = CGRect(origin: CGPoint(x: backButtonArrowX, y: contentVerticalOrigin + floor((nominalHeight - backButtonArrowSize.height) / 2.0)), size: backButtonArrowSize)
             transition.updateFrame(node: self.backButtonArrow, frame: backButtonArrowFrame)
             self.badgeNode.alpha = 1.0
         } else if self.leftButtonNode.view.superview != nil {
@@ -781,7 +782,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         if self.aorusLeadingButtonNode.view.superview != nil {
             // MAX's avatar, just after the back arrow; the title follows it.
             let leadingSize = self.aorusLeadingButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
-            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + 30.0 : leftTitleInset + 4.0
+            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + (AorusMaxInterface.isEnabled ? 46.0 : 30.0) : leftTitleInset + 4.0
             var leadingTransition = transition
             if self.aorusLeadingButtonNode.frame.width.isZero {
                 leadingTransition = .immediate

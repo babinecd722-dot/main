@@ -864,7 +864,24 @@ public enum AorusPluginIconValues {
         let originalInk = ink(of: original)
         // The glyph goes where the original's glyph was, in its colour; an original with
         // nothing visible in it lends its whole box and black.
-        let target = originalInk?.bounds ?? CGRect(origin: CGPoint(), size: size).insetBy(dx: size.width * 0.1, dy: size.height * 0.1)
+        var target = originalInk?.bounds ?? CGRect(origin: CGPoint(), size: size).insetBy(dx: size.width * 0.1, dy: size.height * 0.1)
+        // MAX's 24pt glyphs (such as battery_and_network_24) are square or vertical; fitting them
+        // inside a wide horizontal Telegram original (like the 20x11 battery glyph) crushes them.
+        if isMaxRun {
+            let maxSide = max(target.width, target.height)
+            let minSide = min(target.width, target.height)
+            if maxSide > 0.0, minSide / maxSide < 0.78 {
+                let side = min(min(size.width, size.height) - 2.0, maxSide)
+                if side > minSide {
+                    target = CGRect(
+                        x: target.midX - side * 0.5,
+                        y: target.midY - side * 0.5,
+                        width: side,
+                        height: side
+                    )
+                }
+            }
+        }
         let color = originalInk?.color ?? UIColor.black
         let multiplier = CGFloat((spec["scale"] as? NSNumber)?.doubleValue ?? 1.0)
         let rotation = CGFloat((spec["rotate"] as? NSNumber)?.doubleValue ?? 0.0) * CGFloat.pi / 180.0

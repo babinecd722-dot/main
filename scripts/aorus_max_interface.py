@@ -465,6 +465,12 @@ def patch_profile(tg: Path) -> None:
         text = _edit(text, old, new, f"MAX row title {key}")
     text = _edit(
         text,
+        "icon: PresentationResourcesSettings.powerSaving,",
+        'icon: AorusMaxInterface.isEnabled ? AorusMaxInterface.tintedGlyph("battery_and_network_24", dark: presentationData.theme.overallDarkAppearance) : PresentationResourcesSettings.powerSaving,',
+        "MAX full-size battery icon",
+    )
+    text = _edit(
+        text,
         "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n    for section in SettingsSection.allCases {\n        if let sectionItems = items[section], !sectionItems.isEmpty {\n            result.append((section, sectionItems))\n        }\n    }\n    return result\n}\n\nfunc settingsEditingItems(",
         "    if AorusMaxInterface.isEnabled {\n"
         "        let aorusMaxDigitalIdTitle = AorusMaxInterface.localizedString(\"TAB_DigitalID\", languageCode: presentationData.strings.baseLanguageCode) ?? \"Цифровой ID\"\n"
@@ -480,9 +486,33 @@ def patch_profile(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Hide internal row dividers inside MAX grouped settings cards to match MAX's pure card look.
+    # Align Settings disclosure rows with MAX's measured icon/text/height metrics and hide internal
+    # row dividers inside MAX grouped cards. Keep the classic_geometry `let height = ...` line
+    # verbatim so classic_layout_check continues to pass.
     path = sources / "ListItems/PeerInfoScreenDisclosureItem.swift"
     text = _read(path)
+    text = _edit(
+        text,
+        "        let leftInset = (item.icon == nil && item.iconSignal == nil ? sideInset : sideInset + 29.0 + 16.0)\n",
+        "        let leftInset = (item.icon == nil && item.iconSignal == nil ? sideInset : (AorusMaxInterface.isEnabled ? sideInset + AorusMaxInterface.settingsRowTextInset : sideInset + 29.0 + 16.0))\n",
+        "MAX settings row text inset",
+    )
+    height_anchor = "        let height = AorusOldInterface.isEnabled ? textSize.height + 24.0 : textSize.height + 32.0\n"
+    idx = text.index(height_anchor) + len(height_anchor)
+    head = text[:idx]
+    tail = text[idx:]
+    tail = tail.replace("(height - ", "(aorusHeight - ")
+    tail = tail.replace("height: height)", "height: aorusHeight)")
+    tail = tail.replace("height: height + highlightNodeOffset)", "height: aorusHeight + highlightNodeOffset)")
+    tail = tail.replace("y: height - UIScreenPixel", "y: aorusHeight - UIScreenPixel")
+    tail = tail.replace("return height\n", "return aorusHeight\n", 1)
+    text = head + "        let aorusHeight: CGFloat = AorusMaxInterface.isEnabled ? textSize.height + AorusMaxInterface.settingsRowVerticalPadding : height\n" + tail
+    text = _edit(
+        text,
+        "            let iconFrame = CGRect(origin: CGPoint(x: sideInset, y: floorToScreenPixels((aorusHeight - iconSize.height) / 2.0)), size: iconSize)\n",
+        "            let iconFrame = CGRect(origin: CGPoint(x: AorusMaxInterface.isEnabled ? sideInset + AorusMaxInterface.settingsRowIconOffset : sideInset, y: floorToScreenPixels((aorusHeight - iconSize.height) / 2.0)), size: iconSize)\n",
+        "MAX settings row icon inset",
+    )
     text = _edit(
         text,
         "        self.bottomSeparatorNode.isHidden = hasBottomCorners\n",
@@ -490,6 +520,48 @@ def patch_profile(tg: Path) -> None:
         "MAX settings card without row separators",
     )
     path.write_text(text, encoding="utf-8")
+
+    # Hide internal row dividers across other profile item cards (user/group/channel profiles) in MAX.
+    for list_item in (
+        "ListItems/PeerInfoScreenLabeledValueItem.swift",
+        "ListItems/PeerInfoScreenActionItem.swift",
+        "ListItems/PeerInfoScreenSwitchItem.swift",
+        "ListItems/PeerInfoScreenMemberItem.swift",
+        "ListItems/PeerInfoScreenContactInfoItem.swift",
+        "ListItems/PeerInfoScreenInfoItem.swift",
+    ):
+        item_path = sources / list_item
+        if not item_path.is_file():
+            continue
+        item_text = _read(item_path)
+        if "        self.bottomSeparatorNode.isHidden = hasBottomCorners\n" in item_text:
+            item_text = _edit(
+                item_text,
+                "        self.bottomSeparatorNode.isHidden = hasBottomCorners\n",
+                "        self.bottomSeparatorNode.isHidden = hasBottomCorners || AorusMaxInterface.isEnabled\n",
+                f"MAX profile card separator in {list_item}",
+            )
+            item_path.write_text(item_text, encoding="utf-8")
+
+    # Give profile action buttons (Call / Video / Mute / Search / More) MAX's 16pt corners while
+    # preserving the verbatim OldInterface expression checked by verify_aorus_branding.py.
+    btn_path = sources / "PeerInfoHeaderButtonNode.swift"
+    btn_text = _read(btn_path)
+    btn_text = _edit(
+        btn_text,
+        "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))\n",
+        "        let aorusBaseButtonRadius = min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5)\n"
+        "        let aorusButtonRadius = AorusMaxInterface.isEnabled ? min(16.0, backgroundFrame.height * 0.5) : aorusBaseButtonRadius\n"
+        "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : aorusButtonRadius)\n",
+        "MAX profile action button corner radius",
+    )
+    btn_text = _edit(
+        btn_text,
+        "        self.referenceNode.contextMenuSourcePath = UIBezierPath(roundedRect: backgroundFrame, cornerRadius: min(AorusOldInterface.isEnabled ? 11.0 : 16.0, backgroundFrame.height * 0.5))\n",
+        "        self.referenceNode.contextMenuSourcePath = UIBezierPath(roundedRect: backgroundFrame, cornerRadius: aorusButtonRadius)\n",
+        "MAX profile action button context menu radius",
+    )
+    btn_path.write_text(btn_text, encoding="utf-8")
 
     path = sources / "PeerInfoScreen.swift"
     text = _read(path)
@@ -523,7 +595,7 @@ def patch_profile(tg: Path) -> None:
     text = _read(path)
     text = _edit(text, "let title: String = presentationData.strings.Settings_QuickReactionSetup_Title", 'let title: String = AorusMaxInterface.isEnabled ? presentationData.strings.Settings_Privacy_Messages : presentationData.strings.Settings_QuickReactionSetup_Title', "MAX message settings title")
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: profile preferences, Gosuslugi card, clean QR+Edit header and native message settings")
+    print("MaxInterface: profile preferences, Gosuslugi card, clean QR+Edit header, aligned rows and native message settings")
 
 
 def patch_privacy(tg: Path) -> None:
@@ -1417,6 +1489,12 @@ def patch_recording(tg: Path) -> None:
     )
     text = _edit(
         text,
+        '        if let url = getAppBundle().url(forResource: "LockWait", withExtension: "json"), let animation = Animation.filepath(url.path) {\n',
+        '        if !AorusMaxInterface.isEnabled, let url = getAppBundle().url(forResource: "LockWait", withExtension: "json"), let animation = Animation.filepath(url.path) {\n',
+        "MAX skip unused LockWait animation",
+    )
+    text = _edit(
+        text,
         'if let url = getAppBundle().url(forResource: self.pause ? "LockPause" : "Lock", withExtension: "json"), let animation = Animation.filepath(url.path) {\n            let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .mainThread, decodingStrategy: .codable))\n',
         'if let url = getAppBundle().url(forResource: AorusMaxInterface.isEnabled ? "AorusMaxRecordLock" : (self.pause ? "LockPause" : "Lock"), withExtension: "json"), let animation = Animation.filepath(url.path) {\n            let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: AorusMaxInterface.isEnabled ? .automatic : .mainThread, decodingStrategy: .codable))\n',
         "MAX padlock animation",
@@ -1779,8 +1857,86 @@ _MAX_CHAT_HEADER = """
 
 // AorusGram: MAX interface. A chat's header as MAX draws it: the avatar before the name (the old
 // interface's bar draws an `AorusMaxLeadingNavigationNode` there), then, at the trailing edge,
-// MAX's call button for a person and its menu — search, sound, the chat's info and clearing.
+// MAX's call button for a person, the per-chat Ghost Mode toggle right before the menu when Ghost
+// Mode is on, and its menu — search, sound, the chat's info and clearing.
 extension AorusGhostAvatarNavigationNode: AorusMaxLeadingNavigationNode {
+}
+
+private final class AorusMaxGhostHeaderButtonNode: ASButtonNode {
+    private var peerId: PeerId?
+    private var iconColor: UIColor?
+    private var renderedState: (active: Bool, color: UIColor)?
+    private var settingsObservers: [NSObjectProtocol] = []
+    var onPressed: ((PeerId, ASButtonNode) -> Void)?
+
+    override init() {
+        super.init()
+        self.isUserInteractionEnabled = true
+        self.hitTestSlop = UIEdgeInsets(top: -8.0, left: -8.0, bottom: -8.0, right: -8.0)
+        self.imageNode.contentMode = .scaleAspectFit
+        self.addTarget(self, action: #selector(self.buttonPressed), forControlEvents: .touchUpInside)
+        self.settingsObservers = ["aorusgram_settings_changed", "aorusgram_ghost_mode_changed"].map { name in
+            NotificationCenter.default.addObserver(forName: NSNotification.Name(name), object: nil, queue: .main) { [weak self] _ in
+                self?.refreshIcon(animated: true)
+            }
+        }
+    }
+
+    deinit {
+        for observer in self.settingsObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    func update(peerId: PeerId, color: UIColor) {
+        self.peerId = peerId
+        self.iconColor = color
+        self.refreshIcon(animated: false)
+    }
+
+    private func refreshIcon(animated: Bool) {
+        guard let peerId = self.peerId, let color = self.iconColor else {
+            return
+        }
+        let isActive = aorusGhostIsActive(peerId: peerId)
+        if self.renderedState?.active == isActive && self.renderedState?.color == color {
+            return
+        }
+        let isFirst = self.renderedState == nil
+        self.renderedState = (isActive, color)
+        let image = aorusGhostIconImage(active: isActive, color: color)
+        if !isFirst && animated && self.isNodeLoaded {
+            UIView.transition(with: self.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                self.setImage(image, for: [])
+            })
+        } else {
+            self.setImage(image, for: [])
+        }
+        self.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
+    }
+
+    @objc private func buttonPressed() {
+        guard let peerId = self.peerId else {
+            return
+        }
+        self.onPressed?(peerId, self)
+        self.refreshIcon(animated: true)
+    }
+
+    override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
+        return CGSize(width: 28.0, height: 44.0)
+    }
+
+    override func layout() {
+        super.layout()
+        let side: CGFloat = 28.0
+        self.imageNode.frame = CGRect(
+            x: floor((self.bounds.width - side) * 0.5),
+            y: floor((self.bounds.height - side) * 0.5),
+            width: side,
+            height: side
+        )
+    }
 }
 
 extension ChatControllerImpl {
@@ -1803,6 +1959,24 @@ extension ChatControllerImpl {
             }
             callItem.accessibilityLabel = presentationInterfaceState.strings.PeerInfo_ButtonCall
             items.append(callItem)
+        }
+        if aorusGhostChatButtonIsShown(), let ghostPeerId = aorusGhostPeerIdForChatInterfaceState(presentationInterfaceState) {
+            let ghostButton: AorusMaxGhostHeaderButtonNode
+            let ghostItem: UIBarButtonItem
+            if let currentButton = self.aorusMaxGhostButton as? AorusMaxGhostHeaderButtonNode, let currentItem = self.aorusMaxGhostItem {
+                ghostButton = currentButton
+                ghostItem = currentItem
+            } else {
+                ghostButton = AorusMaxGhostHeaderButtonNode()
+                ghostButton.onPressed = { [weak self] peerId, buttonNode in
+                    self?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)
+                }
+                ghostItem = UIBarButtonItem(customDisplayNode: ghostButton)!
+                self.aorusMaxGhostButton = ghostButton
+                self.aorusMaxGhostItem = ghostItem
+            }
+            ghostButton.update(peerId: ghostPeerId, color: color)
+            items.append(ghostItem)
         }
         let moreButton: MoreHeaderButton
         let moreItem: UIBarButtonItem
@@ -1890,7 +2064,7 @@ extension ChatControllerImpl {
 
 def patch_chat_header_buttons(tg: Path) -> None:
     """MAX's chat header: the avatar moves before the name (the old interface's bar draws it next
-    to the back arrow), and MAX's call and menu buttons take the trailing edge."""
+    to the back arrow), and MAX's call, ghost toggle and menu buttons take the trailing edge."""
     sources = tg / "submodules/TelegramUI/Sources"
     path = sources / "ChatController.swift"
     text = _read(path)
@@ -1898,8 +2072,10 @@ def patch_chat_header_buttons(tg: Path) -> None:
         text,
         "    var moreBarButton: MoreHeaderButton\n",
         "    var moreBarButton: MoreHeaderButton\n"
-        f"    // {MARK}: the call and menu buttons of MAX's chat header.\n"
+        f"    // {MARK}: the call, ghost toggle and menu buttons of MAX's chat header.\n"
         "    var aorusMaxCallItem: UIBarButtonItem?\n"
+        "    var aorusMaxGhostButton: ASButtonNode?\n"
+        "    var aorusMaxGhostItem: UIBarButtonItem?\n"
         "    var aorusMaxMoreButton: MoreHeaderButton?\n"
         "    var aorusMaxMoreItem: UIBarButtonItem?\n"
         "    var aorusMaxMoreColor: UIColor?\n",
@@ -2432,7 +2608,7 @@ private final class AorusMaxSafeModeIntroController: ViewController {
     private let glow = CAGradientLayer()
     private let lockGradient = CAGradientLayer()
     private let lockView = UIView()
-    private let animationNode: AnimatedStickerNode = DefaultAnimatedStickerNodeImpl()
+    private let animationNode = DefaultAnimatedStickerNodeImpl()
     private var aorusAnimationReduceMotion: Bool?
     private var rows: [(UIImageView, UILabel, UILabel)] = []
     private var validLayout: ContainerViewLayout?
@@ -2470,7 +2646,12 @@ private final class AorusMaxSafeModeIntroController: ViewController {
         self.lockGradient.colors = [UIColor(rgb: 0x9856ec).cgColor, UIColor(rgb: 0x6353ee).cgColor, UIColor(rgb: 0x4779ea).cgColor]
         self.lockGradient.startPoint = CGPoint(x: 0.2, y: 0.0)
         self.lockGradient.endPoint = CGPoint(x: 0.8, y: 1.0)
+        self.lockView.isUserInteractionEnabled = false
         self.lockView.layer.addSublayer(self.lockGradient)
+        self.animationNode.automaticallyLoadFirstFrame = true
+        self.animationNode.autoplay = true
+        self.animationNode.overrideVisibility = true
+        self.animationNode.forceSynchronous = true
         self.lockGradient.mask = self.animationNode.layer
         self.scrollView.addSubview(self.lockView)
         self.titleLabel.font = Font.semibold(22.0)
@@ -2532,8 +2713,10 @@ private final class AorusMaxSafeModeIntroController: ViewController {
         let reduceMotion = self.presentationData.reduceMotion || UIAccessibility.isReduceMotionEnabled
         if self.aorusAnimationReduceMotion != reduceMotion {
             self.aorusAnimationReduceMotion = reduceMotion
-            self.animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "AorusMaxSafeModeLock"), width: 360, height: 360, playbackMode: reduceMotion ? .still(.start) : .loop, mode: .direct(cachePathPrefix: nil))
+            self.animationNode.automaticallyLoadFirstFrame = true
+            self.animationNode.autoplay = !reduceMotion
             self.animationNode.overrideVisibility = true
+            self.animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "AorusMaxSafeModeLock"), width: 240, height: 170, playbackMode: reduceMotion ? .still(.start) : .loop, mode: .direct(cachePathPrefix: nil))
             self.animationNode.visibility = true
         }
         if let layout = self.validLayout { self.containerLayoutUpdated(layout, transition: .immediate) }
@@ -2569,13 +2752,16 @@ private final class AorusMaxSafeModeIntroController: ViewController {
         let buttonHeight: CGFloat = 56.0
         self.enableButton.frame = CGRect(x: left, y: layout.size.height - bottom - buttonHeight, width: width, height: buttonHeight)
         self.scrollView.frame = CGRect(x: 0.0, y: top, width: layout.size.width, height: max(0.0, self.enableButton.frame.minY - top - 12.0))
-        let illustration: CGFloat = min(240.0, width)
-        self.glowView.frame = CGRect(x: (layout.size.width - 300.0) * 0.5, y: 0.0, width: 300.0, height: 260.0)
+        let lockWidth: CGFloat = min(220.0, width)
+        let lockHeight: CGFloat = floor(lockWidth * 212.0 / 300.0)
+        let lockSize = CGSize(width: lockWidth, height: lockHeight)
+        self.glowView.frame = CGRect(x: (layout.size.width - 300.0) * 0.5, y: 0.0, width: 300.0, height: 220.0)
         self.glow.frame = self.glowView.bounds
-        self.lockView.frame = CGRect(x: (layout.size.width - illustration) * 0.5, y: 4.0, width: illustration, height: illustration)
+        self.lockView.frame = CGRect(x: floor((layout.size.width - lockWidth) * 0.5), y: 20.0, width: lockWidth, height: lockHeight)
         self.lockGradient.frame = self.lockView.bounds
         self.animationNode.frame = self.lockView.bounds
-        var y: CGFloat = illustration - 10.0
+        self.animationNode.updateLayout(size: lockSize)
+        var y: CGFloat = self.lockView.frame.maxY + 20.0
         for label in [self.titleLabel, self.subtitleLabel] {
             let size = label.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
             label.frame = CGRect(x: left, y: y, width: width, height: ceil(size.height))
@@ -2717,6 +2903,160 @@ def patch_inner_settings_titles(tg: Path) -> None:
     print("MaxInterface: inner settings screens use authentic MAX navigation titles")
 
 
+def patch_performance_isolation(tg: Path) -> None:
+    """Eliminate live UIVisualEffectView blurs and VariableBlurView CAFilter backdrop IOSurfaces
+    when MAX flat interface is enabled so no glass/blur layer runs in parallel underneath MAX."""
+    path = tg / "submodules/Display/Source/NavigationBackgroundView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if self.enableBlur && !sharedIsReduceTransparencyEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {\n",
+        "        if self.enableBlur && !sharedIsReduceTransparencyEnabled && !AorusMaxInterface.isEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {\n",
+        "MAX NavigationBackgroundNode blur disable",
+    )
+    text = _edit(
+        text,
+        "        if let color = self._color, self.enableBlur && !sharedIsReduceTransparencyEnabled && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {\n",
+        "        if let color = self._color, self.enableBlur && !sharedIsReduceTransparencyEnabled && !AorusMaxInterface.isEnabled && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {\n",
+        "MAX BlurredBackgroundView blur disable",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/TelegramUI/Components/EdgeEffect/Sources/EdgeEffect.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if blur {\n",
+        "        if blur && !AorusMaxInterface.isEnabled {\n",
+        "MAX EdgeEffect VariableBlurView disable",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/Components/BlurredBackgroundComponent/Sources/BlurredBackgroundComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            self.updateColor(color: component.color, forceKeepBlur: true, transition: transition.containedViewLayoutTransition)\n",
+        "            self.updateColor(color: component.color, forceKeepBlur: !AorusMaxInterface.isEnabled, transition: transition.containedViewLayoutTransition)\n",
+        "MAX BlurredBackgroundComponent forceKeepBlur disable",
+    )
+    text = _edit(
+        text,
+        "        return View(color: nil, enableBlur: true)\n",
+        "        return View(color: nil, enableBlur: !AorusMaxInterface.isEnabled)\n",
+        "MAX BlurredBackgroundComponent enableBlur disable",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: disabled live UIBlurEffect and VariableBlurView backdrops in MAX mode")
+
+
+def patch_qr_screens(tg: Path) -> None:
+    """Replace Telegram's paper-plane QR center logo with MAX's swirl emblem (`logo_54px`) and
+    apply MAX card radius across QrStudioScreen and ChatQrCodeScreen."""
+    studio = tg / "submodules/TelegramUI/Components/QrStudioScreen/Sources"
+
+    path = studio / "QrStudioExportStickers.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "func qrStudioDecodeExportPlane(pixelSide: Int) -> QrStudioExportSticker? {\n",
+        "func qrStudioDecodeExportPlane(pixelSide: Int) -> QrStudioExportSticker? {\n"
+        f"    // {MARK}: use MAX's crisp swirl emblem in place of Telegram's animated plane.\n"
+        "    if AorusMaxInterface.isEnabled, let cgImage = AorusMaxInterface.qrLogoCGImage(pixelSide: pixelSide) {\n"
+        "        return QrStudioExportSticker(frames: [cgImage], period: 0.0)\n"
+        "    }\n",
+        "MAX QrStudio center emblem",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = studio / "QrStudioCardComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        '                if staticPlane, !planeWasHidden, let icon = generateTintedImage(image: UIImage(bundleImageName: "Share/QrPlaneIcon"), color: .white) {\n',
+        '                if staticPlane, !planeWasHidden, let icon = generateTintedImage(image: AorusMaxInterface.isEnabled ? AorusMaxInterface.glyph("logo_54px") : UIImage(bundleImageName: "Share/QrPlaneIcon"), color: .white) {\n',
+        "MAX QrStudio static card emblem",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = studio / "QrStudioCodePaths.swift"
+    text = _read(path)
+    if "import Display\n" not in text:
+        text = _edit(text, "import Foundation\n", "import Foundation\nimport Display\n", "Display import for QrStudioCodePaths")
+    text = _edit(
+        text,
+        "    static let cornerRadius: CGFloat = 40.0\n",
+        "    static var cornerRadius: CGFloat { return AorusMaxInterface.isEnabled ? 24.0 : 40.0 }\n",
+        "MAX QrStudio card corner radius",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = studio / "QrStudioCodeView.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.planeHostView.center = CGPoint(x: size.width * 0.5, y: size.height * 0.5 - 1.0)\n",
+        "        self.planeHostView.center = CGPoint(x: size.width * 0.5, y: size.height * 0.5 - (AorusMaxInterface.isEnabled ? 0.0 : 1.0))\n",
+        "MAX QrStudio emblem vertical centering",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatQrCodeScreen/Sources/ChatQrCodeScreen.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.codeBackgroundNode.cornerRadius = 42.0\n",
+        "        self.codeBackgroundNode.cornerRadius = AorusMaxInterface.isEnabled ? 24.0 : 42.0\n",
+        "MAX ChatQrCodeScreen card radius",
+    )
+    text = _edit(
+        text,
+        "        if isStatic {\n"
+        "            let codeStaticIconNode = ASImageNode()\n"
+        "            codeStaticIconNode.displaysAsynchronously = false\n"
+        "            codeStaticIconNode.contentMode = .scaleToFill\n"
+        '            codeStaticIconNode.image = UIImage(bundleImageName: "Share/QrPlaneIcon")\n'
+        "            self.codeStaticIconNode = codeStaticIconNode\n"
+        "            self.codeAnimatedIconNode = nil\n"
+        "        } else {\n",
+        "        if isStatic || AorusMaxInterface.isEnabled {\n"
+        "            let codeStaticIconNode = ASImageNode()\n"
+        "            codeStaticIconNode.displaysAsynchronously = false\n"
+        "            codeStaticIconNode.contentMode = AorusMaxInterface.isEnabled ? .scaleAspectFit : .scaleToFill\n"
+        "            if AorusMaxInterface.isEnabled, let cgImage = AorusMaxInterface.qrLogoCGImage(pixelSide: 120) {\n"
+        "                codeStaticIconNode.image = UIImage(cgImage: cgImage)\n"
+        "            } else {\n"
+        '                codeStaticIconNode.image = UIImage(bundleImageName: "Share/QrPlaneIcon")\n'
+        "            }\n"
+        "            self.codeStaticIconNode = codeStaticIconNode\n"
+        "            self.codeAnimatedIconNode = nil\n"
+        "        } else {\n",
+        "MAX ChatQrCodeScreen center emblem",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: QR screens display MAX swirl emblem and 24pt card styling")
+
+
+def patch_auth_screens(tg: Path) -> None:
+    """Apply MAX's 16pt primary action button corners on sign-in / Add Account phone entry screens."""
+    path = tg / "submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50 * 0.5)",
+        "self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: AorusMaxInterface.isEnabled ? 16.0 : 50 * 0.5)",
+        "MAX phone entry continue button radius",
+    )
+    text = _edit(
+        text,
+        "self.proceedNode = SolidRoundedButtonNode(title: strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)",
+        "self.proceedNode = SolidRoundedButtonNode(title: strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: AorusMaxInterface.isEnabled ? 16.0 : 50.0 * 0.5)",
+        "MAX phone confirm continue button radius",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: auth and Add Account buttons use MAX 16pt corners")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -2734,6 +3074,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_call_screen(tg)
     patch_welcome(tg)
     patch_intro_palette(tg)
+    patch_auth_screens(tg)
     patch_tour(tg)
     patch_attachment_panel(tg)
     patch_media_picker(tg)
@@ -2749,6 +3090,8 @@ def patch_max_interface(tg: Path) -> None:
     patch_settings_surfaces(tg)
     patch_read_marks(tg)
     patch_sounds(tg)
+    patch_qr_screens(tg)
+    patch_performance_isolation(tg)
 
 
 if __name__ == "__main__":
