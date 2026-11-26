@@ -273,36 +273,64 @@ func aorusMaxTelegramServicesController(context: AccountContext, title: String, 
     return ItemListController(context: context, state: signal)
 }
 
-// MAX distributes client settings into three distinct cards below Gosuslugi & AorusGram:
-// 1. Main card: Notifications, Security, Messages, Favorites, Folders, Appearance, Devices
-// 2. Device & storage card: Power and Data Saving, Storage (Memory)
-// 3. App & support card: App Language, Support, More (Telegram-only services: Wallet, Premium,
-//    Stars, My TON, Business, Gifts, Watch, Proxy, FAQ, Tips)
-// AorusGram & AI Companion remain untouched in their own card, preserving 100% of functionality.
+// MAX distributes client settings into four distinct cards below Gosuslugi & AorusGram:
+// 1. Main card: Уведомления и звук, Безопасность, Устройства, Сообщения, Избранное, Папки
+// 2. Battery & memory card: Экономия батареи и сети, Память
+// 3. Appearance & language card: Оформление, Язык приложения
+// 4. Business card: MAX для бизнеса (`case_24`, opens Telegram Business, excluded from «Ещё»)
+// Support + «Ещё» (Telegram-only services: Wallet, Premium, Stars, My TON, Gifts, Watch, Proxy,
+// FAQ, Tips — zero duplicates) sit below. AorusGram & AI Companion remain untouched in their card.
 func aorusMaxReorderProfileSections(
     _ items: inout [SettingsSection: [PeerInfoScreenItem]],
     presentationData: PresentationData,
+    openBusiness: @escaping () -> Void,
     openExtras: @escaping ([AorusMaxTelegramServiceEntry]) -> Void
 ) {
     let advanced = items[.advanced] ?? []
     let shortcuts = items[.shortcuts] ?? []
+    let payment = items[.payment] ?? []
     let byAdvancedId: [AnyHashable: PeerInfoScreenItem] = Dictionary(advanced.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let byShortcutId: [AnyHashable: PeerInfoScreenItem] = Dictionary(shortcuts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
+    // Block 1: Уведомления и звук, Безопасность, Устройства, Сообщения, Избранное, Папки
     var primaryCard: [PeerInfoScreenItem] = []
     if let notifications = byAdvancedId[AnyHashable(200)] { primaryCard.append(notifications) }
     if let privacy = byAdvancedId[AnyHashable(201)] { primaryCard.append(privacy) }
+    if let devices = byShortcutId[AnyHashable(103)] { primaryCard.append(devices) }
     primaryCard.append(contentsOf: items[.aorusMaxPreferences] ?? [])
     if let saved = byShortcutId[AnyHashable(101)] { primaryCard.append(saved) }
     if let folders = byShortcutId[AnyHashable(104)] { primaryCard.append(folders) }
-    if let appearance = byAdvancedId[AnyHashable(203)] { primaryCard.append(appearance) }
-    if let devices = byShortcutId[AnyHashable(103)] { primaryCard.append(devices) }
     items[.aorusMaxPreferences] = primaryCard
 
+    // Block 2: Экономия батареи и сети, Память
     var storageCard: [PeerInfoScreenItem] = []
     if let powerSaving = byAdvancedId[AnyHashable(206)] { storageCard.append(powerSaving) }
     if let storage = byAdvancedId[AnyHashable(202)] { storageCard.append(storage) }
     items[.aorusMaxFavorites] = storageCard
+
+    // Block 3: Оформление, Язык приложения
+    var appearanceCard: [PeerInfoScreenItem] = []
+    if let appearance = byAdvancedId[AnyHashable(203)] { appearanceCard.append(appearance) }
+    if let language = byAdvancedId[AnyHashable(204)] { appearanceCard.append(language) }
+
+    // Block 4: MAX для бизнеса (briefcase `case_24` icon, opens native Business setup, never duplicated in «Ещё»)
+    let businessIcon = AorusMaxInterface.tintedGlyph("case_24", dark: presentationData.theme.overallDarkAppearance)
+    let isRu = presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
+    let businessTitle = AorusMaxInterface.localizedString("SETTINGS_BUSINESS_TITLE", languageCode: presentationData.strings.baseLanguageCode) ?? (isRu ? "MAX для бизнеса" : "MAX for Business")
+    let businessAction: () -> Void
+    if let existingBusiness = payment.first(where: { $0.id == AnyHashable(104) }) as? PeerInfoScreenDisclosureItem, let action = existingBusiness.action {
+        businessAction = action
+    } else {
+        businessAction = openBusiness
+    }
+    let businessCard: [PeerInfoScreenItem] = [
+        PeerInfoScreenDisclosureItem(
+            id: "aorusMaxBusiness",
+            text: businessTitle,
+            icon: businessIcon,
+            action: businessAction
+        )
+    ]
 
     let movedShortcuts: Set<AnyHashable> = [101, 102, 103, 104, 121]
     let movedAdvanced: Set<AnyHashable> = [200, 201, 202, 203, 204, 206]
@@ -322,7 +350,8 @@ func aorusMaxReorderProfileSections(
     }
 
     collect(items[.wallet] ?? [])
-    collect(items[.payment] ?? [])
+    // Exclude Business (id 104) so it is never duplicated inside «Ещё».
+    collect(payment.filter { $0.id != AnyHashable(104) })
     collect((items[.extra] ?? []).filter { $0.id != AnyHashable(0) })
     collect(items[.proxy] ?? [])
     collect(items[.apps] ?? [])
@@ -331,9 +360,6 @@ func aorusMaxReorderProfileSections(
 
     let support = items[.support] ?? []
     var keptSupport: [PeerInfoScreenItem] = []
-    if let language = byAdvancedId[AnyHashable(204)] {
-        keptSupport.append(language)
-    }
     for item in support {
         if item.id == AnyHashable(0) {
             keptSupport.append(item)
@@ -354,8 +380,8 @@ func aorusMaxReorderProfileSections(
     }
     items[.support] = keptSupport
 
-    items[.wallet] = []
-    items[.payment] = []
+    items[.wallet] = appearanceCard
+    items[.payment] = businessCard
     items[.extra] = []
     items[.proxy] = []
     items[.apps] = []
@@ -364,3 +390,4 @@ func aorusMaxReorderProfileSections(
     items[.edit] = []
     items[.myProfile] = []
 }
+

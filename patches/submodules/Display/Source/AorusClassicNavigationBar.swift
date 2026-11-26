@@ -855,31 +855,44 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         if let titleView = self.titleView {
             let isFirstTitleLayout = self.aorusLaidOutTitleView !== titleView || titleView.frame.isEmpty
             self.aorusLaidOutTitleView = titleView
+            let isMaxLeadingChatTitle = AorusMaxInterface.isEnabled && self.aorusLeadingButtonNode.view.superview != nil
             if let titleView = titleView as? NavigationBarTitleView {
                 var titleViewTransition = transition
                 if isFirstTitleLayout || AorusMaxInterface.isEnabled {
                     titleViewTransition = .immediate
                 }
-                let titleSize = titleView.updateLayout(availableSize: CGSize(width: size.width - leftTitleInset - rightTitleInset, height: nominalHeight), transition: titleViewTransition)
-                var titleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - titleSize.width) * 0.5), y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
-                if titleFrame.origin.x + titleFrame.width > size.width - rightTitleInset {
-                    titleFrame.origin.x = size.width - rightTitleInset - titleFrame.width
-                }
-                if titleFrame.origin.x < leftTitleInset {
-                    titleFrame.origin.x = leftTitleInset + floorToScreenPixels((size.width - leftTitleInset - rightTitleInset - titleFrame.width) * 0.5)
+                let availableWidth = max(1.0, size.width - leftTitleInset - rightTitleInset)
+                let titleSize = titleView.updateLayout(availableSize: CGSize(width: availableWidth, height: nominalHeight), transition: titleViewTransition)
+                var titleFrame: CGRect
+                if isMaxLeadingChatTitle {
+                    titleFrame = CGRect(origin: CGPoint(x: leftTitleInset, y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
+                } else {
+                    titleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - titleSize.width) * 0.5), y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
+                    if titleFrame.origin.x + titleFrame.width > size.width - rightTitleInset {
+                        titleFrame.origin.x = size.width - rightTitleInset - titleFrame.width
+                    }
+                    if titleFrame.origin.x < leftTitleInset {
+                        titleFrame.origin.x = leftTitleInset + floorToScreenPixels((size.width - leftTitleInset - rightTitleInset - titleFrame.width) * 0.5)
+                    }
                 }
                 titleViewTransition.updateFrame(view: titleView, frame: titleFrame)
             } else {
-                leftTitleInset = max(leftTitleInset, rightTitleInset)
-                rightTitleInset = leftTitleInset
+                var titleFrame: CGRect
+                if isMaxLeadingChatTitle {
+                    let titleSize = CGSize(width: max(1.0, size.width - leftTitleInset - rightTitleInset), height: nominalHeight)
+                    titleFrame = CGRect(origin: CGPoint(x: leftTitleInset, y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
+                } else {
+                    leftTitleInset = max(leftTitleInset, rightTitleInset)
+                    rightTitleInset = leftTitleInset
 
-                let titleSize = CGSize(width: max(1.0, size.width - leftTitleInset - rightTitleInset), height: nominalHeight)
-                var titleFrame = CGRect(origin: CGPoint(x: floor((size.width - titleSize.width) / 2.0), y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
-                if titleFrame.origin.x + titleFrame.width > size.width - rightTitleInset {
-                    titleFrame.origin.x = size.width - rightTitleInset - titleFrame.width
-                }
-                if titleFrame.origin.x < leftTitleInset {
-                    titleFrame.origin.x = leftTitleInset + floorToScreenPixels((size.width - leftTitleInset - rightTitleInset - titleFrame.width) * 0.5)
+                    let titleSize = CGSize(width: max(1.0, size.width - leftTitleInset - rightTitleInset), height: nominalHeight)
+                    titleFrame = CGRect(origin: CGPoint(x: floor((size.width - titleSize.width) / 2.0), y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
+                    if titleFrame.origin.x + titleFrame.width > size.width - rightTitleInset {
+                        titleFrame.origin.x = size.width - rightTitleInset - titleFrame.width
+                    }
+                    if titleFrame.origin.x < leftTitleInset {
+                        titleFrame.origin.x = leftTitleInset + floorToScreenPixels((size.width - leftTitleInset - rightTitleInset - titleFrame.width) * 0.5)
+                    }
                 }
                 var titleViewTransition = transition
                 if isFirstTitleLayout || AorusMaxInterface.isEnabled {

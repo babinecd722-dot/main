@@ -91,9 +91,11 @@ private final class AorusClassicChatListButtonView: HighlightTrackingButton {
         case let .text(title, isBold):
             textString = NSAttributedString(string: AorusOldInterface.classicTitle(title) ?? title, font: isBold ? Font.bold(17.0) : Font.regular(17.0), textColor: color)
         case let .icon(imageName):
-            // AorusGram: MAX interface: MAX's round buttons — the blue one with the plus that
-            // composes, and the grey one with the glass that searches.
-            if AorusMaxInterface.isEnabled, imageName == "Chat List/ComposeIcon", let image = AorusMaxInterface.headerButtonImage(.compose, dark: theme.overallDarkAppearance) {
+            // AorusGram: MAX interface: MAX's round buttons — the blue plus button on Chats &
+            // Contacts, and the grey «…» button beside it.
+            if AorusMaxInterface.isEnabled, (imageName == "Chat List/ComposeIcon" || imageName == "Chat List/AddIcon"), let image = AorusMaxInterface.headerButtonImage(.compose, dark: theme.overallDarkAppearance) {
+                iconSource = .image(image)
+            } else if AorusMaxInterface.isEnabled, imageName == AorusMaxInterface.headerMoreIconName, let image = AorusMaxInterface.headerButtonImage(.more, dark: theme.overallDarkAppearance) {
                 iconSource = .image(image)
             } else if AorusMaxInterface.isEnabled, imageName == AorusMaxInterface.headerSearchIconName, let image = AorusMaxInterface.headerButtonImage(.search, dark: theme.overallDarkAppearance) {
                 iconSource = .image(image)
@@ -576,7 +578,8 @@ private final class AorusClassicChatListContentView: UIView {
         transition.setFrame(view: self.leftButtonOffsetContainer, frame: CGRect(origin: CGPoint(), size: size))
         transition.setFrame(view: self.rightButtonOffsetContainer, frame: CGRect(origin: CGPoint(), size: size))
 
-        let titleText = NSAttributedString(string: content.title, font: Font.semibold(17.0), textColor: theme.rootController.navigationBar.primaryTextColor)
+        let isMaxRootHeader = AorusMaxInterface.isEnabled && backTitle == nil
+        let titleText = NSAttributedString(string: content.title, font: isMaxRootHeader ? Font.regular(22.0) : Font.semibold(17.0), textColor: theme.rootController.navigationBar.primaryTextColor)
         let titleTextUpdated = self.titleTextView.attributedText != titleText
         self.titleTextView.attributedText = titleText
 
@@ -662,11 +665,12 @@ private final class AorusClassicChatListContentView: UIView {
         }
 
         let commonInset: CGFloat = max(leftOffset, size.width - rightOffset)
-        let remainingWidth = size.width - commonInset * 2.0
+        let remainingWidth = isMaxRootHeader ? max(1.0, rightOffset - (leftInset + 16.0)) : (size.width - commonInset * 2.0)
 
         let titleTextSize = self.titleTextView.updateLayout(CGSize(width: remainingWidth, height: size.height))
 
-        let titleFrame = CGRect(origin: CGPoint(x: floor((size.width - titleTextSize.width) / 2.0) + sideContentWidth, y: floor((size.height - titleTextSize.height) / 2.0)), size: titleTextSize)
+        let titleOriginX = isMaxRootHeader ? (leftInset + 16.0) : (floor((size.width - titleTextSize.width) / 2.0) + sideContentWidth)
+        let titleFrame = CGRect(origin: CGPoint(x: titleOriginX, y: floor((size.height - titleTextSize.height) / 2.0)), size: titleTextSize)
         if titleTextUpdated {
             self.titleTextView.frame = titleFrame
         } else {
@@ -746,9 +750,9 @@ private final class AorusClassicChatListContentView: UIView {
             }
 
             let chatListTitleOffset: CGFloat
-            if AorusMaxInterface.isEnabled && backTitle == nil && chatListTitle.text != strings.Contacts_Title {
-                // AorusGram: MAX interface: MAX's large title stands on the left at x=20 on Chats only.
-                chatListTitleOffset = leftOffset + 4.0 - titleContentRect.minX - floor((size.width - chatListTitleContentSize.width) / 2.0)
+            if AorusMaxInterface.isEnabled && backTitle == nil {
+                // AorusGram: MAX interface: left-aligned 22pt regular title on Chats & Contacts.
+                chatListTitleOffset = leftInset + 16.0 - titleContentRect.minX - floor((size.width - chatListTitleContentSize.width) / 2.0)
             } else if chatListTitle.activity {
                 chatListTitleOffset = 0.0
             } else {

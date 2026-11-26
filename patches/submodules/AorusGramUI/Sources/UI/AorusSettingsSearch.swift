@@ -93,7 +93,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     private let backgroundView: GlassBackgroundView
     private let iconView: UIImageView
     private let searchBar: SearchBarNode
-    private let close: (background: GlassBackgroundView, icon: UIImageView)
+    private let close: (background: GlassBackgroundView, icon: UIImageView, button: UIButton)
 
     private var queryUpdated: ((String) -> Void)?
     private var validLayout: (size: CGSize, leftInset: CGFloat, rightInset: CGFloat)?
@@ -110,8 +110,13 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
         self.iconView = UIImageView()
         self.backgroundView.contentView.addSubview(self.iconView)
 
-        self.close = (GlassBackgroundView(), UIImageView())
+        let closeButton = UIButton(type: .custom)
+        closeButton.accessibilityLabel = strings.Common_Close
+        closeButton.accessibilityTraits = .button
+        self.close = (GlassBackgroundView(), UIImageView(), closeButton)
+        self.close.icon.isUserInteractionEnabled = false
         self.close.background.contentView.addSubview(self.close.icon)
+        self.close.background.contentView.addSubview(self.close.button)
 
         SearchBarNode.aorusPreserveInlineNavigation = true
         self.searchBar = SearchBarNode(
@@ -130,10 +135,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
         self.view.addSubview(self.backgroundContainer)
         self.backgroundView.contentView.addSubview(self.searchBar.view)
         self.backgroundContainer.contentView.addSubview(self.close.background)
-        self.close.background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.closeTapped(_:))))
-        self.close.background.isAccessibilityElement = true
-        self.close.background.accessibilityLabel = strings.Common_Close
-        self.close.background.accessibilityTraits = .button
+        self.close.button.addTarget(self, action: #selector(self.closePressed), for: .touchUpInside)
 
         self.searchBar.cancel = { [weak self] in
             self?.searchBar.deactivate(clear: false)
@@ -159,10 +161,8 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
         )
     }
 
-    @objc private func closeTapped(_ recognizer: UITapGestureRecognizer) {
-        if case .ended = recognizer.state {
-            self.searchBar.cancel?()
-        }
+    @objc private func closePressed() {
+        self.searchBar.cancel?()
     }
 
     func setQueryUpdated(_ f: @escaping (String) -> Void) {
@@ -209,7 +209,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
 
         componentTransition.setFrame(view: self.backgroundView, frame: backgroundFrame)
         self.backgroundView.update(size: backgroundFrame.size, cornerRadius: backgroundFrame.height * 0.5, isDark: self.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, transition: componentTransition)
-        if AorusOldInterface.isEnabled && !AorusMaxInterface.isEnabled {
+        if AorusOldInterface.isEnabled {
             let fill = self.theme.rootController.navigationSearchBar.inputFillColor
             self.backgroundView.backgroundColor = fill
             self.backgroundView.layer.cornerRadius = backgroundFrame.height * 0.5
@@ -256,6 +256,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
             self.close.icon.frame = closeIconSize.centered(in: CGRect(origin: CGPoint(), size: closeFrame.size))
         }
         self.close.icon.tintColor = self.theme.chat.inputPanel.panelControlColor
+        self.close.button.frame = CGRect(origin: CGPoint(), size: closeFrame.size)
 
         componentTransition.setFrame(view: self.close.background, frame: closeFrame)
         self.close.background.update(size: closeFrame.size, cornerRadius: closeFrame.height * 0.5, isDark: self.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, transition: componentTransition)

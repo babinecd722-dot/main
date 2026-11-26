@@ -1089,8 +1089,9 @@ jobs:
           # Telegram 12.0's buttons on a profile's header, which the old interface draws
           # instead of the glass capsules (wired in by aorus_old_interface.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusClassicPeerInfoNavigation.swift $PEER/Sources/
-          # The MAXimal interface's service cards over the Profile tab (placed by aorus_max_interface.py).
+          # The MAXimal interface's service cards & 1:1 settings screens (placed by aorus_max_interface.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusMaxProfileItems.swift $PEER/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusMaxSettingsScreens.swift $PEER/Sources/
           # The classic browser and editor renderers from Telegram iOS 12.0.
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserAddressBarComponent.swift $TG/submodules/BrowserUI/Sources/
           cp $PATCHES/submodules/BrowserUI/Sources/AorusClassicBrowserNavigationBarComponent.swift $TG/submodules/BrowserUI/Sources/

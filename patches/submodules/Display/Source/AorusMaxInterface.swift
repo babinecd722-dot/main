@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import CoreImage
 import AppBundle
 
 /// AorusGram: the MAXimal interface — the whole client drawn the way the MAX messenger draws
@@ -71,15 +72,15 @@ public enum AorusMaxInterface {
     public static func palette(dark: Bool) -> Palette {
         if dark {
             return Palette(
-                page: UIColor(rgb: 0x16181b),
-                card: UIColor(rgb: 0x23252a),
+                page: UIColor(rgb: 0x000000),
+                card: UIColor(rgb: 0x1e2024),
                 cardPressed: UIColor(rgb: 0x2c2e33),
                 primaryText: UIColor(rgb: 0xffffff),
                 secondaryText: UIColor(rgb: 0x99a2ad),
                 tertiaryText: UIColor(rgb: 0x5d5f61),
-                separator: UIColor(rgb: 0x2e3036),
+                separator: UIColor(rgb: 0x2c2e33),
                 glyph: UIColor(rgb: 0xffffff),
-                circleButton: UIColor(rgb: 0x2a2d2e),
+                circleButton: UIColor(rgb: 0x1e2024),
                 hint: UIColor(rgb: 0x373a54),
                 hintText: UIColor(rgb: 0xffffff)
             )
@@ -105,7 +106,8 @@ public enum AorusMaxInterface {
     /// MAX's colours under the names the theme is built from (`AorusPluginAppearanceValues`):
     /// a key with `@dark` or `@light` applies to that appearance. Laid in place of every other
     /// look while this run draws MAX.
-    public static let appearance: [String: Any] = {
+    public static var appearance: [String: Any] {
+        let preset = AorusMaxInterface.selectedChatTheme
         var table: [String: Any] = [:]
         func both(_ key: String, _ value: Any) {
             table[key] = value
@@ -115,9 +117,9 @@ public enum AorusMaxInterface {
             table[key + "@light"] = light
         }
 
-        // The tab bar: flat, full width, grey glyphs and titles, the selected one in the accent.
-        pair("tabBar.background", "1c1f22", "f9f9fa")
-        pair("tabBar.separator", "1c1f22", "e7e8ec")
+        // The tab bar: pure black in dark mode (matching MAX iOS Settings/Chats), grey glyphs, blue accent.
+        pair("tabBar.background", "000000", "f9f9fa")
+        pair("tabBar.separator", "141518", "e7e8ec")
         pair("tabBar.icon", "7e8085", "99a2ad")
         pair("tabBar.text", "7e8085", "99a2ad")
         both("tabBar.selected", "0a7df7")
@@ -125,9 +127,9 @@ public enum AorusMaxInterface {
         both("tabBar.badge", "ed2c34")
         both("tabBar.badgeText", "ffffff")
 
-        // Bars: the page's own colour, no line under them, white glyphs and titles.
-        pair("header.background", "16181b", "ffffff")
-        pair("header.separator", "16181b", "ffffff")
+        // Bars: pure black in dark mode, no line under them, white glyphs and titles.
+        pair("header.background", "000000", "ffffff")
+        pair("header.separator", "000000", "ffffff")
         pair("header.buttons", "ffffff", "2c2d2e")
         pair("header.title", "ffffff", "000000")
         pair("header.subtitle", "99a2ad", "818c99")
@@ -136,22 +138,22 @@ public enum AorusMaxInterface {
         pair("header.disabled", "4a4c52", "c4c8cc")
         both("header.badge", "0a7df7")
         both("header.badgeText", "ffffff")
-        pair("header.segment", "23252a", "ebedf0")
+        pair("header.segment", "1e2024", "ebedf0")
         pair("header.segmentSelected", "2c2e33", "ffffff")
         pair("header.segmentText", "ffffff", "000000")
-        pair("header.segmentDivider", "2e3036", "e7e8ec")
+        pair("header.segmentDivider", "2c2e33", "e7e8ec")
 
-        pair("search.background", "16181b", "ffffff")
-        pair("search.field", "23252a", "ebedf0")
+        pair("search.background", "000000", "ffffff")
+        pair("search.field", "1e2024", "ebedf0")
         pair("search.text", "ffffff", "000000")
         pair("search.placeholder", "aaaeb3", "818c99")
         pair("search.icon", "99a2ad", "818c99")
         both("search.accent", "0a7df7")
 
-        // Lists: cards on the page, MAX's greys for what is secondary.
-        pair("list.background", "16181b", "f1f2f5")
-        pair("list.item", "23252a", "ffffff")
-        pair("list.separator", "2e3036", "e7e8ec")
+        // Lists: elevated cards on pure black dark canvas (matching MAX iOS Settings/Messages/Memory/Appearance).
+        pair("list.background", "000000", "f1f2f5")
+        pair("list.item", "1e2024", "ffffff")
+        pair("list.separator", "2c2e33", "e7e8ec")
         pair("list.text", "ffffff", "000000")
         pair("list.secondaryText", "99a2ad", "818c99")
         both("list.accent", "0a7df7")
@@ -167,7 +169,7 @@ public enum AorusMaxInterface {
         both("list.switchKnob", "ffffff")
         both("list.check", "0a7df7")
         pair("list.destructive", "ff3347", "e64646")
-        pair("list.mediaPlaceholder", "232324", "f2f3f5")
+        pair("list.mediaPlaceholder", "1e2024", "f2f3f5")
         both("button.fill", "0a7df7")
         both("button.text", "ffffff")
         both("swipe.accent", "0a7df7")
@@ -179,12 +181,12 @@ public enum AorusMaxInterface {
         pair("swipe.inactive", "3a3c42", "c4c8cc")
         both("swipe.text", "ffffff")
 
-        // The chat list: no lines between rows, pinned chats on the card colour.
-        pair("chatList.background", "16181b", "ffffff")
-        pair("chatList.pinned", "23252a", "f2f3f5")
-        pair("chatList.highlight", "2c2e33", "e8eaed")
-        pair("chatList.selected", "2c2e33", "e8eaed")
-        pair("chatList.separator", "16181b", "ffffff")
+        // The chat list: pure black dark canvas, no lines between rows, pinned chats slightly lifted.
+        pair("chatList.background", "000000", "ffffff")
+        pair("chatList.pinned", "121316", "f2f3f5")
+        pair("chatList.highlight", "1e2024", "e8eaed")
+        pair("chatList.selected", "1e2024", "e8eaed")
+        pair("chatList.separator", "000000", "ffffff")
         pair("chatList.title", "ffffff", "000000")
         pair("chatList.author", "ffffff", "000000")
         pair("chatList.text", "99a2ad", "818c99")
@@ -195,8 +197,8 @@ public enum AorusMaxInterface {
         both("chatList.online", "33e048")
         both("chatList.verified", "0a7df7")
         both("chatList.verifiedCheck", "ffffff")
-        pair("chatList.searchBar", "23252a", "ebedf0")
-        pair("chatList.sectionHeader", "16181b", "ffffff")
+        pair("chatList.searchBar", "1e2024", "ebedf0")
+        pair("chatList.sectionHeader", "000000", "ffffff")
         pair("chatList.sectionHeaderText", "848a8c", "6d7885")
         both("badge.unread", "0a7df7")
         both("badge.unreadText", "ffffff")
@@ -205,12 +207,12 @@ public enum AorusMaxInterface {
         pair("badge.pinned", "5d5f61", "99a2ad")
         both("badge.reaction", "ed2c34")
 
-        // Bubbles: navy (white by day) for others, MAX's violet gradient for one's own.
+        // Bubbles: follow the selected MAX chat theme preset (default Cosmos).
         both("bubble.radius", NSNumber(value: 16.0))
         both("bubble.radiusSmall", NSNumber(value: 6.0))
         both("bubble.tails", NSNumber(value: false))
         both("bubble.mergeCorners", NSNumber(value: true))
-        pair("bubble.incoming.fill", "36384f", "ffffff")
+        pair("bubble.incoming.fill", preset.incomingDarkHex, "ffffff")
         pair("bubble.incoming.highlight", "434661", "e8eaed")
         pair("bubble.incoming.text", "ffffff", "000000")
         pair("bubble.incoming.secondaryText", "9799af", "818c99")
@@ -225,29 +227,29 @@ public enum AorusMaxInterface {
         both("bubble.incoming.reactionSelectedText", "ffffff")
         pair("bubble.incoming.pollBar", "8fbcff", "0a7df7")
         pair("bubble.incoming.selection", "0a7df755", "0a7df744")
-        both("bubble.outgoing.fill", ["6d51ca", "7a45ba"])
-        both("bubble.outgoing.highlight", "5b47b8")
+        both("bubble.outgoing.fill", [preset.outgoingTopHex, preset.outgoingBottomHex])
+        both("bubble.outgoing.highlight", preset.outgoingTopHex)
         both("bubble.outgoing.text", "ffffff")
-        both("bubble.outgoing.secondaryText", "d9ccf5")
+        both("bubble.outgoing.secondaryText", "e8e0fa")
         both("bubble.outgoing.link", "ffffff")
         both("bubble.outgoing.accent", "ffffff")
         both("bubble.outgoing.mediaControl", "ffffff")
-        both("bubble.outgoing.mediaControlInner", "6d51ca")
-        pair("bubble.incoming.mediaControlInner", "36384f", "ffffff")
+        both("bubble.outgoing.mediaControlInner", preset.outgoingTopHex)
+        pair("bubble.incoming.mediaControlInner", preset.incomingDarkHex, "ffffff")
         both("bubble.outgoing.fileTitle", "ffffff")
-        both("bubble.outgoing.fileDescription", "d9ccf5")
+        both("bubble.outgoing.fileDescription", "e8e0fa")
         both("bubble.outgoing.reaction", "ffffff33")
         both("bubble.outgoing.reactionText", "ffffff")
         both("bubble.outgoing.reactionSelected", "ffffff")
-        both("bubble.outgoing.reactionSelectedText", "6d51ca")
+        both("bubble.outgoing.reactionSelectedText", preset.outgoingTopHex)
         both("bubble.outgoing.pollBar", "ffffff")
         both("bubble.outgoing.selection", "ffffff55")
-        both("bubble.checks", "d9ccf5")
+        both("bubble.checks", "e8e0fa")
         pair("bubble.freeform", "212535", "ffffff")
         pair("bubble.mediaStatus", "00000080", "00000066")
         both("bubble.mediaStatusText", "ffffff")
         both("bubble.selectCheck", "0a7df7")
-        pair("bubble.shareButton", "23252acc", "ffffffcc")
+        pair("bubble.shareButton", "1e2024cc", "ffffffcc")
         pair("bubble.shareButtonIcon", "ffffff", "0a7df7")
         pair("bubble.infoText", "ffffff", "000000")
         both("bubble.infoLink", "0a7df7")
@@ -259,17 +261,17 @@ public enum AorusMaxInterface {
         pair("chat.dateText", "e8ecfa", "ffffff")
         pair("chat.unreadBar", "212535", "ebedf0")
         pair("chat.unreadBarText", "e8ecfa", "6d7885")
-        pair("chat.scrollButton", "23252a", "ffffff")
-        pair("chat.scrollButtonStroke", "23252a", "e7e8ec")
+        pair("chat.scrollButton", "1e2024", "ffffff")
+        pair("chat.scrollButtonStroke", "1e2024", "e7e8ec")
         pair("chat.scrollButtonIcon", "ffffff", "2c2d2e")
         both("chat.scrollBadge", "0a7df7")
         both("chat.scrollBadgeText", "ffffff")
 
-        // The message panel: MAX's #16181b dark bar, grey glyphs, the accent to send.
-        pair("input.background", "16181b", "ffffff")
-        pair("input.separator", "16181b", "e7e8ec")
-        pair("input.field", "16181b", "ffffff")
-        pair("input.fieldStroke", "16181b", "ffffff")
+        // The message panel: pure black dark bar, grey glyphs, the accent to send.
+        pair("input.background", "000000", "ffffff")
+        pair("input.separator", "141518", "e7e8ec")
+        pair("input.field", "000000", "ffffff")
+        pair("input.fieldStroke", "000000", "ffffff")
         pair("input.placeholder", "aaaeb3", "818c99")
         pair("input.text", "ffffff", "000000")
         pair("input.icons", "99a2ad", "99a2ad")
@@ -324,7 +326,7 @@ public enum AorusMaxInterface {
         both("settings.iconBackground", "00000000")
         pair("settings.iconGlyph", "ffffff", "2c2d2e")
         return table
-    }()
+    }
 
     private static let originalStrings: [String: [String: String]] = {
         var result: [String: [String: String]] = [:]
@@ -627,11 +629,14 @@ public enum AorusMaxInterface {
 
     /// The name the chat list asks for its round search button; the header draws the circle.
     public static let headerSearchIconName = "AorusMax/HeaderSearch"
+    /// The name the chat list asks for its round "..." selection menu button.
+    public static let headerMoreIconName = "AorusMax/HeaderMore"
 
-    /// A round button of MAX's chat header: the grey circle with the search glass, or the blue
+    /// A round button of MAX's chat header: the grey circle with "..." / search, or the blue
     /// one with the plus.
     public enum HeaderButton: Hashable {
         case search
+        case more
         case compose
     }
 
@@ -675,6 +680,11 @@ public enum AorusMaxInterface {
             ink = palette.glyph
             glyphName = "search_24"
             glyphSide = 22.0
+        case .more:
+            fill = palette.circleButton
+            ink = palette.glyph
+            glyphName = "dots_horizontal_24"
+            glyphSide = 22.0
         case .compose:
             fill = AorusMaxInterface.accent
             ink = UIColor.white
@@ -702,9 +712,252 @@ public enum AorusMaxInterface {
     /// Telegram servers.
     public static let localUnreadFilterId: Int32 = 90001
     public static let localChannelsFilterId: Int32 = 90002
+    public static let localFiltersDidChangeNotification = Notification.Name("AorusMaxLocalFiltersDidChange")
 
     public static func isLocalFilterId(_ id: Int32) -> Bool {
         return id == AorusMaxInterface.localUnreadFilterId || id == AorusMaxInterface.localChannelsFilterId
     }
+
+    private static func hiddenLocalFiltersKey(accountId: Int64) -> String {
+        return "aorusgram_max_hidden_local_filters_\(accountId)"
+    }
+
+    public static func isLocalFilterHidden(_ id: Int32, accountId: Int64) -> Bool {
+        let hidden = (UserDefaults.standard.array(forKey: self.hiddenLocalFiltersKey(accountId: accountId)) as? [Int]) ?? []
+        return hidden.contains(Int(id))
+    }
+
+    public static func hideLocalFilter(_ id: Int32, accountId: Int64) {
+        let key = self.hiddenLocalFiltersKey(accountId: accountId)
+        var hidden = (UserDefaults.standard.array(forKey: key) as? [Int]) ?? []
+        if !hidden.contains(Int(id)) {
+            hidden.append(Int(id))
+            UserDefaults.standard.set(hidden, forKey: key)
+        }
+        NotificationCenter.default.post(name: self.localFiltersDidChangeNotification, object: nil)
+    }
+
+    // MARK: - MAX Messages & Appearance Preferences
+
+    public static let sendByEnterKey = "aorusgram_max_send_by_enter"
+    public static var sendByEnterEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: self.sendByEnterKey) }
+        set { UserDefaults.standard.set(newValue, forKey: self.sendByEnterKey) }
+    }
+
+    public static let quickReactionEnabledKey = "aorusgram_max_quick_reaction_enabled"
+    public static var quickReactionEnabled: Bool {
+        get { (UserDefaults.standard.object(forKey: self.quickReactionEnabledKey) as? Bool) ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: self.quickReactionEnabledKey) }
+    }
+
+    public struct ChatThemePreset: Equatable {
+        public let id: String
+        public let titleRu: String
+        public let titleEn: String
+        public let outgoingTopHex: String
+        public let outgoingBottomHex: String
+        public let incomingDarkHex: String
+        public let outgoingTop: UIColor
+        public let outgoingBottom: UIColor
+        public let incomingDark: UIColor
+        public let incomingLight: UIColor
+        public let wallpaperDark: UIColor
+        public let wallpaperLight: UIColor
+        public let patternTintDark: UIColor
+        public let patternTintLight: UIColor
+
+        public func localizedTitle(languageCode: String) -> String {
+            return languageCode.lowercased().hasPrefix("ru") ? self.titleRu : self.titleEn
+        }
+    }
+
+    public static let chatThemePresets: [ChatThemePreset] = [
+        ChatThemePreset(
+            id: "cosmos",
+            titleRu: "Космос",
+            titleEn: "Cosmos",
+            outgoingTopHex: "6d51ca",
+            outgoingBottomHex: "a152e8",
+            incomingDarkHex: "36384f",
+            outgoingTop: UIColor(rgb: 0x6d51ca),
+            outgoingBottom: UIColor(rgb: 0xa152e8),
+            incomingDark: UIColor(rgb: 0x36384f),
+            incomingLight: UIColor(rgb: 0xffffff),
+            wallpaperDark: UIColor(rgb: 0x0c0e18),
+            wallpaperLight: UIColor(rgb: 0xdee4f0),
+            patternTintDark: UIColor(rgb: 0x3b4466),
+            patternTintLight: UIColor(rgb: 0xb6c2d9)
+        ),
+        ChatThemePreset(
+            id: "mint",
+            titleRu: "Мята",
+            titleEn: "Mint",
+            outgoingTopHex: "2fb995",
+            outgoingBottomHex: "5de0b2",
+            incomingDarkHex: "293b37",
+            outgoingTop: UIColor(rgb: 0x2fb995),
+            outgoingBottom: UIColor(rgb: 0x5de0b2),
+            incomingDark: UIColor(rgb: 0x293b37),
+            incomingLight: UIColor(rgb: 0xffffff),
+            wallpaperDark: UIColor(rgb: 0x0c1614),
+            wallpaperLight: UIColor(rgb: 0xdff2ec),
+            patternTintDark: UIColor(rgb: 0x2d594e),
+            patternTintLight: UIColor(rgb: 0xa7d6c8)
+        ),
+        ChatThemePreset(
+            id: "sunset",
+            titleRu: "Закат",
+            titleEn: "Sunset",
+            outgoingTopHex: "f25c54",
+            outgoingBottomHex: "ff7d6b",
+            incomingDarkHex: "3d2a30",
+            outgoingTop: UIColor(rgb: 0xf25c54),
+            outgoingBottom: UIColor(rgb: 0xff7d6b),
+            incomingDark: UIColor(rgb: 0x3d2a30),
+            incomingLight: UIColor(rgb: 0xffffff),
+            wallpaperDark: UIColor(rgb: 0x170e11),
+            wallpaperLight: UIColor(rgb: 0xf7e4e2),
+            patternTintDark: UIColor(rgb: 0x5e343c),
+            patternTintLight: UIColor(rgb: 0xe3b8b3)
+        ),
+        ChatThemePreset(
+            id: "forest",
+            titleRu: "Лес",
+            titleEn: "Forest",
+            outgoingTopHex: "2ea43f",
+            outgoingBottomHex: "4cc252",
+            incomingDarkHex: "263829",
+            outgoingTop: UIColor(rgb: 0x2ea43f),
+            outgoingBottom: UIColor(rgb: 0x4cc252),
+            incomingDark: UIColor(rgb: 0x263829),
+            incomingLight: UIColor(rgb: 0xffffff),
+            wallpaperDark: UIColor(rgb: 0x0d160e),
+            wallpaperLight: UIColor(rgb: 0xe1f2e3),
+            patternTintDark: UIColor(rgb: 0x2f5434),
+            patternTintLight: UIColor(rgb: 0xb0d6b4)
+        )
+    ]
+
+    public static let chatThemeKey = "aorusgram_max_chat_theme"
+    public static let chatThemeDidChangeNotification = Notification.Name("AorusMaxChatThemeDidChange")
+
+    public static var selectedChatThemeId: String {
+        get { UserDefaults.standard.string(forKey: self.chatThemeKey) ?? "cosmos" }
+        set {
+            UserDefaults.standard.set(newValue, forKey: self.chatThemeKey)
+            NotificationCenter.default.post(name: self.chatThemeDidChangeNotification, object: nil)
+        }
+    }
+
+    public static var selectedChatTheme: ChatThemePreset {
+        let id = self.selectedChatThemeId
+        return self.chatThemePresets.first(where: { $0.id == id }) ?? self.chatThemePresets[0]
+    }
+
+    /// Generates a crisp MAX-branded QR code card image (white rounded card, dark QR modules,
+    /// centered MAX swirl disc badge) suitable for native iOS share sheets.
+    public static func generateQRCodeImage(text: String, side: CGFloat = 640.0) -> UIImage? {
+        guard let data = text.data(using: .utf8),
+              let filter = CIFilter(name: "CIQRCodeGenerator") else {
+            return nil
+        }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("H", forKey: "inputCorrectionLevel")
+        guard let ciImage = filter.outputImage else {
+            return nil
+        }
+        let qrInset: CGFloat = floor(side * 0.1)
+        let qrSide = side - qrInset * 2.0
+        let scaleX = qrSide / ciImage.extent.width
+        let scaleY = qrSide / ciImage.extent.height
+        let transformed = ciImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
+        let ciContext = CIContext(options: nil)
+        guard let cgQR = ciContext.createCGImage(transformed, from: transformed.extent) else {
+            return nil
+        }
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+        return renderer.image { ctx in
+            let bounds = CGRect(x: 0.0, y: 0.0, width: side, height: side)
+            UIColor.white.setFill()
+            UIBezierPath(roundedRect: bounds, cornerRadius: floor(side * 0.08)).fill()
+            ctx.cgContext.interpolationQuality = .none
+            UIImage(cgImage: cgQR).draw(in: CGRect(x: qrInset, y: qrInset, width: qrSide, height: qrSide))
+            let badgeSide = floor(side * 0.22)
+            let plateSide = badgeSide + floor(side * 0.04)
+            let plateRect = CGRect(x: (side - plateSide) * 0.5, y: (side - plateSide) * 0.5, width: plateSide, height: plateSide)
+            UIColor.white.setFill()
+            UIBezierPath(ovalIn: plateRect).fill()
+            if let badge = AorusMaxInterface.qrBadgeImage(diameter: badgeSide, fillColor: AorusMaxInterface.accent) {
+                let badgeRect = CGRect(x: (side - badgeSide) * 0.5, y: (side - badgeSide) * 0.5, width: badgeSide, height: badgeSide)
+                badge.draw(in: badgeRect)
+            }
+        }
+    }
+
+    /// Applies or removes MAX's left-to-right dark shimmer sweep over network status text
+    /// («Ожидание сети…» / «Обновление…» / «Подключение…»).
+    public static func updateNetworkShimmer(on layer: CALayer, bounds: CGRect, active: Bool) {
+        let animationKey = "aorusMaxNetworkShimmer"
+        guard active && !bounds.width.isZero && !bounds.height.isZero else {
+            if layer.mask?.name == animationKey {
+                layer.mask?.removeAnimation(forKey: animationKey)
+                layer.mask = nil
+            }
+            return
+        }
+        let gradient: CAGradientLayer
+        if let existing = layer.mask as? CAGradientLayer, existing.name == animationKey {
+            gradient = existing
+        } else {
+            gradient = CAGradientLayer()
+            gradient.name = animationKey
+            gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+            gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
+            // Light-gray/white base text with a dark-alpha glint sweeping left-to-right.
+            gradient.colors = [
+                UIColor(white: 1.0, alpha: 1.0).cgColor,
+                UIColor(white: 1.0, alpha: 0.25).cgColor,
+                UIColor(white: 1.0, alpha: 1.0).cgColor
+            ]
+            gradient.locations = [-0.4, -0.2, 0.0]
+            layer.mask = gradient
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradient.frame = bounds
+        CATransaction.commit()
+        if gradient.animation(forKey: animationKey) == nil {
+            let anim = CABasicAnimation(keyPath: "locations")
+            anim.fromValue = [-0.45, -0.2, 0.05]
+            anim.toValue = [0.95, 1.2, 1.45]
+            anim.duration = 1.45
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            gradient.add(anim, forKey: animationKey)
+        }
+    }
+
+    /// Round dark-gray circle with a gray cross (`cross_24`) shown on the right of editable folder
+    /// tabs («Новые», «Каналы», custom folders) while MAX selection/edit mode is active.
+    public static func tabDeleteBadgeImage(dark: Bool) -> UIImage? {
+        let diameter: CGFloat = 18.0
+        let fill = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xd8dce2)
+        let crossColor = dark ? UIColor(rgb: 0x9b9fa6) : UIColor(rgb: 0x5c6370)
+        let glyph = AorusMaxInterface.glyph("cross_24")
+        return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
+            context.clear(CGRect(origin: CGPoint(), size: size))
+            context.setFillColor(fill.cgColor)
+            context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
+            if let glyph, let tinted = generateTintedImage(image: glyph, color: crossColor) {
+                let side: CGFloat = 11.0
+                let rect = CGRect(x: (size.width - side) * 0.5, y: (size.height - side) * 0.5, width: side, height: side)
+                UIGraphicsPushContext(context)
+                tinted.draw(in: rect)
+                UIGraphicsPopContext()
+            }
+        })?.withRenderingMode(.alwaysOriginal)
+    }
 }
+
 
