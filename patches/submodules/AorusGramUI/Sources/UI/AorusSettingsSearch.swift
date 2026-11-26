@@ -125,13 +125,21 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
 
         super.init()
 
-        self.view.addSubview(self.backgroundContainer)
-        self.backgroundView.contentView.addSubview(self.searchBar.view)
-        self.backgroundContainer.contentView.addSubview(self.close.background)
-        self.close.background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.closeTapped(_:))))
-        self.close.background.isAccessibilityElement = true
-        self.close.background.accessibilityLabel = strings.Common_Close
-        self.close.background.accessibilityTraits = .button
+        if AorusOldInterface.isEnabled {
+            self.backgroundContainer.isHidden = true
+            self.backgroundView.isHidden = true
+            self.iconView.isHidden = true
+            self.close.background.isHidden = true
+            self.view.addSubview(self.searchBar.view)
+        } else {
+            self.view.addSubview(self.backgroundContainer)
+            self.backgroundView.contentView.addSubview(self.searchBar.view)
+            self.backgroundContainer.contentView.addSubview(self.close.background)
+            self.close.background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.closeTapped(_:))))
+            self.close.background.isAccessibilityElement = true
+            self.close.background.accessibilityLabel = strings.Common_Close
+            self.close.background.accessibilityTraits = .button
+        }
 
         self.searchBar.cancel = { [weak self] in
             self?.searchBar.deactivate(clear: false)
@@ -144,6 +152,19 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     }
 
     private static func searchBarTheme(_ theme: PresentationTheme) -> SearchBarNodeTheme {
+        if AorusOldInterface.isEnabled {
+            return SearchBarNodeTheme(
+                background: theme.rootController.navigationBar.opaqueBackgroundColor,
+                separator: .clear,
+                inputFill: theme.rootController.navigationSearchBar.inputFillColor,
+                primaryText: theme.rootController.navigationSearchBar.inputTextColor,
+                placeholder: theme.rootController.navigationSearchBar.inputPlaceholderTextColor,
+                inputIcon: theme.rootController.navigationSearchBar.inputIconColor,
+                inputClear: theme.rootController.navigationSearchBar.inputClearButtonColor,
+                accent: theme.rootController.navigationSearchBar.accentColor,
+                keyboard: theme.rootController.keyboardColor
+            )
+        }
         return SearchBarNodeTheme(
             background: .clear,
             separator: .clear,
@@ -185,15 +206,22 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     }
 
     override var nominalHeight: CGFloat {
-        return 60.0
+        return AorusOldInterface.isEnabled ? 54.0 : 60.0
     }
 
     override func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, transition: ContainedViewLayoutTransition) -> CGSize {
         self.validLayout = (size, leftInset, rightInset)
+
+        if AorusOldInterface.isEnabled {
+            let searchBarFrame = CGRect(origin: CGPoint(), size: size)
+            transition.updateFrame(view: self.searchBar.view, frame: searchBarFrame)
+            self.searchBar.updateLayout(boundingSize: searchBarFrame.size, leftInset: leftInset, rightInset: rightInset, transition: transition)
+            return size
+        }
+
         let componentTransition = ComponentTransition(transition)
 
-        let contentY = max(6.0, size.height - self.nominalHeight + 6.0)
-        let backgroundFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: contentY), size: CGSize(width: size.width - 16.0 * 2.0 - leftInset - rightInset - 44.0 - 8.0, height: 44.0))
+        let backgroundFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: 6.0), size: CGSize(width: size.width - 16.0 * 2.0 - leftInset - rightInset - 44.0 - 8.0, height: 44.0))
         let closeFrame = CGRect(origin: CGPoint(x: size.width - 16.0 - rightInset - 44.0, y: backgroundFrame.minY), size: CGSize(width: 44.0, height: 44.0))
 
         componentTransition.setFrame(view: self.backgroundContainer, frame: CGRect(origin: CGPoint(), size: size))

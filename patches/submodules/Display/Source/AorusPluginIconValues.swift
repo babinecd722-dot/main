@@ -483,6 +483,8 @@ public enum AorusPluginIconValues {
         ("notifications_off_24", ["Chat/Context Menu/Muted", "Chat/Context Menu/Mute2d", "Peer Info/ButtonMute"]),
         ("notifications_on_24", ["Chat/Context Menu/Unmute", "Item List/Icons/Notifications", "Peer Info/ButtonUnmute"]),
         ("dots_horizontal_24", ["Peer Info/ButtonMore"]),
+        ("search_24", ["Chat List/SearchIcon", "Chat/Context Menu/Search", "Navigation/Search", "Peer Info/ButtonSearch"]),
+        ("block_24", ["Chat/Context Menu/Ban", "Item List/Icons/Block", "Item List/Icons/NoAds", "Peer Info/ButtonStop"]),
         ("leave_chat_24", ["Chat/Context Menu/Logout", "Peer Info/ButtonLeave"]),
         ("add_contact_24", ["Chat/Context Menu/AddUser", "Peer Info/ButtonAddMember"]),
         ("microphone_on_fill_24", ["Peer Info/ButtonVoiceChat"]),

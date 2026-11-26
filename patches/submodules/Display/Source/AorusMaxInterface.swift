@@ -515,6 +515,21 @@ public enum AorusMaxInterface {
         return result
     }
 
+    /// One of MAX's glyphs pre-tinted in an arbitrary `color`, cached by `(name, argb)` so
+    /// scroll-driven navigation bars and buttons never re-rasterize bitmaps per frame.
+    public static func tintedGlyph(_ name: String, color: UIColor) -> UIImage? {
+        let key = "c|\(name)|\(color.argb)" as NSString
+        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
+            return cached
+        }
+        guard let source = AorusMaxInterface.glyph(name),
+              let result = generateTintedImage(image: source, color: color)?.withRenderingMode(.alwaysOriginal) else {
+            return nil
+        }
+        AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
+        return result
+    }
+
     /// Measured MAX settings row metrics from the official MAX 26.17.3 profile reference.
     public static let settingsRowIconOffset: CGFloat = 4.0
     public static let settingsRowTextInset: CGFloat = 57.0

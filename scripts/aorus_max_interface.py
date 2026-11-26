@@ -615,7 +615,7 @@ def patch_privacy(tg: Path) -> None:
     text = _edit(
         text,
         "    case linkHandling\n}\n",
-        "    case linkHandling\n    case aorusMaxSecurityHero\n    case aorusAccountProtection\n    case aorusContactPrivacy\n}\n",
+        "    case linkHandling\n    case aorusAccountProtection\n    case aorusContactPrivacy\n}\n",
         "MAX privacy sections",
     )
     text = _edit(
@@ -624,8 +624,6 @@ def patch_privacy(tg: Path) -> None:
         """    var section: ItemListSectionId {
         if AorusMaxInterface.isEnabled {
             switch self {
-            case .aorusMaxSecurityHero:
-                return PrivacyAndSecuritySection.aorusMaxSecurityHero.rawValue
             case .passcode, .twoStepVerification, .passkeys:
                 return PrivacyAndSecuritySection.aorusAccountProtection.rawValue
             case .aorusMaxSafeMode, .aorusMaxSafeModeInfo, .voiceCallPrivacy, .phoneNumberPrivacy, .messagePrivacy, .groupPrivacy, .groupPrivacyFooter:
@@ -643,8 +641,6 @@ def patch_privacy(tg: Path) -> None:
         "    static func <(lhs: PrivacyAndSecurityEntry, rhs: PrivacyAndSecurityEntry) -> Bool {\n        return lhs.stableId < rhs.stableId\n    }\n",
         """    private var aorusMaxSortOrder: Int32 {
         switch self {
-        case .aorusMaxSecurityHero:
-            return -100
         case .twoStepVerification:
             return -20
         case .passcode:
@@ -712,7 +708,7 @@ def patch_privacy(tg: Path) -> None:
     text = _edit(text, "        switch self {\n            case let .privacyHeader(_, text):", "        switch self {\n            case let .aorusMaxSafeMode(_, value, enabled):\n                let aorusSafeTitle = AorusMaxInterface.localizedString(\"PRIVACY_SETTINGS_SAFE_MODE_TITLE\", languageCode: presentationData.strings.baseLanguageCode) ?? aorusL(\"Безопасный режим\", \"Safe Mode\")\n                let aorusSafeStatus = AorusMaxInterface.localizedString(value ? \"PRIVACY_SETTINGS_TWO_FA_SUBTITLE_ENABLED\" : \"PRIVACY_SETTINGS_TWO_FA_SUBTITLE_DISABLED\", languageCode: presentationData.strings.baseLanguageCode) ?? (value ? presentationData.strings.Settings_PowerSavingOn : presentationData.strings.Settings_PowerSavingOff)\n                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: AorusMaxInterface.tintedGlyph(\"privacy_24\", dark: presentationData.theme.overallDarkAppearance), title: aorusSafeTitle, enabled: enabled, label: aorusSafeStatus, labelStyle: .detailText, sectionId: self.section, style: .blocks, action: { arguments.aorusMaxToggleSafeMode?(!value) })\n            case let .aorusMaxSafeModeInfo(_, text):\n                return ItemListTextItem(presentationData: presentationData, text: .markdown(text), sectionId: self.section, linkAction: { _ in arguments.aorusMaxToggleSafeMode?(false) })\n            case let .privacyHeader(_, text):", "MAX safe mode button")
     text = _edit(text, "    var updatingAccountTimeoutValue: Int32? = nil\n", "    var aorusMaxSafeModeUpdating = false\n    var updatingAccountTimeoutValue: Int32? = nil\n", "MAX safe mode pending state")
     text = _edit(text, "    appConfiguration: AppConfiguration\n) -> [PrivacyAndSecurityEntry]", "    appConfiguration: AppConfiguration,\n    aorusMaxSafeMode: Bool,\n    aorusMaxCanRestore: Bool\n) -> [PrivacyAndSecurityEntry]", "MAX safe mode value argument")
-    text = _edit(text, "    var entries: [PrivacyAndSecurityEntry] = []\n", "    var entries: [PrivacyAndSecurityEntry] = []\n    if AorusMaxInterface.isEnabled {\n        entries.append(.aorusMaxSafeMode(presentationData.theme, aorusMaxSafeMode, privacySettings != nil && !state.aorusMaxSafeModeUpdating))\n        var text = state.aorusMaxSafeModeUpdating ? presentationData.strings.Channel_NotificationLoading : [presentationData.strings.Privacy_Calls, presentationData.strings.PrivacySettings_PhoneNumber, presentationData.strings.PrivacySettings_InviteItem].joined(separator: \" · \")\n        if aorusMaxCanRestore && !aorusMaxSafeMode && !state.aorusMaxSafeModeUpdating { text += \"\\n[\" + presentationData.strings.Undo_Undo + \"](restore)\" }\n        entries.append(.aorusMaxSafeModeInfo(presentationData.theme, text))\n    }\n", "MAX safe mode scope and progress")
+    text = _edit(text, "    var entries: [PrivacyAndSecurityEntry] = []\n", "    var entries: [PrivacyAndSecurityEntry] = []\n    if AorusMaxInterface.isEnabled {\n        entries.append(.aorusMaxSafeMode(presentationData.theme, aorusMaxSafeMode, privacySettings != nil && !state.aorusMaxSafeModeUpdating))\n        var text = state.aorusMaxSafeModeUpdating ? presentationData.strings.Channel_NotificationLoading : [presentationData.strings.Privacy_Calls, presentationData.strings.PrivacySettings_PhoneNumber, presentationData.strings.PrivacySettings_InviteItem].joined(separator: \", \")\n        if aorusMaxCanRestore && !aorusMaxSafeMode && !state.aorusMaxSafeModeUpdating { text += \"\\n[\" + presentationData.strings.Undo_Undo + \"](restore)\" }\n        entries.append(.aorusMaxSafeModeInfo(presentationData.theme, text))\n    }\n", "MAX safe mode scope and progress")
     text = _edit(text, "appConfiguration: appConfiguration), style: .blocks, ensureVisibleItemTag: focusOnItemTag", "appConfiguration: appConfiguration, aorusMaxSafeMode: aorusMaxSafeModeSnapshot?.isActive(privacySettings, content: aorusMaxContentSettings) == true, aorusMaxCanRestore: aorusMaxSafeModeSnapshot != nil), style: .blocks, ensureVisibleItemTag: focusOnItemTag", "MAX safe mode actual state")
     text = _edit(text, "if privacySettings == nil || state.updatingAccountTimeoutValue != nil {", "if privacySettings == nil || state.updatingAccountTimeoutValue != nil || state.aorusMaxSafeModeUpdating {", "MAX safe mode activity")
     text = _edit(text, "        case .blockedPeers, .activeSessions, .passcode,", "        case .aorusMaxSafeMode, .aorusMaxSafeModeInfo:\n            return PrivacyAndSecuritySection.aorusContactPrivacy.rawValue\n        case .blockedPeers, .activeSessions, .passcode,", "MAX safe mode section")
@@ -1668,11 +1664,13 @@ def patch_call_buttons(tg: Path) -> None:
         "    private var aorusMaxPanel: UIView?\n"
         "    private var aorusMaxMicMuted: Bool = false\n"
         "    private var aorusMaxMicLevel: Float = 0.0\n"
+        "    private var aorusMaxCallActive: Bool = false\n"
         "\n"
-        "    func aorusMaxUpdateMicAudioLevel(_ level: Float) {\n"
+        "    func aorusMaxUpdateMicAudioLevel(_ level: Float, isCallActive: Bool) {\n"
         "        guard AorusMaxInterface.isEnabled else { return }\n"
         "        self.aorusMaxMicLevel = level\n"
-        "        self.buttonViews[.microphone]?.aorusMaxUpdateMicEqualizer(visible: !self.aorusMaxMicMuted, level: level)\n"
+        "        self.aorusMaxCallActive = isCallActive\n"
+        "        self.buttonViews[.microphone]?.aorusMaxUpdateMicEqualizer(visible: isCallActive && !self.aorusMaxMicMuted, level: level)\n"
         "    }\n",
         "MAX call panel property",
     )
@@ -1694,7 +1692,7 @@ def patch_call_buttons(tg: Path) -> None:
         "            buttonView.update(size: CGSize(width: buttonSize, height: buttonSize), image: image, isSelected: isActive, isDestructive: isDestructive, isEnabled: button.isEnabled, title: title, transition: buttonTransition)\n",
         "            buttonView.update(size: CGSize(width: buttonSize, height: buttonSize), image: image, isSelected: isActive, isDestructive: isDestructive, isEnabled: button.isEnabled, title: title, transition: buttonTransition)\n"
         "            if AorusMaxInterface.isEnabled, case .microphone = button.content {\n"
-        "                buttonView.aorusMaxUpdateMicEqualizer(visible: !isActive && button.isEnabled, level: self.aorusMaxMicLevel)\n"
+        "                buttonView.aorusMaxUpdateMicEqualizer(visible: self.aorusMaxCallActive && !isActive && button.isEnabled, level: self.aorusMaxMicLevel)\n"
         "            }\n",
         "MAX call microphone equalizer sync",
     )
@@ -1766,13 +1764,22 @@ def patch_call_buttons(tg: Path) -> None:
         "    private var aorusMaxMicClipView: UIView?\n"
         "    private var aorusMaxMicFillView: UIImageView?\n"
         "    private var aorusMaxMicEqualizerState: (visible: Bool, level: Float)?\n"
+        "    private var aorusMaxMicLastRendered: (visible: Bool, clipHeight: CGFloat, bounds: CGSize)?\n"
         "\n"
         "    func aorusMaxUpdateMicEqualizer(visible: Bool, level: Float) {\n"
         "        guard AorusMaxInterface.isEnabled else { return }\n"
         "        self.aorusMaxMicEqualizerState = (visible, level)\n"
-        "        let effectiveVisible = visible && self.currentContentViewIsSelected != true\n"
         "        let boundsSize = self.contentView.bounds.size\n"
-        "        if !effectiveVisible || boundsSize.width < 1.0 || boundsSize.height < 1.0 {\n"
+        "        let normalized: CGFloat = level > 0.015 ? min(1.0, pow(CGFloat(level) * 2.4, 0.72)) : 0.0\n"
+        "        let effectiveVisible = visible && self.currentContentViewIsSelected != true && normalized > 0.0 && boundsSize.width >= 1.0 && boundsSize.height >= 1.0\n"
+        "        let glyphSide: CGFloat = 32.0\n"
+        "        let fillFraction: CGFloat = effectiveVisible ? (0.28 + 0.72 * normalized) : 0.0\n"
+        "        let clipHeight: CGFloat = effectiveVisible ? max(1.0, floor(glyphSide * fillFraction)) : 0.0\n"
+        "        if let last = self.aorusMaxMicLastRendered, last.visible == effectiveVisible, last.clipHeight == clipHeight, last.bounds == boundsSize {\n"
+        "            return\n"
+        "        }\n"
+        "        self.aorusMaxMicLastRendered = (effectiveVisible, clipHeight, boundsSize)\n"
+        "        if !effectiveVisible {\n"
         "            self.aorusMaxMicClipView?.isHidden = true\n"
         "            return\n"
         "        }\n"
@@ -1785,7 +1792,7 @@ def patch_call_buttons(tg: Path) -> None:
         "            clipView = UIView()\n"
         "            clipView.isUserInteractionEnabled = false\n"
         "            clipView.clipsToBounds = true\n"
-        "            fillView = UIImageView(image: generateTintedImage(image: AorusMaxInterface.glyph(\"microphone_on_fill_32\"), color: AorusMaxInterface.online))\n"
+        "            fillView = UIImageView(image: AorusMaxInterface.tintedGlyph(\"microphone_on_fill_32\", color: AorusMaxInterface.online))\n"
         "            fillView.contentMode = .scaleAspectFit\n"
         "            fillView.isUserInteractionEnabled = false\n"
         "            clipView.addSubview(fillView)\n"
@@ -1794,11 +1801,7 @@ def patch_call_buttons(tg: Path) -> None:
         "            self.aorusMaxMicFillView = fillView\n"
         "        }\n"
         "        clipView.isHidden = false\n"
-        "        let glyphSide: CGFloat = 32.0\n"
         "        let glyphOrigin = CGPoint(x: floor((boundsSize.width - glyphSide) * 0.5), y: floor((boundsSize.height - glyphSide) * 0.5))\n"
-        "        let normalized = min(1.0, max(0.0, CGFloat(level) / 1.4))\n"
-        "        let fillFraction: CGFloat = 0.42 + 0.58 * normalized\n"
-        "        let clipHeight = max(1.0, floor(glyphSide * fillFraction))\n"
         "        clipView.frame = CGRect(x: glyphOrigin.x, y: glyphOrigin.y + (glyphSide - clipHeight), width: glyphSide, height: clipHeight)\n"
         "        fillView.frame = CGRect(x: 0.0, y: -(glyphSide - clipHeight), width: glyphSide, height: glyphSide)\n"
         "    }\n",
@@ -1825,7 +1828,13 @@ def patch_call_buttons(tg: Path) -> None:
         "        if self.canAnimateAudioLevel {\n",
         "    private func updateAudioLevel() {\n"
         "        if AorusMaxInterface.isEnabled {\n"
-        "            self.buttonGroupView.aorusMaxUpdateMicAudioLevel(self.audioLevel)\n"
+        "            let aorusIsCallActive: Bool\n"
+        "            if let params = self.params, case .active = params.state.lifecycleState {\n"
+        "                aorusIsCallActive = true\n"
+        "            } else {\n"
+        "                aorusIsCallActive = false\n"
+        "            }\n"
+        "            self.buttonGroupView.aorusMaxUpdateMicAudioLevel(aorusIsCallActive ? self.audioLevel : 0.0, isCallActive: aorusIsCallActive)\n"
         "        }\n"
         "        if self.canAnimateAudioLevel {\n",
         "MAX call mic equalizer audio level driver",
@@ -2065,11 +2074,7 @@ extension ChatControllerImpl {
         })))
         if aorusGhostChatButtonIsShown(), let ghostPeerId = aorusGhostPeerIdForChatInterfaceState(self.presentationInterfaceState) {
             let ghostActive = aorusGhostIsActive(peerId: ghostPeerId)
-            let ghostStateLabel = AorusMaxInterface.localizedString(
-                ghostActive ? "PRIVACY_SETTINGS_TWO_FA_SUBTITLE_ENABLED" : "PRIVACY_SETTINGS_TWO_FA_SUBTITLE_DISABLED",
-                languageCode: strings.baseLanguageCode
-            ) ?? (ghostActive ? strings.Settings_PowerSavingOn : strings.Settings_PowerSavingOff)
-            let ghostTitle = aorusL("Режим призрака", "Ghost Mode") + " · " + ghostStateLabel
+            let ghostTitle = ghostActive ? aorusL("Выключить режим призрака", "Disable Ghost Mode") : aorusL("Включить режим призрака", "Enable Ghost Mode")
             items.append(.action(ContextMenuActionItem(text: ghostTitle, icon: { theme in
                 let tint = ghostActive ? AorusMaxInterface.accent : theme.contextMenu.primaryColor
                 return aorusGhostIconImage(active: ghostActive, color: tint)
@@ -2303,9 +2308,24 @@ def patch_input_panel(tg: Path) -> None:
 
 
 def patch_profile_header_metrics(tg: Path) -> None:
-    """Apply MAX's profile metrics and flat card aesthetic across ALL profiles (users, groups, channels, and own settings)."""
-    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    """Apply MAX's profile metrics, flat canvas (zero Telegram Premium / Star Gift covers),
+    curated 4-button action cards with authentic MAX labels, and zero-blur scroll optimization
+    across ALL profiles (users, groups, channels, and own settings)."""
+    sources = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources"
+    path = sources / "PeerInfoHeaderNode.swift"
     text = _read(path)
+    text = _edit(
+        text,
+        "        self.buttonsBackgroundNode = NavigationBackgroundNode(color: .clear, enableBlur: true, enableSaturation: false)\n",
+        "        self.buttonsBackgroundNode = NavigationBackgroundNode(color: .clear, enableBlur: !AorusMaxInterface.isEnabled, enableSaturation: false)\n",
+        "MAX profile action buttons without live blur",
+    )
+    text = _edit(
+        text,
+        "        if listContainerNode.galleryEntries.isEmpty, peer.smallProfileImage == nil {\n",
+        "        if !AorusMaxInterface.isEnabled, listContainerNode.galleryEntries.isEmpty, peer.smallProfileImage == nil {\n",
+        "MAX profile skip glass cover tint publishing",
+    )
     text = _edit(
         text,
         "        let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0\n",
@@ -2320,10 +2340,20 @@ def patch_profile_header_metrics(tg: Path) -> None:
     )
     text = _edit(
         text,
+        "        if let status = peer?.emojiStatus, case .starGift = status.content {\n",
+        "        if !AorusMaxInterface.isEnabled, let status = peer?.emojiStatus, case .starGift = status.content {\n",
+        "MAX profile skip star gift background cover subject",
+    )
+    text = _edit(
+        text,
+        "        } else if let peer {\n"
+        "            backgroundCoverSubject = .peer(peer)\n"
         "            if peer.effectiveProfileColor != nil {\n"
         "                hasBackground = true\n"
         "            }\n",
-        "            if !AorusMaxInterface.isEnabled, peer.effectiveProfileColor != nil {\n"
+        "        } else if !AorusMaxInterface.isEnabled, let peer {\n"
+        "            backgroundCoverSubject = .peer(peer)\n"
+        "            if peer.effectiveProfileColor != nil {\n"
         "                hasBackground = true\n"
         "            }\n",
         "MAX profile flat header height without colored cover",
@@ -2382,9 +2412,39 @@ def patch_profile_header_metrics(tg: Path) -> None:
         "            self.avatarClippingNode.clipsToBounds = true\n"
         "            if AorusMaxInterface.isEnabled {\n"
         "                self.backgroundBannerView.isHidden = true\n"
+        "                self.backgroundCover.view?.isHidden = true\n"
+        "                self.aorusAnimatedProfileBackgroundView.isHidden = true\n"
+        "                self.giftsCover.view?.isHidden = true\n"
         "            }\n",
-        "MAX profile flat canvas without backgroundBannerView",
+        "MAX profile flat canvas without cover views",
     )
+    text = _edit(
+        text,
+        "        let backgroundCoverSize = self.backgroundCover.update(\n",
+        "        if !AorusMaxInterface.isEnabled {\n"
+        "        let backgroundCoverSize = self.backgroundCover.update(\n",
+        "MAX profile skip backgroundCover and animated background per-frame update",
+    )
+    text = _edit(
+        text,
+        "        if let profileGiftsContext, let peer {\n",
+        "        }\n"
+        "        if !AorusMaxInterface.isEnabled, let profileGiftsContext, let peer {\n",
+        "MAX profile skip giftsCover per-frame update",
+    )
+    # MAX's authentic action button labels on peer profiles.
+    for old_btn, key in (
+        ("                buttonText = presentationData.strings.PeerInfo_ButtonMessage\n", "CHAT_COMPOSE_MESSAGE"),
+        ("                buttonText = presentationData.strings.PeerInfo_ButtonCall\n", "CHAT_DETAIL_TOP_ACTION_AUDIO_CALL"),
+        ("                buttonText = presentationData.strings.PeerInfo_ButtonVideoCall\n", "CHAT_DETAIL_TOP_ACTION_VIDEO_CALL"),
+        ("                    buttonText = presentationData.strings.PeerInfo_ButtonMute\n", "CHAT_DETAIL_NOTIFICATIONS_TITLE"),
+        ("                buttonText = presentationData.strings.PeerInfo_ButtonMore\n", "CHAT_DETAIL_TOP_ACTION_MORE"),
+        ("                buttonText = presentationData.strings.PeerInfo_ButtonSearch\n", "CHAT_DETAIL_TOP_ACTION_SEARCH"),
+    ):
+        indent = old_btn[: len(old_btn) - len(old_btn.lstrip(" "))]
+        orig_expr = old_btn.strip().split(" = ", 1)[1]
+        new_btn = f'{indent}buttonText = AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("{key}", languageCode: presentationData.strings.baseLanguageCode) ?? {orig_expr}) : {orig_expr}\n'
+        text = _edit(text, old_btn, new_btn, f"MAX profile button title {key}")
     text = _edit(
         text,
         "                if let mainUsername = user.addressName, !mainUsername.isEmpty {\n",
@@ -2404,7 +2464,43 @@ def patch_profile_header_metrics(tg: Path) -> None:
         "MAX own-profile phone ink",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: all profile headers use MAX's 110pt avatar, flat canvas, 26pt semibold title and accent action cards")
+
+    # MAX peer profiles show a clean, balanced 4-button action row (never Telegram's cramped 5 buttons).
+    data_path = sources / "PeerInfoData.swift"
+    data_text = _read(data_path)
+    data_text = _edit(
+        data_text,
+        "        aorusForcedButtons.append(.more)\n"
+        "        return aorusForcedButtons\n"
+        "    }\n"
+        "    \n"
+        "    return result\n",
+        "        aorusForcedButtons.append(.more)\n"
+        "        return aorusForcedButtons\n"
+        "    }\n"
+        "    \n"
+        "    if AorusMaxInterface.isEnabled, threadInfo == nil, result.count > 4 {\n"
+        "        var curated: [PeerInfoHeaderButtonKey] = []\n"
+        "        if case .user = peer {\n"
+        "            let preferred: [PeerInfoHeaderButtonKey] = isOpenedFromChat ? [.call, .videoCall, .mute, .more, .search, .message] : [.message, .call, .mute, .more, .videoCall, .search]\n"
+        "            for key in preferred where result.contains(key) && curated.count < 4 {\n"
+        "                curated.append(key)\n"
+        "            }\n"
+        "        } else {\n"
+        "            let preferred: [PeerInfoHeaderButtonKey] = [.voiceChat, .message, .discussion, .mute, .search, .more, .leave]\n"
+        "            for key in preferred where result.contains(key) && curated.count < 4 {\n"
+        "                curated.append(key)\n"
+        "            }\n"
+        "        }\n"
+        "        if !curated.isEmpty {\n"
+        "            return curated\n"
+        "        }\n"
+        "    }\n"
+        "    return result\n",
+        "MAX peer profile curated 4-button action row",
+    )
+    data_path.write_text(data_text, encoding="utf-8")
+    print("MaxInterface: all profile headers use MAX's 110pt avatar, flat zero-cover canvas, 26pt semibold title and 4-card action row")
 
 
 def patch_settings_surfaces(tg: Path) -> None:
@@ -2427,24 +2523,81 @@ def patch_settings_surfaces(tg: Path) -> None:
 
 
 def patch_read_marks(tg: Path) -> None:
+    """Use MAX's genuine delivered_16 (single check) and read_16 (double check) PNG assets
+    upright at native 1:1 square proportions — zero squashing, zero cropping, zero hand-drawn ticks."""
     path = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesChatList.swift"
     text = _read(path)
-    text = _edit(text, "private func generateStatusCheckImage(theme: PresentationTheme, single: Bool) -> UIImage? {\n", 'private func generateStatusCheckImage(theme: PresentationTheme, single: Bool) -> UIImage? {\n    if AorusMaxInterface.isEnabled {\n        return generateTintedImage(image: AorusMaxInterface.glyph(single ? "check_16" : "read_16"), color: theme.chatList.checkmarkColor)\n    }\n', "MAX source list read marks")
+    text = _edit(
+        text,
+        "private func generateStatusCheckImage(theme: PresentationTheme, single: Bool) -> UIImage? {\n",
+        'private func generateStatusCheckImage(theme: PresentationTheme, single: Bool) -> UIImage? {\n'
+        '    if AorusMaxInterface.isEnabled, let source = AorusMaxInterface.tintedGlyph(single ? "delivered_16" : "read_16", color: theme.chatList.checkmarkColor) {\n'
+        "        return generateImage(CGSize(width: 15.0, height: 15.0), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: .zero, size: size))\n"
+        "            UIGraphicsPushContext(context)\n"
+        "            source.draw(in: CGRect(origin: .zero, size: size))\n"
+        "            UIGraphicsPopContext()\n"
+        "        })\n"
+        "    }\n",
+        "MAX source list read marks",
+    )
     path.write_text(text, encoding="utf-8")
+
     path = tg / "submodules/TelegramPresentationData/Sources/PresentationThemeEssentialGraphics.swift"
     text = _read(path)
-    text = _edit(text, "func generateCheckImage(partial: Bool, color: UIColor, width: CGFloat) -> UIImage? {\n", r'''func generateCheckImage(partial: Bool, color: UIColor, width: CGFloat) -> UIImage? {
-    if AorusMaxInterface.isEnabled, let source = generateTintedImage(image: AorusMaxInterface.glyph("check_16"), color: color) {
-        return generateImage(CGSize(width: width, height: floor(width * 9.0 / 11.0)), rotatedContext: { size, context in
-            context.clear(CGRect(origin: .zero, size: size))
-            if partial { context.clip(to: CGRect(x: size.width * 0.35, y: 0.0, width: size.width * 0.65, height: size.height)) }
-            UIGraphicsPushContext(context)
-            source.draw(in: CGRect(origin: .zero, size: size))
-            UIGraphicsPopContext()
-        })
-    }
-''', "MAX source bubble read marks")
+    text = _edit(
+        text,
+        "func generateCheckImage(partial: Bool, color: UIColor, width: CGFloat) -> UIImage? {\n",
+        'func generateCheckImage(partial: Bool, color: UIColor, width: CGFloat) -> UIImage? {\n'
+        '    if AorusMaxInterface.isEnabled, let source = AorusMaxInterface.tintedGlyph(partial ? "read_16" : "delivered_16", color: color) {\n'
+        "        let side = max(14.0, floor(width * 1.28))\n"
+        "        return generateImage(CGSize(width: side, height: side), rotatedContext: { size, context in\n"
+        "            context.clear(CGRect(origin: .zero, size: size))\n"
+        "            UIGraphicsPushContext(context)\n"
+        "            source.draw(in: CGRect(origin: .zero, size: size))\n"
+        "            UIGraphicsPopContext()\n"
+        "        })\n"
+        "    }\n",
+        "MAX source bubble read marks",
+    )
     path.write_text(text, encoding="utf-8")
+
+    # In MAX mode, `loadedCheckFullImage` is the complete `delivered_16` single check and
+    # `loadedCheckPartialImage` is the complete `read_16` double check; draw exactly one of them
+    # so they never overlap or distort.
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "                        statusWidth = floor(floor(arguments.presentationData.fontSize.baseDisplaySize * 13.0 / 17.0))\n",
+        "                        statusWidth = floor(floor(arguments.presentationData.fontSize.baseDisplaySize * (AorusMaxInterface.isEnabled ? 15.0 : 13.0) / 17.0))\n",
+        "MAX bubble check status width",
+    )
+    text = _edit(
+        text,
+        "                        if read {\n"
+        "                            checkReadFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width, y: 3.0 + offset), size: checkSize)\n"
+        "                        }\n"
+        "                        checkSentFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width - checkOffset, y: 3.0 + offset), size: checkSize)\n",
+        "                        if AorusMaxInterface.isEnabled {\n"
+        "                            let aorusCheckFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 4.0 + statusWidth - checkSize.width, y: 1.0 + offset), size: checkSize)\n"
+        "                            if read {\n"
+        "                                checkReadFrame = aorusCheckFrame\n"
+        "                                checkSentFrame = nil\n"
+        "                            } else {\n"
+        "                                checkReadFrame = nil\n"
+        "                                checkSentFrame = aorusCheckFrame\n"
+        "                            }\n"
+        "                        } else {\n"
+        "                            if read {\n"
+        "                                checkReadFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width, y: 3.0 + offset), size: checkSize)\n"
+        "                            }\n"
+        "                            checkSentFrame = CGRect(origin: CGPoint(x: leftInset + impressionWidth + date.size.width + 5.0 + statusWidth - checkSize.width - checkOffset, y: 3.0 + offset), size: checkSize)\n"
+        "                        }\n",
+        "MAX bubble single delivered_16 vs double read_16 placement",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: chat list and message bubbles use genuine MAX delivered_16 and read_16 icons")
 
 
 def patch_camera_input(tg: Path) -> None:
@@ -2542,88 +2695,97 @@ def patch_chat_list_geometry(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    path = tg / "submodules/ChatListUI/Sources/TabBarChatListFilterController.swift"
+    # Seed MAX's «Новые» (Unread) and «Каналы» (Channels) as REAL native Telegram folders once per
+    # account so they are 100% tappable, swipeable, filterable, renameable, editable, and deletable
+    # in Telegram's native Folders settings (never synthetic fake tabs).
+    path = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
     text = _read(path)
     text = _edit(
         text,
-        "    |> mapToSignal { filters -> Signal<([ChatListFilter], ChatListFilterBadgeSecretChats), NoError> in\n"
-        "        var folderUserIds = Set<EnginePeer.Id>()\n",
-        "    |> mapToSignal { rawFilters -> Signal<([ChatListFilter], ChatListFilterBadgeSecretChats), NoError> in\n"
-        "        var filters = rawFilters\n"
-        "        if AorusMaxInterface.isEnabled {\n"
-        "            let lang = context.sharedContext.currentPresentationData.with { $0.strings.baseLanguageCode }\n"
-        "            if !filters.contains(where: { if case .allChats = $0 { return true }; return false }) {\n"
-        "                filters.insert(.allChats, at: 0)\n"
+        "    private var initializedFilters = false\n"
+        "    private func reloadFilters(firstUpdate: (() -> Void)? = nil) {\n",
+        "    private var initializedFilters = false\n"
+        "    private var aorusMaxCheckedDefaultFolders = false\n"
+        "    private func reloadFilters(firstUpdate: (() -> Void)? = nil) {\n",
+        "MAX real folder seed guard property",
+    )
+    text = _edit(
+        text,
+        "            let (_, items) = countAndFilterItems\n"
+        "            var filterItems: [ChatListFilterTabEntry] = []\n",
+        "            let (_, items) = countAndFilterItems\n"
+        "            if AorusMaxInterface.isEnabled, !strongSelf.aorusMaxCheckedDefaultFolders, case .chatList(.root) = strongSelf.location {\n"
+        "                strongSelf.aorusMaxCheckedDefaultFolders = true\n"
+        "                let seedKey = \"aorusgram_max_seeded_folders_v1_\\(strongSelf.context.account.id.int64)\"\n"
+        "                if !UserDefaults.standard.bool(forKey: seedKey) {\n"
+        "                    UserDefaults.standard.set(true, forKey: seedKey)\n"
+        "                    let maxFolders = (isPremium == true) ? Int(limits.maxFoldersCount) * 2 : Int(limits.maxFoldersCount)\n"
+        "                    let lang = strongSelf.presentationData.strings.baseLanguageCode\n"
+        "                    let context = strongSelf.context\n"
+        "                    let _ = (context.engine.peers.updateChatListFiltersInteractively { currentFilters in\n"
+        "                        var updated = currentFilters\n"
+        "                        let existingCount = updated.filter { if case .filter = $0 { return true }; return false }.count\n"
+        "                        var added = 0\n"
+        "                        let hasUnread = updated.contains(where: {\n"
+        "                            if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }\n"
+        "                            return false\n"
+        "                        })\n"
+        "                        if !hasUnread && existingCount + added < maxFolders {\n"
+        '                            let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"\n'
+        "                            let unreadId = context.engine.peers.generateNewChatListFilterId(filters: updated)\n"
+        "                            let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
+        "                            updated.append(.filter(id: unreadId, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData))\n"
+        "                            added += 1\n"
+        "                        }\n"
+        "                        let hasChannels = updated.contains(where: {\n"
+        "                            if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }\n"
+        "                            return false\n"
+        "                        })\n"
+        "                        if !hasChannels && existingCount + added < maxFolders {\n"
+        '                            let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"\n'
+        "                            let channelsId = context.engine.peers.generateNewChatListFilterId(filters: updated)\n"
+        "                            let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
+        "                            updated.append(.filter(id: channelsId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData))\n"
+        "                        }\n"
+        "                        return updated\n"
+        "                    }).startStandalone()\n"
+        "                }\n"
         "            }\n"
-        "            let hasUnread = filters.contains(where: {\n"
-        "                if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }\n"
-        "                return false\n"
-        "            })\n"
-        "            if !hasUnread {\n"
-        '                let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"\n'
-        "                let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                filters.insert(.filter(id: 90001, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData), at: min(1, filters.count))\n"
-        "            }\n"
-        "            let hasChannels = filters.contains(where: {\n"
-        "                if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }\n"
-        "                return false\n"
-        "            })\n"
-        "            if !hasChannels {\n"
-        '                let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"\n'
-        "                let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                filters.insert(.filter(id: 90002, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData), at: min(2, filters.count))\n"
-        "            }\n"
-        "        }\n"
-        "        var folderUserIds = Set<EnginePeer.Id>()\n",
-        "MAX built-in Unread and Channels folder tabs",
+        "            var filterItems: [ChatListFilterTabEntry] = []\n",
+        "MAX seed real native Unread and Channels folders once per account",
     )
     path.write_text(text, encoding="utf-8")
 
-    # Synthetic MAX folder tabs (id >= 90000: Unread / Channels) are local and do not exist in
-    # Telegram's server filter list; prevent ChatListNode.resetFilter() from wiping them back to nil.
-    path = tg / "submodules/ChatListUI/Sources/Node/ChatListNode.swift"
+    # Left-align MAX's folder tabs (`Все  Новые (1)  Каналы (5)`) via `.fit` layout (matching
+    # MAX's reference frames) instead of stretching/centering them across the full width.
+    path = tg / "submodules/ChatListUI/Sources/ChatListControllerNode.swift"
     text = _read(path)
     text = _edit(
         text,
-        "    private func resetFilter() {\n"
-        "        if let chatListFilter = self.chatListFilter, chatListFilter.id != Int32.max {\n",
-        "    private func resetFilter() {\n"
-        "        if let chatListFilter = self.chatListFilter, chatListFilter.id != Int32.max, !(AorusMaxInterface.isEnabled && chatListFilter.id >= 90000) {\n",
-        "MAX built-in folder tabs retain local filter predicate",
+        "                        case .all:\n"
+        "                            id = Int32.min\n"
+        "                            title = HorizontalTabsComponent.Tab.Title(text: self.presentationData.strings.ChatList_Tabs_All, entities: [], enableAnimations: false)\n",
+        "                        case .all:\n"
+        "                            id = Int32.min\n"
+        '                            let allTitle = AorusMaxInterface.isEnabled ? (AorusMaxInterface.localizedString("FOLDER_ALL", languageCode: self.presentationData.strings.baseLanguageCode) ?? self.presentationData.strings.ChatList_Tabs_All) : self.presentationData.strings.ChatList_Tabs_All\n'
+        "                            title = HorizontalTabsComponent.Tab.Title(text: allTitle, entities: [], enableAnimations: false)\n",
+        "MAX folder All tab title",
+    )
+    text = _edit(
+        text,
+        "                    selectedTab: selectedTab,\n"
+        "                    isEditing: isEditing,\n"
+        "                    liftWhileSwitching: layout.deviceMetrics.type != .tablet\n",
+        "                    selectedTab: selectedTab,\n"
+        "                    isEditing: isEditing,\n"
+        "                    layout: AorusMaxInterface.isEnabled ? .fit : .fill,\n"
+        "                    liftWhileSwitching: layout.deviceMetrics.type != .tablet\n",
+        "MAX left-aligned folder tabs layout",
     )
     path.write_text(text, encoding="utf-8")
 
     path = tg / "submodules/TelegramUI/Components/ChatList/ChatListFilterTabContainerNode/Sources/ChatListFilterTabContainerNode.swift"
     text = _read(path)
-    text = _edit(
-        text,
-        "                }, requestedDeletion: { [weak self] in\n"
-        "                    self?.tabRequestedDeletion?(filter.id)\n"
-        "                }, contextGesture: { [weak self] sourceNode, gesture, isDisabled in\n"
-        "                    guard let strongSelf = self else {\n"
-        "                        return\n"
-        "                    }\n"
-        "                    strongSelf.scrollNode.view.panGestureRecognizer.isEnabled = false\n"
-        "                    strongSelf.scrollNode.view.panGestureRecognizer.isEnabled = true\n"
-        "                    strongSelf.scrollNode.view.setContentOffset(strongSelf.scrollNode.view.contentOffset, animated: false)\n"
-        "                    switch filter {\n"
-        "                    case let .filter(id, _, _):\n"
-        "                        strongSelf.contextGesture?(id, sourceNode, gesture, isDisabled)\n",
-        "                }, requestedDeletion: { [weak self] in\n"
-        "                    if case let .filter(id) = filter.id, id >= 90000 { return }\n"
-        "                    self?.tabRequestedDeletion?(filter.id)\n"
-        "                }, contextGesture: { [weak self] sourceNode, gesture, isDisabled in\n"
-        "                    guard let strongSelf = self else {\n"
-        "                        return\n"
-        "                    }\n"
-        "                    strongSelf.scrollNode.view.panGestureRecognizer.isEnabled = false\n"
-        "                    strongSelf.scrollNode.view.panGestureRecognizer.isEnabled = true\n"
-        "                    strongSelf.scrollNode.view.setContentOffset(strongSelf.scrollNode.view.contentOffset, animated: false)\n"
-        "                    switch filter {\n"
-        "                    case let .filter(id, _, _):\n"
-        "                        if id >= 90000 { strongSelf.contextGesture?(nil, sourceNode, gesture, isDisabled) } else { strongSelf.contextGesture?(id, sourceNode, gesture, isDisabled) }\n",
-        "MAX synthetic folder tab guard",
-    )
     text = _edit(
         text,
         "        self.backgroundView.contentView.addSubview(self.scrollNode.view)\n",
@@ -2658,204 +2820,6 @@ def patch_chat_list_geometry(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-_MAX_SECURITY_HEADER_ITEM = r'''
-private final class AorusMaxSecurityHeaderItem: ListViewItem, ItemListItem {
-    let theme: PresentationTheme
-    let safeModeActive: Bool
-    let title: String
-    let statusText: String
-    let reduceMotion: Bool
-    let sectionId: ItemListSectionId
-    let selectable = false
-
-    var isAlwaysPlain: Bool {
-        return true
-    }
-
-    var requestsNoInset: Bool {
-        return true
-    }
-
-    init(theme: PresentationTheme, safeModeActive: Bool, title: String, statusText: String, reduceMotion: Bool, sectionId: ItemListSectionId) {
-        self.theme = theme
-        self.safeModeActive = safeModeActive
-        self.title = title
-        self.statusText = statusText
-        self.reduceMotion = reduceMotion
-        self.sectionId = sectionId
-    }
-
-    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        async {
-            let node = AorusMaxSecurityHeaderItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            Queue.mainQueue().async {
-                completion(node, {
-                    return (nil, { _ in apply() })
-                })
-            }
-        }
-    }
-
-    func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        Queue.mainQueue().async {
-            if let nodeValue = node() as? AorusMaxSecurityHeaderItemNode {
-                let makeLayout = nodeValue.asyncLayout()
-                async {
-                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-                    Queue.mainQueue().async {
-                        completion(layout, { _ in apply() })
-                    }
-                }
-            }
-        }
-    }
-}
-
-private final class AorusMaxSecurityHeaderItemNode: ListViewItemNode, ItemListItemNode {
-    private let glowNode = ASDisplayNode()
-    private let glowLayer = CAGradientLayer()
-    private let discNode = ASDisplayNode()
-    private let discGradient = CAGradientLayer()
-    private let animationNode = DefaultAnimatedStickerNodeImpl()
-    private let titleNode = ImmediateTextNode()
-    private let pillNode = ASDisplayNode()
-    private let statusNode = ImmediateTextNode()
-    private var configuredReduceMotion: Bool?
-    private var configuredSafeMode: Bool?
-    private var item: AorusMaxSecurityHeaderItem?
-
-    override var canBeSelected: Bool {
-        return false
-    }
-
-    var tag: ItemListItemTag? {
-        return nil
-    }
-
-    init() {
-        super.init(layerBacked: false)
-        self.glowNode.isUserInteractionEnabled = false
-        self.glowLayer.type = .radial
-        self.glowLayer.locations = [0.0, 0.55, 1.0]
-        self.glowLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
-        self.glowLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
-        self.discNode.isUserInteractionEnabled = false
-        self.discNode.clipsToBounds = true
-        self.discGradient.startPoint = CGPoint(x: 0.15, y: 0.0)
-        self.discGradient.endPoint = CGPoint(x: 0.85, y: 1.0)
-        self.animationNode.isUserInteractionEnabled = false
-        self.titleNode.displaysAsynchronously = false
-        self.titleNode.isUserInteractionEnabled = false
-        self.titleNode.textAlignment = .center
-        self.titleNode.maximumNumberOfLines = 1
-        self.pillNode.isUserInteractionEnabled = false
-        self.pillNode.clipsToBounds = true
-        self.statusNode.displaysAsynchronously = false
-        self.statusNode.isUserInteractionEnabled = false
-        self.statusNode.textAlignment = .center
-        self.statusNode.maximumNumberOfLines = 2
-        self.addSubnode(self.glowNode)
-        self.addSubnode(self.discNode)
-        self.discNode.addSubnode(self.animationNode)
-        self.addSubnode(self.titleNode)
-        self.addSubnode(self.pillNode)
-        self.addSubnode(self.statusNode)
-    }
-
-    override func didLoad() {
-        super.didLoad()
-        self.glowNode.layer.insertSublayer(self.glowLayer, at: 0)
-        self.discNode.layer.insertSublayer(self.discGradient, at: 0)
-        self.glowLayer.frame = self.glowNode.bounds
-        self.discGradient.frame = self.discNode.bounds
-    }
-
-    func asyncLayout() -> (_ item: AorusMaxSecurityHeaderItem, _ params: ListViewItemLayoutParams, _ insets: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { [weak self] item, params, _ in
-            let height: CGFloat = 176.0
-            let layout = ListViewItemNodeLayout(
-                contentSize: CGSize(width: params.width, height: height),
-                insets: UIEdgeInsets()
-            )
-            return (layout, {
-                guard let self else { return }
-                self.item = item
-                let dark = item.theme.overallDarkAppearance
-                let palette = AorusMaxInterface.palette(dark: dark)
-                self.backgroundColor = .clear
-
-                let width = params.width
-                let contentWidth = max(0.0, width - params.leftInset - params.rightInset - 32.0)
-
-                let glowSize: CGFloat = 160.0
-                let discSize: CGFloat = 72.0
-                let animSize: CGFloat = 44.0
-                let discY: CGFloat = 18.0
-
-                self.glowNode.frame = CGRect(x: floor((width - glowSize) * 0.5), y: discY + (discSize - glowSize) * 0.5, width: glowSize, height: glowSize)
-                self.glowLayer.frame = self.glowNode.bounds
-
-                self.discNode.frame = CGRect(x: floor((width - discSize) * 0.5), y: discY, width: discSize, height: discSize)
-                self.discNode.cornerRadius = discSize * 0.5
-                self.discGradient.frame = self.discNode.bounds
-
-                self.animationNode.frame = CGRect(x: floor((discSize - animSize) * 0.5), y: floor((discSize - animSize) * 0.5), width: animSize, height: animSize)
-                self.animationNode.updateLayout(size: CGSize(width: animSize, height: animSize))
-
-                if self.configuredSafeMode != item.safeModeActive {
-                    self.configuredSafeMode = item.safeModeActive
-                    if item.safeModeActive {
-                        self.glowLayer.colors = [UIColor(rgb: 0x33e048, alpha: 0.34).cgColor, UIColor(rgb: 0x1f9d55, alpha: 0.12).cgColor, UIColor.clear.cgColor]
-                        self.discGradient.colors = [UIColor(rgb: 0x33e048).cgColor, UIColor(rgb: 0x1f9d55).cgColor]
-                    } else {
-                        self.glowLayer.colors = [UIColor(rgb: 0x6633ff, alpha: 0.38).cgColor, UIColor(rgb: 0x0a7df7, alpha: 0.14).cgColor, UIColor.clear.cgColor]
-                        self.discGradient.colors = [UIColor(rgb: 0x9856ec).cgColor, UIColor(rgb: 0x6353ee).cgColor, UIColor(rgb: 0x0a7df7).cgColor]
-                    }
-                }
-
-                if self.configuredReduceMotion != item.reduceMotion {
-                    self.configuredReduceMotion = item.reduceMotion
-                    self.animationNode.automaticallyLoadFirstFrame = true
-                    self.animationNode.autoplay = !item.reduceMotion
-                    self.animationNode.overrideVisibility = true
-                    self.animationNode.forceSynchronous = true
-                    self.animationNode.setup(
-                        source: AnimatedStickerNodeLocalFileSource(name: "AorusMaxSecurityCheck"),
-                        width: 132,
-                        height: 132,
-                        playbackMode: item.reduceMotion ? .still(.end) : .loop,
-                        mode: .direct(cachePathPrefix: nil)
-                    )
-                    self.animationNode.setOverlayColor(.white, replace: true, animated: false)
-                    self.animationNode.visibility = true
-                }
-
-                self.titleNode.attributedText = NSAttributedString(string: item.title, font: Font.semibold(22.0), textColor: palette.primaryText)
-                let titleSize = self.titleNode.updateLayout(CGSize(width: contentWidth, height: 40.0))
-                let titleY = discY + discSize + 14.0
-                self.titleNode.frame = CGRect(x: floor((width - titleSize.width) * 0.5), y: titleY, width: titleSize.width, height: titleSize.height)
-
-                let pillTint: UIColor = item.safeModeActive ? (dark ? UIColor(rgb: 0x33e048) : UIColor(rgb: 0x1b8f42)) : AorusMaxInterface.accent
-                let pillBg: UIColor = item.safeModeActive ? UIColor(rgb: 0x33e048, alpha: dark ? 0.16 : 0.14) : UIColor(rgb: 0x0a7df7, alpha: dark ? 0.16 : 0.12)
-                self.statusNode.attributedText = NSAttributedString(string: item.statusText, font: Font.medium(13.0), textColor: pillTint)
-                let statusSize = self.statusNode.updateLayout(CGSize(width: max(0.0, contentWidth - 28.0), height: 40.0))
-                let pillWidth = min(contentWidth, statusSize.width + 24.0)
-                let pillHeight = max(26.0, statusSize.height + 10.0)
-                let pillY = titleY + titleSize.height + 10.0
-                self.pillNode.backgroundColor = pillBg
-                self.pillNode.cornerRadius = pillHeight * 0.5
-                self.pillNode.frame = CGRect(x: floor((width - pillWidth) * 0.5), y: pillY, width: pillWidth, height: pillHeight)
-                self.statusNode.frame = CGRect(x: floor((width - statusSize.width) * 0.5), y: pillY + floor((pillHeight - statusSize.height) * 0.5), width: statusSize.width, height: statusSize.height)
-            })
-        }
-    }
-}
-'''
-
-
 def patch_privacy_screen(tg: Path) -> None:
     path = tg / "submodules/SettingsUI/Sources/Privacy and Security/PrivacyAndSecurityController.swift"
     text = _read(path)
@@ -2864,15 +2828,10 @@ def patch_privacy_screen(tg: Path) -> None:
     text = _edit(text, "aorusMaxCanRestore: aorusMaxSafeModeSnapshot != nil), style:", "aorusMaxCanRestore: aorusMaxSafeModeSnapshot != nil, aorusMaxAdvanced: aorusMaxAdvanced, aorusMaxContentSettings: aorusMaxContentSettings), style:", "MAX privacy screen arguments")
     text = _edit(text, "    var aorusMaxToggleSafeMode: ((Bool) -> Void)?\n", "    var aorusMaxToggleSafeMode: ((Bool) -> Void)?\n    var aorusMaxOpenContent: (() -> Void)?\n    var aorusMaxOpenAdvanced: (() -> Void)?\n    var aorusMaxOpenDevices: (() -> Void)?\n    var aorusMaxProtectionActive = false\n", "MAX privacy native destinations")
     text = _edit(text, "    case aorusContactPrivacy\n", "    case aorusContactPrivacy\n    case aorusMaxInformation\n    case aorusMaxBlocked\n    case aorusMaxDevices\n    case aorusMaxMore\n", "MAX privacy card sections")
-    text = _edit(text, "    case aorusMaxSafeModeInfo(PresentationTheme, String)\n", "    case aorusMaxSecurityHero(PresentationTheme, Bool, String, String, Bool)\n    case aorusMaxSafeModeInfo(PresentationTheme, String)\n    case aorusMaxContent(PresentationTheme, String, String, Bool)\n    case aorusMaxMore(PresentationTheme, String)\n", "MAX privacy content entries")
-    text = _edit(text, "        case .aorusMaxSafeMode, .aorusMaxSafeModeInfo:\n", "        case .aorusMaxSecurityHero:\n            return PrivacyAndSecuritySection.aorusMaxSecurityHero.rawValue\n        case .aorusMaxMore:\n            return PrivacyAndSecuritySection.aorusMaxMore.rawValue\n        case .aorusMaxContent, .aorusMaxSafeMode, .aorusMaxSafeModeInfo:\n", "MAX privacy content card")
-    text = _edit(text, "            case .aorusMaxSafeMode:\n                return 100\n", "            case .aorusMaxSecurityHero:\n                return 99\n            case .aorusMaxContent:\n                return 102\n            case .aorusMaxMore:\n                return 103\n            case .aorusMaxSafeMode:\n                return 100\n", "MAX privacy content identity")
+    text = _edit(text, "    case aorusMaxSafeModeInfo(PresentationTheme, String)\n", "    case aorusMaxSafeModeInfo(PresentationTheme, String)\n    case aorusMaxContent(PresentationTheme, String, String, Bool)\n    case aorusMaxMore(PresentationTheme, String)\n", "MAX privacy content entries")
+    text = _edit(text, "        case .aorusMaxSafeMode, .aorusMaxSafeModeInfo:\n", "        case .aorusMaxMore:\n            return PrivacyAndSecuritySection.aorusMaxMore.rawValue\n        case .aorusMaxContent, .aorusMaxSafeMode, .aorusMaxSafeModeInfo:\n", "MAX privacy content card")
+    text = _edit(text, "            case .aorusMaxSafeMode:\n                return 100\n", "            case .aorusMaxContent:\n                return 102\n            case .aorusMaxMore:\n                return 103\n            case .aorusMaxSafeMode:\n                return 100\n", "MAX privacy content identity")
     text = _edit(text, "        switch lhs {\n            case let .aorusMaxSafeMode", """        switch lhs {
-            case let .aorusMaxSecurityHero(theme, safeMode, title, status, reduceMotion):
-                if case let .aorusMaxSecurityHero(otherTheme, otherSafeMode, otherTitle, otherStatus, otherReduceMotion) = rhs {
-                    return theme === otherTheme && safeMode == otherSafeMode && title == otherTitle && status == otherStatus && reduceMotion == otherReduceMotion
-                }
-                return false
             case let .aorusMaxContent(theme, title, value, enabled):
                 if case let .aorusMaxContent(otherTheme, otherTitle, otherValue, otherEnabled) = rhs { return theme === otherTheme && title == otherTitle && value == otherValue && enabled == otherEnabled }
                 return false
@@ -2880,17 +2839,15 @@ def patch_privacy_screen(tg: Path) -> None:
                 if case let .aorusMaxMore(otherTheme, otherTitle) = rhs { return theme === otherTheme && title == otherTitle }
                 return false
             case let .aorusMaxSafeMode""", "MAX privacy content equality")
-    text = _edit(text, "            switch self {\n            case .aorusMaxSecurityHero:", """            switch self {
+    text = _edit(text, "            switch self {\n            case .passcode, .twoStepVerification, .passkeys:", """            switch self {
             case .privacyHeader, .lastSeenPrivacy, .accountTimeout:
                 return PrivacyAndSecuritySection.aorusMaxInformation.rawValue
             case .blockedPeers:
                 return PrivacyAndSecuritySection.aorusMaxBlocked.rawValue
             case .activeSessions:
                 return PrivacyAndSecuritySection.aorusMaxDevices.rawValue
-            case .aorusMaxSecurityHero:""", "MAX privacy separate information cards")
+            case .passcode, .twoStepVerification, .passkeys:""", "MAX privacy separate information cards")
     text = _edit(text, "        switch self {\n            case let .aorusMaxSafeMode", """        switch self {
-            case let .aorusMaxSecurityHero(theme, safeMode, title, status, reduceMotion):
-                return AorusMaxSecurityHeaderItem(theme: theme, safeModeActive: safeMode, title: title, statusText: status, reduceMotion: reduceMotion, sectionId: self.section)
             case let .aorusMaxContent(_, title, value, enabled):
                 return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, enabled: enabled, label: value, sectionId: self.section, style: .blocks, action: { arguments.aorusMaxOpenContent?() })
             case let .aorusMaxMore(_, title):
@@ -2914,11 +2871,6 @@ def patch_privacy_screen(tg: Path) -> None:
             return AorusMaxInterface.localizedString(key, languageCode: presentationData.strings.baseLanguageCode) ?? fallback
         }
         var result: [PrivacyAndSecurityEntry] = []
-        let heroTitle = source("PRIVACY_SETTINGS_TITLE", presentationData.strings.PrivacySettings_Title)
-        let heroStatus = aorusMaxSafeMode
-            ? source("PRIVACY_SETTINGS_FAMILY_CONTROL_MODE_MANAGEABLE", source("PRIVACY_SETTINGS_SAFE_MODE_ENABLED_TITLE", presentationData.strings.PrivacySettings_Title))
-            : source("SETTINGS_PIN_ONBOARDING_DESCRIPTION", presentationData.strings.PrivacySettings_Title)
-        result.append(.aorusMaxSecurityHero(presentationData.theme, aorusMaxSafeMode, heroTitle, heroStatus, presentationData.reduceMotion))
         let everybody = source("ALL_USERS", presentationData.strings.PrivacySettings_LastSeenEverybody)
         let contacts = source("CONTACTS_ONLY", presentationData.strings.PrivacySettings_LastSeenContacts)
         func value(_ setting: SelectivePrivacySettings?, fallback: String) -> String {
@@ -2975,7 +2927,6 @@ def patch_privacy_screen(tg: Path) -> None:
         return result
     }
 ''' + anchor, "MAX privacy screen card order")
-    text += "\n" + _MAX_SECURITY_HEADER_ITEM
     text = _edit(text, "    arguments.aorusMaxToggleSafeMode = { value in\n", r'''    arguments.aorusMaxOpenAdvanced = {
         pushControllerImpl?(privacyAndSecurityController(context: context, aorusMaxAdvanced: true), true)
     }
@@ -3224,7 +3175,7 @@ def patch_safe_mode_intro(tg: Path) -> None:
             let data = context.sharedContext.currentPresentationData.with { $0 }
             let lang = data.strings.baseLanguageCode
             let title = AorusMaxInterface.localizedString("PRIVACY_SETTINGS_SAFE_MODE_TITLE", languageCode: lang) ?? data.strings.PrivacySettings_Title
-            let disableTitle = AorusMaxInterface.localizedString("PRIVACY_SETTINGS_TWO_FA_SUBTITLE_DISABLED", languageCode: lang) ?? data.strings.Common_Done
+            let disableTitle = AorusMaxInterface.localizedString("TWO_FA_DISABLE_ALERT_DISABLE_ACTION", languageCode: lang) ?? aorusL("Отключить", "Disable")
             let sheet = ActionSheetController(presentationData: data)
             sheet.setItemGroups([
                 ActionSheetItemGroup(items: [
@@ -3648,6 +3599,16 @@ private final class AorusMaxBlockedEmptyStateItemNode: ItemListControllerEmptySt
         self.discNode.addSubnode(self.animationNode)
         self.addSubnode(self.titleNode)
         self.addSubnode(self.textNode)
+    }
+
+    override func didEnterHierarchy() {
+        super.didEnterHierarchy()
+        self.animationNode.visibility = true
+    }
+
+    override func didExitHierarchy() {
+        super.didExitHierarchy()
+        self.animationNode.visibility = false
     }
 
     func update(theme: PresentationTheme, title: String, text: String, reduceMotion: Bool) {
