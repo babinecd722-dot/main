@@ -1190,8 +1190,8 @@ _TABS_SELECTION_LINE = '''        // AorusGram: old interface: 12.0's accent lin
         private func aorusUpdateSelectionLine(component: HorizontalTabsComponent, sizeHeight: CGFloat, transition: ComponentTransition) {
             if self.aorusSelectionLineTheme !== component.theme {
                 self.aorusSelectionLineTheme = component.theme
-                // The MAXimal interface draws the line in the text colour, as MAX does.
-                let color = AorusMaxInterface.isEnabled ? component.theme.list.itemPrimaryTextColor : component.theme.list.itemAccentColor
+                // The MAXimal interface draws the line in MAX's blue accent, as MAX does.
+                let color = AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : component.theme.list.itemAccentColor
                 self.aorusSelectionLine.image = generateImage(CGSize(width: 5.0, height: 3.0), rotatedContext: { size, context in
                     context.clear(CGRect(origin: CGPoint(), size: size))
                     context.setFillColor(color.cgColor)

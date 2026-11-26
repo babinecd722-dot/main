@@ -465,7 +465,7 @@ public enum AorusPluginIconValues {
         ("text_transparent_bg_28", ["Media Editor/TextSemi"]),
         ("picture_24", ["Chat/Context Menu/Image", "Media Editor/AddImage", "Item List/Icons/Wallpaper"]),
         ("ic_music_24", ["Media Editor/Audio", "Media Editor/AudioSmall", "Media Editor/SmallAudio"]),
-        ("back_24_ios", ["Chat/Context Menu/Back", "Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"]),
+        ("back_24_ios", ["Chat/Context Menu/Back"]),
         // The profile's QR code, top left as MAX puts it.
         ("qr_code_24", ["Settings/QrIcon", "Settings/QrButtonIcon", "Settings/ScanQr", "Navigation/ScanQr"]),
         // Navigation bar glyphs.

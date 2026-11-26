@@ -548,14 +548,17 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
 
         self.applyTheme()
 
-        self.backButtonArrow.layer.minificationFilter = .nearest
-        self.backButtonArrow.layer.magnificationFilter = .nearest
+        self.backButtonArrow.contentMode = .scaleAspectFit
+        if !AorusMaxInterface.isEnabled {
+            self.backButtonArrow.layer.minificationFilter = .nearest
+            self.backButtonArrow.layer.magnificationFilter = .nearest
+        }
         self.iconObserver = NotificationCenter.default.addObserver(forName: AorusPluginIconValues.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.async { [weak self] in
                 guard let self else {
                     return
                 }
-                self.backButtonArrow.image = navigationBarBackArrowImage(color: self.presentationData.theme.buttonColor)
+                self.backButtonArrow.image = self.resolvedBackArrowImage(color: self.presentationData.theme.buttonColor)
                 self.updateLeftButton(animated: false)
                 self.requestLayout()
             }
@@ -642,6 +645,13 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         return theme.aorusClassicBackgroundColor ?? .clear
     }
 
+    private func resolvedBackArrowImage(color: UIColor) -> UIImage? {
+        if AorusMaxInterface.isEnabled, let image = AorusMaxInterface.tintedGlyph("back_24_ios", color: color) {
+            return image
+        }
+        return navigationBarBackArrowImage(color: color)
+    }
+
     private func applyTheme() {
         let theme = self.presentationData.theme
         self.backButtonNode.color = theme.buttonColor
@@ -652,7 +662,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         self.rightButtonNode.disabledColor = theme.disabledButtonColor
         self.aorusLeadingButtonNode.color = theme.buttonColor
         self.aorusLeadingButtonNode.disabledColor = theme.disabledButtonColor
-        self.backButtonArrow.image = navigationBarBackArrowImage(color: theme.buttonColor)
+        self.backButtonArrow.image = self.resolvedBackArrowImage(color: theme.buttonColor)
         if let title = self.title {
             self.titleNode.attributedText = NSAttributedString(string: title, font: AorusClassicNavigationBar.titleFont, textColor: theme.primaryTextColor)
             self.titleNode.accessibilityLabel = title

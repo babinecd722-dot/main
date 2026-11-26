@@ -2695,71 +2695,195 @@ def patch_chat_list_geometry(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Seed MAX's «Новые» (Unread) and «Каналы» (Channels) as REAL native Telegram folders once per
-    # account so they are 100% tappable, swipeable, filterable, renameable, editable, and deletable
-    # in Telegram's native Folders settings (never synthetic fake tabs).
+    # 100% LOCAL-ONLY MAX tabs («Новые» & «Каналы»): active ONLY when MAXimal interface is
+    # enabled and NEVER synced to Telegram servers (zero updateChatListFiltersInteractively RPCs).
+    # Injected inside chatListFilterItems(context:) right before Postbox unread badge aggregation
+    # so both tabs automatically receive live unread counts and native Postbox filtering.
+    path = tg / "submodules/ChatListUI/Sources/TabBarChatListFilterController.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    |> mapToSignal { filters -> Signal<([ChatListFilter], ChatListFilterBadgeSecretChats), NoError> in\n",
+        "    |> mapToSignal { rawFilters -> Signal<([ChatListFilter], ChatListFilterBadgeSecretChats), NoError> in\n"
+        "        var filters = rawFilters\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            let lang = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode\n"
+        "            let hasAll = filters.contains(where: { if case .allChats = $0 { return true }; return false })\n"
+        "            if !hasAll {\n"
+        "                filters.insert(.allChats, at: 0)\n"
+        "            }\n"
+        "            let hasUnread = filters.contains(where: {\n"
+        "                if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }\n"
+        "                return false\n"
+        "            })\n"
+        "            if !hasUnread {\n"
+        '                let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"\n'
+        "                let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
+        "                let insertIdx = min(1, filters.count)\n"
+        "                filters.insert(.filter(id: AorusMaxInterface.localUnreadFilterId, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData), at: insertIdx)\n"
+        "            }\n"
+        "            let hasChannels = filters.contains(where: {\n"
+        "                if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }\n"
+        "                return false\n"
+        "            })\n"
+        "            if !hasChannels {\n"
+        '                let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"\n'
+        "                let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
+        "                let channelsIdx = min(2, filters.count)\n"
+        "                filters.insert(.filter(id: AorusMaxInterface.localChannelsFilterId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData), at: channelsIdx)\n"
+        "            }\n"
+        "        }\n",
+        "MAX local-only Unread and Channels tabs without server sync",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # Wire ChatListController so local-only MAX tabs are 100% tappable, never locked by server
+    # folder limits, and never send invalid server edit/delete RPCs on long-press.
     path = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
     text = _read(path)
     text = _edit(
         text,
-        "    private var initializedFilters = false\n"
-        "    private func reloadFilters(firstUpdate: (() -> Void)? = nil) {\n",
-        "    private var initializedFilters = false\n"
-        "    private var aorusMaxCheckedDefaultFolders = false\n"
-        "    private func reloadFilters(firstUpdate: (() -> Void)? = nil) {\n",
-        "MAX real folder seed guard property",
+        "            let filtersLimit = isPremium == false ? limits.maxFoldersCount : nil\n",
+        "            let aorusMaxLocalCount: Int32 = AorusMaxInterface.isEnabled ? Int32(items.filter { if case let .filter(id, _, _, _) = $0.0 { return AorusMaxInterface.isLocalFilterId(id) }; return false }.count) : 0\n"
+        "            let filtersLimit = isPremium == false ? (limits.maxFoldersCount + aorusMaxLocalCount) : nil\n",
+        "MAX local tabs exempt from server folder limit",
     )
     text = _edit(
         text,
-        "            let (_, items) = countAndFilterItems\n"
-        "            var filterItems: [ChatListFilterTabEntry] = []\n",
-        "            let (_, items) = countAndFilterItems\n"
-        "            if AorusMaxInterface.isEnabled, !strongSelf.aorusMaxCheckedDefaultFolders, case .chatList(.root) = strongSelf.location {\n"
-        "                strongSelf.aorusMaxCheckedDefaultFolders = true\n"
-        "                let seedKey = \"aorusgram_max_seeded_folders_v1_\\(strongSelf.context.account.id.int64)\"\n"
-        "                if !UserDefaults.standard.bool(forKey: seedKey) {\n"
-        "                    UserDefaults.standard.set(true, forKey: seedKey)\n"
-        "                    let maxFolders = (isPremium == true) ? Int(limits.maxFoldersCount) * 2 : Int(limits.maxFoldersCount)\n"
-        "                    let lang = strongSelf.presentationData.strings.baseLanguageCode\n"
-        "                    let context = strongSelf.context\n"
-        "                    let _ = (context.engine.peers.updateChatListFiltersInteractively { currentFilters in\n"
-        "                        var updated = currentFilters\n"
-        "                        let existingCount = updated.filter { if case .filter = $0 { return true }; return false }.count\n"
-        "                        var added = 0\n"
-        "                        let hasUnread = updated.contains(where: {\n"
-        "                            if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }\n"
-        "                            return false\n"
-        "                        })\n"
-        "                        if !hasUnread && existingCount + added < maxFolders {\n"
-        '                            let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"\n'
-        "                            let unreadId = context.engine.peers.generateNewChatListFilterId(filters: updated)\n"
-        "                            let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                            updated.append(.filter(id: unreadId, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData))\n"
-        "                            added += 1\n"
+        "                var found = false\n"
+        "                var foundValue: ChatListFilter?\n"
+        "                for filter in filters {\n"
+        "                    if filter.id == id {\n"
+        "                        foundValue = filter\n"
+        "                        found = true\n"
+        "                        break\n"
+        "                    }\n"
+        "                }\n",
+        "                var found = false\n"
+        "                var foundValue: ChatListFilter?\n"
+        "                if AorusMaxInterface.isEnabled && AorusMaxInterface.isLocalFilterId(id) {\n"
+        "                    for available in strongSelf.chatListDisplayNode.mainContainerNode.availableFilters {\n"
+        "                        if case let .filter(localFilter) = available, localFilter.id == id {\n"
+        "                            foundValue = localFilter\n"
+        "                            found = true\n"
+        "                            break\n"
         "                        }\n"
-        "                        let hasChannels = updated.contains(where: {\n"
-        "                            if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }\n"
-        "                            return false\n"
-        "                        })\n"
-        "                        if !hasChannels && existingCount + added < maxFolders {\n"
-        '                            let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"\n'
-        "                            let channelsId = context.engine.peers.generateNewChatListFilterId(filters: updated)\n"
-        "                            let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                            updated.append(.filter(id: channelsId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData))\n"
-        "                        }\n"
-        "                        return updated\n"
-        "                    }).startStandalone()\n"
+        "                    }\n"
         "                }\n"
-        "            }\n"
-        "            var filterItems: [ChatListFilterTabEntry] = []\n",
-        "MAX seed real native Unread and Channels folders once per account",
+        "                if !found {\n"
+        "                    for filter in filters {\n"
+        "                        if filter.id == id {\n"
+        "                            foundValue = filter\n"
+        "                            found = true\n"
+        "                            break\n"
+        "                        }\n"
+        "                    }\n"
+        "                }\n",
+        "MAX selectTab resolves local-only filter IDs",
+    )
+    text = _edit(
+        text,
+        "            var items: [ContextMenuItem] = []\n"
+        "            if let id = id {\n",
+        "            var items: [ContextMenuItem] = []\n"
+        "            if let id = id, AorusMaxInterface.isEnabled && AorusMaxInterface.isLocalFilterId(id) {\n"
+        "                if let filterEntries = self.tabContainerData?.0 {\n"
+        "                    for filter in filterEntries {\n"
+        "                        if case let .filter(filterId, _, unread) = filter, filterId == id, unread.value > 0 {\n"
+        "                            items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.ChatList_ReadAll, textColor: .primary, icon: { theme in\n"
+        '                                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/ReadAll"), color: theme.contextMenu.primaryColor)\n'
+        "                            }, action: { [weak self] c, _ in\n"
+        "                                c?.dismiss(completion: {\n"
+        "                                    self?.readAllInFilter(id: id)\n"
+        "                                })\n"
+        "                            })))\n"
+        "                            break\n"
+        "                        }\n"
+        "                    }\n"
+        "                }\n"
+        "                items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.ChatList_EditFolders, icon: { theme in\n"
+        '                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/EditFolder"), color: theme.contextMenu.primaryColor)\n'
+        "                }, action: { [weak self] c, _ in\n"
+        "                    c?.dismiss(completion: {\n"
+        "                        self?.openFilterSettings()\n"
+        "                    })\n"
+        "                })))\n"
+        "            } else if let id = id {\n",
+        "MAX local tab context menu without server edit/delete RPCs",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # Prevent transparent ChatListContainerItemNodes from bleeding through adjacent tabs during
+    # tab switches (opaque background + clipsToBounds).
+    path = tg / "submodules/ChatListUI/Sources/ChatListContainerItemNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.edgeEffectView.isHidden = AorusOldInterface.isEnabled // AorusGram: old interface\n",
+        "        self.edgeEffectView.isHidden = AorusOldInterface.isEnabled // AorusGram: old interface\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.clipsToBounds = true\n"
+        "            self.backgroundColor = presentationData.theme.chatList.backgroundColor\n"
+        "        }\n",
+        "MAX opaque clipped ChatListContainerItemNode init",
+    )
+    text = _edit(
+        text,
+        "    func updatePresentationData(_ presentationData: PresentationData) {\n"
+        "        self.presentationData = presentationData\n",
+        "    func updatePresentationData(_ presentationData: PresentationData) {\n"
+        "        self.presentationData = presentationData\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.backgroundColor = presentationData.theme.chatList.backgroundColor\n"
+        "        }\n",
+        "MAX opaque ChatListContainerItemNode theme update",
     )
     path.write_text(text, encoding="utf-8")
 
     # Left-align MAX's folder tabs (`Все  Новые (1)  Каналы (5)`) via `.fit` layout (matching
-    # MAX's reference frames) instead of stretching/centering them across the full width.
+    # MAX's reference frames) and clip ChatListContainerNode + cancel stale layer animations on
+    # removed/switched tabs so previous tabs never linger or overlap.
     path = tg / "submodules/ChatListUI/Sources/ChatListControllerNode.swift"
     text = _read(path)
+    text = _edit(
+        text,
+        "        self.backgroundColor = presentationData.theme.chatList.backgroundColor\n"
+        "        \n"
+        "        let itemNode = ChatListContainerItemNode(",
+        "        self.backgroundColor = presentationData.theme.chatList.backgroundColor\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.clipsToBounds = true\n"
+        "        }\n"
+        "        \n"
+        "        let itemNode = ChatListContainerItemNode(",
+        "MAX clip ChatListContainerNode",
+    )
+    text = _edit(
+        text,
+        "                self.selectedId = id\n"
+        "                self.applyItemNodeAsCurrent(id: id, itemNode: itemNode)\n"
+        "                let transition: ContainedViewLayoutTransition = .animated(duration: 0.35, curve: .spring)\n",
+        "                if AorusMaxInterface.isEnabled {\n"
+        "                    for (_, existingNode) in self.itemNodes {\n"
+        "                        existingNode.layer.removeAllAnimations()\n"
+        "                    }\n"
+        "                }\n"
+        "                self.selectedId = id\n"
+        "                self.applyItemNodeAsCurrent(id: id, itemNode: itemNode)\n"
+        "                let transition: ContainedViewLayoutTransition = .animated(duration: 0.35, curve: .spring)\n",
+        "MAX cancel stale tab animations on switchToFilter",
+    )
+    text = _edit(
+        text,
+        "                    if let itemNode = self.itemNodes.removeValue(forKey: id) {\n"
+        "                        itemNode.removeFromSupernode()\n"
+        "                    }\n",
+        "                    if let itemNode = self.itemNodes.removeValue(forKey: id) {\n"
+        "                        itemNode.layer.removeAllAnimations()\n"
+        "                        itemNode.removeFromSupernode()\n"
+        "                    }\n",
+        "MAX clean removal of inactive tab nodes",
+    )
     text = _edit(
         text,
         "                        case .all:\n"
@@ -2781,6 +2905,43 @@ def patch_chat_list_geometry(tg: Path) -> None:
         "                    layout: AorusMaxInterface.isEnabled ? .fit : .fill,\n"
         "                    liftWhileSwitching: layout.deviceMetrics.type != .tablet\n",
         "MAX left-aligned folder tabs layout",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # Left-align MAX's «Чаты» title (~22pt bold at x = 16pt, matching AorusMaxTourChats.jpg)
+    # inside StoryPeerListComponent, which owns the Chats title whenever storySubscriptions != nil.
+    path = tg / "submodules/TelegramUI/Components/Stories/StoryPeerListComponent/Sources/StoryPeerListComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "                let attributedText = NSAttributedString(string: updatedTitleState.text, attributes: [\n"
+        "                    NSAttributedString.Key.font: Font.semibold(17.0),\n",
+        "                let attributedText = NSAttributedString(string: updatedTitleState.text, attributes: [\n"
+        "                    NSAttributedString.Key.font: AorusMaxInterface.isEnabled ? Font.bold(22.0) : Font.semibold(17.0),\n",
+        "MAX large Chats header title font in StoryPeerListComponent",
+    )
+    text = _edit(
+        text,
+        "            var titleContentOffset: CGFloat\n"
+        "            if self.sortedItems.isEmpty {\n"
+        "                titleContentOffset = collapsedTitleOffset\n"
+        "            } else {\n"
+        "                let expandedTitleOrigin = StoryPeerListTitleLayout.expandedTitleOrigin(containerWidth: itemLayout.containerSize.width, titleWidth: titleWidth, minX: component.minTitleX, maxX: component.maxTitleX) + (self.expandedTitleOriginOffsetCurve?.value(at: CACurrentMediaTime()) ?? 0.0)\n"
+        "                titleContentOffset = titleMinContentOffset.interpolate(to: expandedTitleOrigin, amount: min(1.0, collapsedState.maxFraction) * (1.0 - collapsedState.activityFraction))\n"
+        "                titleContentOffset += -expandBoundsFraction * 4.0\n"
+        "            }\n",
+        "            var titleContentOffset: CGFloat\n"
+        "            if AorusMaxInterface.isEnabled && self.sortedItems.isEmpty {\n"
+        "                titleContentOffset = component.leftInset + 16.0\n"
+        "            } else if self.sortedItems.isEmpty {\n"
+        "                titleContentOffset = collapsedTitleOffset\n"
+        "            } else {\n"
+        "                let expandedTitleOrigin = AorusMaxInterface.isEnabled ? (component.leftInset + 16.0) : (StoryPeerListTitleLayout.expandedTitleOrigin(containerWidth: itemLayout.containerSize.width, titleWidth: titleWidth, minX: component.minTitleX, maxX: component.maxTitleX) + (self.expandedTitleOriginOffsetCurve?.value(at: CACurrentMediaTime()) ?? 0.0))\n"
+        "                let maxBaseOffset = AorusMaxInterface.isEnabled ? (component.leftInset + 16.0) : titleMinContentOffset\n"
+        "                titleContentOffset = maxBaseOffset.interpolate(to: expandedTitleOrigin, amount: min(1.0, collapsedState.maxFraction) * (1.0 - collapsedState.activityFraction))\n"
+        "                titleContentOffset += -expandBoundsFraction * 4.0\n"
+        "            }\n",
+        "MAX left-aligned Chats header title position in StoryPeerListComponent",
     )
     path.write_text(text, encoding="utf-8")
 
@@ -2922,7 +3083,6 @@ def patch_privacy_screen(tg: Path) -> None:
         for entry in entries {
             if case let .blockedPeers(theme, title, value) = entry { result.append(.blockedPeers(theme, source("PRIVACY_SETTINGS_BLACKLIST", title), value)) }
         }
-        result.append(.activeSessions(presentationData.theme, source("DEVICES", presentationData.strings.Settings_Devices), ""))
         result.append(.aorusMaxMore(presentationData.theme, presentationData.strings.Common_More))
         return result
     }
@@ -3392,24 +3552,11 @@ def patch_inner_settings_titles(tg: Path) -> None:
 
 
 def patch_performance_isolation(tg: Path) -> None:
-    """Eliminate live UIVisualEffectView blurs and VariableBlurView CAFilter backdrop IOSurfaces
-    when MAX flat interface is enabled so no glass/blur layer runs in parallel underneath MAX."""
-    path = tg / "submodules/Display/Source/NavigationBackgroundView.swift"
-    text = _read(path)
-    text = _edit(
-        text,
-        "        if self.enableBlur && !sharedIsReduceTransparencyEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {\n",
-        "        if self.enableBlur && !sharedIsReduceTransparencyEnabled && !AorusMaxInterface.isEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {\n",
-        "MAX NavigationBackgroundNode blur disable",
-    )
-    text = _edit(
-        text,
-        "        if let color = self._color, self.enableBlur && !sharedIsReduceTransparencyEnabled && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {\n",
-        "        if let color = self._color, self.enableBlur && !sharedIsReduceTransparencyEnabled && !AorusMaxInterface.isEnabled && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {\n",
-        "MAX BlurredBackgroundView blur disable",
-    )
-    path.write_text(text, encoding="utf-8")
-
+    """Keep EdgeEffect flat in MAX (no iOS 26 VariableBlurView IOSurfaces) while preserving
+    genuine panel/context-menu blurs (Sticker Picker, Context Menu backdrop, Reaction Bar),
+    wire crisp unstretched 24x24 MAX back_24_ios into NavigationBarTheme, and let
+    AorusSettingsSearch preserve Interface 2.0's .inlineNavigation style without duplicating
+    SearchBarNode's loupe/Cancel button."""
     path = tg / "submodules/TelegramUI/Components/EdgeEffect/Sources/EdgeEffect.swift"
     text = _read(path)
     text = _edit(
@@ -3420,22 +3567,65 @@ def patch_performance_isolation(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    path = tg / "submodules/Components/BlurredBackgroundComponent/Sources/BlurredBackgroundComponent.swift"
+    # Crisp 24x24 MAX back_24_ios for every NavigationBarTheme.generateBackArrowImage caller.
+    path = tg / "submodules/Display/Source/NavigationBar.swift"
     text = _read(path)
     text = _edit(
         text,
-        "            self.updateColor(color: component.color, forceKeepBlur: true, transition: transition.containedViewLayoutTransition)\n",
-        "            self.updateColor(color: component.color, forceKeepBlur: !AorusMaxInterface.isEnabled, transition: transition.containedViewLayoutTransition)\n",
-        "MAX BlurredBackgroundComponent forceKeepBlur disable",
+        "    public static func generateBackArrowImage(color: UIColor) -> UIImage? {\n",
+        "    public static func generateBackArrowImage(color: UIColor) -> UIImage? {\n"
+        "        if AorusMaxInterface.isEnabled, let image = AorusMaxInterface.tintedGlyph(\"back_24_ios\", color: color) {\n"
+        "            return image\n"
+        "        }\n",
+        "MAX crisp 24x24 back_24_ios in NavigationBarTheme",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # Let AorusSettingsSearch keep Interface 2.0's .inlineNavigation SearchBarNode without
+    # breaking aorus_old_interface.py / aorus_classic_components.py replay anchors.
+    path = tg / "submodules/SearchBarNode/Sources/SearchBarNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "    public let fieldStyle: SearchBarStyle\n",
+        "    public static var aorusPreserveInlineNavigation: Bool = false\n"
+        "    public private(set) var fieldStyle: SearchBarStyle\n",
+        "SearchBarNode aorusPreserveInlineNavigation flag",
     )
     text = _edit(
         text,
-        "        return View(color: nil, enableBlur: true)\n",
-        "        return View(color: nil, enableBlur: !AorusMaxInterface.isEnabled)\n",
-        "MAX BlurredBackgroundComponent enableBlur disable",
+        "        let fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // AorusGram: classic components\n"
+        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // AorusGram: old interface\n"
+        "        self.forceSeparator = forceSeparator\n",
+        "        let aorusKeepInline = SearchBarNode.aorusPreserveInlineNavigation && fieldStyle == .inlineNavigation\n"
+        "        let fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // AorusGram: classic components\n"
+        "        self.fieldStyle = AorusOldInterface.isEnabled && (fieldStyle == .glass || fieldStyle == .inlineNavigation) ? .modern : fieldStyle // AorusGram: old interface\n"
+        "        self.forceSeparator = forceSeparator\n"
+        "        if aorusKeepInline {\n"
+        "            self.fieldStyle = .inlineNavigation\n"
+        "        }\n",
+        "SearchBarNode preserve inlineNavigation for AorusSettingsSearch",
+    )
+    text = _edit(
+        text,
+        "        self.textField = SearchBarTextField(theme: theme, style: fieldStyle)\n",
+        "        self.textField = SearchBarTextField(theme: theme, style: self.fieldStyle)\n",
+        "SearchBarNode textField matches resolved fieldStyle",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: disabled live UIBlurEffect and VariableBlurView backdrops in MAX mode")
+
+    # Reaction bar in MAX dark mode: use translucent fill so BlurredBackgroundView frosts cleanly
+    # behind the reaction vibrancy mask rather than compositing onto a 100% opaque surface.
+    path = tg / "submodules/ReactionSelectionNode/Sources/ReactionContextBackgroundNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "                self.backgroundView.updateColor(color: theme.contextMenu.backgroundColor, forceKeepBlur: true, transition: .immediate)\n",
+        "                self.backgroundView.updateColor(color: AorusMaxInterface.isEnabled ? theme.contextMenu.backgroundColor.withAlphaComponent(0.86) : theme.contextMenu.backgroundColor, forceKeepBlur: true, transition: .immediate)\n",
+        "MAX translucent reaction bar blur backdrop",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: preserved panel/context blurs, disabled EdgeEffect blur, wired crisp back_24_ios and inline settings search")
 
 
 def patch_qr_screens(tg: Path) -> None:
@@ -3748,6 +3938,79 @@ def patch_menus_and_sheets(tg: Path) -> None:
         "                    highlightTransition.setCornerRadius(layer: self.highlightedItemBackgroundView.layer, cornerRadius: 12.0)\n"
         "                }\n",
         "MAX rounded context menu row highlight",
+    )
+    text = _edit(
+        text,
+        "            let (size, apparentHeight) = self.node.update(\n",
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                self.backgroundColor = presentationData.theme.contextMenu.backgroundColor\n"
+        "            }\n"
+        "            let (size, apparentHeight) = self.node.update(\n",
+        "MAX opaque context menu ItemContainer prevents submenu bleed-through",
+    )
+    text = _edit(
+        text,
+        "            transition.updatePosition(node: itemContainer, position: position, completion: { [weak itemContainer] _ in\n"
+        "                itemContainer?.removeFromSupernode()\n"
+        "            })\n",
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                if transition.isAnimated {\n"
+        "                    transition.updateAlpha(node: itemContainer, alpha: 0.0, beginWithCurrentState: true)\n"
+        "                    transition.updatePosition(node: itemContainer, position: position, beginWithCurrentState: true, completion: { [weak itemContainer] _ in\n"
+        "                        itemContainer?.removeFromSupernode()\n"
+        "                    })\n"
+        "                } else {\n"
+        "                    itemContainer.removeFromSupernode()\n"
+        "                }\n"
+        "            } else {\n"
+        "                transition.updatePosition(node: itemContainer, position: position, completion: { [weak itemContainer] _ in\n"
+        "                    itemContainer?.removeFromSupernode()\n"
+        "                })\n"
+        "            }\n",
+        "MAX clean context menu dismissal without lingering submenu",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # 1b. Clip AorusClassicLensContainer contentsView and ContextSourceContainer tabs so switching
+    #     between context menu tabs/submenus never leaves previous menu views lingering on screen.
+    path = tg / "submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.addSubview(self.backgroundView)\n"
+        "        self.addSubview(self.contentsView)\n",
+        "        self.contentsView.clipsToBounds = true\n"
+        "        self.addSubview(self.backgroundView)\n"
+        "        self.addSubview(self.contentsView)\n",
+        "MAX clip AorusClassicLensContainer contentsView",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    path = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextSourceContainer.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            self.sources.append(mappedSource)\n"
+        "            self.addSubnode(mappedSource.presentationNode)\n",
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                self.clipsToBounds = true\n"
+        "                mappedSource.presentationNode.clipsToBounds = true\n"
+        "            }\n"
+        "            self.sources.append(mappedSource)\n"
+        "            self.addSubnode(mappedSource.presentationNode)\n",
+        "MAX clip ContextSourceContainer tabs",
+    )
+    text = _edit(
+        text,
+        "            let itemTransition = transition\n"
+        "            itemTransition.updateFrame(node: self.sources[i].presentationNode, frame: itemFrame)\n",
+        "            let itemTransition = transition\n"
+        "            itemTransition.updateFrame(node: self.sources[i].presentationNode, frame: itemFrame)\n"
+        "            if AorusMaxInterface.isEnabled && self.sources.count > 1 {\n"
+        "                let tabVisible = (i == self.activeIndex || self.panState != nil)\n"
+        "                itemTransition.updateAlpha(node: self.sources[i].presentationNode, alpha: tabVisible ? 1.0 : 0.0, beginWithCurrentState: true)\n"
+        "            }\n",
+        "MAX hide inactive ContextSourceContainer tabs cleanly",
     )
     path.write_text(text, encoding="utf-8")
 

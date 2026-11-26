@@ -113,6 +113,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
         self.close = (GlassBackgroundView(), UIImageView())
         self.close.background.contentView.addSubview(self.close.icon)
 
+        SearchBarNode.aorusPreserveInlineNavigation = true
         self.searchBar = SearchBarNode(
             theme: AorusSettingsSearchNavigationContentNode.searchBarTheme(theme),
             presentationTheme: theme,
@@ -122,24 +123,17 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
             displayBackground: false,
             cancelText: nil
         )
+        SearchBarNode.aorusPreserveInlineNavigation = false
 
         super.init()
 
-        if AorusOldInterface.isEnabled {
-            self.backgroundContainer.isHidden = true
-            self.backgroundView.isHidden = true
-            self.iconView.isHidden = true
-            self.close.background.isHidden = true
-            self.view.addSubview(self.searchBar.view)
-        } else {
-            self.view.addSubview(self.backgroundContainer)
-            self.backgroundView.contentView.addSubview(self.searchBar.view)
-            self.backgroundContainer.contentView.addSubview(self.close.background)
-            self.close.background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.closeTapped(_:))))
-            self.close.background.isAccessibilityElement = true
-            self.close.background.accessibilityLabel = strings.Common_Close
-            self.close.background.accessibilityTraits = .button
-        }
+        self.view.addSubview(self.backgroundContainer)
+        self.backgroundView.contentView.addSubview(self.searchBar.view)
+        self.backgroundContainer.contentView.addSubview(self.close.background)
+        self.close.background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.closeTapped(_:))))
+        self.close.background.isAccessibilityElement = true
+        self.close.background.accessibilityLabel = strings.Common_Close
+        self.close.background.accessibilityTraits = .button
 
         self.searchBar.cancel = { [weak self] in
             self?.searchBar.deactivate(clear: false)
@@ -152,19 +146,6 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     }
 
     private static func searchBarTheme(_ theme: PresentationTheme) -> SearchBarNodeTheme {
-        if AorusOldInterface.isEnabled {
-            return SearchBarNodeTheme(
-                background: theme.rootController.navigationBar.opaqueBackgroundColor,
-                separator: .clear,
-                inputFill: theme.rootController.navigationSearchBar.inputFillColor,
-                primaryText: theme.rootController.navigationSearchBar.inputTextColor,
-                placeholder: theme.rootController.navigationSearchBar.inputPlaceholderTextColor,
-                inputIcon: theme.rootController.navigationSearchBar.inputIconColor,
-                inputClear: theme.rootController.navigationSearchBar.inputClearButtonColor,
-                accent: theme.rootController.navigationSearchBar.accentColor,
-                keyboard: theme.rootController.keyboardColor
-            )
-        }
         return SearchBarNodeTheme(
             background: .clear,
             separator: .clear,
@@ -206,29 +187,37 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     }
 
     override var nominalHeight: CGFloat {
-        return AorusOldInterface.isEnabled ? 54.0 : 60.0
+        // Match AorusClassicNavigationBar's 44pt default height so opening/closing search
+        // never resizes the navigation bar or causes a vertical jolt.
+        return AorusOldInterface.isEnabled ? 44.0 : 60.0
     }
 
     override func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, transition: ContainedViewLayoutTransition) -> CGSize {
         self.validLayout = (size, leftInset, rightInset)
 
-        if AorusOldInterface.isEnabled {
-            let searchBarFrame = CGRect(origin: CGPoint(), size: size)
-            transition.updateFrame(view: self.searchBar.view, frame: searchBarFrame)
-            self.searchBar.updateLayout(boundingSize: searchBarFrame.size, leftInset: leftInset, rightInset: rightInset, transition: transition)
-            return size
-        }
-
         let componentTransition = ComponentTransition(transition)
 
-        let backgroundFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: 6.0), size: CGSize(width: size.width - 16.0 * 2.0 - leftInset - rightInset - 44.0 - 8.0, height: 44.0))
-        let closeFrame = CGRect(origin: CGPoint(x: size.width - 16.0 - rightInset - 44.0, y: backgroundFrame.minY), size: CGSize(width: 44.0, height: 44.0))
+        let barHeight: CGFloat = AorusOldInterface.isEnabled ? 38.0 : 44.0
+        let closeSide: CGFloat = barHeight
+        let barY: CGFloat = AorusOldInterface.isEnabled ? max(0.0, size.height - 44.0 + floor((44.0 - barHeight) * 0.5)) : 6.0
+
+        let backgroundFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: barY), size: CGSize(width: size.width - 16.0 * 2.0 - leftInset - rightInset - closeSide - 8.0, height: barHeight))
+        let closeFrame = CGRect(origin: CGPoint(x: size.width - 16.0 - rightInset - closeSide, y: backgroundFrame.minY), size: CGSize(width: closeSide, height: closeSide))
 
         componentTransition.setFrame(view: self.backgroundContainer, frame: CGRect(origin: CGPoint(), size: size))
         self.backgroundContainer.update(size: size, isDark: self.theme.overallDarkAppearance, transition: componentTransition)
 
         componentTransition.setFrame(view: self.backgroundView, frame: backgroundFrame)
         self.backgroundView.update(size: backgroundFrame.size, cornerRadius: backgroundFrame.height * 0.5, isDark: self.theme.overallDarkAppearance, tintColor: .init(kind: .panel), isInteractive: true, transition: componentTransition)
+        if AorusOldInterface.isEnabled && !AorusMaxInterface.isEnabled {
+            let fill = self.theme.rootController.navigationSearchBar.inputFillColor
+            self.backgroundView.backgroundColor = fill
+            self.backgroundView.layer.cornerRadius = backgroundFrame.height * 0.5
+            self.backgroundView.clipsToBounds = true
+            self.close.background.backgroundColor = fill
+            self.close.background.layer.cornerRadius = closeFrame.height * 0.5
+            self.close.background.clipsToBounds = true
+        }
 
         // Telegram's own search glyph, in the colour Telegram gives a search field's icon.
         if self.iconView.image == nil {
@@ -243,7 +232,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
             componentTransition.setBounds(view: self.iconView, bounds: CGRect(origin: CGPoint(), size: iconFrame.size))
         }
 
-        let searchBarFrame = CGRect(origin: CGPoint(x: 36.0, y: 0.0), size: CGSize(width: backgroundFrame.width - 36.0 - 4.0, height: 44.0))
+        let searchBarFrame = CGRect(origin: CGPoint(x: 36.0, y: 0.0), size: CGSize(width: backgroundFrame.width - 36.0 - 4.0, height: barHeight))
         componentTransition.setFrame(view: self.searchBar.view, frame: searchBarFrame)
         self.searchBar.updateLayout(boundingSize: searchBarFrame.size, leftInset: 0.0, rightInset: 0.0, transition: transition)
 
@@ -262,7 +251,9 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
             })?.withRenderingMode(.alwaysTemplate)
         }
         if let image = self.close.icon.image {
-            self.close.icon.frame = image.size.centered(in: CGRect(origin: CGPoint(), size: closeFrame.size))
+            let iconScale: CGFloat = closeFrame.height < 44.0 ? closeFrame.height / 44.0 : 1.0
+            let closeIconSize = CGSize(width: floor(image.size.width * iconScale), height: floor(image.size.height * iconScale))
+            self.close.icon.frame = closeIconSize.centered(in: CGRect(origin: CGPoint(), size: closeFrame.size))
         }
         self.close.icon.tintColor = self.theme.chat.inputPanel.panelControlColor
 

@@ -328,25 +328,33 @@ private final class AorusClassicChatListBackButtonView: HighlightableButton {
     }
 
     func update(title: String, theme: PresentationTheme, availableSize: CGSize, transition: ComponentTransition) -> CGSize {
-        let titleText = NSAttributedString(string: title, font: Font.regular(17.0), textColor: theme.rootController.navigationBar.accentTextColor)
+        let effectiveTitle = AorusMaxInterface.isEnabled ? "" : title
+        let titleText = NSAttributedString(string: effectiveTitle, font: Font.regular(17.0), textColor: theme.rootController.navigationBar.accentTextColor)
         let titleTextUpdated = self.titleView.attributedText != titleText
         self.titleView.attributedText = titleText
-        let titleSize = self.titleView.updateLayout(CGSize(width: 100.0, height: 44.0))
+        self.titleView.isHidden = effectiveTitle.isEmpty
+        let titleSize = effectiveTitle.isEmpty ? .zero : self.titleView.updateLayout(CGSize(width: 100.0, height: 44.0))
 
         self.accessibilityLabel = title
         self.accessibilityTraits = [.button]
 
-        if self.currentColor != theme.rootController.navigationBar.accentTextColor {
-            self.currentColor = theme.rootController.navigationBar.accentTextColor
-            self.arrowView.image = NavigationBarTheme.generateBackArrowImage(color: theme.rootController.navigationBar.accentTextColor)
+        let arrowColor = AorusMaxInterface.isEnabled ? theme.rootController.navigationBar.buttonColor : theme.rootController.navigationBar.accentTextColor
+        if self.currentColor != arrowColor {
+            self.currentColor = arrowColor
+            if AorusMaxInterface.isEnabled {
+                self.arrowView.contentMode = .scaleAspectFit
+                self.arrowView.image = AorusMaxInterface.tintedGlyph("back_24_ios", color: arrowColor) ?? NavigationBarTheme.generateBackArrowImage(color: arrowColor)
+            } else {
+                self.arrowView.image = NavigationBarTheme.generateBackArrowImage(color: theme.rootController.navigationBar.accentTextColor)
+            }
         }
 
-        let iconSpacing: CGFloat = 8.0
-        let iconOffset: CGFloat = -7.0
+        let iconSpacing: CGFloat = effectiveTitle.isEmpty ? 0.0 : 8.0
+        let iconOffset: CGFloat = AorusMaxInterface.isEnabled ? 0.0 : -7.0
 
-        let arrowSize = self.arrowView.image?.size ?? CGSize(width: 13.0, height: 22.0)
+        let arrowSize = AorusMaxInterface.isEnabled ? CGSize(width: 24.0, height: 24.0) : (self.arrowView.image?.size ?? CGSize(width: 13.0, height: 22.0))
 
-        let arrowFrame = CGRect(origin: CGPoint(x: iconOffset - 1.0, y: floor((availableSize.height - arrowSize.height) / 2.0)), size: arrowSize)
+        let arrowFrame = CGRect(origin: CGPoint(x: iconOffset - (AorusMaxInterface.isEnabled ? 0.0 : 1.0), y: floor((availableSize.height - arrowSize.height) / 2.0)), size: arrowSize)
         transition.setPosition(view: self.arrowView, position: arrowFrame.center)
         transition.setBounds(view: self.arrowView, bounds: CGRect(origin: CGPoint(), size: arrowFrame.size))
 
@@ -357,6 +365,9 @@ private final class AorusClassicChatListBackButtonView: HighlightableButton {
             transition.setFrame(view: self.titleView, frame: titleFrame)
         }
 
+        if AorusMaxInterface.isEnabled {
+            return CGSize(width: max(36.0, arrowSize.width), height: availableSize.height)
+        }
         return CGSize(width: iconOffset + arrowSize.width + iconSpacing + titleSize.width, height: availableSize.height)
     }
 }

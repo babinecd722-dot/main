@@ -696,4 +696,15 @@ public enum AorusMaxInterface {
             }
         })?.withRenderingMode(.alwaysOriginal)
     }
+
+    /// Reserved local-only filter IDs for MAX's default «Новые» (Unread) and «Каналы» (Channels)
+    /// chat list tabs. Active exclusively when MAXimal interface is enabled and never synced to
+    /// Telegram servers.
+    public static let localUnreadFilterId: Int32 = 90001
+    public static let localChannelsFilterId: Int32 = 90002
+
+    public static func isLocalFilterId(_ id: Int32) -> Bool {
+        return id == AorusMaxInterface.localUnreadFilterId || id == AorusMaxInterface.localChannelsFilterId
+    }
 }
+
