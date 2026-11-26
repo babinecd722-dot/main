@@ -3567,20 +3567,6 @@ def patch_performance_isolation(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Crisp 24x24 MAX back_24_ios for every NavigationBarTheme.generateBackArrowImage caller.
-    path = tg / "submodules/Display/Source/NavigationBar.swift"
-    text = _read(path)
-    text = _edit(
-        text,
-        "    public static func generateBackArrowImage(color: UIColor) -> UIImage? {\n",
-        "    public static func generateBackArrowImage(color: UIColor) -> UIImage? {\n"
-        "        if AorusMaxInterface.isEnabled, let image = AorusMaxInterface.tintedGlyph(\"back_24_ios\", color: color) {\n"
-        "            return image\n"
-        "        }\n",
-        "MAX crisp 24x24 back_24_ios in NavigationBarTheme",
-    )
-    path.write_text(text, encoding="utf-8")
-
     # Let AorusSettingsSearch keep Interface 2.0's .inlineNavigation SearchBarNode without
     # breaking aorus_old_interface.py / aorus_classic_components.py replay anchors.
     path = tg / "submodules/SearchBarNode/Sources/SearchBarNode.swift"

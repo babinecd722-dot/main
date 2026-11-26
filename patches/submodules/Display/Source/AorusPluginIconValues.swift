@@ -180,6 +180,24 @@ public enum AorusPluginIconValues {
         guard let image else {
             return nil
         }
+        if isMaxRun && name == "Telegram/Navigation/Back",
+           let source = UIImage(named: "AorusMax/back_24_ios", in: getAppBundle(), compatibleWith: nil),
+           source.size.width > 0.0, source.size.height > 0.0 {
+            let tintColor = ink(of: image)?.color ?? UIColor.white
+            if let tinted = generateImage(source.size, opaque: false, scale: source.scale, rotatedContext: { size, context in
+                let canvas = CGRect(origin: CGPoint(), size: size)
+                context.clear(canvas)
+                context.interpolationQuality = .high
+                UIGraphicsPushContext(context)
+                source.draw(in: canvas)
+                UIGraphicsPopContext()
+                context.setBlendMode(.sourceIn)
+                context.setFillColor(tintColor.cgColor)
+                context.fill(canvas)
+            }) {
+                return tinted.withRenderingMode(image.renderingMode == .alwaysTemplate ? .alwaysTemplate : .alwaysOriginal)
+            }
+        }
         if isMaxRun && maxIconsByTarget[name] == nil {
             return image
         }
