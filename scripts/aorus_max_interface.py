@@ -1038,7 +1038,7 @@ def patch_privacy(tg: Path) -> None:
     text = _edit(text, "|> map { presentationData, state, privacySettings, noticeView,", "|> map { presentationData, state, privacySettingsAndContent, noticeView,", "MAX content state mapping")
     text = _edit(text, "        var canAutoarchive = false\n", "        let (rawPrivacySettings, aorusMaxContentSettings, _) = privacySettingsAndContent\n        let aorusMaxStatus = AorusMaxSafeModeManager.shared.status(accountId: context.account.id.int64)\n        let privacySettings = rawPrivacySettings ?? aorusMaxStatus.lastSettings\n        let _ = aorusMaxLatestPrivacy.swap((privacySettings, aorusMaxContentSettings))\n        var state = state\n        if AorusMaxInterface.isEnabled {\n            state.aorusMaxSafeModeUpdating = state.aorusMaxSafeModeUpdating || aorusMaxStatus.updating\n            state.aorusMaxSafeModeOptimistic = aorusMaxStatus.optimistic\n            state.aorusMaxSafeModePartialError = aorusMaxStatus.partialError\n        }\n        let aorusMaxSafeModeSnapshot = AorusMaxSafeModeManager.shared.snapshot(accountId: context.account.id.int64)\n        let aorusMaxSafeModeActive = aorusMaxStatus.optimistic ?? (aorusMaxSafeModeSnapshot?.isActive(privacySettings, content: aorusMaxContentSettings) == true)\n        var canAutoarchive = false\n", "MAX content state values")
     text = _edit(text, "    var authorizationCompletion: ((Any) -> Void)?\n", "    var authorizationCompletion: ((Any) -> Void)?\n    private var aorusMaxHasAppeared = false\n    var aorusMaxRefreshContentSettings: (() -> Void)?\n\n    override func viewDidAppear(_ animated: Bool) {\n        super.viewDidAppear(animated)\n        if self.aorusMaxHasAppeared {\n            self.aorusMaxRefreshContentSettings?()\n        } else {\n            self.aorusMaxHasAppeared = true\n        }\n    }\n", "MAX content refresh lifecycle")
-    text = _edit(text, "    let controller = PrivacyAndSecurityControllerImpl(context: context, state: signal)\n", "    let controller = PrivacyAndSecurityControllerImpl(context: context, state: signal)\n    if AorusMaxInterface.isEnabled {\n        controller.aorusMaxRefreshContentSettings = {\n            guard !AorusMaxSafeModeManager.shared.isUpdating(accountId: context.account.id.int64) else { return }\n            aorusMaxContentSettingsPromise.set(contentSettingsConfiguration(network: context.account.network) |> map(Optional.init))\n        }\n    }\n", "MAX content refresh action")
+    text = _edit(text, "    let controller = PrivacyAndSecurityControllerImpl(context: context, state: signal)\n", "    let controller = PrivacyAndSecurityControllerImpl(context: context, state: signal)\n    if AorusMaxInterface.isEnabled {\n        controller.aorusMaxRefreshContentSettings = {\n            guard !AorusMaxSafeModeManager.shared.shouldSkipAppearRefresh(accountId: context.account.id.int64) else { return }\n            aorusMaxContentSettingsPromise.set(contentSettingsConfiguration(network: context.account.network) |> map(Optional.init))\n        }\n    }\n", "MAX content refresh action")
     text = _edit(text, "    let account: Account\n", "    let account: Account\n    var aorusMaxToggleSafeMode: ((Bool) -> Void)?\n", "MAX safe mode action")
     text = _edit(text, "    case privacyHeader(PresentationTheme, String)\n", "    case aorusMaxSafeMode(PresentationTheme, Bool, Bool)\n    case aorusMaxSafeModeInfo(PresentationTheme, String)\n    case privacyHeader(PresentationTheme, String)\n", "MAX safe mode entries")
     text = _edit(text, "            case .blockedPeers:\n                return 1\n", "            case .aorusMaxSafeMode:\n                return 100\n            case .aorusMaxSafeModeInfo:\n                return 101\n            case .blockedPeers:\n                return 1\n", "MAX safe mode stable identity")
@@ -1139,6 +1139,17 @@ def patch_privacy(tg: Path) -> None:
         return result
     }
 
+    /// Strictest restriction ("Nobody") required by Telegram's backend so `phoneDiscoveryEnabled = false` persists.
+    var restrictedNobody: AorusMaxPrivacyRule {
+        var result = self
+        result.mode = 2
+        result.enabled = []
+        result.premium = false
+        result.bots = false
+        result.closeFriends = false
+        return result
+    }
+
     func settings(peers: [Int64: EnginePeer]) -> SelectivePrivacySettings? {
         var enableFor: [EnginePeer.Id: SelectivePrivacyPeer] = [:]
         var disableFor: [EnginePeer.Id: SelectivePrivacyPeer] = [:]
@@ -1214,6 +1225,7 @@ private final class AorusMaxSafeModeManager {
     private var optimisticByAccount: [Int64: Bool] = [:]
     private var errorByAccount: [Int64: Bool] = [:]
     private var lastSettingsByAccount: [Int64: AccountPrivacySettings] = [:]
+    private var lastAppliedAtByAccount: [Int64: TimeInterval] = [:]
     private var disposablesByAccount: [Int64: MetaDisposable] = [:]
     private var versionPromisesByAccount: [Int64: ValuePromise<Int>] = [:]
     private var versionsByAccount: [Int64: Int] = [:]
@@ -1252,6 +1264,18 @@ private final class AorusMaxSafeModeManager {
         self.lock.lock()
         defer { self.lock.unlock() }
         return self.inFlightByAccount[accountId] ?? false
+    }
+
+    func shouldSkipAppearRefresh(accountId: Int64) -> Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        if self.inFlightByAccount[accountId] == true {
+            return true
+        }
+        if let appliedAt = self.lastAppliedAtByAccount[accountId], Date().timeIntervalSinceReferenceDate - appliedAt < 2.5 {
+            return true
+        }
+        return false
     }
 
     func versionSignal(accountId: Int64) -> Signal<Int, NoError> {
@@ -1349,7 +1373,7 @@ private final class AorusMaxSafeModeManager {
             let currentCalls = AorusMaxPrivacyRule(settings.voiceCalls)
             let currentInvitations = AorusMaxPrivacyRule(settings.groupInvitations)
             let phoneNumber: AorusMaxPrivacyRule = value
-                ? currentPhone.restricted
+                ? currentPhone.restrictedNobody
                 : (activeSnapshot.phoneNumber.map { currentPhone.isRestricted ? $0 : currentPhone } ?? currentPhone)
             let calls: AorusMaxPrivacyRule = value
                 ? currentCalls.restricted
@@ -1381,8 +1405,8 @@ private final class AorusMaxSafeModeManager {
                 func completeFlag(_ signal: Signal<Void, NoError>) -> Signal<Bool, NoError> {
                     return signal |> mapToSignal { _ -> Signal<Bool, NoError> in .complete() } |> then(.single(true))
                 }
-                // Keep phoneNumber -> phoneDiscovery ordered (Telegram server requires phoneNumber != Everyone
-                // before accepting phoneDiscoveryEnabled = false), while calls and invites run in parallel.
+                // Keep phoneNumber (Nobody) -> phoneDiscovery (My Contacts) ordered so Telegram's backend
+                // persists phoneDiscoveryEnabled = false, while calls and invites run in parallel.
                 let phoneBranch = completeFlag(
                     context.engine.privacy.updateSelectiveAccountPrivacySettings(type: .phoneNumber, settings: phoneSettings)
                     |> then(context.engine.privacy.updatePhoneNumberDiscovery(value: discovery))
@@ -1422,6 +1446,7 @@ private final class AorusMaxSafeModeManager {
                 self.optimisticByAccount[accountId] = nil
                 self.errorByAccount[accountId] = false
                 self.lastSettingsByAccount[accountId] = updatedSettings
+                self.lastAppliedAtByAccount[accountId] = Date().timeIntervalSinceReferenceDate
                 self.lock.unlock()
                 self.bumpVersion(accountId: accountId)
                 onApplied(updatedSettings, updatedContent)
@@ -4749,8 +4774,11 @@ def patch_performance_isolation(tg: Path) -> None:
     )
     text = _edit(
         text,
-        "                backgroundTintView.image = generateStretchableFilledCircleImage(diameter: AorusOldInterface.isEnabled ? 2.0 : keyboardCornerRadius * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate) // AorusGram: old interface\n",
-        "                backgroundTintView.image = AorusMaxInterface.isEnabled ? generateSingleColorImage(size: CGSize(width: 2.0, height: 2.0), color: .white)?.withRenderingMode(.alwaysTemplate) : generateStretchableFilledCircleImage(diameter: AorusOldInterface.isEnabled ? 2.0 : keyboardCornerRadius * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate) // AorusGram: old interface\n",
+        "            if backgroundTintView.image == nil {\n",
+        "            if AorusMaxInterface.isEnabled && backgroundTintView.image == nil {\n"
+        "                backgroundTintView.image = generateSingleColorImage(size: CGSize(width: 2.0, height: 2.0), color: .white)?.withRenderingMode(.alwaysTemplate)\n"
+        "            }\n"
+        "            if backgroundTintView.image == nil {\n",
         "MAX solid emoji/sticker panel backgroundTintView image",
     )
     text = _edit(
