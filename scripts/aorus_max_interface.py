@@ -1480,7 +1480,8 @@ private final class AorusMaxSafeModeManager {
 
 
 def patch_hints(tg: Path) -> None:
-    """MAX's words over the record button when it is tapped instead of held."""
+    """MAX's words over the record button when it is tapped instead of held, and neutral dark
+    charcoal tooltip surfaces across TooltipControllerNode and TooltipScreen."""
     path = tg / "submodules/TelegramUI/Sources/ChatController.swift"
     text = _read(path)
     text = _edit(
@@ -1493,7 +1494,88 @@ def patch_hints(tg: Path) -> None:
         "MAX record hint",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: MAX's hint over the record button")
+
+    # TooltipControllerNode ("Удерживайте для записи" etc.): elevated neutral charcoal (#2c2e33)
+    # with crisp white text instead of pure black 0.8 smudge.
+    path = tg / "submodules/Display/Source/TooltipControllerNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        if !isBlurred {\n"
+        "            self.containerNode.containerNode.backgroundColor = UIColor(white: 0.0, alpha: 0.8)\n"
+        "        }\n",
+        f"        // {MARK}: elevated neutral charcoal tooltip surface with crisp white text.\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.containerNode.containerNode.backgroundColor = AorusMaxInterface.palette(dark: true).hint\n"
+        "        } else if !isBlurred {\n"
+        "            self.containerNode.containerNode.backgroundColor = UIColor(white: 0.0, alpha: 0.8)\n"
+        "        }\n",
+        "MAX tooltip controller background",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    # TooltipScreen (video/voice pause & view-once tooltips + default dark tooltips): replace
+    # pure-black nav-bar blur / 0x18181a customBlur with elevated #2c2e33 charcoal in MAX dark mode.
+    path = tg / "submodules/TooltipUI/Sources/TooltipScreen.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            if case let .customBlur(color, _) = style {\n"
+        "                backgroundColor = color\n"
+        "                enableSaturation = false\n"
+        "            } else {\n"
+        "                if theme.overallDarkAppearance {\n"
+        "                    backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "                } else {\n"
+        "                    backgroundColor = UIColor(rgb: 0x000000, alpha: 0.6)\n"
+        "                }\n"
+        "            }\n",
+        "            if case let .customBlur(color, _) = style {\n"
+        "                backgroundColor = (AorusMaxInterface.isEnabled && color.rgb == 0x18181a) ? AorusMaxInterface.palette(dark: true).hint : color\n"
+        "                enableSaturation = false\n"
+        "            } else {\n"
+        "                if AorusMaxInterface.isEnabled && theme.overallDarkAppearance {\n"
+        "                    backgroundColor = AorusMaxInterface.palette(dark: true).hint\n"
+        "                } else if theme.overallDarkAppearance {\n"
+        "                    backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "                } else {\n"
+        "                    backgroundColor = UIColor(rgb: 0x000000, alpha: 0.6)\n"
+        "                }\n"
+        "            }\n",
+        "MAX tooltip screen top/bottom dark surface",
+    )
+    text = _edit(
+        text,
+        "            if case let .customBlur(color, _) = style {\n"
+        "                backgroundColor = color\n"
+        "                enableSaturation = false\n"
+        "            } else if case .light = style {\n"
+        "                backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "            } else {\n"
+        "                if theme.overallDarkAppearance {\n"
+        "                    backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "                } else {\n"
+        "                    backgroundColor = UIColor(rgb: 0x000000, alpha: 0.6)\n"
+        "                }\n"
+        "            }\n",
+        "            if case let .customBlur(color, _) = style {\n"
+        "                backgroundColor = (AorusMaxInterface.isEnabled && color.rgb == 0x18181a) ? AorusMaxInterface.palette(dark: true).hint : color\n"
+        "                enableSaturation = false\n"
+        "            } else if case .light = style {\n"
+        "                backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "            } else {\n"
+        "                if AorusMaxInterface.isEnabled && theme.overallDarkAppearance {\n"
+        "                    backgroundColor = AorusMaxInterface.palette(dark: true).hint\n"
+        "                } else if theme.overallDarkAppearance {\n"
+        "                    backgroundColor = theme.rootController.navigationBar.blurredBackgroundColor\n"
+        "                } else {\n"
+        "                    backgroundColor = UIColor(rgb: 0x000000, alpha: 0.6)\n"
+        "                }\n"
+        "            }\n",
+        "MAX tooltip screen arrow dark surface",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: MAX's hint over the record button and crisp dark tooltip surfaces")
 
 
 _MAX_LOCK_HINT = """
@@ -1510,6 +1592,10 @@ private final class AorusMaxLockHintView: UIView {
         let palette = AorusMaxInterface.palette(dark: dark)
         self.isUserInteractionEnabled = false
         self.backgroundShape.fillColor = palette.hint.cgColor
+        self.backgroundShape.shadowColor = UIColor.black.cgColor
+        self.backgroundShape.shadowOpacity = 0.24
+        self.backgroundShape.shadowRadius = 8.0
+        self.backgroundShape.shadowOffset = CGSize(width: 0.0, height: 2.0)
         self.layer.addSublayer(self.backgroundShape)
         self.label.text = text
         self.label.numberOfLines = 2
@@ -1607,7 +1693,7 @@ def patch_lock_hint(tg: Path) -> None:
 
 def patch_video_message_screen(tg: Path) -> None:
     """The video-message recorder as MAX draws it: a dark screen with MAX's violet-blue glow
-    behind the round preview, under the same record button and lock."""
+    behind the round preview, dark circular controls with crisp white/accent icons."""
     path = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
     text = _read(path)
     text = _edit(
@@ -1644,6 +1730,56 @@ def patch_video_message_screen(tg: Path) -> None:
         "            transition.setPosition(view: self.backgroundView, position: actualBackgroundFrame.center)\n            transition.setBounds(view: self.backgroundView, bounds: CGRect(origin: .zero, size: actualBackgroundFrame.size))\n"
         "            self.aorusMaxGlowLayer?.frame = CGRect(origin: .zero, size: actualBackgroundFrame.size)\n",
         "MAX recorder glow layout",
+    )
+    # MAX's video recorder always sits on a dark canvas (#16181b + violet glow), so all 5 circular
+    # controls (flip, flash, mask, view-once, record-more) must always use dark circular plates with
+    # crisp white icons (and MAX accent when view-once is enabled) instead of dim grey or light plates.
+    text = _edit(
+        text,
+        "isDark: environment.theme.overallDarkAppearance,\n",
+        "isDark: AorusMaxInterface.isEnabled ? true : environment.theme.overallDarkAppearance,\n",
+        "MAX video recorder dark button circles",
+        count=5,
+    )
+    text = _edit(
+        text,
+        "                                    image: state.image(.flip, theme: environment.theme),\n"
+        "                                    tintColor: environment.theme.chat.inputPanel.panelControlColor,\n",
+        "                                    image: state.image(.flip, theme: environment.theme),\n"
+        "                                    tintColor: AorusMaxInterface.isEnabled ? UIColor(rgb: 0xffffff) : environment.theme.chat.inputPanel.panelControlColor,\n",
+        "MAX video flip button icon color",
+    )
+    text = _edit(
+        text,
+        "                                content: LottieComponent.AppBundleContent(name: flashIconName),\n"
+        "                                color: environment.theme.chat.inputPanel.panelControlColor,\n",
+        "                                content: LottieComponent.AppBundleContent(name: flashIconName),\n"
+        "                                color: AorusMaxInterface.isEnabled ? UIColor(rgb: 0xffffff) : environment.theme.chat.inputPanel.panelControlColor,\n",
+        "MAX video animated flash button icon color",
+    )
+    text = _edit(
+        text,
+        "                                image: state.image(.flash, theme: environment.theme),\n"
+        "                                tintColor: environment.theme.chat.inputPanel.panelControlColor,\n",
+        "                                image: state.image(.flash, theme: environment.theme),\n"
+        "                                tintColor: AorusMaxInterface.isEnabled ? UIColor(rgb: 0xffffff) : environment.theme.chat.inputPanel.panelControlColor,\n",
+        "MAX video static flash button icon color",
+    )
+    text = _edit(
+        text,
+        "                                            name: component.cameraState.isViewOnceEnabled ? \"Media Gallery/ViewOnceEnabled\" : \"Media Gallery/ViewOnce\",\n"
+        "                                            tintColor: environment.theme.chat.inputPanel.panelControlColor\n",
+        "                                            name: component.cameraState.isViewOnceEnabled ? \"Media Gallery/ViewOnceEnabled\" : \"Media Gallery/ViewOnce\",\n"
+        "                                            tintColor: AorusMaxInterface.isEnabled ? (component.cameraState.isViewOnceEnabled ? AorusMaxInterface.accent : UIColor(rgb: 0xffffff)) : environment.theme.chat.inputPanel.panelControlColor\n",
+        "MAX video view-once button icon color",
+    )
+    text = _edit(
+        text,
+        "                                            name: \"Chat/Input/Text/IconVideo\",\n"
+        "                                            tintColor: environment.theme.chat.inputPanel.panelControlColor\n",
+        "                                            name: \"Chat/Input/Text/IconVideo\",\n"
+        "                                            tintColor: AorusMaxInterface.isEnabled ? UIColor(rgb: 0xffffff) : environment.theme.chat.inputPanel.panelControlColor\n",
+        "MAX video record-more button icon color",
     )
     path.write_text(text, encoding="utf-8")
     print("MaxInterface: the video-message recorder in MAX's look")
@@ -2106,7 +2242,7 @@ def patch_recording(tg: Path) -> None:
     text = _edit(
         text,
         'if let url = getAppBundle().url(forResource: self.pause ? "LockPause" : "Lock", withExtension: "json"), let animation = Animation.filepath(url.path) {\n            let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .mainThread, decodingStrategy: .codable))\n',
-        'if let url = getAppBundle().url(forResource: AorusMaxInterface.isEnabled ? "AorusMaxRecordLock" : (self.pause ? "LockPause" : "Lock"), withExtension: "json"), let animation = Animation.filepath(url.path) {\n            let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: AorusMaxInterface.isEnabled ? .automatic : .mainThread, decodingStrategy: .codable))\n',
+        'if let url = getAppBundle().url(forResource: AorusMaxInterface.isEnabled ? "AorusMaxRecordLock" : (self.pause ? "LockPause" : "Lock"), withExtension: "json"), let animation = Animation.filepath(url.path) {\n            let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .mainThread, decodingStrategy: .codable))\n',
         "MAX padlock animation",
     )
     text = _edit(
@@ -2118,7 +2254,7 @@ def patch_recording(tg: Path) -> None:
         "            let side: CGFloat = 24.0\n"
         "            lockingView.frame = CGRect(x: floor((bounds.width - side) / 2.0), y: floor((bounds.height - side) / 2.0), width: side, height: side)\n"
         '            if self.pause, let url = getAppBundle().url(forResource: "AorusMaxRecordPause", withExtension: "json"), let animation = Animation.filepath(url.path) {\n'
-        "                let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .automatic, decodingStrategy: .codable))\n"
+        "                let view = AnimationView(animation: animation, configuration: LottieConfiguration(renderingEngine: .mainThread, decodingStrategy: .codable))\n"
         "                view.backgroundColor = .clear\n"
         "                view.isOpaque = false\n"
         "                view.isHidden = true\n"
@@ -2168,33 +2304,42 @@ def patch_recording(tg: Path) -> None:
         "        lockingView.currentProgress = lockness\n"
         "    }\n\n"
         "    func updateTheme(_ theme: PresentationTheme) {\n"
-        f"        // {MARK}: cache keypaths and skip idleView/redundant updates in MAX mode.\n"
+        f"        // {MARK}: recolor MAX's Lottie padlock and pause icons on the main-thread engine\n"
+        "        // (CoreAnimation engine returns no keypaths, leaving black icons on dark grey panels).\n"
         "        if AorusMaxInterface.isEnabled {\n"
         "            if self.aorusMaxTheme === theme {\n"
         "                return\n"
         "            }\n"
         "            self.aorusMaxTheme = theme\n"
+        "            let isDarkLock = self.useDarkTheme || theme.overallDarkAppearance\n"
+        "            let lockColor = isDarkLock ? UIColor(rgb: 0xffffff) : theme.chat.inputPanel.primaryTextColor\n"
         "            let lockKeypaths: [String]\n"
         "            if let cached = self.aorusMaxLockColorKeypaths {\n"
         "                lockKeypaths = cached\n"
         "            } else {\n"
-        "                lockKeypaths = lockingView.allKeypaths(predicate: { $0.keys.last == \"Color\" })\n"
+        "                let found = lockingView.allKeypaths(predicate: { $0.keys.last == \"Color\" })\n"
+        "                lockKeypaths = found.isEmpty ? [\"**.Color\"] : found\n"
         "                self.aorusMaxLockColorKeypaths = lockKeypaths\n"
         "            }\n"
+        "            let lockProvider = ColorValueProvider(lockColor.lottieColorValue)\n"
         "            for keypath in lockKeypaths {\n"
-        "                lockingView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.primaryTextColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n"
+        "                lockingView.setValueProvider(lockProvider, keypath: AnimationKeypath(keypath: keypath))\n"
         "            }\n"
+        "            lockingView.forceDisplayUpdate()\n"
         "            if let pauseView = self.aorusMaxPauseView {\n"
         "                let pauseKeypaths: [String]\n"
         "                if let cached = self.aorusMaxPauseColorKeypaths {\n"
         "                    pauseKeypaths = cached\n"
         "                } else {\n"
-        "                    pauseKeypaths = pauseView.allKeypaths(predicate: { $0.keys.last == \"Color\" })\n"
+        "                    let found = pauseView.allKeypaths(predicate: { $0.keys.last == \"Color\" })\n"
+        "                    pauseKeypaths = found.isEmpty ? [\"**.Color\"] : found\n"
         "                    self.aorusMaxPauseColorKeypaths = pauseKeypaths\n"
         "                }\n"
+        "                let pauseProvider = ColorValueProvider(theme.chat.inputPanel.panelControlAccentColor.lottieColorValue)\n"
         "                for keypath in pauseKeypaths {\n"
-        "                    pauseView.setValueProvider(ColorValueProvider(theme.chat.inputPanel.panelControlAccentColor.lottieColorValue), keypath: AnimationKeypath(keypath: keypath))\n"
+        "                    pauseView.setValueProvider(pauseProvider, keypath: AnimationKeypath(keypath: keypath))\n"
         "                }\n"
+        "                pauseView.forceDisplayUpdate()\n"
         "            }\n"
         "            return\n"
         "        }\n",
@@ -2212,6 +2357,12 @@ def patch_recording(tg: Path) -> None:
     text = _read(path)
     text = _edit(
         text,
+        "            let lockView = LockView(frame: CGRect(origin: CGPoint(), size: CGSize(width: 40.0, height: 60.0)), theme: self.theme, useDarkTheme: self.useDarkTheme, pause: self.pause, strings: self.strings)\n",
+        "            let lockView = LockView(frame: CGRect(origin: CGPoint(), size: CGSize(width: 40.0, height: 60.0)), theme: self.theme, useDarkTheme: AorusMaxInterface.isEnabled ? (self.hidesOnLock || self.useDarkTheme) : self.useDarkTheme, pause: self.pause, strings: self.strings)\n",
+        "MAX lock view dark panel propagation",
+    )
+    text = _edit(
+        text,
         "    public override func createLockPanelView() -> (UIView & TGModernConversationInputMicButtonLockPanelView)! {\n",
         "    public override func createLockPanelView() -> (UIView & TGModernConversationInputMicButtonLockPanelView)! {\n"
         f"        // {MARK}: MAX's plain rounded square behind the lock.\n"
@@ -2223,9 +2374,52 @@ def patch_recording(tg: Path) -> None:
     text = text.rstrip("\n") + "\n" + _MAX_LOCK_PANEL
     path.write_text(text, encoding="utf-8")
 
+    path = components / "Chat/ChatRecordingViewOnceButtonNode/Sources/ChatRecordingViewOnceButtonNode.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "        self.iconView.tintColor = theme.chat.inputPanel.panelControlColor\n"
+        "        self.iconView.setMonochromaticEffect(tintColor: self.iconView.tintColor)\n",
+        f"        // {MARK}: crisp white/glyph contrast (and MAX accent when view-once is selected).\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            let iconColor = (self.icon == .viewOnce && self.innerIsSelected) ? AorusMaxInterface.accent : (theme.overallDarkAppearance ? UIColor(rgb: 0xffffff) : AorusMaxInterface.palette(dark: false).glyph)\n"
+        "            self.iconView.tintColor = iconColor\n"
+        "            self.iconView.setMonochromaticEffect(tintColor: iconColor)\n"
+        "        } else {\n"
+        "            self.iconView.tintColor = theme.chat.inputPanel.panelControlColor\n"
+        "            self.iconView.setMonochromaticEffect(tintColor: self.iconView.tintColor)\n"
+        "        }\n",
+        "MAX recording viewOnce selection icon color",
+    )
+    text = _edit(
+        text,
+        "            }\n"
+        "            \n"
+        "            self.iconView.tintColor = theme.chat.inputPanel.panelControlColor\n"
+        "        }\n",
+        "            }\n"
+        "            \n"
+        "            if AorusMaxInterface.isEnabled {\n"
+        "                let iconColor = (self.icon == .viewOnce && self.innerIsSelected) ? AorusMaxInterface.accent : (theme.overallDarkAppearance ? UIColor(rgb: 0xffffff) : AorusMaxInterface.palette(dark: false).glyph)\n"
+        "                self.iconView.tintColor = iconColor\n"
+        "                self.iconView.setMonochromaticEffect(tintColor: iconColor)\n"
+        "            } else {\n"
+        "                self.iconView.tintColor = theme.chat.inputPanel.panelControlColor\n"
+        "            }\n"
+        "        }\n",
+        "MAX recording viewOnce theme icon color",
+    )
+    path.write_text(text, encoding="utf-8")
+
     path = components / "Chat/ChatTextInputAudioRecordingCancelIndicator/Sources/ChatTextInputAudioRecordingCancelIndicator.swift"
     text = _read(path)
     text = _edit(text, "strings.Conversation_SlideToCancel", "aorusMaxSlideToCancelText(strings)", "MAX cancel text", count=4)
+    text = _edit(
+        text,
+        "textColor: theme.chat.inputPanel.actionControlForegroundColor",
+        "textColor: AorusMaxInterface.isEnabled ? theme.chat.inputPanel.panelControlColor : theme.chat.inputPanel.actionControlForegroundColor",
+        "MAX cancel indicator updateTheme color",
+    )
     text = text.rstrip("\n") + (
         "\n\n"
         f"// {MARK}: MAX says only «Отменить» behind the arrow.\n"
@@ -4789,7 +4983,8 @@ def patch_performance_isolation(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Quick Translate side button in MAX: clean neutral-ink flag glyph (replacing globe/planet).
+    # Quick Translate side button in MAX: clean outlined waving flag cloth (no flagpole/stick),
+    # cached in AorusMaxInterface.translateFlagGlyph(color:).
     path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageShareButton/Sources/ChatMessageShareButton.swift"
     text = _read(path)
     text = _edit(
@@ -4797,9 +4992,9 @@ def patch_performance_isolation(tg: Path) -> None:
         "            if aorusIsTranslate {\n"
         "                updatedIconImage = generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n",
         "            if aorusIsTranslate {\n"
-        "                let aorusTranslateIcon = AorusMaxInterface.isEnabled ? UIImage(systemName: \"flag\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15.0, weight: .medium)) : UIImage(bundleImageName: \"Chat/Context Menu/Translate\")\n"
-        "                updatedIconImage = generateTintedImage(image: aorusTranslateIcon, color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n",
-        "MAX clean flag glyph for quick translate message button",
+        "                let aorusTranslateColor = bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper)\n"
+        "                updatedIconImage = AorusMaxInterface.isEnabled ? AorusMaxInterface.translateFlagGlyph(color: aorusTranslateColor) : generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: aorusTranslateColor)\n",
+        "MAX clean poleless waving flag glyph for quick translate message button",
     )
     path.write_text(text, encoding="utf-8")
     print("MaxInterface: preserved panel/context blurs, fixed opaque emoji panel backdrop, wired flag quick-translate glyph, crisp back_24_ios and inline settings search")

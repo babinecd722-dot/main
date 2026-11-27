@@ -419,6 +419,19 @@ private final class AorusMaxMemoryRowView: UIControl {
     }
 }
 
+private final class AorusMaxDisplayLinkProxy: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init()
+    }
+
+    @objc func tick() {
+        self.handler()
+    }
+}
+
 private final class AorusMaxMemorySettingsController: ViewController {
     private enum DataRowKind: Hashable {
         case files
@@ -465,6 +478,8 @@ private final class AorusMaxMemorySettingsController: ViewController {
     private var rollingStartTime: CFTimeInterval = 0.0
     private var rollingDuration: CFTimeInterval = 0.42
     private var rollingDisplayLink: CADisplayLink?
+    private let selectionFeedback = UISelectionFeedbackGenerator()
+    private let notificationFeedback = UINotificationFeedbackGenerator()
 
     private let scrollView = UIScrollView()
 
@@ -900,12 +915,15 @@ private final class AorusMaxMemorySettingsController: ViewController {
             return
         }
         self.rollingStartTime = CACurrentMediaTime()
-        let link = CADisplayLink(target: self, selector: #selector(self.rollingDisplayLinkTick))
+        let proxy = AorusMaxDisplayLinkProxy { [weak self] in
+            self?.rollingDisplayLinkTick()
+        }
+        let link = CADisplayLink(target: proxy, selector: #selector(AorusMaxDisplayLinkProxy.tick))
         link.add(to: .main, forMode: .common)
         self.rollingDisplayLink = link
     }
 
-    @objc private func rollingDisplayLinkTick() {
+    private func rollingDisplayLinkTick() {
         let elapsed = CACurrentMediaTime() - self.rollingStartTime
         let progress = min(1.0, max(0.0, elapsed / self.rollingDuration))
         // Cubic ease-out matching Telegram's storage counter settle curve.
@@ -913,6 +931,11 @@ private final class AorusMaxMemorySettingsController: ViewController {
 
         let totalDelta = Double(self.targetTotalBytes - self.rollingStartTotal)
         self.displayedTotalBytes = self.rollingStartTotal + Int64((totalDelta * eased).rounded())
+        let cardWidth: CGFloat? = self.validLayout.map { layout in
+            let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
+            return min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
+        }
+        let lastRowView = self.orderedRowViews.last
         for row in self.rows {
             let start = self.rollingStartBytesByKind[row.kind] ?? row.sizeBytes
             let target = self.rollingTargetBytesByKind[row.kind] ?? row.sizeBytes
@@ -920,10 +943,8 @@ private final class AorusMaxMemorySettingsController: ViewController {
             self.displayedBytesByKind[row.kind] = value
             if let rowView = self.rowViewMap[row.kind] {
                 rowView.sizeLabel.text = self.formattedRowSize(row: row, bytes: value)
-                if let layout = self.validLayout {
-                    let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
-                    let cardWidth = min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
-                    rowView.layoutRow(width: cardWidth, height: 54.0, showSeparator: rowView !== self.orderedRowViews.last)
+                if let cardWidth {
+                    rowView.layoutRow(width: cardWidth, height: 54.0, showSeparator: rowView !== lastRowView)
                 }
             }
         }
@@ -971,12 +992,12 @@ private final class AorusMaxMemorySettingsController: ViewController {
         switch row.kind {
         case .aorusDeletedMessages:
             self.includeDeletedInClear.toggle()
-            UISelectionFeedbackGenerator().selectionChanged()
+            self.selectionFeedback.selectionChanged()
             self.rebuildRowsAndApplyTheme(animated: true, rollNumbers: true)
             self.rowViewMap[.aorusDeletedMessages]?.animateCheckboxBounce()
         case .aorusEditedMessages:
             self.includeEditedInClear.toggle()
-            UISelectionFeedbackGenerator().selectionChanged()
+            self.selectionFeedback.selectionChanged()
             self.rebuildRowsAndApplyTheme(animated: true, rollNumbers: true)
             self.rowViewMap[.aorusEditedMessages]?.animateCheckboxBounce()
         case .files, .stickers, .photos, .videos, .audio, .other:
@@ -1090,10 +1111,10 @@ private final class AorusMaxMemorySettingsController: ViewController {
             self.reloadStorageStats(animated: true, rollNumbers: true) { [weak self] in
                 guard let self else { return }
                 if allOk {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    self.notificationFeedback.notificationOccurred(.success)
                     self.presentCompletionToast(freedBytes: expectedFreedBytes)
                 } else {
-                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    self.notificationFeedback.notificationOccurred(.error)
                     let alert = UIAlertController(
                         title: self.isRu ? "Ошибка очистки" : "Clear error",
                         message: self.isRu ? "Не удалось очистить сохранённые сообщения. Попробуйте повторить позже." : "Could not clear saved messages. Please try again later.",
@@ -1277,6 +1298,7 @@ private final class AorusMaxDiscreteFontSlider: UIControl {
     private let activeTrackView = UIView()
     private var tickViews: [UIView] = []
     private let thumbView = UIView()
+    private let selectionFeedback = UISelectionFeedbackGenerator()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1347,7 +1369,7 @@ private final class AorusMaxDiscreteFontSlider: UIControl {
         let step = Int((clampedX / usableWidth * CGFloat(self.stepsCount - 1)).rounded())
         if step != self.selectedStep {
             self.selectedStep = step
-            UISelectionFeedbackGenerator().selectionChanged()
+            self.selectionFeedback.selectionChanged()
             self.onStepChanged?(step)
         }
     }
@@ -1420,7 +1442,10 @@ private final class AorusMaxThemePreviewCardView: UIControl {
             self.bgPatternView.image = AorusMaxInterface.tintedWallpaperPattern(preset: self.preset, dark: dark)
         }
         self.incomingPill.backgroundColor = dark ? self.preset.incomingDark : self.preset.incomingLight
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         self.outgoingGradient.colors = [self.preset.outgoingTop.cgColor, self.preset.outgoingBottom.cgColor]
+        CATransaction.commit()
         let targetBorderWidth: CGFloat = selected ? 2.5 : 1.0
         let targetBorderColor = selected
             ? AorusMaxInterface.accent.cgColor
@@ -1448,7 +1473,10 @@ private final class AorusMaxThemePreviewCardView: UIControl {
         let h = self.bounds.height
         self.incomingPill.frame = CGRect(x: floor(w * 0.14), y: floor(h * 0.25), width: floor(w * 0.6), height: floor(h * 0.21))
         self.outgoingPill.frame = CGRect(x: floor(w * 0.26), y: floor(h * 0.52), width: floor(w * 0.6), height: floor(h * 0.21))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         self.outgoingGradient.frame = self.outgoingPill.bounds
+        CATransaction.commit()
     }
 }
 
@@ -1466,6 +1494,10 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private var reactionsDisposable: Disposable?
     private var validLayout: ContainerViewLayout?
     private var liveFontSizeOverride: PresentationFontSize?
+    private var hasLoadedThemeSettings = false
+    private var pendingSegmentTarget: (index: Int, deadline: CFTimeInterval)?
+    private var lastSegmentPillFrame: CGRect = .zero
+    private let selectionFeedback = UISelectionFeedbackGenerator()
 
     private let scrollView = UIScrollView()
 
@@ -1517,6 +1549,9 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 self.liveFontSizeOverride = nil
             }
             if self.isNodeLoaded {
+                if self.pendingSegmentTarget == nil {
+                    self.selectedSegmentIndex = self.resolvedSegmentIndex(from: self.themeSettings, fallbackDark: data.theme.overallDarkAppearance)
+                }
                 self.applyAppearance(animated: appearanceChanged)
             }
         })
@@ -1528,6 +1563,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         |> deliverOnMainQueue).start(next: { [weak self] settings in
             guard let self else { return }
             self.themeSettings = settings
+            self.hasLoadedThemeSettings = true
             if self.isNodeLoaded {
                 self.syncControlsFromSettings()
             }
@@ -1614,7 +1650,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             self.segmentDividers.append(div)
         }
         for i in 0 ..< 3 {
-            let btn = UIButton(type: .system)
+            let btn = UIButton(type: .custom)
             btn.tag = i
             btn.titleLabel?.font = Font.medium(15.0)
             btn.addTarget(self, action: #selector(self.segmentTapped(_:)), for: .touchUpInside)
@@ -1660,6 +1696,64 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.applyAppearance(animated: false)
     }
 
+    private func resolvedSegmentIndex(from settings: PresentationThemeSettings, fallbackDark: Bool) -> Int {
+        guard self.hasLoadedThemeSettings else {
+            return fallbackDark ? 2 : 1
+        }
+        if case .system = settings.automaticThemeSwitchSetting.trigger {
+            return 0
+        }
+        if case let .builtin(builtin) = settings.theme {
+            switch builtin {
+            case .night, .nightAccent, .neutralNight:
+                return 2
+            case .day, .dayClassic, .neutral:
+                return 1
+            }
+        }
+        return fallbackDark ? 2 : 1
+    }
+
+    private func updateSegmentSelectionUI(animated: Bool) {
+        guard self.segmentButtons.count == 3 else { return }
+        let dark = self.presentationData.theme.overallDarkAppearance
+        let palette = AorusMaxInterface.palette(dark: dark)
+        let selIndex = max(0, min(2, self.selectedSegmentIndex))
+        let selBtn = self.segmentButtons[selIndex]
+        let hasFrame = !selBtn.frame.isEmpty
+        let targetPillFrame = hasFrame ? selBtn.frame.insetBy(dx: 2.0, dy: 2.0) : .zero
+        let shouldMovePill = hasFrame && targetPillFrame != self.lastSegmentPillFrame
+
+        let applyStates = {
+            for (i, btn) in self.segmentButtons.enumerated() {
+                btn.setTitleColor(i == selIndex ? AorusMaxInterface.accent : (dark ? .white : palette.primaryText), for: .normal)
+            }
+            for (i, div) in self.segmentDividers.enumerated() {
+                div.alpha = (i == selIndex || i + 1 == selIndex) ? 0.0 : 1.0
+            }
+            if shouldMovePill {
+                self.segmentSelectedPill.frame = targetPillFrame
+            }
+        }
+
+        if shouldMovePill {
+            self.lastSegmentPillFrame = targetPillFrame
+        }
+
+        if animated && !self.reduceMotion && hasFrame {
+            UIView.animate(
+                withDuration: 0.28,
+                delay: 0.0,
+                usingSpringWithDamping: 0.88,
+                initialSpringVelocity: 0.2,
+                options: [.allowUserInteraction, .beginFromCurrentState],
+                animations: applyStates
+            )
+        } else {
+            applyStates()
+        }
+    }
+
     private func syncControlsFromSettings() {
         self.systemFontSwitch.isOn = self.themeSettings.useSystemFont
         let effectiveFont = self.liveFontSizeOverride ?? (self.themeSettings.useSystemFont ? self.presentationData.chatFontSize : self.themeSettings.fontSize)
@@ -1668,16 +1762,24 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.fontSlider.isEnabled = true
         self.fontSlider.alpha = 1.0
 
-        switch self.themeSettings.automaticThemeSwitchSetting.trigger {
-        case .system:
-            self.selectedSegmentIndex = 0
-        default:
-            self.selectedSegmentIndex = self.presentationData.theme.overallDarkAppearance ? 2 : 1
+        let derived = self.resolvedSegmentIndex(from: self.themeSettings, fallbackDark: self.presentationData.theme.overallDarkAppearance)
+        if let pending = self.pendingSegmentTarget {
+            if derived == pending.index {
+                self.pendingSegmentTarget = nil
+            } else if CACurrentMediaTime() < pending.deadline {
+                return
+            } else {
+                self.pendingSegmentTarget = nil
+            }
         }
-        self.applyAppearance(animated: false)
+        if self.selectedSegmentIndex != derived {
+            self.selectedSegmentIndex = derived
+            self.updateSegmentSelectionUI(animated: false)
+        }
     }
 
     private func rebuildRealChatPreview(width: CGFloat, animated: Bool) {
+        let _ = animated
         guard width > 40.0 else { return }
         let liveTheme = aorusPluginPreviewTheme(self.presentationData.theme)
         let dark = liveTheme.overallDarkAppearance
@@ -1700,21 +1802,16 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         let targetPattern = AorusMaxInterface.tintedWallpaperPattern(preset: preset, dark: dark)
             ?? AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight")
 
-        if animated && !self.reduceMotion {
-            UIView.animate(withDuration: 0.24, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: {
-                self.previewContainer.backgroundColor = targetBgColor
-            })
-            UIView.transition(with: self.previewPatternView, duration: 0.24, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: {
-                self.previewPatternView.image = targetPattern
-            })
-        } else {
+        let bgNode = self.previewBackgroundNode
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        UIView.performWithoutAnimation {
             self.previewContainer.backgroundColor = targetBgColor
             self.previewPatternView.image = targetPattern
+            bgNode?.update(wallpaper: wallpaper, animated: false)
+            bgNode?.updateBubbleTheme(bubbleTheme: liveTheme, bubbleCorners: self.presentationData.chatBubbleCorners)
         }
-
-        let bgNode = self.previewBackgroundNode
-        bgNode?.update(wallpaper: wallpaper, animated: animated && !self.reduceMotion)
-        bgNode?.updateBubbleTheme(bubbleTheme: liveTheme, bubbleCorners: self.presentationData.chatBubbleCorners)
+        CATransaction.commit()
 
         let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(1))
         let otherPeerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(2))
@@ -1835,7 +1932,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         let params = ListViewItemLayoutParams(width: width, leftInset: 0.0, rightInset: 0.0, availableHeight: 440.0)
         let canReuse = self.previewMessageNodes.count == items.count
-        let itemAnimation: ListViewItemUpdateAnimation = (animated && !self.reduceMotion) ? .Crossfade : .None
+        let itemAnimation: ListViewItemUpdateAnimation = .None
 
         if canReuse {
             var totalHeight: CGFloat = 12.0 + 12.0
@@ -1865,7 +1962,9 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             }
             self.previewContentHeight = max(160.0, totalHeight)
             let contentSize = CGSize(width: width, height: self.previewContentHeight)
-            let applyLayout = {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            UIView.performWithoutAnimation {
                 self.previewMessagesContainer.frame = CGRect(origin: .zero, size: contentSize)
                 var topOffset: CGFloat = 12.0
                 for (node, size, apply) in pendingFrames {
@@ -1878,11 +1977,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                     bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
                 }
             }
-            if animated && !self.reduceMotion {
-                UIView.animate(withDuration: 0.24, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: applyLayout)
-            } else {
-                applyLayout()
-            }
+            CATransaction.commit()
         } else {
             var builtNodes: [ListViewItemNode] = []
             for i in 0 ..< items.count {
@@ -1940,6 +2035,11 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: animated && !self.reduceMotion ? .animated(duration: 0.24, curve: .easeInOut) : .immediate)
 
+        let segTitles = isRu ? ["Системная", "Светлая", "Тёмная"] : [strings.AutoNightTheme_System, "Light", "Dark"]
+        for (i, btn) in self.segmentButtons.enumerated() where btn.title(for: .normal) != segTitles[i] {
+            btn.setTitle(segTitles[i], for: .normal)
+        }
+
         let applyColors = {
             self.displayNode.backgroundColor = palette.page
 
@@ -1959,14 +2059,12 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             self.themeHeaderLabel.textColor = palette.secondaryText
             self.segmentContainer.backgroundColor = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xe3e6ec)
             self.segmentSelectedPill.backgroundColor = dark ? UIColor(rgb: 0x1a1c22) : UIColor.white
-            let segTitles = isRu ? ["Системная", "Светлая", "Тёмная"] : [strings.AutoNightTheme_System, "Light", "Dark"]
             for (i, btn) in self.segmentButtons.enumerated() {
-                btn.setTitle(segTitles[i], for: .normal)
                 btn.setTitleColor(i == self.selectedSegmentIndex ? AorusMaxInterface.accent : (dark ? .white : palette.primaryText), for: .normal)
             }
             for (i, div) in self.segmentDividers.enumerated() {
                 div.backgroundColor = dark ? UIColor(white: 1.0, alpha: 0.16) : UIColor(white: 0.0, alpha: 0.12)
-                div.isHidden = (i == self.selectedSegmentIndex || i + 1 == self.selectedSegmentIndex)
+                div.alpha = (i == self.selectedSegmentIndex || i + 1 == self.selectedSegmentIndex) ? 0.0 : 1.0
             }
             self.themeNameLabel.textColor = palette.primaryText
         }
@@ -1995,7 +2093,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         if let layout = self.validLayout {
             let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
             let cardWidth = min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
-            self.rebuildRealChatPreview(width: cardWidth, animated: animated)
+            self.rebuildRealChatPreview(width: cardWidth, animated: false)
             self.containerLayoutUpdated(layout, transition: animated && !self.reduceMotion ? .animated(duration: 0.26, curve: .spring) : .immediate)
         }
     }
@@ -2029,9 +2127,12 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     }
 
     @objc private func segmentTapped(_ sender: UIButton) {
-        self.selectedSegmentIndex = sender.tag
         let index = sender.tag
-        UISelectionFeedbackGenerator().selectionChanged()
+        guard index != self.selectedSegmentIndex else { return }
+        self.selectedSegmentIndex = index
+        self.pendingSegmentTarget = (index, CACurrentMediaTime() + 0.8)
+        self.selectionFeedback.selectionChanged()
+        self.updateSegmentSelectionUI(animated: true)
         let _ = updatePresentationThemeSettingsInteractively(accountManager: self.context.sharedContext.accountManager) { current in
             var updated = current
             switch index {
@@ -2047,7 +2148,6 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             }
             return updated
         }.start()
-        self.applyAppearance(animated: true)
     }
 
     @objc private func presetCardTapped(_ sender: AorusMaxThemePreviewCardView) {
@@ -2059,7 +2159,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         // global PresentationData refresh so both this preview and real chats update immediately.
         AorusMaxInterface.selectedChatThemeId = sender.preset.id
         self.lastPreviewSignature = ""
-        UISelectionFeedbackGenerator().selectionChanged()
+        self.selectionFeedback.selectionChanged()
         sender.animateSelectionPop()
         self.applyAppearance(animated: true)
     }
@@ -2103,12 +2203,15 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         }
         let selBtn = self.segmentButtons[max(0, min(2, self.selectedSegmentIndex))]
         let targetPillFrame = selBtn.frame.insetBy(dx: 2.0, dy: 2.0)
-        if transition.isAnimated && !self.segmentSelectedPill.frame.isEmpty && !self.reduceMotion {
-            UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.84, initialSpringVelocity: 0.35, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
+        if targetPillFrame != self.lastSegmentPillFrame {
+            self.lastSegmentPillFrame = targetPillFrame
+            if transition.isAnimated && !self.segmentSelectedPill.frame.isEmpty && !self.reduceMotion {
+                UIView.animate(withDuration: 0.28, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.2, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
+                    self.segmentSelectedPill.frame = targetPillFrame
+                })
+            } else {
                 self.segmentSelectedPill.frame = targetPillFrame
-            })
-        } else {
-            self.segmentSelectedPill.frame = targetPillFrame
+            }
         }
         for (i, div) in self.segmentDividers.enumerated() {
             div.frame = CGRect(x: CGFloat(i + 1) * segW, y: 8.0, width: UIScreenPixel, height: segHeight - 16.0)
@@ -2125,6 +2228,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         let presetH = floor(presetW * 1.38)
         let targetPresetY = targetThemeNameY + 34.0
         let finalContentHeight = targetPresetY + presetH + max(28.0, layout.intrinsicInsets.bottom + 20.0)
+        let previewHeightChanged = abs(self.previewContainer.frame.height - targetPreviewFrame.height) > 0.5
 
         let applyLowerFrames = {
             self.previewContainer.frame = targetPreviewFrame
@@ -2144,7 +2248,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             self.presetScrollView.contentSize = CGSize(width: max(cardWidth, px - cardGap), height: presetH)
             self.scrollView.contentSize = CGSize(width: layout.size.width, height: finalContentHeight)
         }
-        if transition.isAnimated && !self.previewContainer.frame.isEmpty && !self.reduceMotion {
+        if transition.isAnimated && !self.previewContainer.frame.isEmpty && previewHeightChanged && !self.reduceMotion {
             UIView.animate(withDuration: 0.28, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.25, options: [.allowUserInteraction, .beginFromCurrentState], animations: applyLowerFrames)
         } else {
             applyLowerFrames()

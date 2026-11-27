@@ -81,7 +81,7 @@ public enum AorusMaxInterface {
                 separator: UIColor(rgb: 0x2c2e33),
                 glyph: UIColor(rgb: 0xffffff),
                 circleButton: UIColor(rgb: 0x1e2024),
-                hint: UIColor(rgb: 0x373a54),
+                hint: UIColor(rgb: 0x2c2e33),
                 hintText: UIColor(rgb: 0xffffff)
             )
         } else {
@@ -95,7 +95,7 @@ public enum AorusMaxInterface {
                 separator: UIColor(rgb: 0xe7e8ec),
                 glyph: UIColor(rgb: 0x2c2d2e),
                 circleButton: UIColor(rgb: 0xebedf0),
-                hint: UIColor(rgb: 0x373a54),
+                hint: UIColor(rgb: 0x2c2e33),
                 hintText: UIColor(rgb: 0xffffff)
             )
         }
@@ -103,11 +103,20 @@ public enum AorusMaxInterface {
 
     // MARK: - The look, as a table of the app's theme keys
 
+    private static let appearanceCacheLock = NSLock()
+    private static var cachedAppearance: (presetId: String, table: [String: Any])?
+
     /// MAX's colours under the names the theme is built from (`AorusPluginAppearanceValues`):
     /// a key with `@dark` or `@light` applies to that appearance. Laid in place of every other
     /// look while this run draws MAX.
     public static var appearance: [String: Any] {
         let preset = AorusMaxInterface.selectedChatTheme
+        AorusMaxInterface.appearanceCacheLock.lock()
+        if let cached = AorusMaxInterface.cachedAppearance, cached.presetId == preset.id {
+            AorusMaxInterface.appearanceCacheLock.unlock()
+            return cached.table
+        }
+        AorusMaxInterface.appearanceCacheLock.unlock()
         var table: [String: Any] = [:]
         func both(_ key: String, _ value: Any) {
             table[key] = value
@@ -327,6 +336,9 @@ public enum AorusMaxInterface {
         // Settings glyphs on their own, with no coloured tile behind them.
         both("settings.iconBackground", "00000000")
         pair("settings.iconGlyph", "ffffff", "2c2d2e")
+        AorusMaxInterface.appearanceCacheLock.lock()
+        AorusMaxInterface.cachedAppearance = (preset.id, table)
+        AorusMaxInterface.appearanceCacheLock.unlock()
         return table
     }
 
@@ -935,6 +947,8 @@ public enum AorusMaxInterface {
         return self.chatThemePresets.first(where: { $0.id == id }) ?? self.chatThemePresets[0]
     }
 
+    private static let qrCIContext = CIContext(options: nil)
+
     /// Generates a crisp MAX-branded QR code card image (white rounded card, crisp dark QR modules,
     /// centered MAX blue-violet gradient swirl disc badge, optional username/link caption) suitable
     /// for native iOS share sheets.
@@ -956,8 +970,7 @@ public enum AorusMaxInterface {
         let scaleX = qrSide / ciImage.extent.width
         let scaleY = qrSide / ciImage.extent.height
         let transformed = ciImage.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-        let ciContext = CIContext(options: nil)
-        guard let cgQR = ciContext.createCGImage(transformed, from: transformed.extent) else {
+        guard let cgQR = AorusMaxInterface.qrCIContext.createCGImage(transformed, from: transformed.extent) else {
             return nil
         }
         let format = UIGraphicsImageRendererFormat()
@@ -1060,14 +1073,54 @@ public enum AorusMaxInterface {
         }
     }
 
+    /// Clean waving flag cloth outline (no flagpole/stick) for MAX's quick-translate side button,
+    /// cached by ARGB color so chat scrolling allocates zero bitmaps per message.
+    public static func translateFlagGlyph(color: UIColor) -> UIImage? {
+        let key = "__translate_flag__|\(color.argb)" as NSString
+        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
+            return cached
+        }
+        let result = generateImage(CGSize(width: 20.0, height: 20.0), rotatedContext: { size, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: 3.0, y: 6.1))
+            path.addCurve(
+                to: CGPoint(x: 17.0, y: 5.2),
+                control1: CGPoint(x: 6.6, y: 3.0),
+                control2: CGPoint(x: 13.2, y: 8.6)
+            )
+            path.addLine(to: CGPoint(x: 17.0, y: 13.9))
+            path.addCurve(
+                to: CGPoint(x: 3.0, y: 14.8),
+                control1: CGPoint(x: 13.2, y: 17.3),
+                control2: CGPoint(x: 6.6, y: 11.7)
+            )
+            path.closeSubpath()
+            context.setStrokeColor(color.cgColor)
+            context.setLineWidth(1.7)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.addPath(path)
+            context.strokePath()
+        })?.withRenderingMode(.alwaysOriginal)
+        if let result {
+            AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
+        }
+        return result
+    }
+
     /// Round dark-gray circle with a gray cross (`cross_24`) shown on the right of editable folder
     /// tabs («Новые», «Каналы», custom folders) while MAX selection/edit mode is active.
     public static func tabDeleteBadgeImage(dark: Bool) -> UIImage? {
+        let key = "__tab_delete_badge__|\(dark ? 1 : 0)" as NSString
+        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
+            return cached
+        }
         let diameter: CGFloat = 18.0
         let fill = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xd8dce2)
         let crossColor = dark ? UIColor(rgb: 0x9b9fa6) : UIColor(rgb: 0x5c6370)
         let glyph = AorusMaxInterface.glyph("cross_24")
-        return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
+        let result = generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
             context.clear(CGRect(origin: CGPoint(), size: size))
             context.setFillColor(fill.cgColor)
             context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
@@ -1079,7 +1132,12 @@ public enum AorusMaxInterface {
                 UIGraphicsPopContext()
             }
         })?.withRenderingMode(.alwaysOriginal)
+        if let result {
+            AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
+        }
+        return result
     }
 }
+
 
 
