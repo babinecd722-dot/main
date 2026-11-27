@@ -535,6 +535,11 @@ private final class AorusMaxMemorySettingsController: ViewController {
         self.rollingDisplayLink = nil
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        self.stopRollingAnimation()
+    }
+
     override func loadDisplayNode() {
         self.displayNode = ASDisplayNode()
         self.scrollView.alwaysBounceVertical = true

@@ -1119,11 +1119,11 @@ def patch_privacy(tg: Path) -> None:
                 |> then(context.engine.privacy.updateSelectiveAccountPrivacySettings(type: .voiceCalls, settings: callSettings))
                 |> then(context.engine.privacy.updateSelectiveAccountPrivacySettings(type: .groupInvitations, settings: invitationSettings))
                 if let sensitive {
-                    // Best-effort on iOS: App Store restrictions may reject sensitiveContentEnabled changes.
+                    // Best-effort on iOS: updateRemoteContentSettingsConfiguration already catches
+                    // RPC errors internally and completes cleanly as Signal<Never, NoError>.
                     update = update |> then(
                         updateRemoteContentSettingsConfiguration(postbox: context.account.postbox, network: context.account.network, sensitiveContentEnabled: sensitive)
-                        |> `catch` { _ -> Signal<Never, NoError> in .complete() }
-                        |> mapToSignal { _ -> Signal<Void, NoError> in .complete() }
+                        |> mapToSignal { _ -> Signal<Void, NoError> in }
                     )
                 }
                 return update |> mapToSignal { _ -> Signal<(AccountPrivacySettings, ContentSettingsConfiguration), NoError> in .complete() } |> then(combineLatest(context.engine.privacy.requestAccountPrivacySettings(), contentSettingsConfiguration(network: context.account.network)))
