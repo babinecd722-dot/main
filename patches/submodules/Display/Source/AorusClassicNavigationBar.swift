@@ -65,6 +65,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
     private let leftButtonNode: AorusClassicNavigationButtonNode
     private let rightButtonNode: AorusClassicNavigationButtonNode
     private var rightButtonNodeUpdated = false
+    private var aorusLastRightLayoutWidth: CGFloat = 0.0
     /// The MAXimal interface draws a chat's avatar — the first of the screen's trailing buttons,
     /// when it is `AorusMaxLeadingNavigationNode` — before the title, next to the back arrow, and
     /// the rest of the trailing buttons where they were.
@@ -470,6 +471,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
             }
             self.rightButtonNode.view.removeFromSuperview()
             self.rightButtonNode.updateItems([], animated: false)
+            self.aorusLastRightLayoutWidth = 0.0
         }
     }
 
@@ -785,7 +787,7 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
 
             self.backButtonArrow.alpha = 1.0
             let backButtonArrowSize = AorusMaxInterface.isEnabled ? CGSize(width: 24.0, height: 24.0) : CGSize(width: 13.0, height: 22.0)
-            let backButtonArrowX = leftInset + (AorusMaxInterface.isEnabled ? 14.0 : 8.0)
+            let backButtonArrowX = leftInset + (AorusMaxInterface.isEnabled ? 12.0 : 8.0)
             let backButtonArrowFrame = CGRect(origin: CGPoint(x: backButtonArrowX, y: contentVerticalOrigin + floor((nominalHeight - backButtonArrowSize.height) / 2.0)), size: backButtonArrowSize)
             transition.updateFrame(node: self.backButtonArrow, frame: backButtonArrowFrame)
             self.badgeNode.alpha = 1.0
@@ -804,14 +806,14 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         if self.aorusLeadingButtonNode.view.superview != nil {
             // MAX's avatar, just after the back arrow; the title follows it.
             let leadingSize = self.aorusLeadingButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
-            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + (AorusMaxInterface.isEnabled ? 46.0 : 30.0) : leftTitleInset + 4.0
+            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + (AorusMaxInterface.isEnabled ? 44.0 : 30.0) : leftTitleInset + 4.0
             var leadingTransition = transition
             if self.aorusLeadingButtonNode.frame.width.isZero {
                 leadingTransition = .immediate
             }
             self.aorusLeadingButtonNode.alpha = 1.0
             leadingTransition.updateFrame(node: self.aorusLeadingButtonNode, frame: CGRect(origin: CGPoint(x: leadingX, y: contentVerticalOrigin + floor((nominalHeight - leadingSize.height) / 2.0)), size: leadingSize))
-            leftTitleInset = max(leftTitleInset, leadingX + leadingSize.width + 4.0)
+            leftTitleInset = max(leftTitleInset, leadingX + leadingSize.width + (AorusMaxInterface.isEnabled ? 10.0 : 4.0))
         }
 
         let badgeSize = self.badgeNode.measure(CGSize(width: 200.0, height: 100.0))
@@ -819,15 +821,20 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
 
         if self.rightButtonNode.view.superview != nil {
             var transition = transition
-            if self.rightButtonNode.frame.width.isZero || self.rightButtonNodeUpdated {
+            if self.rightButtonNode.frame.width.isZero || self.rightButtonNodeUpdated || self.aorusLastRightLayoutWidth == 0.0 || self.rightButtonNode.frame.origin.x <= 0.0 {
                 transition = .immediate
             }
             let rightButtonSize = self.rightButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
             self.rightButtonNode.alpha = 1.0
             rightTitleInset = rightButtonSize.width + leftButtonInset + 4.0
             transition.updateFrame(node: self.rightButtonNode, frame: CGRect(origin: CGPoint(x: size.width - rightInset - 16.0 - rightButtonSize.width, y: contentVerticalOrigin + floor((nominalHeight - rightButtonSize.height) / 2.0)), size: rightButtonSize))
+            if size.width > 0.0 {
+                self.aorusLastRightLayoutWidth = size.width
+            }
         }
-        self.rightButtonNodeUpdated = false
+        if size.width > 0.0 {
+            self.rightButtonNodeUpdated = false
+        }
 
         if (leftTitleInset == leftInset) != (rightTitleInset == rightInset) {
             if rightTitleInset == rightInset {

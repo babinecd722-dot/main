@@ -855,9 +855,10 @@ public enum AorusMaxInterface {
         return self.chatThemePresets.first(where: { $0.id == id }) ?? self.chatThemePresets[0]
     }
 
-    /// Generates a crisp MAX-branded QR code card image (white rounded card, dark QR modules,
-    /// centered MAX swirl disc badge) suitable for native iOS share sheets.
-    public static func generateQRCodeImage(text: String, side: CGFloat = 640.0) -> UIImage? {
+    /// Generates a crisp MAX-branded QR code card image (white rounded card, crisp dark QR modules,
+    /// centered MAX blue-violet gradient swirl disc badge, optional username/link caption) suitable
+    /// for native iOS share sheets.
+    public static func generateQRCodeImage(text: String, caption: String? = nil, side: CGFloat = 720.0) -> UIImage? {
         guard let data = text.data(using: .utf8),
               let filter = CIFilter(name: "CIQRCodeGenerator") else {
             return nil
@@ -867,6 +868,9 @@ public enum AorusMaxInterface {
         guard let ciImage = filter.outputImage else {
             return nil
         }
+        let hasCaption = caption.map { !$0.isEmpty } ?? false
+        let captionBand: CGFloat = hasCaption ? floor(side * 0.12) : 0.0
+        let totalSize = CGSize(width: side, height: side + captionBand)
         let qrInset: CGFloat = floor(side * 0.1)
         let qrSide = side - qrInset * 2.0
         let scaleX = qrSide / ciImage.extent.width
@@ -876,21 +880,59 @@ public enum AorusMaxInterface {
         guard let cgQR = ciContext.createCGImage(transformed, from: transformed.extent) else {
             return nil
         }
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: totalSize, format: format)
         return renderer.image { ctx in
-            let bounds = CGRect(x: 0.0, y: 0.0, width: side, height: side)
+            let cg = ctx.cgContext
+            let bounds = CGRect(origin: .zero, size: totalSize)
             UIColor.white.setFill()
-            UIBezierPath(roundedRect: bounds, cornerRadius: floor(side * 0.08)).fill()
-            ctx.cgContext.interpolationQuality = .none
+            cg.fill(bounds)
+
+            cg.interpolationQuality = .none
             UIImage(cgImage: cgQR).draw(in: CGRect(x: qrInset, y: qrInset, width: qrSide, height: qrSide))
+
             let badgeSide = floor(side * 0.22)
-            let plateSide = badgeSide + floor(side * 0.04)
+            let plateSide = badgeSide + floor(side * 0.045)
             let plateRect = CGRect(x: (side - plateSide) * 0.5, y: (side - plateSide) * 0.5, width: plateSide, height: plateSide)
             UIColor.white.setFill()
             UIBezierPath(ovalIn: plateRect).fill()
-            if let badge = AorusMaxInterface.qrBadgeImage(diameter: badgeSide, fillColor: AorusMaxInterface.accent) {
-                let badgeRect = CGRect(x: (side - badgeSide) * 0.5, y: (side - badgeSide) * 0.5, width: badgeSide, height: badgeSide)
-                badge.draw(in: badgeRect)
+
+            let badgeRect = CGRect(x: (side - badgeSide) * 0.5, y: (side - badgeSide) * 0.5, width: badgeSide, height: badgeSide)
+            cg.saveGState()
+            UIBezierPath(ovalIn: badgeRect).addClip()
+            let colors = [UIColor(rgb: 0x2675ff).cgColor, UIColor(rgb: 0x7b3fff).cgColor] as CFArray
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.0, 1.0]) {
+                cg.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: badgeRect.minX, y: badgeRect.minY),
+                    end: CGPoint(x: badgeRect.maxX, y: badgeRect.maxY),
+                    options: []
+                )
+            } else {
+                AorusMaxInterface.accent.setFill()
+                cg.fill(badgeRect)
+            }
+            if let logo = AorusMaxInterface.glyph("logo_54px"),
+               let tinted = generateTintedImage(image: logo, color: .white) {
+                let logoSide = floor(badgeSide * 0.64)
+                let logoRect = CGRect(x: (side - logoSide) * 0.5, y: (side - logoSide) * 0.5, width: logoSide, height: logoSide)
+                tinted.draw(in: logoRect)
+            }
+            cg.restoreGState()
+
+            if let caption, !caption.isEmpty {
+                let style = NSMutableParagraphStyle()
+                style.alignment = .center
+                style.lineBreakMode = .byTruncatingTail
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: floor(side * 0.046), weight: .semibold),
+                    .foregroundColor: UIColor(rgb: 0x111214),
+                    .paragraphStyle: style
+                ]
+                let captionRect = CGRect(x: qrInset, y: side - floor(side * 0.03), width: qrSide, height: captionBand)
+                (caption as NSString).draw(in: captionRect, withAttributes: attrs)
             }
         }
     }

@@ -193,9 +193,11 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
     }
 
     override func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, transition: ContainedViewLayoutTransition) -> CGSize {
+        let isFirstLayout = self.validLayout == nil
         self.validLayout = (size, leftInset, rightInset)
 
-        let componentTransition = ComponentTransition(transition)
+        let effectiveTransition: ContainedViewLayoutTransition = isFirstLayout ? .immediate : transition
+        let componentTransition = ComponentTransition(effectiveTransition)
 
         let barHeight: CGFloat = AorusOldInterface.isEnabled ? 38.0 : 44.0
         let closeSide: CGFloat = barHeight
@@ -234,7 +236,7 @@ private final class AorusSettingsSearchNavigationContentNode: NavigationBarConte
 
         let searchBarFrame = CGRect(origin: CGPoint(x: 36.0, y: 0.0), size: CGSize(width: backgroundFrame.width - 36.0 - 4.0, height: barHeight))
         componentTransition.setFrame(view: self.searchBar.view, frame: searchBarFrame)
-        self.searchBar.updateLayout(boundingSize: searchBarFrame.size, leftInset: 0.0, rightInset: 0.0, transition: transition)
+        self.searchBar.updateLayout(boundingSize: searchBarFrame.size, leftInset: 0.0, rightInset: 0.0, transition: effectiveTransition)
 
         if self.close.icon.image == nil {
             self.close.icon.image = generateImage(CGSize(width: 40.0, height: 40.0), contextGenerator: { size, context in

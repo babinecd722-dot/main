@@ -533,6 +533,7 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
     private var backgroundContentColor: UIColor = .clear
     private var contentsColor: UIColor = .white
     private var canBeExpanded: Bool = false
+    private var aorusHasLaidOutWidth: CGFloat = 0.0
 
     var performAction: ((PeerInfoHeaderNavigationButtonKey, ContextReferenceContentNode?, ContextGesture?) -> Void)?
 
@@ -579,6 +580,11 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
     }
 
     func update(size: CGSize, presentationData: PresentationData, leftButtons: [PeerInfoHeaderNavigationButtonSpec], rightButtons: [PeerInfoHeaderNavigationButtonSpec], expandFraction: CGFloat, shouldAnimateIn: Bool, transition: ContainedViewLayoutTransition) {
+        let isInitialLayout = self.aorusHasLaidOutWidth == 0.0 && size.width > 0.0
+        let transition: ContainedViewLayoutTransition = isInitialLayout ? .immediate : transition
+        if size.width > 0.0 {
+            self.aorusHasLaidOutWidth = size.width
+        }
         let darkChanged = self.presentationData?.theme.overallDarkAppearance != presentationData.theme.overallDarkAppearance
         if AorusMaxInterface.isEnabled && darkChanged {
             if self.canBeExpanded {
@@ -769,7 +775,8 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                         transition.updateSublayerTransformOffset(layer: buttonNode.layer, offset: .zero)
                     }
                 } else {
-                    transition.updateFrameAdditiveToCenter(node: buttonNode, frame: buttonFrame)
+                    let buttonFrameTransition: ContainedViewLayoutTransition = (buttonNode.frame.width.isZero || buttonNode.frame.origin.x <= 0.0) ? .immediate : transition
+                    buttonFrameTransition.updateFrameAdditiveToCenter(node: buttonNode, frame: buttonFrame)
                     transition.updateAlpha(node: buttonNode, alpha: alphaFactor * alphaFactor)
                 }
             }
@@ -815,7 +822,8 @@ final class AorusClassicPeerInfoNavigationButtonContainerNode: SparseNode {
                     } else {
                         nextRegularButtonOrigin = nextButtonOrigin
                     }
-                    transition.updateFrameAdditiveToCenter(node: buttonNode, frame: buttonFrame)
+                    let buttonFrameTransition: ContainedViewLayoutTransition = (buttonNode.frame.width.isZero || buttonNode.frame.origin.x <= 0.0) ? .immediate : transition
+                    buttonFrameTransition.updateFrameAdditiveToCenter(node: buttonNode, frame: buttonFrame)
                     let alphaFactor: CGFloat = spec.isForExpandedView ? expandFraction : (1.0 - expandFraction)
 
                     var buttonTransition = transition
