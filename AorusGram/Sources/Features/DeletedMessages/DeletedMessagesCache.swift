@@ -785,6 +785,140 @@ final class DeletedMessagesCache {
         return count
     }
 
+    /// Returns `(count, payloadBytes)` for confirmed deleted messages (`status=1`) belonging
+    /// strictly to `accountKey`, independent of whether saving new deletions is currently enabled.
+    /// Returns `nil` if the database cannot be opened right now.
+    func deletedOnlyStats(accountKey: Int64) -> (count: Int, bytes: Int64)? {
+        var result: (count: Int, bytes: Int64)?
+        queue.sync {
+            guard let db = self.connection() else { return }
+            var stmt: OpaquePointer?
+            let sql = """
+                SELECT COUNT(*), COALESCE(SUM(
+                    LENGTH(CAST(COALESCE(sender_name, '') AS BLOB)) +
+                    LENGTH(CAST(COALESCE(text, '') AS BLOB)) +
+                    LENGTH(CAST(COALESCE(media_type, '') AS BLOB)) +
+                    LENGTH(CAST(COALESCE(media_path, '') AS BLOB)) +
+                    64
+                ), 0)
+                FROM messages
+                WHERE account_key=? AND status=1;
+            """
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                sqlite3_finalize(stmt)
+                return
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, accountKey)
+            let code = sqlite3_step(stmt)
+            if code == SQLITE_ROW {
+                let count = Int(sqlite3_column_int64(stmt, 0))
+                let bytes = count > 0 ? sqlite3_column_int64(stmt, 1) : 0
+                result = (count, bytes)
+            } else {
+                self.check(code)
+            }
+        }
+        return result
+    }
+
+    /// Removes ONLY deleted messages (`status=1`) for `accountKey`, preserving other accounts,
+    /// normal pre-cached messages (`status=0`), and edit histories (`original_text IS NOT NULL`).
+    /// Invokes `completion` on the main queue ONLY after SQLite commits (or fails honestly).
+    func clearDeletedOnly(accountKey: Int64, completion: @escaping (Bool) -> Void) {
+        queue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            guard let db = self.connection() else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            var ok = sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil) == SQLITE_OK
+            if ok {
+                var delStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, "DELETE FROM messages WHERE account_key=? AND status=1 AND original_text IS NULL;", -1, &delStmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(delStmt, 1, accountKey)
+                    let code = sqlite3_step(delStmt)
+                    if code != SQLITE_DONE {
+                        self.check(code)
+                        ok = false
+                    }
+                } else {
+                    ok = false
+                }
+                sqlite3_finalize(delStmt)
+            }
+            if ok {
+                var updStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, "UPDATE messages SET status=0, deleted_at=NULL WHERE account_key=? AND status=1 AND original_text IS NOT NULL;", -1, &updStmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(updStmt, 1, accountKey)
+                    let code = sqlite3_step(updStmt)
+                    if code != SQLITE_DONE {
+                        self.check(code)
+                        ok = false
+                    }
+                } else {
+                    ok = false
+                }
+                sqlite3_finalize(updStmt)
+            }
+            if ok {
+                ok = sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK
+            }
+            if !ok {
+                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            // Best-effort WAL compaction after commit.
+            sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+            sqlite3_exec(db, "VACUUM;", nil, nil, nil)
+            DispatchQueue.main.async { completion(true) }
+        }
+    }
+
+    /// Removes ONLY saved edit histories (`original_text IS NOT NULL`) for `accountKey` inside
+    /// SQLite, preserving other accounts and deleted-only messages (`status=1`).
+    func clearEditedOnly(accountKey: Int64, completion: @escaping (Bool) -> Void) {
+        queue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            guard let db = self.connection() else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            var ok = sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil) == SQLITE_OK
+            if ok {
+                var updStmt: OpaquePointer?
+                if sqlite3_prepare_v2(db, "UPDATE messages SET original_text=NULL, edited_at=NULL WHERE account_key=? AND original_text IS NOT NULL;", -1, &updStmt, nil) == SQLITE_OK {
+                    sqlite3_bind_int64(updStmt, 1, accountKey)
+                    let code = sqlite3_step(updStmt)
+                    if code != SQLITE_DONE {
+                        self.check(code)
+                        ok = false
+                    }
+                } else {
+                    ok = false
+                }
+                sqlite3_finalize(updStmt)
+            }
+            if ok {
+                ok = sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK
+            }
+            if !ok {
+                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+            DispatchQueue.main.async { completion(true) }
+        }
+    }
+
     /// Wipe ALL stored messages (deleted + edited + plain pre-cached).
     /// Called from the "Очистить кеш" button in Settings.
     ///
