@@ -10,6 +10,7 @@ import TelegramUIPreferences
 import SettingsUI
 import QuickReactionSetupController
 import WallpaperBackgroundNode
+import UndoUI
 import AorusGramUI
 
 // MARK: - Shared MAX Settings Helpers
@@ -41,7 +42,7 @@ private func aorusMaxFormatBytes(_ bytes: Int64, isRu: Bool) -> String {
 
 private func aorusMaxChevronImage(dark: Bool) -> UIImage? {
     let color = dark ? UIColor(rgb: 0x6b6f78) : UIColor(rgb: 0x9aa0a8)
-    return AorusMaxInterface.tintedGlyph("chevron_right_24", color: color)
+    return AorusMaxInterface.tintedGlyph("chevron_right_16", color: color)
         ?? UIImage(systemName: "chevron.right")?.withTintColor(color, renderingMode: .alwaysOriginal)
 }
 
@@ -331,9 +332,101 @@ func aorusMaxMemorySettingsController(context: AccountContext) -> ViewController
     return AorusMaxMemorySettingsController(context: context)
 }
 
+private final class AorusMaxMemoryRowView: UIControl {
+    var highlightColor: UIColor = UIColor(white: 1.0, alpha: 0.06)
+    var onTap: (() -> Void)?
+
+    let titleLabel = UILabel()
+    let sizeLabel = UILabel()
+    let chevronView = UIImageView()
+    let checkView = UIImageView()
+    let separatorView = UIView()
+
+    var isCheckable: Bool = false {
+        didSet {
+            self.checkView.isHidden = !self.isCheckable
+            self.chevronView.isHidden = self.isCheckable
+        }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.addTarget(self, action: #selector(self.didTap), for: .touchUpInside)
+
+        self.titleLabel.font = Font.regular(17.0)
+        self.titleLabel.isUserInteractionEnabled = false
+        self.addSubview(self.titleLabel)
+
+        self.sizeLabel.font = Font.regular(16.0)
+        self.sizeLabel.textAlignment = .right
+        self.sizeLabel.isUserInteractionEnabled = false
+        self.addSubview(self.sizeLabel)
+
+        self.chevronView.contentMode = .scaleAspectFit
+        self.chevronView.isUserInteractionEnabled = false
+        self.addSubview(self.chevronView)
+
+        self.checkView.contentMode = .scaleAspectFit
+        self.checkView.isUserInteractionEnabled = false
+        self.checkView.isHidden = true
+        self.addSubview(self.checkView)
+
+        self.separatorView.isUserInteractionEnabled = false
+        self.addSubview(self.separatorView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            self.backgroundColor = self.isHighlighted ? self.highlightColor : .clear
+        }
+    }
+
+    @objc private func didTap() {
+        self.onTap?()
+    }
+
+    func animateCheckboxBounce() {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        self.checkView.layer.removeAnimation(forKey: "aorusCheckPop")
+        self.checkView.transform = CGAffineTransform(scaleX: 0.78, y: 0.78)
+        UIView.animate(withDuration: 0.34, delay: 0.0, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.5, options: [.allowUserInteraction], animations: {
+            self.checkView.transform = .identity
+        })
+    }
+
+    func layoutRow(width: CGFloat, height: CGFloat, showSeparator: Bool) {
+        var titleX: CGFloat = 16.0
+        if self.isCheckable {
+            self.checkView.frame = CGRect(x: 16.0, y: floor((height - 22.0) * 0.5), width: 22.0, height: 22.0)
+            titleX = 50.0
+        }
+        var rightEdge = width - 16.0
+        if !self.isCheckable {
+            self.chevronView.frame = CGRect(x: width - 16.0 - 16.0, y: floor((height - 16.0) * 0.5), width: 16.0, height: 16.0)
+            rightEdge = self.chevronView.frame.minX - 6.0
+        }
+        let sSize = self.sizeLabel.sizeThatFits(CGSize(width: 140.0, height: height))
+        let sw = ceil(sSize.width)
+        self.sizeLabel.frame = CGRect(x: rightEdge - sw, y: 0.0, width: sw, height: height)
+        rightEdge = self.sizeLabel.frame.minX - 10.0
+        self.titleLabel.frame = CGRect(x: titleX, y: 0.0, width: max(0.0, rightEdge - titleX), height: height)
+        self.separatorView.isHidden = !showSeparator
+        self.separatorView.frame = CGRect(x: titleX, y: height - UIScreenPixel, width: max(0.0, width - titleX), height: UIScreenPixel)
+    }
+}
+
 private final class AorusMaxMemorySettingsController: ViewController {
-    private enum DataRowKind: Equatable {
-        case telegramCategory(StorageUsageStats.CategoryKey, titleRu: String, titleEn: String, genitiveRu: String, genitiveEn: String)
+    private enum DataRowKind: Hashable {
+        case files
+        case stickers
+        case photos
+        case videos
+        case audio
+        case other
         case aorusDeletedMessages
         case aorusEditedMessages
     }
@@ -341,6 +434,8 @@ private final class AorusMaxMemorySettingsController: ViewController {
     private struct DataRow {
         let kind: DataRowKind
         let title: String
+        let genitiveRu: String
+        let genitiveEn: String
         let sizeBytes: Int64
         let extraCount: Int
         let isCheckable: Bool
@@ -361,6 +456,15 @@ private final class AorusMaxMemorySettingsController: ViewController {
     private var includeDeletedInClear = true
     private var includeEditedInClear = true
     private var rows: [DataRow] = []
+    private var displayedBytesByKind: [DataRowKind: Int64] = [:]
+    private var displayedTotalBytes: Int64 = 0
+    private var targetTotalBytes: Int64 = 0
+    private var rollingStartBytesByKind: [DataRowKind: Int64] = [:]
+    private var rollingTargetBytesByKind: [DataRowKind: Int64] = [:]
+    private var rollingStartTotal: Int64 = 0
+    private var rollingStartTime: CFTimeInterval = 0.0
+    private var rollingDuration: CFTimeInterval = 0.42
+    private var rollingDisplayLink: CADisplayLink?
 
     private let scrollView = UIScrollView()
 
@@ -375,10 +479,12 @@ private final class AorusMaxMemorySettingsController: ViewController {
     // Section header: ДАННЫЕ
     private let dataHeaderLabel = UILabel()
 
-    // Card 2: Data rows + Clear Cache button
+    // Card 2: Persistent data rows + Clear Cache button
     private let dataCard = UIView()
-    private var rowViews: [UIView] = []
+    private var rowViewMap: [DataRowKind: AorusMaxMemoryRowView] = [:]
+    private var orderedRowViews: [AorusMaxMemoryRowView] = []
     private let clearButton = UIButton(type: .system)
+    private let clearShimmerLayer = CAGradientLayer()
     private let clearTitleLabel = UILabel()
     private let clearSizeBadge = UILabel()
 
@@ -417,10 +523,16 @@ private final class AorusMaxMemorySettingsController: ViewController {
     }
 
     deinit {
+        self.stopRollingAnimation()
         self.presentationDisposable?.dispose()
         self.cacheSettingsDisposable?.dispose()
         self.statsDisposable?.dispose()
         self.clearDisposable.dispose()
+    }
+
+    private func stopRollingAnimation() {
+        self.rollingDisplayLink?.invalidate()
+        self.rollingDisplayLink = nil
     }
 
     override func loadDisplayNode() {
@@ -458,6 +570,18 @@ private final class AorusMaxMemorySettingsController: ViewController {
         self.clearButton.layer.cornerRadius = 16.0
         self.clearButton.clipsToBounds = true
         self.clearButton.addTarget(self, action: #selector(self.clearAllPressed), for: .touchUpInside)
+
+        self.clearShimmerLayer.colors = [
+            UIColor.white.withAlphaComponent(0.0).cgColor,
+            UIColor.white.withAlphaComponent(0.24).cgColor,
+            UIColor.white.withAlphaComponent(0.0).cgColor
+        ]
+        self.clearShimmerLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        self.clearShimmerLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+        self.clearShimmerLayer.locations = [-0.5, -0.25, 0.0]
+        self.clearShimmerLayer.isHidden = true
+        self.clearButton.layer.addSublayer(self.clearShimmerLayer)
+
         self.clearTitleLabel.font = Font.semibold(16.0)
         self.clearTitleLabel.textColor = .white
         self.clearTitleLabel.isUserInteractionEnabled = false
@@ -475,7 +599,7 @@ private final class AorusMaxMemorySettingsController: ViewController {
         self.reloadStorageStats(animated: false)
     }
 
-    private func reloadStorageStats(animated: Bool) {
+    private func reloadStorageStats(animated: Bool, rollNumbers: Bool = false, completion: (() -> Void)? = nil) {
         self.isLoadingStats = true
         self.statsDisposable?.dispose()
         self.statsDisposable = (self.context.engine.resources.collectStorageUsageStats()
@@ -483,12 +607,17 @@ private final class AorusMaxMemorySettingsController: ViewController {
             guard let self else { return }
             self.storageStats = stats
             self.isLoadingStats = false
-            self.rebuildRowsAndApplyTheme(animated: animated || self.validLayout != nil)
+            self.rebuildRowsAndApplyTheme(animated: animated || self.validLayout != nil, rollNumbers: rollNumbers)
+            completion?()
         })
     }
 
     private var isRu: Bool {
         return self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
+    }
+
+    private var reduceMotion: Bool {
+        return self.presentationData.reduceMotion || UIAccessibility.isReduceMotionEnabled
     }
 
     private func timeoutTitle(_ timeout: Int32) -> String {
@@ -510,14 +639,35 @@ private final class AorusMaxMemorySettingsController: ViewController {
                 self.containerLayoutUpdated(layout, transition: .immediate)
             }
         }
-        if animated {
+        if animated && !self.reduceMotion {
             UIView.transition(with: self.keepValueLabel, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction], animations: apply)
         } else {
             apply()
         }
     }
 
-    private func rebuildRowsAndApplyTheme(animated: Bool = false) {
+    private func setClearingVisualState(_ clearing: Bool) {
+        let isRu = self.isRu
+        self.clearTitleLabel.text = clearing
+            ? (isRu ? "Очистка…" : "Clearing…")
+            : (isRu ? "Очистить кэш" : "Clear cache")
+        self.clearShimmerLayer.isHidden = !clearing || self.reduceMotion
+        self.clearShimmerLayer.removeAnimation(forKey: "aorusClearSweep")
+        if clearing && !self.reduceMotion {
+            let sweep = CABasicAnimation(keyPath: "locations")
+            sweep.fromValue = [-0.55, -0.25, 0.05]
+            sweep.toValue = [0.95, 1.25, 1.55]
+            sweep.duration = 1.15
+            sweep.repeatCount = .infinity
+            self.clearShimmerLayer.add(sweep, forKey: "aorusClearSweep")
+        }
+        if let layout = self.validLayout {
+            self.layoutClearButtonContents(buttonHeight: 52.0)
+            let _ = layout
+        }
+    }
+
+    private func rebuildRowsAndApplyTheme(animated: Bool = false, rollNumbers: Bool = false) {
         let dark = self.presentationData.theme.overallDarkAppearance
         let palette = AorusMaxInterface.palette(dark: dark)
         let isRu = self.isRu
@@ -544,11 +694,11 @@ private final class AorusMaxMemorySettingsController: ViewController {
 
         self.dataCard.backgroundColor = palette.card
         self.clearButton.backgroundColor = AorusMaxInterface.accent
-        self.clearTitleLabel.text = isRu ? "Очистить кэш" : "Clear cache"
+        self.clearTitleLabel.text = self.isClearing
+            ? (isRu ? "Очистка…" : "Clearing…")
+            : (isRu ? "Очистить кэш" : "Clear cache")
         self.clearSizeBadge.textColor = AorusMaxInterface.accent
 
-        // Build rows matching MAX's reference layout (`image_2.jpg`):
-        // Файлы, Стикеры, Фото, Аудиосообщения (+ Видео if > 0) + AorusGram Deleted/Edited checkboxes.
         let categories = self.storageStats?.totalStats.categories ?? [:]
         var built: [DataRow] = []
 
@@ -556,39 +706,71 @@ private final class AorusMaxMemorySettingsController: ViewController {
         let stickersSize = categories[.stickers]?.size ?? 0
         let photosSize = (categories[.photos]?.size ?? 0) + (categories[.avatars]?.size ?? 0)
         let videosSize = (categories[.videos]?.size ?? 0) + (categories[.stories]?.size ?? 0)
-        let audioSize = (categories[.music]?.size ?? 0) + (categories[.misc]?.size ?? 0)
+        let audioSize = categories[.music]?.size ?? 0
+        let otherSize = categories[.misc]?.size ?? 0
 
-        built.append(DataRow(kind: .telegramCategory(.files, titleRu: "Файлы", titleEn: "Files", genitiveRu: "файлов", genitiveEn: "of files"), title: isRu ? "Файлы" : "Files", sizeBytes: filesSize, extraCount: 0, isCheckable: false))
-        built.append(DataRow(kind: .telegramCategory(.stickers, titleRu: "Стикеры", titleEn: "Stickers", genitiveRu: "стикеров", genitiveEn: "of stickers"), title: isRu ? "Стикеры" : "Stickers", sizeBytes: stickersSize, extraCount: 0, isCheckable: false))
-        built.append(DataRow(kind: .telegramCategory(.photos, titleRu: "Фото", titleEn: "Photos", genitiveRu: "фото", genitiveEn: "of photos"), title: isRu ? "Фото" : "Photos", sizeBytes: photosSize, extraCount: 0, isCheckable: false))
+        built.append(DataRow(kind: .files, title: isRu ? "Файлы" : "Files", genitiveRu: "файлов", genitiveEn: "of files", sizeBytes: filesSize, extraCount: 0, isCheckable: false))
+        built.append(DataRow(kind: .stickers, title: isRu ? "Стикеры" : "Stickers", genitiveRu: "стикеров", genitiveEn: "of stickers", sizeBytes: stickersSize, extraCount: 0, isCheckable: false))
+        built.append(DataRow(kind: .photos, title: isRu ? "Фото" : "Photos", genitiveRu: "фото", genitiveEn: "of photos", sizeBytes: photosSize, extraCount: 0, isCheckable: false))
         if videosSize > 0 {
-            built.append(DataRow(kind: .telegramCategory(.videos, titleRu: "Видео", titleEn: "Videos", genitiveRu: "видео", genitiveEn: "of videos"), title: isRu ? "Видео" : "Videos", sizeBytes: videosSize, extraCount: 0, isCheckable: false))
+            built.append(DataRow(kind: .videos, title: isRu ? "Видео" : "Videos", genitiveRu: "видео", genitiveEn: "of videos", sizeBytes: videosSize, extraCount: 0, isCheckable: false))
         }
-        built.append(DataRow(kind: .telegramCategory(.music, titleRu: "Аудиосообщения", titleEn: "Audio messages", genitiveRu: "аудиосообщений", genitiveEn: "of audio messages"), title: isRu ? "Аудиосообщения" : "Audio messages", sizeBytes: audioSize, extraCount: 0, isCheckable: false))
-
-        if AorusSavedMessagesStorage.isDeletedMessagesEnabled {
-            let stats = AorusSavedMessagesStorage.deletedMessagesStats(context: self.context)
-            built.append(DataRow(kind: .aorusDeletedMessages, title: isRu ? "Удалённые сообщения" : "Deleted messages", sizeBytes: stats.bytes, extraCount: stats.count, isCheckable: true))
-        }
-        if AorusSavedMessagesStorage.isEditedMessagesEnabled {
-            let editBytes = AorusSavedMessagesStorage.editedMessagesBytes(context: self.context)
-            built.append(DataRow(kind: .aorusEditedMessages, title: isRu ? "Изменённые сообщения" : "Edited messages", sizeBytes: editBytes, extraCount: 0, isCheckable: true))
+        built.append(DataRow(kind: .audio, title: isRu ? "Аудиосообщения" : "Audio messages", genitiveRu: "аудиосообщений", genitiveEn: "of audio messages", sizeBytes: audioSize, extraCount: 0, isCheckable: false))
+        if otherSize > 0 {
+            built.append(DataRow(kind: .other, title: isRu ? "Другое" : "Other", genitiveRu: "прочих данных", genitiveEn: "of other data", sizeBytes: otherSize, extraCount: 0, isCheckable: false))
         }
 
-        var totalBytes: Int64 = filesSize + stickersSize + photosSize + videosSize + audioSize
+        // Show saved deleted / edited rows whenever the feature is enabled OR existing saved
+        // records remain on disk — turning off saving new messages must never hide old data.
+        let deletedStats = AorusSavedMessagesStorage.deletedMessagesStats(context: self.context)
+        if AorusSavedMessagesStorage.isDeletedMessagesEnabled || deletedStats.count > 0 || deletedStats.bytes > 0 {
+            built.append(DataRow(kind: .aorusDeletedMessages, title: isRu ? "Удалённые сообщения" : "Deleted messages", genitiveRu: "удалённых сообщений", genitiveEn: "of deleted messages", sizeBytes: deletedStats.bytes, extraCount: deletedStats.count, isCheckable: true))
+        }
+        let editBytes = AorusSavedMessagesStorage.editedMessagesBytes(context: self.context)
+        if AorusSavedMessagesStorage.isEditedMessagesEnabled || editBytes > 0 {
+            built.append(DataRow(kind: .aorusEditedMessages, title: isRu ? "Изменённые сообщения" : "Edited messages", genitiveRu: "изменённых сообщений", genitiveEn: "of edited messages", sizeBytes: editBytes, extraCount: 0, isCheckable: true))
+        }
+
+        var totalBytes: Int64 = filesSize + stickersSize + photosSize + videosSize + audioSize + otherSize
+        var hasCheckedSavedData = false
         for row in built {
             if case .aorusDeletedMessages = row.kind, self.includeDeletedInClear {
                 totalBytes += row.sizeBytes
+                if row.extraCount > 0 || row.sizeBytes > 0 {
+                    hasCheckedSavedData = true
+                }
             } else if case .aorusEditedMessages = row.kind, self.includeEditedInClear {
                 totalBytes += row.sizeBytes
+                if row.sizeBytes > 0 {
+                    hasCheckedSavedData = true
+                }
             }
         }
 
-        let applyUpdates = {
-            self.rows = built
-            self.rebuildRowViews(palette: palette, dark: dark, highlight: highlight)
+        let previousKinds = self.rows.map(\.kind)
+        self.rows = built
+        let newKinds = built.map(\.kind)
+        let structureChanged = previousKinds != newKinds
+
+        self.syncPersistentRowViews(palette: palette, dark: dark, highlight: highlight)
+
+        self.targetTotalBytes = totalBytes
+        self.clearButton.isEnabled = !self.isClearing && (totalBytes > 0 || hasCheckedSavedData)
+
+        let shouldRoll = rollNumbers && !self.reduceMotion
+        if shouldRoll {
+            self.startRollingAnimation(toTotal: totalBytes)
+        } else {
+            self.stopRollingAnimation()
+            self.displayedTotalBytes = totalBytes
+            for row in built {
+                self.displayedBytesByKind[row.kind] = row.sizeBytes
+            }
+            self.refreshRowSizeLabels(animated: animated && !self.reduceMotion)
             self.clearSizeBadge.text = aorusMaxFormatBytes(totalBytes, isRu: isRu)
-            self.clearButton.isEnabled = !self.isClearing && totalBytes > 0
+        }
+
+        let layoutBlock = {
             self.clearButton.alpha = self.clearButton.isEnabled ? 1.0 : 0.5
             self.clearButton.transform = .identity
             if let layout = self.validLayout {
@@ -596,72 +778,163 @@ private final class AorusMaxMemorySettingsController: ViewController {
             }
         }
 
-        if animated {
-            UIView.transition(with: self.dataCard, duration: 0.28, options: [.transitionCrossDissolve, .allowUserInteraction], animations: applyUpdates)
+        if animated && structureChanged && !self.reduceMotion {
+            UIView.animate(withDuration: 0.34, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.25, options: [.allowUserInteraction], animations: layoutBlock)
+        } else if animated && !self.reduceMotion {
+            UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseOut, .allowUserInteraction], animations: layoutBlock)
         } else {
-            applyUpdates()
+            layoutBlock()
         }
     }
 
-    private func rebuildRowViews(palette: AorusMaxInterface.Palette, dark: Bool, highlight: UIColor) {
-        for view in self.rowViews {
-            view.removeFromSuperview()
+    private func syncPersistentRowViews(palette: AorusMaxInterface.Palette, dark: Bool, highlight: UIColor) {
+        let activeKinds = Set(self.rows.map(\.kind))
+        for (kind, view) in self.rowViewMap where !activeKinds.contains(kind) {
+            self.rowViewMap.removeValue(forKey: kind)
+            if !self.reduceMotion {
+                UIView.animate(withDuration: 0.22, animations: {
+                    view.alpha = 0.0
+                }, completion: { _ in
+                    view.removeFromSuperview()
+                })
+            } else {
+                view.removeFromSuperview()
+            }
         }
-        self.rowViews.removeAll()
 
         let chevron = aorusMaxChevronImage(dark: dark)
-        for (index, row) in self.rows.enumerated() {
-            let btn = AorusMaxHighlightRowButton()
-            btn.highlightColor = highlight
-            btn.tag = index
-
-            let titleLabel = UILabel()
-            titleLabel.font = Font.regular(17.0)
-            titleLabel.textColor = palette.primaryText
-            titleLabel.text = row.title
-            titleLabel.tag = 101
-            titleLabel.isUserInteractionEnabled = false
-            btn.addSubview(titleLabel)
-
-            let sizeLabel = UILabel()
-            sizeLabel.font = Font.regular(16.0)
-            sizeLabel.textColor = palette.secondaryText
-            sizeLabel.textAlignment = .right
-            if row.extraCount > 0 && row.sizeBytes == 0 {
-                sizeLabel.text = "\(row.extraCount)"
+        var ordered: [AorusMaxMemoryRowView] = []
+        for row in self.rows {
+            let rowView: AorusMaxMemoryRowView
+            let isNew: Bool
+            if let existing = self.rowViewMap[row.kind] {
+                rowView = existing
+                isNew = false
             } else {
-                sizeLabel.text = aorusMaxFormatBytes(row.sizeBytes, isRu: self.isRu)
+                rowView = AorusMaxMemoryRowView()
+                self.dataCard.insertSubview(rowView, belowSubview: self.clearButton)
+                self.rowViewMap[row.kind] = rowView
+                isNew = true
             }
-            sizeLabel.tag = 102
-            sizeLabel.isUserInteractionEnabled = false
-            btn.addSubview(sizeLabel)
-
+            rowView.alpha = 1.0
+            rowView.highlightColor = highlight
+            rowView.titleLabel.text = row.title
+            rowView.titleLabel.textColor = palette.primaryText
+            rowView.sizeLabel.textColor = palette.secondaryText
+            rowView.separatorView.backgroundColor = palette.separator
+            rowView.isCheckable = row.isCheckable
             if row.isCheckable {
-                let checked: Bool
-                if case .aorusDeletedMessages = row.kind {
-                    checked = self.includeDeletedInClear
-                } else {
-                    checked = self.includeEditedInClear
-                }
-                let checkView = UIImageView()
-                checkView.contentMode = .scaleAspectFit
-                checkView.tag = 104
-                checkView.isUserInteractionEnabled = false
-                checkView.image = self.checkboxImage(checked: checked, dark: dark)
-                btn.addSubview(checkView)
+                let checked = (row.kind == .aorusDeletedMessages) ? self.includeDeletedInClear : self.includeEditedInClear
+                rowView.checkView.image = self.checkboxImage(checked: checked, dark: dark)
             } else {
-                let chevronView = UIImageView(image: chevron)
-                chevronView.contentMode = .scaleAspectFit
-                chevronView.tag = 103
-                chevronView.isUserInteractionEnabled = false
-                btn.addSubview(chevronView)
+                rowView.chevronView.image = chevron
             }
-
-            btn.onTap = { [weak self] in
+            rowView.onTap = { [weak self] in
                 self?.rowTapped(row)
             }
-            self.dataCard.addSubview(btn)
-            self.rowViews.append(btn)
+            if isNew && self.displayedBytesByKind[row.kind] == nil {
+                self.displayedBytesByKind[row.kind] = row.sizeBytes
+            }
+            ordered.append(rowView)
+        }
+        self.orderedRowViews = ordered
+    }
+
+    private func formattedRowSize(row: DataRow, bytes: Int64) -> String {
+        if row.extraCount > 0 && bytes == 0 {
+            return "\(row.extraCount)"
+        }
+        return aorusMaxFormatBytes(bytes, isRu: self.isRu)
+    }
+
+    private func refreshRowSizeLabels(animated: Bool) {
+        let isRu = self.isRu
+        for row in self.rows {
+            guard let rowView = self.rowViewMap[row.kind] else { continue }
+            let bytes = self.displayedBytesByKind[row.kind] ?? row.sizeBytes
+            let newText = self.formattedRowSize(row: row, bytes: bytes)
+            if rowView.sizeLabel.text != newText {
+                if animated {
+                    UIView.transition(with: rowView.sizeLabel, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                        rowView.sizeLabel.text = newText
+                    })
+                } else {
+                    rowView.sizeLabel.text = newText
+                }
+            }
+        }
+        let totalText = aorusMaxFormatBytes(self.displayedTotalBytes, isRu: isRu)
+        if self.clearSizeBadge.text != totalText {
+            if animated {
+                UIView.transition(with: self.clearSizeBadge, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                    self.clearSizeBadge.text = totalText
+                })
+            } else {
+                self.clearSizeBadge.text = totalText
+            }
+        }
+    }
+
+    private func startRollingAnimation(toTotal targetTotal: Int64) {
+        self.stopRollingAnimation()
+        self.rollingStartTotal = self.displayedTotalBytes
+        self.rollingStartBytesByKind = self.displayedBytesByKind
+        self.rollingTargetBytesByKind = [:]
+        var hasDelta = self.rollingStartTotal != targetTotal
+        for row in self.rows {
+            let start = self.displayedBytesByKind[row.kind] ?? row.sizeBytes
+            self.rollingStartBytesByKind[row.kind] = start
+            self.rollingTargetBytesByKind[row.kind] = row.sizeBytes
+            if start != row.sizeBytes {
+                hasDelta = true
+            }
+        }
+        guard hasDelta else {
+            self.displayedTotalBytes = targetTotal
+            self.refreshRowSizeLabels(animated: false)
+            return
+        }
+        self.rollingStartTime = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(self.rollingDisplayLinkTick))
+        link.add(to: .main, forMode: .common)
+        self.rollingDisplayLink = link
+    }
+
+    @objc private func rollingDisplayLinkTick() {
+        let elapsed = CACurrentMediaTime() - self.rollingStartTime
+        let progress = min(1.0, max(0.0, elapsed / self.rollingDuration))
+        // Cubic ease-out matching Telegram's storage counter settle curve.
+        let eased = 1.0 - pow(1.0 - progress, 3.0)
+
+        let totalDelta = Double(self.targetTotalBytes - self.rollingStartTotal)
+        self.displayedTotalBytes = self.rollingStartTotal + Int64((totalDelta * eased).rounded())
+        for row in self.rows {
+            let start = self.rollingStartBytesByKind[row.kind] ?? row.sizeBytes
+            let target = self.rollingTargetBytesByKind[row.kind] ?? row.sizeBytes
+            let value = start + Int64((Double(target - start) * eased).rounded())
+            self.displayedBytesByKind[row.kind] = value
+            if let rowView = self.rowViewMap[row.kind] {
+                rowView.sizeLabel.text = self.formattedRowSize(row: row, bytes: value)
+                if let layout = self.validLayout {
+                    let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
+                    let cardWidth = min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
+                    rowView.layoutRow(width: cardWidth, height: 54.0, showSeparator: rowView !== self.orderedRowViews.last)
+                }
+            }
+        }
+        self.clearSizeBadge.text = aorusMaxFormatBytes(self.displayedTotalBytes, isRu: self.isRu)
+        self.layoutClearButtonContents(buttonHeight: 52.0)
+
+        if progress >= 1.0 {
+            self.stopRollingAnimation()
+            self.displayedTotalBytes = self.targetTotalBytes
+            for row in self.rows {
+                self.displayedBytesByKind[row.kind] = row.sizeBytes
+            }
+            self.refreshRowSizeLabels(animated: false)
+            if let layout = self.validLayout {
+                self.containerLayoutUpdated(layout, transition: .immediate)
+            }
         }
     }
 
@@ -673,7 +946,7 @@ private final class AorusMaxMemorySettingsController: ViewController {
             if checked {
                 context.setFillColor(AorusMaxInterface.accent.cgColor)
                 context.fillEllipse(in: rect)
-                if let check = AorusMaxInterface.tintedGlyph("done_24", color: .white) ?? AorusMaxInterface.tintedGlyph("check_24", color: .white) {
+                if let check = AorusMaxInterface.tintedGlyph("check_24", color: .white) {
                     let glyphRect = CGRect(x: 4.0, y: 4.0, width: size.width - 8.0, height: size.height - 8.0)
                     UIGraphicsPushContext(context)
                     check.draw(in: glyphRect)
@@ -689,21 +962,24 @@ private final class AorusMaxMemorySettingsController: ViewController {
     }
 
     private func rowTapped(_ row: DataRow) {
+        guard !self.isClearing else { return }
         switch row.kind {
         case .aorusDeletedMessages:
             self.includeDeletedInClear.toggle()
             UISelectionFeedbackGenerator().selectionChanged()
-            self.rebuildRowsAndApplyTheme(animated: true)
+            self.rebuildRowsAndApplyTheme(animated: true, rollNumbers: true)
+            self.rowViewMap[.aorusDeletedMessages]?.animateCheckboxBounce()
         case .aorusEditedMessages:
             self.includeEditedInClear.toggle()
             UISelectionFeedbackGenerator().selectionChanged()
-            self.rebuildRowsAndApplyTheme(animated: true)
-        case let .telegramCategory(categoryKey, _, _, genitiveRu, genitiveEn):
+            self.rebuildRowsAndApplyTheme(animated: true, rollNumbers: true)
+            self.rowViewMap[.aorusEditedMessages]?.animateCheckboxBounce()
+        case .files, .stickers, .photos, .videos, .audio, .other:
             guard row.sizeBytes > 0 else { return }
             let sizeText = aorusMaxFormatBytes(row.sizeBytes, isRu: self.isRu)
             let title = self.isRu
-                ? "Очистить \(sizeText) \(genitiveRu) из кэша?"
-                : "Clear \(sizeText) \(genitiveEn) from cache?"
+                ? "Очистить \(sizeText) \(row.genitiveRu) из кэша?"
+                : "Clear \(sizeText) \(row.genitiveEn) from cache?"
             let message = self.isRu
                 ? "После удаления данные можно загрузить снова"
                 : "After deletion, data can be downloaded again"
@@ -712,74 +988,139 @@ private final class AorusMaxMemorySettingsController: ViewController {
             alert.addAction(UIAlertAction(title: self.isRu ? "Очистить" : "Clear", style: .destructive, handler: { [weak self] _ in
                 guard let self else { return }
                 let keys: [StorageUsageStats.CategoryKey]
-                switch categoryKey {
+                switch row.kind {
+                case .files:
+                    keys = [.files]
+                case .stickers:
+                    keys = [.stickers]
                 case .photos:
                     keys = [.photos, .avatars]
                 case .videos:
                     keys = [.videos, .stories]
-                case .music:
-                    keys = [.music, .misc]
-                default:
-                    keys = [categoryKey]
+                case .audio:
+                    keys = [.music]
+                case .other:
+                    keys = [.misc]
+                case .aorusDeletedMessages, .aorusEditedMessages:
+                    keys = []
                 }
-                self.performClear(categories: keys, clearDeleted: false, clearEdited: false)
+                self.performClear(categories: keys, clearDeleted: false, clearEdited: false, expectedFreedBytes: row.sizeBytes)
             }))
             self.present(alert, animated: true)
         }
     }
 
     @objc private func clearAllPressed() {
-        let sizeText = self.clearSizeBadge.text ?? ""
-        let title = self.isRu ? "Очистить весь кэш (\(sizeText))?" : "Clear all cache (\(sizeText))?"
-        let message = self.isRu ? "После удаления данные можно загрузить снова" : "After deletion, data can be downloaded again"
+        guard !self.isClearing else { return }
+        let hasDeleted = self.rows.contains(where: { $0.kind == .aorusDeletedMessages && ($0.extraCount > 0 || $0.sizeBytes > 0) })
+        let hasEdited = self.rows.contains(where: { $0.kind == .aorusEditedMessages && $0.sizeBytes > 0 })
+        let clearDeleted = hasDeleted && self.includeDeletedInClear
+        let clearEdited = hasEdited && self.includeEditedInClear
+
+        let sizeText = aorusMaxFormatBytes(self.targetTotalBytes, isRu: self.isRu)
+        let title = self.isRu ? "Очистить кэш (\(sizeText))?" : "Clear cache (\(sizeText))?"
+        let message: String
+        if clearDeleted || clearEdited {
+            message = self.isRu
+                ? "Медиа из кэша Telegram можно загрузить снова. Локально сохранённые копии удалённых и изменённых сообщений будут удалены безвозвратно."
+                : "Telegram cached media can be downloaded again. Locally saved copies of deleted and edited messages will be permanently removed."
+        } else {
+            message = self.isRu
+                ? "После удаления данные можно загрузить снова"
+                : "After deletion, data can be downloaded again"
+        }
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: self.isRu ? "Отменить" : "Cancel", style: .cancel))
         alert.addAction(UIAlertAction(title: self.isRu ? "Очистить" : "Clear", style: .destructive, handler: { [weak self] _ in
             guard let self else { return }
             let allCategories: [StorageUsageStats.CategoryKey] = [.photos, .videos, .files, .music, .stickers, .avatars, .misc, .stories]
-            let clearDeleted = AorusSavedMessagesStorage.isDeletedMessagesEnabled && self.includeDeletedInClear
-            let clearEdited = AorusSavedMessagesStorage.isEditedMessagesEnabled && self.includeEditedInClear
-            self.performClear(categories: allCategories, clearDeleted: clearDeleted, clearEdited: clearEdited)
+            self.performClear(categories: allCategories, clearDeleted: clearDeleted, clearEdited: clearEdited, expectedFreedBytes: self.targetTotalBytes)
         }))
         self.present(alert, animated: true)
     }
 
-    private func performClear(categories: [StorageUsageStats.CategoryKey], clearDeleted: Bool, clearEdited: Bool) {
+    private func presentCompletionToast(freedBytes: Int64) {
+        let isRu = self.isRu
+        let text: String
+        if freedBytes > 0 {
+            let formatted = aorusMaxFormatBytes(freedBytes, isRu: isRu)
+            text = isRu ? "Кэш очищен — освобождено \(formatted)" : "Cache cleared — freed \(formatted)"
+        } else {
+            text = isRu ? "Кэш очищен" : "Cache cleared"
+        }
+        let content: UndoOverlayContent
+        if let check = AorusMaxInterface.tintedGlyph("check_24", color: .white) {
+            content = .universalImage(image: check, size: CGSize(width: 24.0, height: 24.0), title: nil, text: text, customUndoText: nil, timeout: 3.0)
+        } else {
+            content = .info(title: nil, text: text, timeout: 3.0, customUndoText: nil)
+        }
+        self.present(UndoOverlayController(presentationData: self.presentationData, content: content, elevatedLayout: false, animateInAsReplacement: false, action: { _ in return true }), in: .current)
+    }
+
+    private func performClear(categories: [StorageUsageStats.CategoryKey], clearDeleted: Bool, clearEdited: Bool, expectedFreedBytes: Int64) {
         guard !self.isClearing else { return }
         self.isClearing = true
         self.clearButton.isEnabled = false
-        UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
-            self.clearButton.alpha = 0.65
-            self.clearButton.transform = CGAffineTransform(scaleX: 0.985, y: 0.985)
-        })
+        self.setClearingVisualState(true)
+        if !self.reduceMotion {
+            UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction], animations: {
+                self.clearButton.alpha = 0.78
+                self.clearButton.transform = CGAffineTransform(scaleX: 0.985, y: 0.985)
+            })
+        } else {
+            self.clearButton.alpha = 0.78
+        }
 
-        let finish: () -> Void = { [weak self] in
+        let finish: (Bool) -> Void = { [weak self] allOk in
             guard let self else { return }
             self.isClearing = false
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0.4, options: [.allowUserInteraction], animations: {
+            self.setClearingVisualState(false)
+            if !self.reduceMotion {
+                UIView.animate(withDuration: 0.34, delay: 0.0, usingSpringWithDamping: 0.74, initialSpringVelocity: 0.45, options: [.allowUserInteraction], animations: {
+                    self.clearButton.transform = .identity
+                })
+            } else {
                 self.clearButton.transform = .identity
-            })
-            self.reloadStorageStats(animated: true)
+            }
+            self.reloadStorageStats(animated: true, rollNumbers: true) { [weak self] in
+                guard let self else { return }
+                if allOk {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    self.presentCompletionToast(freedBytes: expectedFreedBytes)
+                } else {
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    let alert = UIAlertController(
+                        title: self.isRu ? "Ошибка очистки" : "Clear error",
+                        message: self.isRu ? "Не удалось очистить сохранённые сообщения. Попробуйте повторить позже." : "Could not clear saved messages. Please try again later.",
+                        preferredStyle: .alert
+                    )
+                    alert.addAction(UIAlertAction(title: self.presentationData.strings.Common_OK, style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
         }
 
         let runAorusCleanup: () -> Void = { [weak self] in
             guard let self else { return }
             let group = DispatchGroup()
+            var deletedOk = true
+            var editedOk = true
             if clearDeleted {
                 group.enter()
-                AorusSavedMessagesStorage.clearDeletedMessages(context: self.context) {
+                AorusSavedMessagesStorage.clearDeletedMessages(context: self.context) { ok in
+                    deletedOk = ok
                     group.leave()
                 }
             }
             if clearEdited {
                 group.enter()
-                AorusSavedMessagesStorage.clearEditedMessages(context: self.context) {
+                AorusSavedMessagesStorage.clearEditedMessages(context: self.context) { ok in
+                    editedOk = ok
                     group.leave()
                 }
             }
             group.notify(queue: .main) {
-                finish()
+                finish(deletedOk && editedOk)
             }
         }
 
@@ -833,6 +1174,23 @@ private final class AorusMaxMemorySettingsController: ViewController {
         self.present(sheet, in: .window(.root))
     }
 
+    private func layoutClearButtonContents(buttonHeight: CGFloat) {
+        let titleSize = self.clearTitleLabel.sizeThatFits(CGSize(width: 220.0, height: buttonHeight))
+        let badgeTextSize = self.clearSizeBadge.sizeThatFits(CGSize(width: 140.0, height: 28.0))
+        let badgeWidth = ceil(badgeTextSize.width) + 20.0
+        let badgeHeight: CGFloat = 28.0
+        let spacing: CGFloat = 10.0
+        let totalInlineWidth = ceil(titleSize.width) + spacing + badgeWidth
+        let inlineStartX = floor((self.clearButton.bounds.width - totalInlineWidth) * 0.5)
+        self.clearTitleLabel.frame = CGRect(x: inlineStartX, y: floor((buttonHeight - ceil(titleSize.height)) * 0.5), width: ceil(titleSize.width), height: ceil(titleSize.height))
+        self.clearSizeBadge.frame = CGRect(x: self.clearTitleLabel.frame.maxX + spacing, y: floor((buttonHeight - badgeHeight) * 0.5), width: badgeWidth, height: badgeHeight)
+        self.clearSizeBadge.layer.cornerRadius = badgeHeight * 0.5
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.clearShimmerLayer.frame = self.clearButton.bounds
+        CATransaction.commit()
+    }
+
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         self.validLayout = layout
@@ -848,7 +1206,7 @@ private final class AorusMaxMemorySettingsController: ViewController {
         let keepHeight: CGFloat = 104.0
         self.keepCard.frame = CGRect(x: cardX, y: y, width: cardWidth, height: keepHeight)
         self.keepButton.frame = self.keepCard.bounds
-        self.keepChevronView.frame = CGRect(x: cardWidth - 16.0 - 18.0, y: floor((keepHeight - 18.0) * 0.5), width: 18.0, height: 18.0)
+        self.keepChevronView.frame = CGRect(x: cardWidth - 16.0 - 16.0, y: floor((keepHeight - 16.0) * 0.5), width: 16.0, height: 16.0)
         let valSize = self.keepValueLabel.sizeThatFits(CGSize(width: 120.0, height: 30.0))
         self.keepValueLabel.frame = CGRect(x: self.keepChevronView.frame.minX - 6.0 - ceil(valSize.width), y: floor((keepHeight - ceil(valSize.height)) * 0.5), width: ceil(valSize.width), height: ceil(valSize.height))
         let keepTextWidth = max(0.0, self.keepValueLabel.frame.minX - 16.0 - 12.0)
@@ -863,51 +1221,19 @@ private final class AorusMaxMemorySettingsController: ViewController {
         self.dataHeaderLabel.frame = CGRect(x: cardX + 16.0, y: y, width: cardWidth - 32.0, height: 18.0)
         y += 26.0
 
-        // Card 2: Data rows + Clear button
+        // Card 2: Persistent data rows + Clear button
         let rowHeight: CGFloat = 54.0
         var cardY: CGFloat = 6.0
-        for rowView in self.rowViews {
+        for (index, rowView) in self.orderedRowViews.enumerated() {
             rowView.frame = CGRect(x: 0.0, y: cardY, width: cardWidth, height: rowHeight)
-            let checkView = rowView.viewWithTag(104)
-            let chevronView = rowView.viewWithTag(103)
-            let sizeLabel = rowView.viewWithTag(102) as? UILabel
-            let titleLabel = rowView.viewWithTag(101) as? UILabel
-
-            var titleX: CGFloat = 16.0
-            if let checkView {
-                checkView.frame = CGRect(x: 16.0, y: floor((rowHeight - 22.0) * 0.5), width: 22.0, height: 22.0)
-                titleX = 50.0
-            }
-            var rightEdge = cardWidth - 16.0
-            if let chevronView {
-                chevronView.frame = CGRect(x: cardWidth - 16.0 - 18.0, y: floor((rowHeight - 18.0) * 0.5), width: 18.0, height: 18.0)
-                rightEdge = chevronView.frame.minX - 6.0
-            }
-            if let sizeLabel {
-                let sSize = sizeLabel.sizeThatFits(CGSize(width: 120.0, height: rowHeight))
-                let sw = ceil(sSize.width)
-                sizeLabel.frame = CGRect(x: rightEdge - sw, y: 0.0, width: sw, height: rowHeight)
-                rightEdge = sizeLabel.frame.minX - 10.0
-            }
-            if let titleLabel {
-                titleLabel.frame = CGRect(x: titleX, y: 0.0, width: max(0.0, rightEdge - titleX), height: rowHeight)
-            }
+            rowView.layoutRow(width: cardWidth, height: rowHeight, showSeparator: index + 1 < self.orderedRowViews.count)
             cardY += rowHeight
         }
 
         cardY += 12.0
         let buttonHeight: CGFloat = 52.0
         self.clearButton.frame = CGRect(x: 16.0, y: cardY, width: max(0.0, cardWidth - 32.0), height: buttonHeight)
-        let titleSize = self.clearTitleLabel.sizeThatFits(CGSize(width: 220.0, height: buttonHeight))
-        let badgeTextSize = self.clearSizeBadge.sizeThatFits(CGSize(width: 140.0, height: 28.0))
-        let badgeWidth = ceil(badgeTextSize.width) + 20.0
-        let badgeHeight: CGFloat = 28.0
-        let spacing: CGFloat = 10.0
-        let totalInlineWidth = ceil(titleSize.width) + spacing + badgeWidth
-        let inlineStartX = floor((self.clearButton.bounds.width - totalInlineWidth) * 0.5)
-        self.clearTitleLabel.frame = CGRect(x: inlineStartX, y: floor((buttonHeight - ceil(titleSize.height)) * 0.5), width: ceil(titleSize.width), height: ceil(titleSize.height))
-        self.clearSizeBadge.frame = CGRect(x: self.clearTitleLabel.frame.maxX + spacing, y: floor((buttonHeight - badgeHeight) * 0.5), width: badgeWidth, height: badgeHeight)
-        self.clearSizeBadge.layer.cornerRadius = badgeHeight * 0.5
+        self.layoutClearButtonContents(buttonHeight: buttonHeight)
 
         let totalCardHeight = cardY + buttonHeight + 16.0
         self.dataCard.frame = CGRect(x: cardX, y: y, width: cardWidth, height: totalCardHeight)
@@ -1034,17 +1360,20 @@ private final class AorusMaxDiscreteFontSlider: UIControl {
 
 private final class AorusMaxThemePreviewCardView: UIControl {
     let preset: AorusMaxInterface.ChatThemePreset
-    private let bgPatternLayer = CALayer()
+    private let bgPatternView = UIImageView()
     private let incomingPill = UIView()
     private let outgoingPill = UIView()
     private let outgoingGradient = CAGradientLayer()
+    private var lastDark: Bool?
 
     init(preset: AorusMaxInterface.ChatThemePreset) {
         self.preset = preset
         super.init(frame: .zero)
         self.layer.cornerRadius = 14.0
         self.clipsToBounds = true
-        self.layer.addSublayer(self.bgPatternLayer)
+        self.bgPatternView.contentMode = .scaleAspectFill
+        self.bgPatternView.isUserInteractionEnabled = false
+        self.addSubview(self.bgPatternView)
         self.incomingPill.isUserInteractionEnabled = false
         self.incomingPill.layer.cornerRadius = 7.0
         self.addSubview(self.incomingPill)
@@ -1061,18 +1390,55 @@ private final class AorusMaxThemePreviewCardView: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(dark: Bool, selected: Bool) {
+    override var isHighlighted: Bool {
+        didSet {
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
+            let target = self.isHighlighted ? CGAffineTransform(scaleX: 0.94, y: 0.94) : .identity
+            UIView.animate(withDuration: 0.18, delay: 0.0, options: [.curveEaseOut, .allowUserInteraction, .beginFromCurrentState], animations: {
+                self.transform = target
+            })
+        }
+    }
+
+    func animateSelectionPop() {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        self.transform = CGAffineTransform(scaleX: 0.93, y: 0.93)
+        UIView.animate(withDuration: 0.36, delay: 0.0, usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
+            self.transform = .identity
+        })
+    }
+
+    func update(dark: Bool, selected: Bool, animated: Bool = false) {
         self.backgroundColor = dark ? self.preset.wallpaperDark : self.preset.wallpaperLight
+        if self.lastDark != dark {
+            self.lastDark = dark
+            self.bgPatternView.image = AorusMaxInterface.tintedWallpaperPattern(preset: self.preset, dark: dark)
+        }
         self.incomingPill.backgroundColor = dark ? self.preset.incomingDark : self.preset.incomingLight
         self.outgoingGradient.colors = [self.preset.outgoingTop.cgColor, self.preset.outgoingBottom.cgColor]
-        self.layer.borderWidth = selected ? 2.5 : 1.0
-        self.layer.borderColor = selected
+        let targetBorderWidth: CGFloat = selected ? 2.5 : 1.0
+        let targetBorderColor = selected
             ? AorusMaxInterface.accent.cgColor
-            : (dark ? UIColor(white: 1.0, alpha: 0.12).cgColor : UIColor(white: 0.0, alpha: 0.1).cgColor)
+            : (dark ? UIColor(white: 1.0, alpha: 0.14).cgColor : UIColor(white: 0.0, alpha: 0.1).cgColor)
+        if animated && !UIAccessibility.isReduceMotionEnabled {
+            let widthAnim = CABasicAnimation(keyPath: "borderWidth")
+            widthAnim.fromValue = self.layer.borderWidth
+            widthAnim.toValue = targetBorderWidth
+            widthAnim.duration = 0.2
+            self.layer.add(widthAnim, forKey: "aorusBorderWidth")
+            let colorAnim = CABasicAnimation(keyPath: "borderColor")
+            colorAnim.fromValue = self.layer.borderColor
+            colorAnim.toValue = targetBorderColor
+            colorAnim.duration = 0.2
+            self.layer.add(colorAnim, forKey: "aorusBorderColor")
+        }
+        self.layer.borderWidth = targetBorderWidth
+        self.layer.borderColor = targetBorderColor
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        self.bgPatternView.frame = self.bounds
         let w = self.bounds.width
         let h = self.bounds.height
         self.incomingPill.frame = CGRect(x: floor(w * 0.14), y: floor(h * 0.25), width: floor(w * 0.6), height: floor(h * 0.21))
@@ -1092,6 +1458,8 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private var presentationDisposable: Disposable?
     private var settingsDisposable: Disposable?
     private var validLayout: ContainerViewLayout?
+    private var liveFontSizeOverride: PresentationFontSize?
+    private var didPlayBubbleEntrance = false
 
     private let scrollView = UIScrollView()
 
@@ -1112,7 +1480,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private var segmentDividers: [UIView] = []
     private var selectedSegmentIndex: Int = 0
 
-    // Live chat preview (real Telegram ChatMessageItem nodes + WallpaperBackgroundNode)
+    // Live chat preview (real Telegram ChatMessageItem nodes + preset-tinted MAX pattern)
     private let previewContainer = UIView()
     private var previewBackgroundNode: WallpaperBackgroundNode?
     private let previewPatternView = UIImageView()
@@ -1137,9 +1505,13 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         self.presentationDisposable = (context.sharedContext.presentationData |> deliverOnMainQueue).start(next: { [weak self] data in
             guard let self else { return }
+            let appearanceChanged = self.presentationData.theme.overallDarkAppearance != data.theme.overallDarkAppearance
             self.presentationData = data
+            if self.liveFontSizeOverride == data.chatFontSize {
+                self.liveFontSizeOverride = nil
+            }
             if self.isNodeLoaded {
-                self.applyAppearance(animated: false)
+                self.applyAppearance(animated: appearanceChanged)
             }
         })
 
@@ -1167,6 +1539,10 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
     private var isRu: Bool {
         return self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
+    }
+
+    private var reduceMotion: Bool {
+        return self.presentationData.reduceMotion || UIAccessibility.isReduceMotionEnabled
     }
 
     override func loadDisplayNode() {
@@ -1234,7 +1610,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.previewContainer.addSubview(bgNode.view)
 
         self.previewPatternView.contentMode = .scaleAspectFill
-        self.previewPatternView.alpha = 0.24
+        self.previewPatternView.alpha = 1.0
         self.previewPatternView.isUserInteractionEnabled = false
         self.previewContainer.addSubview(self.previewPatternView)
 
@@ -1265,11 +1641,9 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
     private func syncControlsFromSettings() {
         self.systemFontSwitch.isOn = self.themeSettings.useSystemFont
-        let effectiveFont = self.themeSettings.useSystemFont ? self.presentationData.chatFontSize : self.themeSettings.fontSize
+        let effectiveFont = self.liveFontSizeOverride ?? (self.themeSettings.useSystemFont ? self.presentationData.chatFontSize : self.themeSettings.fontSize)
         let stepIndex = Self.fontSizes.firstIndex(of: effectiveFont) ?? 2
         self.fontSlider.selectedStep = stepIndex
-        // Keep the font slider crisp and interactive at all times (never faded/transparent);
-        // sliding it automatically switches «Use system size» off.
         self.fontSlider.isEnabled = true
         self.fontSlider.alpha = 1.0
 
@@ -1282,28 +1656,73 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.applyAppearance(animated: false)
     }
 
+    private func playInitialBubbleEntranceIfNeeded() {
+        guard !self.didPlayBubbleEntrance, !self.previewMessageNodes.isEmpty else {
+            return
+        }
+        self.didPlayBubbleEntrance = true
+        guard !self.reduceMotion else {
+            return
+        }
+        // `previewMessagesContainer` is rotated 180°, so `last` is the top incoming bubble and
+        // `first` is the bottom outgoing bubble; translating from y = -16 -> 0 in rotated space
+        // slides each bubble smoothly upward into place with Telegram's spring curve.
+        let orderedTopToBottom = Array(self.previewMessageNodes.reversed())
+        for (index, node) in orderedTopToBottom.enumerated() {
+            let view = node.view
+            view.alpha = 0.0
+            view.transform = CGAffineTransform(translationX: 0.0, y: -16.0).scaledBy(x: 0.95, y: 0.95)
+            let delay = Double(index) * 0.075
+            UIView.animate(
+                withDuration: 0.42,
+                delay: delay,
+                usingSpringWithDamping: 0.82,
+                initialSpringVelocity: 0.35,
+                options: [.allowUserInteraction],
+                animations: {
+                    view.alpha = 1.0
+                    view.transform = .identity
+                }
+            )
+        }
+    }
+
     private func rebuildRealChatPreview(width: CGFloat, animated: Bool) {
         guard width > 40.0 else { return }
-        let dark = self.presentationData.theme.overallDarkAppearance
+        let liveTheme = aorusPluginPreviewTheme(self.presentationData.theme)
+        let dark = liveTheme.overallDarkAppearance
         let preset = AorusMaxInterface.selectedChatTheme
         let strings = self.presentationData.strings
-        let fontSize = self.presentationData.chatFontSize
+        let fontSize = self.liveFontSizeOverride ?? self.presentationData.chatFontSize
         let wallpaper = TelegramWallpaper.color(dark ? preset.wallpaperDark.rgb : preset.wallpaperLight.rgb)
 
-        let outgoingArgb = self.presentationData.theme.chat.message.outgoing.bubble.withWallpaper.fill.first?.argb ?? 0
-        let incomingArgb = self.presentationData.theme.chat.message.incoming.bubble.withWallpaper.fill.first?.argb ?? 0
-        let signature = "\(Int(width))|\(dark ? 1 : 0)|\(preset.id)|\(fontSize.baseDisplaySize)|\(strings.baseLanguageCode)|\(self.presentationData.theme.index)|\(outgoingArgb)|\(incomingArgb)"
+        let outgoingArgb = liveTheme.chat.message.outgoing.bubble.withWallpaper.fill.first?.argb ?? 0
+        let incomingArgb = liveTheme.chat.message.incoming.bubble.withWallpaper.fill.first?.argb ?? 0
+        let signature = "\(Int(width))|\(dark ? 1 : 0)|\(preset.id)|\(fontSize.baseDisplaySize)|\(strings.baseLanguageCode)|\(liveTheme.index)|\(outgoingArgb)|\(incomingArgb)"
         if signature == self.lastPreviewSignature && !self.previewMessageNodes.isEmpty {
             return
         }
         self.lastPreviewSignature = signature
 
-        self.previewContainer.backgroundColor = dark ? preset.wallpaperDark : preset.wallpaperLight
-        self.previewPatternView.image = AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight")
+        let targetBgColor = dark ? preset.wallpaperDark : preset.wallpaperLight
+        let targetPattern = AorusMaxInterface.tintedWallpaperPattern(preset: preset, dark: dark)
+            ?? AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight")
+
+        if animated && !self.reduceMotion {
+            UIView.animate(withDuration: 0.28, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: {
+                self.previewContainer.backgroundColor = targetBgColor
+            })
+            UIView.transition(with: self.previewPatternView, duration: 0.28, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: {
+                self.previewPatternView.image = targetPattern
+            })
+        } else {
+            self.previewContainer.backgroundColor = targetBgColor
+            self.previewPatternView.image = targetPattern
+        }
 
         let bgNode = self.previewBackgroundNode
-        bgNode?.update(wallpaper: wallpaper, animated: false)
-        bgNode?.updateBubbleTheme(bubbleTheme: self.presentationData.theme, bubbleCorners: self.presentationData.chatBubbleCorners)
+        bgNode?.update(wallpaper: wallpaper, animated: animated && !self.reduceMotion)
+        bgNode?.updateBubbleTheme(bubbleTheme: liveTheme, bubbleCorners: self.presentationData.chatBubbleCorners)
 
         let peerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(1))
         let otherPeerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(2))
@@ -1431,7 +1850,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             items.append(self.context.sharedContext.makeChatMessagePreviewItem(
                 context: self.context,
                 messages: [EngineMessage(rawMessage)],
-                theme: self.presentationData.theme,
+                theme: liveTheme,
                 strings: strings,
                 wallpaper: wallpaper,
                 fontSize: fontSize,
@@ -1455,35 +1874,82 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         }
 
         let params = ListViewItemLayoutParams(width: width, leftInset: 0.0, rightInset: 0.0, availableHeight: 360.0)
-        var builtNodes: [ListViewItemNode] = []
-        for i in 0 ..< items.count {
-            var itemNode: ListViewItemNode?
-            items[i].nodeConfiguredForParams(
-                async: { $0() },
-                params: params,
-                synchronousLoads: false,
-                neighbors: ListViewItemNeighbors(
+        let canReuse = self.previewMessageNodes.count == items.count
+        let itemAnimation: ListViewItemUpdateAnimation = (animated && !self.reduceMotion) ? .Crossfade : .None
+
+        if canReuse {
+            var totalHeight: CGFloat = 12.0 + 12.0
+            var pendingFrames: [(ListViewItemNode, CGSize, () -> Void)] = []
+            for i in 0 ..< items.count {
+                let itemNode = self.previewMessageNodes[i]
+                let neighbors = ListViewItemNeighbors(
                     previous: i == 0 ? nil : items[i - 1].neighborDescriptor,
                     next: i == items.count - 1 ? nil : items[i + 1].neighborDescriptor
-                ),
-                completion: { node, apply in
-                    itemNode = node
-                    apply().1(ListViewItemApply())
-                }
-            )
-            if let itemNode {
-                itemNode.isUserInteractionEnabled = false
-                builtNodes.append(itemNode)
+                )
+                items[i].updateNode(
+                    async: { $0() },
+                    node: { return itemNode },
+                    params: params,
+                    neighbors: neighbors,
+                    animation: itemAnimation,
+                    completion: { layout, apply in
+                        let size = layout.size
+                        pendingFrames.append((itemNode, size, {
+                            itemNode.contentSize = layout.contentSize
+                            itemNode.insets = layout.insets
+                            apply(ListViewItemApply())
+                        }))
+                        totalHeight += size.height
+                    }
+                )
             }
-        }
-
-        var totalHeight: CGFloat = 12.0 + 12.0
-        for node in builtNodes {
-            totalHeight += node.frame.size.height
-        }
-        self.previewContentHeight = max(120.0, totalHeight)
-
-        let swapNodes = {
+            self.previewContentHeight = max(120.0, totalHeight)
+            let contentSize = CGSize(width: width, height: self.previewContentHeight)
+            let applyLayout = {
+                self.previewMessagesContainer.frame = CGRect(origin: .zero, size: contentSize)
+                var topOffset: CGFloat = 12.0
+                for (node, size, apply) in pendingFrames {
+                    apply()
+                    node.updateFrame(CGRect(origin: CGPoint(x: 0.0, y: topOffset), size: size), within: contentSize)
+                    topOffset += size.height
+                }
+                if let bgNode {
+                    bgNode.frame = CGRect(x: 0.0, y: -60.0, width: width, height: self.previewContentHeight + 120.0)
+                    bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
+                }
+            }
+            if animated && !self.reduceMotion {
+                UIView.animate(withDuration: 0.26, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: applyLayout)
+            } else {
+                applyLayout()
+            }
+        } else {
+            var builtNodes: [ListViewItemNode] = []
+            for i in 0 ..< items.count {
+                var itemNode: ListViewItemNode?
+                items[i].nodeConfiguredForParams(
+                    async: { $0() },
+                    params: params,
+                    synchronousLoads: false,
+                    neighbors: ListViewItemNeighbors(
+                        previous: i == 0 ? nil : items[i - 1].neighborDescriptor,
+                        next: i == items.count - 1 ? nil : items[i + 1].neighborDescriptor
+                    ),
+                    completion: { node, apply in
+                        itemNode = node
+                        apply().1(ListViewItemApply())
+                    }
+                )
+                if let itemNode {
+                    itemNode.isUserInteractionEnabled = false
+                    builtNodes.append(itemNode)
+                }
+            }
+            var totalHeight: CGFloat = 12.0 + 12.0
+            for node in builtNodes {
+                totalHeight += node.frame.size.height
+            }
+            self.previewContentHeight = max(120.0, totalHeight)
             for old in self.previewMessageNodes {
                 old.removeFromSupernode()
             }
@@ -1500,12 +1966,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 bgNode.frame = CGRect(x: 0.0, y: -60.0, width: width, height: self.previewContentHeight + 120.0)
                 bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
             }
-        }
-
-        if animated {
-            UIView.transition(with: self.previewContainer, duration: 0.24, options: [.transitionCrossDissolve, .allowUserInteraction], animations: swapNodes)
-        } else {
-            swapNodes()
+            self.playInitialBubbleEntranceIfNeeded()
         }
     }
 
@@ -1518,54 +1979,71 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         self.title = AorusMaxInterface.localizedString("APPEARANCE_SETTINGS_TITLE", languageCode: strings.baseLanguageCode) ?? (isRu ? "Оформление" : "Appearance")
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
-        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: .immediate)
+        self.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationData: self.presentationData), transition: animated && !self.reduceMotion ? .animated(duration: 0.24, curve: .easeInOut) : .immediate)
 
-        self.displayNode.backgroundColor = palette.page
+        let applyColors = {
+            self.displayNode.backgroundColor = palette.page
 
-        self.fontHeaderLabel.text = strings.Appearance_TextSizeSetting.uppercased()
-        self.fontHeaderLabel.textColor = palette.secondaryText
-        self.fontCard.backgroundColor = palette.card
-        self.systemFontLabel.text = isRu ? "Как в системе" : strings.Appearance_TextSize_Automatic
-        self.systemFontLabel.textColor = palette.primaryText
-        self.smallALabel.textColor = palette.primaryText
-        self.largeALabel.textColor = palette.primaryText
-        self.fontSlider.trackColor = dark ? UIColor(rgb: 0x50545e) : UIColor(rgb: 0xc8cdd6)
-        self.fontSlider.activeTrackColor = dark ? UIColor(rgb: 0xd0d4dc) : AorusMaxInterface.accent
-        self.fontSlider.isEnabled = true
-        self.fontSlider.alpha = 1.0
+            self.fontHeaderLabel.text = strings.Appearance_TextSizeSetting.uppercased()
+            self.fontHeaderLabel.textColor = palette.secondaryText
+            self.fontCard.backgroundColor = palette.card
+            self.systemFontLabel.text = isRu ? "Как в системе" : strings.Appearance_TextSize_Automatic
+            self.systemFontLabel.textColor = palette.primaryText
+            self.smallALabel.textColor = palette.primaryText
+            self.largeALabel.textColor = palette.primaryText
+            self.fontSlider.trackColor = dark ? UIColor(rgb: 0x50545e) : UIColor(rgb: 0xc8cdd6)
+            self.fontSlider.activeTrackColor = dark ? UIColor(rgb: 0xd0d4dc) : AorusMaxInterface.accent
+            self.fontSlider.isEnabled = true
+            self.fontSlider.alpha = 1.0
 
-        self.themeHeaderLabel.text = isRu ? "ТЕМА" : strings.Appearance_ColorTheme.uppercased()
-        self.themeHeaderLabel.textColor = palette.secondaryText
-        self.segmentContainer.backgroundColor = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xe3e6ec)
-        self.segmentSelectedPill.backgroundColor = dark ? UIColor(rgb: 0x1a1c22) : UIColor.white
-        let segTitles = isRu ? ["Системная", "Светлая", "Тёмная"] : [strings.AutoNightTheme_System, "Light", "Dark"]
-        for (i, btn) in self.segmentButtons.enumerated() {
-            btn.setTitle(segTitles[i], for: .normal)
-            btn.setTitleColor(i == self.selectedSegmentIndex ? AorusMaxInterface.accent : (dark ? .white : palette.primaryText), for: .normal)
+            self.themeHeaderLabel.text = isRu ? "ТЕМА" : strings.Appearance_ColorTheme.uppercased()
+            self.themeHeaderLabel.textColor = palette.secondaryText
+            self.segmentContainer.backgroundColor = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xe3e6ec)
+            self.segmentSelectedPill.backgroundColor = dark ? UIColor(rgb: 0x1a1c22) : UIColor.white
+            let segTitles = isRu ? ["Системная", "Светлая", "Тёмная"] : [strings.AutoNightTheme_System, "Light", "Dark"]
+            for (i, btn) in self.segmentButtons.enumerated() {
+                btn.setTitle(segTitles[i], for: .normal)
+                btn.setTitleColor(i == self.selectedSegmentIndex ? AorusMaxInterface.accent : (dark ? .white : palette.primaryText), for: .normal)
+            }
+            for (i, div) in self.segmentDividers.enumerated() {
+                div.backgroundColor = dark ? UIColor(white: 1.0, alpha: 0.16) : UIColor(white: 0.0, alpha: 0.12)
+                div.isHidden = (i == self.selectedSegmentIndex || i + 1 == self.selectedSegmentIndex)
+            }
+            self.themeNameLabel.textColor = palette.primaryText
         }
-        for (i, div) in self.segmentDividers.enumerated() {
-            div.backgroundColor = dark ? UIColor(white: 1.0, alpha: 0.16) : UIColor(white: 0.0, alpha: 0.12)
-            div.isHidden = (i == self.selectedSegmentIndex || i + 1 == self.selectedSegmentIndex)
+
+        if animated && !self.reduceMotion {
+            UIView.animate(withDuration: 0.24, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: applyColors)
+        } else {
+            applyColors()
         }
 
-        self.themeNameLabel.text = preset.localizedTitle(languageCode: strings.baseLanguageCode)
-        self.themeNameLabel.textColor = palette.primaryText
+        let newThemeTitle = preset.localizedTitle(languageCode: strings.baseLanguageCode)
+        if self.themeNameLabel.text != newThemeTitle {
+            if animated && !self.reduceMotion {
+                UIView.transition(with: self.themeNameLabel, duration: 0.22, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: {
+                    self.themeNameLabel.text = newThemeTitle
+                })
+            } else {
+                self.themeNameLabel.text = newThemeTitle
+            }
+        }
 
         for card in self.presetCards {
-            card.update(dark: dark, selected: card.preset.id == preset.id)
+            card.update(dark: dark, selected: card.preset.id == preset.id, animated: animated)
         }
 
         if let layout = self.validLayout {
             let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
             let cardWidth = min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
             self.rebuildRealChatPreview(width: cardWidth, animated: animated)
-            self.containerLayoutUpdated(layout, transition: animated ? .animated(duration: 0.25, curve: .easeInOut) : .immediate)
+            self.containerLayoutUpdated(layout, transition: animated && !self.reduceMotion ? .animated(duration: 0.26, curve: .spring) : .immediate)
         }
     }
 
     @objc private func systemFontSwitchChanged() {
         let useSystem = self.systemFontSwitch.isOn
-        // Never dim or disable the slider; user can drag it anytime to leave system sizing.
+        self.liveFontSizeOverride = nil
         self.fontSlider.isEnabled = true
         self.fontSlider.alpha = 1.0
         let _ = updatePresentationThemeSettingsInteractively(accountManager: self.context.sharedContext.accountManager) { current in
@@ -1580,6 +2058,8 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             self.systemFontSwitch.setOn(false, animated: true)
         }
         let size = Self.fontSizes[max(0, min(Self.fontSizes.count - 1, step))]
+        self.liveFontSizeOverride = size
+        self.applyAppearance(animated: true)
         let _ = updatePresentationThemeSettingsInteractively(accountManager: self.context.sharedContext.accountManager) { current in
             var updated = current
             updated.useSystemFont = false
@@ -1612,14 +2092,16 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     }
 
     @objc private func presetCardTapped(_ sender: AorusMaxThemePreviewCardView) {
+        guard AorusMaxInterface.selectedChatThemeId != sender.preset.id else {
+            sender.animateSelectionPop()
+            return
+        }
+        // Synchronously updates UserDefaults, invalidates AorusPluginAppearanceValues, and triggers
+        // global PresentationData refresh so both this preview and real chats update immediately.
         AorusMaxInterface.selectedChatThemeId = sender.preset.id
         self.lastPreviewSignature = ""
         UISelectionFeedbackGenerator().selectionChanged()
-        // Trigger presentationData refresh so chat bubbles pick up the new MAX theme immediately.
-        NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
-        let _ = updatePresentationThemeSettingsInteractively(accountManager: self.context.sharedContext.accountManager) { current in
-            return current
-        }.start()
+        sender.animateSelectionPop()
         self.applyAppearance(animated: true)
     }
 
@@ -1662,8 +2144,8 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         }
         let selBtn = self.segmentButtons[max(0, min(2, self.selectedSegmentIndex))]
         let targetPillFrame = selBtn.frame.insetBy(dx: 2.0, dy: 2.0)
-        if transition.isAnimated && !self.segmentSelectedPill.frame.isEmpty {
-            UIView.animate(withDuration: 0.28, delay: 0.0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3, options: [.allowUserInteraction], animations: {
+        if transition.isAnimated && !self.segmentSelectedPill.frame.isEmpty && !self.reduceMotion {
+            UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.84, initialSpringVelocity: 0.35, options: [.allowUserInteraction, .beginFromCurrentState], animations: {
                 self.segmentSelectedPill.frame = targetPillFrame
             })
         } else {
@@ -1677,32 +2159,36 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         // Real Telegram chat preview card
         self.rebuildRealChatPreview(width: cardWidth, animated: false)
         let previewHeight = self.previewContentHeight
-        self.previewContainer.frame = CGRect(x: cardX, y: y, width: cardWidth, height: previewHeight)
-        self.previewPatternView.frame = self.previewContainer.bounds
-        self.previewMessagesContainer.frame = self.previewContainer.bounds
-        if let bgNode = self.previewBackgroundNode {
-            bgNode.frame = CGRect(x: 0.0, y: -60.0, width: cardWidth, height: previewHeight + 120.0)
-            bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
-        }
-        y += previewHeight + 16.0
-
-        // Theme title
-        self.themeNameLabel.frame = CGRect(x: cardX, y: y, width: cardWidth, height: 24.0)
-        y += 34.0
-
-        // Horizontal 4 theme cards row
+        let targetPreviewFrame = CGRect(x: cardX, y: y, width: cardWidth, height: previewHeight)
+        let targetThemeNameY = y + previewHeight + 16.0
         let cardGap: CGFloat = 10.0
         let presetW = max(76.0, floor((cardWidth - cardGap * 3.0) / 4.0))
         let presetH = floor(presetW * 1.38)
-        self.presetScrollView.frame = CGRect(x: cardX, y: y, width: cardWidth, height: presetH)
-        var px: CGFloat = 0.0
-        for card in self.presetCards {
-            card.frame = CGRect(x: px, y: 0.0, width: presetW, height: presetH)
-            px += presetW + cardGap
-        }
-        self.presetScrollView.contentSize = CGSize(width: max(cardWidth, px - cardGap), height: presetH)
-        y += presetH + max(28.0, layout.intrinsicInsets.bottom + 20.0)
+        let targetPresetY = targetThemeNameY + 34.0
+        let finalContentHeight = targetPresetY + presetH + max(28.0, layout.intrinsicInsets.bottom + 20.0)
 
-        self.scrollView.contentSize = CGSize(width: layout.size.width, height: y)
+        let applyLowerFrames = {
+            self.previewContainer.frame = targetPreviewFrame
+            self.previewPatternView.frame = self.previewContainer.bounds
+            self.previewMessagesContainer.frame = self.previewContainer.bounds
+            if let bgNode = self.previewBackgroundNode {
+                bgNode.frame = CGRect(x: 0.0, y: -60.0, width: cardWidth, height: previewHeight + 120.0)
+                bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
+            }
+            self.themeNameLabel.frame = CGRect(x: cardX, y: targetThemeNameY, width: cardWidth, height: 24.0)
+            self.presetScrollView.frame = CGRect(x: cardX, y: targetPresetY, width: cardWidth, height: presetH)
+            var px: CGFloat = 0.0
+            for card in self.presetCards {
+                card.frame = CGRect(x: px, y: 0.0, width: presetW, height: presetH)
+                px += presetW + cardGap
+            }
+            self.presetScrollView.contentSize = CGSize(width: max(cardWidth, px - cardGap), height: presetH)
+            self.scrollView.contentSize = CGSize(width: layout.size.width, height: finalContentHeight)
+        }
+        if transition.isAnimated && !self.previewContainer.frame.isEmpty && !self.reduceMotion {
+            UIView.animate(withDuration: 0.28, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.25, options: [.allowUserInteraction, .beginFromCurrentState], animations: applyLowerFrames)
+        } else {
+            applyLowerFrames()
+        }
     }
 }

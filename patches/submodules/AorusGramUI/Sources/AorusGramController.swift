@@ -1736,28 +1736,29 @@ private func aorusSettingsPageController(context: AccountContext, shortcutRoutes
             case .importSessionString:
                 AorusAccountImport.present(.sessionString, context: context, from: weakController)
             case .clearDeletedCache:
-                let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-                let showDone: () -> Void = {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                let group = DispatchGroup()
+                var deletedOk = true
+                var editedOk = true
+                group.enter()
+                AorusSavedMessagesStorage.clearDeletedMessages(context: context) { ok in
+                    deletedOk = ok
+                    group.leave()
+                }
+                group.enter()
+                AorusSavedMessagesStorage.clearEditedMessages(context: context) { ok in
+                    editedOk = ok
+                    group.leave()
+                }
+                group.notify(queue: .main) {
+                    let allOk = deletedOk && editedOk
+                    let errorTitle = context.sharedContext.currentPresentationData.with { $0 }.strings.Login_UnknownError
+                    UINotificationFeedbackGenerator().notificationOccurred(allOk ? .success : .error)
                     let alert = UIAlertController(
-                        title: aorusL("Кэш успешно очищен", "Cache cleared"),
+                        title: allOk ? aorusL("Кэш успешно очищен", "Cache cleared") : errorTitle,
                         message: nil, preferredStyle: .alert)
                     alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .default))
                     weakController?.present(alert, animated: true)
                 }
-                // The texts edited messages had are kept apart from the messages; they go too.
-                AorusEditHistory.removeAll(basePath: context.account.postbox.mediaBox.basePath)
-                let ids: [MessageId] = stored.compactMap { entry in
-                    guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
-                    return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))
-                }
-                guard !ids.isEmpty else { showDone(); return }
-                let _ = (context.account.postbox.transaction { transaction -> Void in
-                    transaction.deleteMessages(ids, forEachMedia: { _ in })
-                } |> deliverOnMainQueue).start(completed: {
-                    UserDefaults.standard.removeObject(forKey: "aorusgram_preserved_msgs")
-                    showDone()
-                })
             case .saveSettings:
                 AorusSettingsTransfer.present(.save, context: context, from: weakController)
             case .loadSettings:

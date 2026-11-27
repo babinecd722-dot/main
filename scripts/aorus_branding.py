@@ -959,26 +959,26 @@ def patch_media_editor_send_accent(tg: Path) -> None:
     """The Send control the chat media editor shows after you pick a photo stayed blue: its
     fill is a fixed literal, and the attachment sheet's own Send/Next controls take their
     colour from `defaultDarkColorPresentationTheme` — a dark chrome theme pinned to Telegram
-    blue that the accent theme never recolours. Repoint all three to the AorusGram accent so
-    "Send" is accent-coloured everywhere media is sent, not blue in some flows."""
-    accent = "0x9b4dff"
+    blue that the accent theme never recolours. Repoint all three to the AorusGram accent
+    (or MAX's own blue accent while the MAXimal interface is active)."""
+    accent_expr = "(AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : UIColor(rgb: 0x9b4dff))"
     edits = [
         (
             "submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift",
             "public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: 0x3e88f7),",
-            "public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: UIColor(rgb: " + accent + "),",
+            "public let defaultDarkColorPresentationTheme = customizeDefaultDarkPresentationTheme(theme: defaultDarkPresentationTheme, editing: false, title: nil, accentColor: " + accent_expr + ",",
             "dark media chrome accent",
         ),
         (
             "submodules/TelegramUI/Components/ChatMediaEditorScreen/Sources/ChatMediaEditorBottomControlsComponent.swift",
             "private let chatMediaEditorBottomControlsSendColor = UIColor(rgb: 0x0088ff)",
-            "private let chatMediaEditorBottomControlsSendColor = UIColor(rgb: " + accent + ")",
+            "private let chatMediaEditorBottomControlsSendColor = " + accent_expr,
             "chat media editor send",
         ),
         (
             "submodules/TelegramUI/Components/ChatMediaEditorScreen/Sources/ChatMediaEditorCover.swift",
             "self.saveButton.backgroundColor = UIColor(rgb: 0x0088ff)",
-            "self.saveButton.backgroundColor = UIColor(rgb: " + accent + ")",
+            "self.saveButton.backgroundColor = " + accent_expr,
             "chat media editor cover save",
         ),
     ]
@@ -993,6 +993,8 @@ def patch_media_editor_send_accent(tg: Path) -> None:
             continue
         if text.count(old) != 1:
             raise RuntimeError(f"MediaEditorSendAccent: anchor for {label} found {text.count(old)} times")
+        if "import Display\n" not in text:
+            text = text.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
         print(f"MediaEditorSendAccent: {label} -> accent")
 
@@ -1000,7 +1002,7 @@ def patch_media_editor_send_accent(tg: Path) -> None:
 def patch_premium_button_purple(tg: Path) -> None:
     """The Premium / subscription screens hardcode a blue button colour (0x0077ff),
     independent of the theme accent, so their buttons stayed blue. Repoint that blue to
-    the neon violet across all PremiumUI screens (colour literal only)."""
+    the neon violet (or MAX's own blue accent while the MAXimal interface is active)."""
     pdir = tg / "submodules/PremiumUI/Sources"
     if not pdir.is_dir():
         print("PremiumPurple: PremiumUI/Sources not found — skip")
@@ -1008,16 +1010,19 @@ def patch_premium_button_purple(tg: Path) -> None:
     # Every blue used for premium buttons / accents across ALL premium screens
     # (subscribe, "subscription ended", limit, gift, boost, privacy…), so none stay blue.
     blues = ["0x0077ff", "0x0088ff", "0x597cf5", "0x2a9ef1"]
+    accent_expr = "(AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : UIColor(rgb: 0x9b4dff))"
     changed = 0
     for p in sorted(pdir.glob("*.swift")):
         t = p.read_text(encoding="utf-8")
         orig = t
         for b in blues:
-            t = t.replace(f"UIColor(rgb: {b})", "UIColor(rgb: 0x9b4dff)")
+            t = t.replace(f"UIColor(rgb: {b})", accent_expr)
         if t != orig:
+            if "import Display\n" not in t:
+                t = t.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
             p.write_text(t, encoding="utf-8")
             changed += 1
-    print(f"PremiumPurple: recolored blue premium buttons/accents -> violet in {changed} file(s)")
+    print(f"PremiumPurple: recolored blue premium buttons/accents -> accent in {changed} file(s)")
 
 
 def patch_outgoing_bubble_purple(tg: Path) -> None:
@@ -1416,9 +1421,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                attributes: msg.attributes,\n"
                 "                media: msg.media))\n"
                 "        })\n"
-                "        var preservedList = (UserDefaults.standard.array(forKey: \"aorusgram_preserved_msgs\") as? [[String: Int64]]) ?? []\n"
-                "        preservedList.append([\"peerId\": id.peerId.toInt64(), \"msgId\": Int64(id.id), \"namespace\": Int64(id.namespace)])\n"
-                "        UserDefaults.standard.set(preservedList, forKey: \"aorusgram_preserved_msgs\")\n"
+                "        AorusPreservedMessagesStore.append(peerId: id.peerId.toInt64(), msgId: Int64(id.id), namespace: Int64(id.namespace), basePath: mediaBox.basePath)\n"
                 "    }\n"
                 "    if __aorusIdsToDelete.isEmpty { return }\n"
                 "    "
@@ -9080,25 +9083,26 @@ def patch_aorus_accent_theme(tg: Path) -> None:
         if changed:
             tabbar_file.write_text(t, encoding="utf-8")
 
+    aorus_activity_color = "(AorusMaxInterface.isEnabled ? AorusMaxInterface.accent : UIColor(rgb: 0x9b4dff))"
     activity_replacements = [
         (
             tg / "submodules/TelegramUI/Components/ChatListTitleView/Sources/ChatListTitleView.swift",
             [
                 (
                     "self.activityIndicator.type = .custom(self.theme.rootController.navigationBar.primaryTextColor, 22.0, 1.5, false)",
-                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false)",
+                    f"self.activityIndicator.type = .custom({aorus_activity_color}, 22.0, 1.5, false)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.rootController.navigationBar.primaryTextColor, 22.0, 1.5, false), speed: .slow)",
-                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false), speed: .slow)",
+                    f"ActivityIndicator(type: .custom({aorus_activity_color}, 22.0, 1.5, false), speed: .slow)",
                 ),
                 (
                     "self.activityIndicator.type = .custom(self.theme.list.itemAccentColor, 22.0, 1.5, false)",
-                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false)",
+                    f"self.activityIndicator.type = .custom({aorus_activity_color}, 22.0, 1.5, false)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.list.itemAccentColor, 22.0, 1.5, false), speed: .slow)",
-                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false), speed: .slow)",
+                    f"ActivityIndicator(type: .custom({aorus_activity_color}, 22.0, 1.5, false), speed: .slow)",
                 ),
             ],
         ),
@@ -9107,19 +9111,19 @@ def patch_aorus_accent_theme(tg: Path) -> None:
             [
                 (
                     "self.activityIndicator.type = .custom(theme.chat.inputPanel.panelControlColor, 10.0, 1.3333, true)",
-                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true)",
+                    f"self.activityIndicator.type = .custom({aorus_activity_color}, 10.0, 1.3333, true)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.chat.inputPanel.panelControlColor, 10.0, 1.3333, true), speed: .slow)",
-                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true), speed: .slow)",
+                    f"ActivityIndicator(type: .custom({aorus_activity_color}, 10.0, 1.3333, true), speed: .slow)",
                 ),
                 (
                     "self.activityIndicator.type = .custom(theme.list.itemAccentColor, 10.0, 1.3333, true)",
-                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true)",
+                    f"self.activityIndicator.type = .custom({aorus_activity_color}, 10.0, 1.3333, true)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.list.itemAccentColor, 10.0, 1.3333, true), speed: .slow)",
-                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true), speed: .slow)",
+                    f"ActivityIndicator(type: .custom({aorus_activity_color}, 10.0, 1.3333, true), speed: .slow)",
                 ),
             ],
         ),
@@ -9131,7 +9135,7 @@ def patch_aorus_accent_theme(tg: Path) -> None:
                     "                        color: component.theme.rootController.navigationBar.accentTextColor\n"
                     "                    )",
                     "TitleActivityIndicatorComponent(\n"
-                    "                        color: UIColor(rgb: 0x9b4dff)\n"
+                    f"                        color: {aorus_activity_color}\n"
                     "                    )",
                 ),
             ],
@@ -32580,6 +32584,25 @@ def main() -> None:
     # After the side buttons are final: it moves the Wall test their flags start from.
     from aorus_wall_round_video import patch_wall_round_video
     patch_wall_round_video(tg)
+    # Suppress AorusGram translate/transcribe/wall side buttons inside ALL native Telegram
+    # `isPreview == true` message previews (Appearance, Chat Themes, Ranks, etc.) while keeping
+    # them in AorusGram's own Message Settings preview (`stableId` in `0xA05E7E57..<0xA05E7E5B`).
+    _bubble_preview_path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    if _bubble_preview_path.is_file():
+        _bp = _bubble_preview_path.read_text(encoding="utf-8")
+        if "let aorusAllowQuickButtons =" not in _bp:
+            _bp_anchor = "        if aorusNeedsTranslateButton {\n"
+            _bp_guard = (
+                "        let aorusAllowQuickButtons = !item.presentationData.isPreview || (item.message.stableId >= 0xA05E7E57 && item.message.stableId < 0xA05E7E57 + 4)\n"
+                "        if aorusAllowQuickButtons && aorusNeedsTranslateButton {\n"
+            )
+            if _bp.count(_bp_anchor) != 1:
+                raise RuntimeError("PreviewQuickButtons: anchor for aorusNeedsTranslateButton not found")
+            _bp = _bp.replace(_bp_anchor, _bp_guard, 1)
+            _bp = _bp.replace("        if aorusNeedsSubTranslate {\n", "        if aorusAllowQuickButtons && aorusNeedsSubTranslate {\n", 1)
+            _bp = _bp.replace("        if aorusIsWallPost {\n", "        if aorusAllowQuickButtons && aorusIsWallPost {\n", 1)
+            _bubble_preview_path.write_text(_bp, encoding="utf-8")
+            print("PreviewQuickButtons: suppressed AorusGram side buttons in native Telegram previews")
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

@@ -729,7 +729,9 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         let rightInset = layout.rightInset + self.trailingButtonsInset
         let contentVerticalOrigin = layout.additionalTopHeight
         // 12.0 put the buttons in landscape further apart.
-        let windowBounds = self.view.window?.bounds ?? CGRect(origin: CGPoint(), size: size)
+        // Fall back to UIScreen.main.bounds before the bar enters a UIWindow so a portrait
+        // navigation bar (width > barHeight) is never misclassified as landscape (+16pt shift).
+        let windowBounds = self.view.window?.bounds ?? UIScreen.main.bounds
         let isLandscape = windowBounds.width > windowBounds.height
 
         let backgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height + layout.additionalBackgroundHeight))
@@ -804,16 +806,16 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
         }
 
         if self.aorusLeadingButtonNode.view.superview != nil {
-            // MAX's avatar, just after the back arrow; the title follows it.
+            // MAX's avatar, just after the back arrow; the title follows flush right next to it.
             let leadingSize = self.aorusLeadingButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
-            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + (AorusMaxInterface.isEnabled ? 44.0 : 30.0) : leftTitleInset + 4.0
+            let leadingX = self.backButtonNode.view.superview != nil ? leftInset + (AorusMaxInterface.isEnabled ? 42.0 : 30.0) : leftTitleInset + 4.0
             var leadingTransition = transition
             if self.aorusLeadingButtonNode.frame.width.isZero {
                 leadingTransition = .immediate
             }
             self.aorusLeadingButtonNode.alpha = 1.0
             leadingTransition.updateFrame(node: self.aorusLeadingButtonNode, frame: CGRect(origin: CGPoint(x: leadingX, y: contentVerticalOrigin + floor((nominalHeight - leadingSize.height) / 2.0)), size: leadingSize))
-            leftTitleInset = max(leftTitleInset, leadingX + leadingSize.width + (AorusMaxInterface.isEnabled ? 10.0 : 4.0))
+            leftTitleInset = max(leftTitleInset, leadingX + leadingSize.width + (AorusMaxInterface.isEnabled ? 4.0 : 4.0))
         }
 
         let badgeSize = self.badgeNode.measure(CGSize(width: 200.0, height: 100.0))
@@ -821,8 +823,9 @@ public final class AorusClassicNavigationBar: ASDisplayNode, NavigationBar {
 
         if self.rightButtonNode.view.superview != nil {
             var transition = transition
-            if self.rightButtonNode.frame.width.isZero || self.rightButtonNodeUpdated || self.aorusLastRightLayoutWidth == 0.0 || self.rightButtonNode.frame.origin.x <= 0.0 {
+            if self.rightButtonNode.frame.width.isZero || self.rightButtonNodeUpdated || self.aorusLastRightLayoutWidth != size.width || self.rightButtonNode.frame.origin.x <= 0.0 {
                 transition = .immediate
+                self.rightButtonNode.layer.removeAnimation(forKey: "position")
             }
             let rightButtonSize = self.rightButtonNode.updateLayout(constrainedSize: CGSize(width: size.width, height: 44.0), isLandscape: isLandscape, transition: transition)
             self.rightButtonNode.alpha = 1.0

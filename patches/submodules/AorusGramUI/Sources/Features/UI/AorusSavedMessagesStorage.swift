@@ -16,21 +16,28 @@ public enum AorusSavedMessagesStorage {
         return AorusGramManager.shared.saveEditedMessages
     }
 
-    /// Returns `(messageCount, diskBytes)` for locally preserved deleted messages and the
-    /// `DeletedMessagesCache` SQLite store.
+    /// Returns `(messageCount, payloadBytes)` for locally preserved deleted messages belonging
+    /// strictly to `context.account` (SQLite `status=1` rows + account-scoped Postbox markers).
+    /// Returns `(0, 0)` when nothing is stored; never counts unrelated files or empty DB pages.
     public static func deletedMessagesStats(context: AccountContext) -> (count: Int, bytes: Int64) {
-        let preserved = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-        var totalBytes: Int64 = 0
-        if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            let dbDir = appSupport.appendingPathComponent("AorusGram", isDirectory: true)
-            totalBytes += self.directorySize(at: dbDir)
+        let basePath = context.account.postbox.mediaBox.basePath
+        let accountKey = DeletedMessagesCache.accountKey(forStoragePath: basePath)
+        let sqliteStats = DeletedMessagesCache.shared.deletedOnlyStats(accountKey: accountKey)
+        let scopedPreserved = AorusPreservedMessagesStore.scopedMessageIds(basePath: basePath)
+        let legacyPreserved = AorusPreservedMessagesStore.legacyMessageIds(basePath: basePath)
+        let preservedCount = scopedPreserved.count + legacyPreserved.count
+        let sqliteCount = sqliteStats?.count ?? 0
+        let totalCount = max(sqliteCount, preservedCount)
+        guard totalCount > 0 else {
+            return (0, 0)
         }
-        // Account for metadata/entries stored in Postbox even if SQLite file is small.
-        let estimatedMinBytes = Int64(preserved.count) * 512
-        return (preserved.count, max(totalBytes, estimatedMinBytes))
+        let sqliteBytes = sqliteStats?.bytes ?? 0
+        let preservedBytes = Int64(preservedCount) * 256
+        return (totalCount, max(sqliteBytes, preservedBytes))
     }
 
-    /// Returns disk size in bytes for locally saved incoming edit histories (`aorus-edit-history`).
+    /// Returns disk size in bytes for locally saved incoming edit histories (`aorus-edit-history`)
+    /// belonging strictly to `context.account`.
     public static func editedMessagesBytes(context: AccountContext) -> Int64 {
         let basePath = context.account.postbox.mediaBox.basePath
         let dir = URL(fileURLWithPath: basePath)
@@ -39,32 +46,59 @@ public enum AorusSavedMessagesStorage {
         return self.directorySize(at: dir)
     }
 
-    /// Clears locally preserved deleted messages (Postbox + UserDefaults + DeletedMessagesCache).
-    public static func clearDeletedMessages(context: AccountContext, completion: @escaping () -> Void) {
-        DeletedMessagesCache.shared.clearAll()
-        let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-        UserDefaults.standard.removeObject(forKey: "aorusgram_preserved_msgs")
-        let ids: [MessageId] = stored.compactMap { entry in
-            guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
-            return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))
+    /// Clears ONLY locally preserved deleted messages for `context.account` (SQLite `status=1`
+    /// rows for this account + Postbox messages bearing the invisible deleted marker + this
+    /// account's preserved index). Other accounts, pre-cached normal messages, and edit histories
+    /// remain untouched. Invokes `completion(success)` ONLY after SQLite and Postbox finish.
+    public static func clearDeletedMessages(context: AccountContext, completion: @escaping (Bool) -> Void) {
+        let basePath = context.account.postbox.mediaBox.basePath
+        let accountKey = DeletedMessagesCache.accountKey(forStoragePath: basePath)
+        let scopedIds = AorusPreservedMessagesStore.scopedMessageIds(basePath: basePath)
+        let legacyIds = AorusPreservedMessagesStore.legacyMessageIds(basePath: basePath)
+
+        DeletedMessagesCache.shared.clearDeletedOnly(accountKey: accountKey) { sqliteOk in
+            guard sqliteOk else {
+                completion(false)
+                return
+            }
+            if scopedIds.isEmpty && legacyIds.isEmpty {
+                AorusPreservedMessagesStore.clearAccountIndex(basePath: basePath)
+                completion(true)
+                return
+            }
+            let _ = (context.account.postbox.transaction { transaction -> Void in
+                var toDelete: [MessageId] = []
+                for id in scopedIds {
+                    if transaction.getMessage(id) != nil {
+                        toDelete.append(id)
+                    }
+                }
+                // For legacy unscoped entries, ONLY delete if the message actually carries
+                // AorusGram's deleted-marker suffix so another account's IDs never match blindly.
+                for id in legacyIds {
+                    if let message = transaction.getMessage(id), message.text.hasSuffix("\u{2063}\u{2064}") {
+                        toDelete.append(id)
+                    }
+                }
+                if !toDelete.isEmpty {
+                    transaction.deleteMessages(Array(Set(toDelete)), forEachMedia: { _ in })
+                }
+            } |> deliverOnMainQueue).start(completed: {
+                AorusPreservedMessagesStore.clearAccountIndex(basePath: basePath)
+                completion(true)
+            })
         }
-        guard !ids.isEmpty else {
-            DispatchQueue.main.async { completion() }
-            return
-        }
-        let _ = (context.account.postbox.transaction { transaction -> Void in
-            transaction.deleteMessages(ids, forEachMedia: { _ in })
-        } |> deliverOnMainQueue).start(completed: {
-            completion()
-        })
     }
 
-    /// Clears locally saved edit histories (`aorus-edit-history`).
-    public static func clearEditedMessages(context: AccountContext, completion: @escaping () -> Void) {
+    /// Clears ONLY locally saved edit histories for `context.account` (`aorus-edit-history` files
+    /// + SQLite `original_text` columns for this account) and invokes `completion(success)` after
+    /// both finish.
+    public static func clearEditedMessages(context: AccountContext, completion: @escaping (Bool) -> Void) {
         let basePath = context.account.postbox.mediaBox.basePath
+        let accountKey = DeletedMessagesCache.accountKey(forStoragePath: basePath)
         AorusEditHistory.removeAll(basePath: basePath)
-        DispatchQueue.main.async {
-            completion()
+        DeletedMessagesCache.shared.clearEditedOnly(accountKey: accountKey) { sqliteOk in
+            completion(sqliteOk)
         }
     }
 

@@ -164,14 +164,7 @@ public enum AorusEditHistory {
         guard !FileManager.default.fileExists(atPath: marker.path) else {
             return
         }
-        let entries = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-        var ids = Set<MessageId>()
-        for entry in entries {
-            guard let peerId = entry["peerId"], let id = entry["msgId"], let namespace = entry["namespace"] else {
-                continue
-            }
-            ids.insert(MessageId(peerId: PeerId(peerId), namespace: Int32(clamping: namespace), id: Int32(clamping: id)))
-        }
+        let ids = Set(AorusPreservedMessagesStore.messageIds(basePath: basePath))
         let _ = (postbox.transaction { transaction -> Void in
             for id in ids {
                 guard let message = transaction.getMessage(id), let legacy = self.splitLegacy(text: message.text, entities: self.entities(message.attributes)) else {
@@ -236,5 +229,84 @@ public enum AorusEditHistory {
         let bodyLength = (body as NSString).length
         let bodyEntities = entities.filter { $0.range.upperBound <= bodyLength }
         return (body, bodyEntities, Array(newestFirst.reversed()))
+    }
+}
+
+/// Account-scoped persistence for Postbox message IDs preserved with the invisible deleted-marker
+/// suffix (`\u{2063}\u{2064}`). Keyed by FNV-1a hash of `mediaBox.basePath` so clearing one
+/// account never touches another account's preserved messages.
+public enum AorusPreservedMessagesStore {
+    private static let lock = NSLock()
+    private static let legacyKey = "aorusgram_preserved_msgs"
+
+    public static func accountKey(basePath: String) -> Int64 {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in basePath.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01B3
+        }
+        let folded = Int64(bitPattern: hash & 0x7fff_ffff_ffff_ffff)
+        return folded == 0 ? 1 : folded
+    }
+
+    private static func storageKey(basePath: String) -> String {
+        return "aorusgram_preserved_msgs_\(self.accountKey(basePath: basePath))"
+    }
+
+    private static func legacyClearedKey(basePath: String) -> String {
+        return "aorusgram_preserved_legacy_cleared_\(self.accountKey(basePath: basePath))"
+    }
+
+    public static func append(peerId: Int64, msgId: Int64, namespace: Int64, basePath: String) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        let key = self.storageKey(basePath: basePath)
+        var list = (UserDefaults.standard.array(forKey: key) as? [[String: Int64]]) ?? []
+        if !list.contains(where: { $0["peerId"] == peerId && $0["msgId"] == msgId && $0["namespace"] == namespace }) {
+            list.append(["peerId": peerId, "msgId": msgId, "namespace": namespace])
+            UserDefaults.standard.set(list, forKey: key)
+        }
+    }
+
+    public static func scopedMessageIds(basePath: String) -> [MessageId] {
+        self.lock.lock()
+        let raw = (UserDefaults.standard.array(forKey: self.storageKey(basePath: basePath)) as? [[String: Int64]]) ?? []
+        self.lock.unlock()
+        return self.decode(raw)
+    }
+
+    public static func legacyMessageIds(basePath: String) -> [MessageId] {
+        self.lock.lock()
+        let alreadyCleared = UserDefaults.standard.bool(forKey: self.legacyClearedKey(basePath: basePath))
+        let raw = alreadyCleared ? [] : ((UserDefaults.standard.array(forKey: self.legacyKey) as? [[String: Int64]]) ?? [])
+        self.lock.unlock()
+        return self.decode(raw)
+    }
+
+    public static func messageIds(basePath: String) -> [MessageId] {
+        var combined = Set(self.scopedMessageIds(basePath: basePath))
+        for id in self.legacyMessageIds(basePath: basePath) {
+            combined.insert(id)
+        }
+        return Array(combined)
+    }
+
+    public static func clearAccountIndex(basePath: String) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        UserDefaults.standard.removeObject(forKey: self.storageKey(basePath: basePath))
+        if UserDefaults.standard.object(forKey: self.legacyKey) != nil {
+            // Mark legacy list cleared for THIS account without deleting it for other accounts.
+            UserDefaults.standard.set(true, forKey: self.legacyClearedKey(basePath: basePath))
+        }
+    }
+
+    private static func decode(_ entries: [[String: Int64]]) -> [MessageId] {
+        return entries.compactMap { entry in
+            guard let peerId = entry["peerId"], let id = entry["msgId"], let namespace = entry["namespace"] else {
+                return nil
+            }
+            return MessageId(peerId: PeerId(peerId), namespace: Int32(clamping: namespace), id: Int32(clamping: id))
+        }
     }
 }

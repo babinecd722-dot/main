@@ -412,7 +412,44 @@ public enum AorusMaxInterface {
     /// built-in one, drawn from MAX's space pattern; the colour in its settings says which of
     /// the two pictures — the night one or the day one — it is.
     public static func defaultWallpaperColor(dark: Bool) -> UInt32 {
-        return dark ? 0x0c0c0f : 0xdee4f0
+        let preset = AorusMaxInterface.selectedChatTheme
+        return dark ? preset.wallpaperDark.rgb : preset.wallpaperLight.rgb
+    }
+
+    /// Renders MAX's bundled geometric space pattern tinted with the selected theme preset's
+    /// wallpaper and pattern colors (Cosmos, Mint, Sunset, Forest), cached in memory.
+    public static func tintedWallpaperPattern(preset: ChatThemePreset, dark: Bool) -> UIImage? {
+        let cacheKey = "tinted_wp|\(preset.id)|\(dark ? 1 : 0)" as NSString
+        if let cached = AorusMaxInterface.pictureCache.object(forKey: cacheKey) {
+            return cached
+        }
+        guard let source = AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight") else {
+            return nil
+        }
+        let baseColor = dark ? preset.wallpaperDark : preset.wallpaperLight
+        let patternTint = dark ? preset.patternTintDark : preset.patternTintLight
+        let maxSide: CGFloat = 1024.0
+        let scaleFactor = min(1.0, maxSide / max(source.size.width, source.size.height))
+        let targetSize = CGSize(
+            width: max(1.0, floor(source.size.width * scaleFactor)),
+            height: max(1.0, floor(source.size.height * scaleFactor))
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let rendered = renderer.image { ctx in
+            let rect = CGRect(origin: .zero, size: targetSize)
+            baseColor.setFill()
+            ctx.fill(rect)
+            // Blend MAX's space pattern over the preset base so the doodle lines stay crisp,
+            // then apply the preset's patternTint hue cleanly.
+            source.draw(in: rect, blendMode: dark ? .screen : .multiply, alpha: dark ? 0.34 : 0.28)
+            patternTint.withAlphaComponent(dark ? 0.42 : 0.36).setFill()
+            ctx.fill(rect, blendMode: .color)
+        }
+        AorusMaxInterface.pictureCache.setObject(rendered, forKey: cacheKey)
+        return rendered
     }
 
     /// The bundled picture of Telegram's built-in wallpaper: MAX's pattern in a MAX run.
@@ -695,9 +732,7 @@ public enum AorusMaxInterface {
         return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
             context.clear(CGRect(origin: CGPoint(), size: size))
             context.setFillColor(fill.cgColor)
-            let roundedPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(), size: size), cornerRadius: 11.0).cgPath
-            context.addPath(roundedPath)
-            context.fillPath()
+            context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
             if let glyph, let tinted = generateTintedImage(image: glyph, color: ink) {
                 let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
                 UIGraphicsPushContext(context)
@@ -727,6 +762,11 @@ public enum AorusMaxInterface {
         return hidden.contains(Int(id))
     }
 
+    public static func hasHiddenLocalFilters(accountId: Int64) -> Bool {
+        let hidden = (UserDefaults.standard.array(forKey: self.hiddenLocalFiltersKey(accountId: accountId)) as? [Int]) ?? []
+        return hidden.contains(Int(self.localUnreadFilterId)) || hidden.contains(Int(self.localChannelsFilterId))
+    }
+
     public static func hideLocalFilter(_ id: Int32, accountId: Int64) {
         let key = self.hiddenLocalFiltersKey(accountId: accountId)
         var hidden = (UserDefaults.standard.array(forKey: key) as? [Int]) ?? []
@@ -734,6 +774,23 @@ public enum AorusMaxInterface {
             hidden.append(Int(id))
             UserDefaults.standard.set(hidden, forKey: key)
         }
+        NotificationCenter.default.post(name: self.localFiltersDidChangeNotification, object: nil)
+    }
+
+    public static func restoreLocalFilter(_ id: Int32, accountId: Int64) {
+        let key = self.hiddenLocalFiltersKey(accountId: accountId)
+        var hidden = (UserDefaults.standard.array(forKey: key) as? [Int]) ?? []
+        hidden.removeAll(where: { $0 == Int(id) })
+        if hidden.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else {
+            UserDefaults.standard.set(hidden, forKey: key)
+        }
+        NotificationCenter.default.post(name: self.localFiltersDidChangeNotification, object: nil)
+    }
+
+    public static func restoreAllLocalFilters(accountId: Int64) {
+        UserDefaults.standard.removeObject(forKey: self.hiddenLocalFiltersKey(accountId: accountId))
         NotificationCenter.default.post(name: self.localFiltersDidChangeNotification, object: nil)
     }
 
@@ -846,6 +903,8 @@ public enum AorusMaxInterface {
         get { UserDefaults.standard.string(forKey: self.chatThemeKey) ?? "cosmos" }
         set {
             UserDefaults.standard.set(newValue, forKey: self.chatThemeKey)
+            // Invalidate AorusPluginAppearanceValues synchronously and trigger global PresentationData refresh.
+            NotificationCenter.default.post(name: Notification.Name("aorusgram.pluginAppearanceChanged"), object: nil)
             NotificationCenter.default.post(name: self.chatThemeDidChangeNotification, object: nil)
         }
     }

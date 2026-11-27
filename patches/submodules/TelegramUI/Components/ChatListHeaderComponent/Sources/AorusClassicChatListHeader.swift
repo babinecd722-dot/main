@@ -315,6 +315,7 @@ private final class AorusClassicChatListBackButtonView: HighlightableButton {
             if highlighted {
                 self.alpha = 0.6
             } else {
+                self.alpha = 1.0
                 self.layer.animateAlpha(from: 0.6, to: 1.0, duration: 0.2)
             }
         }
@@ -726,7 +727,7 @@ private final class AorusClassicChatListContentView: UIView {
                 self.titleScaleContainer.addSubview(chatListTitleView)
             }
 
-            let chatListTitleContentSize = size
+            let chatListTitleContentSize = isMaxRootHeader ? CGSize(width: remainingWidth, height: size.height) : size
             chatListTitleView.theme = theme
             chatListTitleView.strings = strings
             chatListTitleView.setTitle(chatListTitle, animated: false)
