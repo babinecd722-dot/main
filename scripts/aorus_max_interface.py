@@ -2186,13 +2186,24 @@ def patch_chat_header(tg: Path) -> None:
     activity_path.write_text(activity_text, encoding="utf-8")
 
     # Remove classic's +10pt right-hand avatar offset in MAX (where the avatar sits on the left
-    # beside the back arrow) so the avatar never collides with the title or leaves an uneven gap.
+    # beside the back arrow) without modifying aorus_old_interface's block so classic replay stays
+    # byte-identical.
     avatar_path = tg / "submodules/TelegramUI/Components/Chat/ChatAvatarNavigationNode/Sources/ChatAvatarNavigationNode.swift"
     avatar_text = _read(avatar_path)
     avatar_text = _edit(
         avatar_text,
-        "            self.containerNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 37.0, height: 37.0)).offsetBy(dx: 10.0, dy: 1.0)\n",
-        "            self.containerNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 37.0, height: 37.0)).offsetBy(dx: AorusMaxInterface.isEnabled ? 0.0 : 10.0, dy: AorusMaxInterface.isEnabled ? 0.0 : 1.0)\n",
+        "        } else {\n"
+        "            self.containerNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 44.0, height: 44.0))\n"
+        "            self.avatarNode.frame = self.containerNode.bounds.insetBy(dx: 3.0, dy: 3.0)\n"
+        "        }\n",
+        "        } else {\n"
+        "            self.containerNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 44.0, height: 44.0))\n"
+        "            self.avatarNode.frame = self.containerNode.bounds.insetBy(dx: 3.0, dy: 3.0)\n"
+        "        }\n"
+        "        if AorusMaxInterface.isEnabled {\n"
+        "            self.containerNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: 37.0, height: 37.0))\n"
+        "            self.avatarNode.frame = self.containerNode.bounds\n"
+        "        }\n",
         "MAX leading avatar zero offset",
     )
     avatar_path.write_text(avatar_text, encoding="utf-8")
