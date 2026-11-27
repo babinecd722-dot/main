@@ -612,7 +612,7 @@ private final class AorusMaxMemorySettingsController: ViewController {
             guard let self else { return }
             self.storageStats = stats
             self.isLoadingStats = false
-            self.rebuildRowsAndApplyTheme(animated: animated || self.validLayout != nil, rollNumbers: rollNumbers)
+            self.rebuildRowsAndApplyTheme(animated: animated, rollNumbers: rollNumbers)
             completion?()
         })
     }
@@ -757,7 +757,7 @@ private final class AorusMaxMemorySettingsController: ViewController {
         let newKinds = built.map(\.kind)
         let structureChanged = previousKinds != newKinds
 
-        self.syncPersistentRowViews(palette: palette, dark: dark, highlight: highlight)
+        self.syncPersistentRowViews(palette: palette, dark: dark, highlight: highlight, animated: animated)
 
         self.targetTotalBytes = totalBytes
         self.clearButton.isEnabled = !self.isClearing && (totalBytes > 0 || hasCheckedSavedData)
@@ -792,11 +792,11 @@ private final class AorusMaxMemorySettingsController: ViewController {
         }
     }
 
-    private func syncPersistentRowViews(palette: AorusMaxInterface.Palette, dark: Bool, highlight: UIColor) {
+    private func syncPersistentRowViews(palette: AorusMaxInterface.Palette, dark: Bool, highlight: UIColor, animated: Bool) {
         let activeKinds = Set(self.rows.map(\.kind))
         for (kind, view) in self.rowViewMap where !activeKinds.contains(kind) {
             self.rowViewMap.removeValue(forKey: kind)
-            if !self.reduceMotion {
+            if animated && !self.reduceMotion {
                 UIView.animate(withDuration: 0.22, animations: {
                     view.alpha = 0.0
                 }, completion: { _ in
@@ -1460,11 +1460,12 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private let context: AccountContext
     private var presentationData: PresentationData
     private var themeSettings: PresentationThemeSettings
+    private var availableReactions: AvailableReactions?
     private var presentationDisposable: Disposable?
     private var settingsDisposable: Disposable?
+    private var reactionsDisposable: Disposable?
     private var validLayout: ContainerViewLayout?
     private var liveFontSizeOverride: PresentationFontSize?
-    private var didPlayBubbleEntrance = false
 
     private let scrollView = UIScrollView()
 
@@ -1485,13 +1486,13 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private var segmentDividers: [UIView] = []
     private var selectedSegmentIndex: Int = 0
 
-    // Live chat preview (real Telegram ChatMessageItem nodes + preset-tinted MAX pattern)
+    // Live chat preview (real Telegram ChatMessageItem nodes + authentic MAX wallpaper)
     private let previewContainer = UIView()
     private var previewBackgroundNode: WallpaperBackgroundNode?
     private let previewPatternView = UIImageView()
     private let previewMessagesContainer = ASDisplayNode()
     private var previewMessageNodes: [ListViewItemNode] = []
-    private var previewContentHeight: CGFloat = 176.0
+    private var previewContentHeight: CGFloat = 240.0
     private var lastPreviewSignature: String = ""
 
     // Theme title + 4 preset cards
@@ -1531,6 +1532,20 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 self.syncControlsFromSettings()
             }
         })
+
+        self.reactionsDisposable = (context.engine.stickers.availableReactions()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] reactions in
+            guard let self, let reactions else { return }
+            self.availableReactions = reactions
+            if self.isNodeLoaded, let layout = self.validLayout {
+                let sideInset: CGFloat = 16.0 + max(layout.safeInsets.left, layout.safeInsets.right)
+                let cardWidth = min(560.0, max(0.0, layout.size.width - sideInset * 2.0))
+                self.lastPreviewSignature = ""
+                self.rebuildRealChatPreview(width: cardWidth, animated: false)
+                self.containerLayoutUpdated(layout, transition: .immediate)
+            }
+        })
     }
 
     required init(coder: NSCoder) {
@@ -1540,6 +1555,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     deinit {
         self.presentationDisposable?.dispose()
         self.settingsDisposable?.dispose()
+        self.reactionsDisposable?.dispose()
     }
 
     private var isRu: Bool {
@@ -1661,49 +1677,20 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         self.applyAppearance(animated: false)
     }
 
-    private func playInitialBubbleEntranceIfNeeded() {
-        guard !self.didPlayBubbleEntrance, !self.previewMessageNodes.isEmpty else {
-            return
-        }
-        self.didPlayBubbleEntrance = true
-        guard !self.reduceMotion else {
-            return
-        }
-        // `previewMessagesContainer` is rotated 180°, so `last` is the top incoming bubble and
-        // `first` is the bottom outgoing bubble; translating from y = -16 -> 0 in rotated space
-        // slides each bubble smoothly upward into place with Telegram's spring curve.
-        let orderedTopToBottom = Array(self.previewMessageNodes.reversed())
-        for (index, node) in orderedTopToBottom.enumerated() {
-            let view = node.view
-            view.alpha = 0.0
-            view.transform = CGAffineTransform(translationX: 0.0, y: -16.0).scaledBy(x: 0.95, y: 0.95)
-            let delay = Double(index) * 0.075
-            UIView.animate(
-                withDuration: 0.42,
-                delay: delay,
-                usingSpringWithDamping: 0.82,
-                initialSpringVelocity: 0.35,
-                options: [.allowUserInteraction],
-                animations: {
-                    view.alpha = 1.0
-                    view.transform = .identity
-                }
-            )
-        }
-    }
-
     private func rebuildRealChatPreview(width: CGFloat, animated: Bool) {
         guard width > 40.0 else { return }
         let liveTheme = aorusPluginPreviewTheme(self.presentationData.theme)
         let dark = liveTheme.overallDarkAppearance
         let preset = AorusMaxInterface.selectedChatTheme
         let strings = self.presentationData.strings
+        let isRu = self.isRu
         let fontSize = self.liveFontSizeOverride ?? self.presentationData.chatFontSize
-        let wallpaper = TelegramWallpaper.color(dark ? preset.wallpaperDark.rgb : preset.wallpaperLight.rgb)
+        let wallpaper = TelegramWallpaper.builtin(WallpaperSettings(colors: [AorusMaxInterface.defaultWallpaperColor(dark: dark)]))
 
         let outgoingArgb = liveTheme.chat.message.outgoing.bubble.withWallpaper.fill.first?.argb ?? 0
         let incomingArgb = liveTheme.chat.message.incoming.bubble.withWallpaper.fill.first?.argb ?? 0
-        let signature = "\(Int(width))|\(dark ? 1 : 0)|\(preset.id)|\(fontSize.baseDisplaySize)|\(strings.baseLanguageCode)|\(liveTheme.index)|\(outgoingArgb)|\(incomingArgb)"
+        let hasReactions = self.availableReactions != nil ? 1 : 0
+        let signature = "\(Int(width))|\(dark ? 1 : 0)|\(preset.id)|\(fontSize.baseDisplaySize)|\(strings.baseLanguageCode)|\(liveTheme.index)|\(outgoingArgb)|\(incomingArgb)|\(hasReactions)"
         if signature == self.lastPreviewSignature && !self.previewMessageNodes.isEmpty {
             return
         }
@@ -1714,10 +1701,10 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             ?? AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight")
 
         if animated && !self.reduceMotion {
-            UIView.animate(withDuration: 0.28, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: {
+            UIView.animate(withDuration: 0.24, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: {
                 self.previewContainer.backgroundColor = targetBgColor
             })
-            UIView.transition(with: self.previewPatternView, duration: 0.28, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: {
+            UIView.transition(with: self.previewPatternView, duration: 0.24, options: [.transitionCrossDissolve, .allowUserInteraction, .beginFromCurrentState], animations: {
                 self.previewPatternView.image = targetPattern
             })
         } else {
@@ -1734,77 +1721,32 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         struct PreviewMessageSpec {
             let outgoing: Bool
-            let reply: (String, String)?
             let text: String
+            let withReactions: Bool
         }
+        // Authentic MAX Appearance preview: 3 clean messages (incoming, outgoing with ❤️ 1 🔥 1, incoming).
         let specs: [PreviewMessageSpec] = [
             PreviewMessageSpec(
                 outgoing: false,
-                reply: (strings.Appearance_PreviewReplyAuthor, strings.Appearance_PreviewReplyText),
-                text: strings.Appearance_PreviewIncomingText
+                text: isRu ? "Выберите тему, чтобы изменить фон и цвет сообщений 🎨" : "Choose a theme to change the background and message color 🎨",
+                withReactions: false
             ),
             PreviewMessageSpec(
                 outgoing: true,
-                reply: nil,
-                text: strings.Appearance_PreviewOutgoingText
+                text: isRu ? "Посмотрите, как с ней будут выглядеть ваши чаты" : "See how your chats will look with it",
+                withReactions: true
+            ),
+            PreviewMessageSpec(
+                outgoing: false,
+                text: isRu ? "Меняйте тему в любое время" : "Change the theme at any time",
+                withReactions: false
             )
         ]
 
         var items: [ListViewItem] = []
         for (idx, spec) in specs.reversed().enumerated() {
-            var peers = EngineSimpleDictionary<EnginePeer.Id, EngineRawPeer>()
-            var messages = EngineSimpleDictionary<EngineMessage.Id, EngineRawMessage>()
-            let replyMessageId = EngineMessage.Id(peerId: peerId, namespace: 0, id: 100 + Int32(idx))
-            if let (author, replyText) = spec.reply {
-                let replyUser = TelegramUser(
-                    id: peerId,
-                    accessHash: nil,
-                    firstName: author,
-                    lastName: "",
-                    username: nil,
-                    phone: nil,
-                    photo: [],
-                    botInfo: nil,
-                    restrictionInfo: nil,
-                    flags: [],
-                    emojiStatus: nil,
-                    usernames: [],
-                    storiesHidden: nil,
-                    nameColor: .preset(.blue),
-                    backgroundEmojiId: nil,
-                    profileColor: nil,
-                    profileBackgroundEmojiId: nil,
-                    subscriberCount: nil,
-                    verificationIconFileId: nil
-                )
-                peers[peerId] = replyUser
-                messages[replyMessageId] = EngineRawMessage(
-                    stableId: UInt32(100 + idx),
-                    stableVersion: 0,
-                    id: replyMessageId,
-                    globallyUniqueId: nil,
-                    groupingKey: nil,
-                    groupInfo: nil,
-                    threadId: nil,
-                    timestamp: 66000,
-                    flags: [.Incoming],
-                    tags: [],
-                    globalTags: [],
-                    localTags: [],
-                    customTags: [],
-                    forwardInfo: nil,
-                    author: replyUser,
-                    text: replyText,
-                    attributes: [],
-                    media: [],
-                    peers: peers,
-                    associatedMessages: EngineSimpleDictionary(),
-                    associatedMessageIds: [],
-                    associatedMedia: [:],
-                    associatedThreadInfo: nil,
-                    associatedStories: [:]
-                )
-            }
+            let peers = EngineSimpleDictionary<EnginePeer.Id, EngineRawPeer>()
+            let messages = EngineSimpleDictionary<EngineMessage.Id, EngineRawMessage>()
             let outgoingAuthor = TelegramUser(
                 id: otherPeerId,
                 accessHash: nil,
@@ -1826,6 +1768,19 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 subscriberCount: nil,
                 verificationIconFileId: nil
             )
+            var attributes: [EngineMessage.Attribute] = []
+            if spec.withReactions, self.availableReactions != nil {
+                attributes.append(ReactionsMessageAttribute(
+                    canViewList: false,
+                    isTags: false,
+                    reactions: [
+                        MessageReaction(value: .builtin("❤️"), count: 1, chosenOrder: nil),
+                        MessageReaction(value: .builtin("🔥"), count: 1, chosenOrder: nil)
+                    ],
+                    recentPeers: [],
+                    topPeers: []
+                ))
+            }
             let rawMessage = EngineRawMessage(
                 stableId: UInt32(idx + 1),
                 stableVersion: 0,
@@ -1843,7 +1798,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 forwardInfo: nil,
                 author: spec.outgoing ? outgoingAuthor : nil,
                 text: spec.text,
-                attributes: spec.reply != nil ? [ReplyMessageAttribute(messageId: replyMessageId, threadMessageId: nil, quote: nil, isQuote: false, innerSubject: nil)] : [],
+                attributes: attributes,
                 media: [],
                 peers: peers,
                 associatedMessages: messages,
@@ -1866,7 +1821,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 tapMessage: nil,
                 clickThroughMessage: nil,
                 backgroundNode: bgNode,
-                availableReactions: nil,
+                availableReactions: self.availableReactions,
                 accountPeer: nil,
                 isCentered: false,
                 isPreview: true,
@@ -1878,7 +1833,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             ))
         }
 
-        let params = ListViewItemLayoutParams(width: width, leftInset: 0.0, rightInset: 0.0, availableHeight: 360.0)
+        let params = ListViewItemLayoutParams(width: width, leftInset: 0.0, rightInset: 0.0, availableHeight: 440.0)
         let canReuse = self.previewMessageNodes.count == items.count
         let itemAnimation: ListViewItemUpdateAnimation = (animated && !self.reduceMotion) ? .Crossfade : .None
 
@@ -1908,7 +1863,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                     }
                 )
             }
-            self.previewContentHeight = max(120.0, totalHeight)
+            self.previewContentHeight = max(160.0, totalHeight)
             let contentSize = CGSize(width: width, height: self.previewContentHeight)
             let applyLayout = {
                 self.previewMessagesContainer.frame = CGRect(origin: .zero, size: contentSize)
@@ -1924,7 +1879,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 }
             }
             if animated && !self.reduceMotion {
-                UIView.animate(withDuration: 0.26, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: applyLayout)
+                UIView.animate(withDuration: 0.24, delay: 0.0, options: [.curveEaseInOut, .allowUserInteraction, .beginFromCurrentState], animations: applyLayout)
             } else {
                 applyLayout()
             }
@@ -1954,7 +1909,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
             for node in builtNodes {
                 totalHeight += node.frame.size.height
             }
-            self.previewContentHeight = max(120.0, totalHeight)
+            self.previewContentHeight = max(160.0, totalHeight)
             for old in self.previewMessageNodes {
                 old.removeFromSupernode()
             }
@@ -1971,7 +1926,6 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 bgNode.frame = CGRect(x: 0.0, y: -60.0, width: width, height: self.previewContentHeight + 120.0)
                 bgNode.updateLayout(size: bgNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
             }
-            self.playInitialBubbleEntranceIfNeeded()
         }
     }
 

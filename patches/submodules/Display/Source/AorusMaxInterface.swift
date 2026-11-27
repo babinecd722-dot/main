@@ -151,7 +151,9 @@ public enum AorusMaxInterface {
         both("search.accent", "0a7df7")
 
         // Lists: elevated cards on pure black dark canvas (matching MAX iOS Settings/Messages/Memory/Appearance).
+        // Grouped settings keep #f1f2f5 page canvas on light theme while plain lists (Search, Contacts) match #ffffff.
         pair("list.background", "000000", "f1f2f5")
+        pair("list.plainBackground", "000000", "ffffff")
         pair("list.item", "1e2024", "ffffff")
         pair("list.separator", "2c2e33", "e7e8ec")
         pair("list.text", "ffffff", "000000")
@@ -250,14 +252,14 @@ public enum AorusMaxInterface {
         both("bubble.mediaStatusText", "ffffff")
         both("bubble.selectCheck", "0a7df7")
         pair("bubble.shareButton", "1e2024cc", "ffffffcc")
-        pair("bubble.shareButtonIcon", "ffffff", "0a7df7")
+        pair("bubble.shareButtonIcon", "ffffff", "2c2d2e")
         pair("bubble.infoText", "ffffff", "000000")
         both("bubble.infoLink", "0a7df7")
 
         // The chat around the bubbles.
-        pair("chat.service", "212535", "3c4a6a66")
+        pair("chat.service", "212535", "5a657766")
         pair("chat.serviceText", "e8ecfa", "ffffff")
-        pair("chat.date", "212535", "3c4a6a66")
+        pair("chat.date", "212535", "5a657766")
         pair("chat.dateText", "e8ecfa", "ffffff")
         pair("chat.unreadBar", "212535", "ebedf0")
         pair("chat.unreadBarText", "e8ecfa", "6d7885")
@@ -416,15 +418,20 @@ public enum AorusMaxInterface {
         return dark ? preset.wallpaperDark.rgb : preset.wallpaperLight.rgb
     }
 
-    /// Renders MAX's bundled geometric space pattern tinted with the selected theme preset's
-    /// wallpaper and pattern colors (Cosmos, Mint, Sunset, Forest), cached in memory.
+    /// Renders MAX's bundled geometric space pattern for the selected chat theme preset.
+    /// For default Cosmos, returns MAX's authentic unmodified `AorusMaxWallpaperDark`/`Light`
+    /// asset directly; for Mint, Romance, and Nature, tints the pattern cleanly over each
+    /// preset's authentic base surface, cached in memory.
     public static func tintedWallpaperPattern(preset: ChatThemePreset, dark: Bool) -> UIImage? {
-        let cacheKey = "tinted_wp|\(preset.id)|\(dark ? 1 : 0)" as NSString
-        if let cached = AorusMaxInterface.pictureCache.object(forKey: cacheKey) {
-            return cached
-        }
         guard let source = AorusMaxInterface.picture(dark ? "AorusMaxWallpaperDark" : "AorusMaxWallpaperLight") else {
             return nil
+        }
+        if preset.id == "cosmos" {
+            return source
+        }
+        let cacheKey = "tinted_wp_v2|\(preset.id)|\(dark ? 1 : 0)" as NSString
+        if let cached = AorusMaxInterface.pictureCache.object(forKey: cacheKey) {
+            return cached
         }
         let baseColor = dark ? preset.wallpaperDark : preset.wallpaperLight
         let patternTint = dark ? preset.patternTintDark : preset.patternTintLight
@@ -442,10 +449,8 @@ public enum AorusMaxInterface {
             let rect = CGRect(origin: .zero, size: targetSize)
             baseColor.setFill()
             ctx.fill(rect)
-            // Blend MAX's space pattern over the preset base so the doodle lines stay crisp,
-            // then apply the preset's patternTint hue cleanly.
-            source.draw(in: rect, blendMode: dark ? .screen : .multiply, alpha: dark ? 0.34 : 0.28)
-            patternTint.withAlphaComponent(dark ? 0.42 : 0.36).setFill()
+            source.draw(in: rect, blendMode: dark ? .screen : .multiply, alpha: dark ? 0.45 : 0.42)
+            patternTint.withAlphaComponent(dark ? 0.52 : 0.42).setFill()
             ctx.fill(rect, blendMode: .color)
         }
         AorusMaxInterface.pictureCache.setObject(rendered, forKey: cacheKey)
@@ -732,7 +737,9 @@ public enum AorusMaxInterface {
         return generateImage(CGSize(width: diameter, height: diameter), rotatedContext: { size, context in
             context.clear(CGRect(origin: CGPoint(), size: size))
             context.setFillColor(fill.cgColor)
-            context.fillEllipse(in: CGRect(origin: CGPoint(), size: size))
+            let roundedPath = UIBezierPath(roundedRect: CGRect(origin: CGPoint(), size: size), cornerRadius: 11.0).cgPath
+            context.addPath(roundedPath)
+            context.fillPath()
             if let glyph, let tinted = generateTintedImage(image: glyph, color: ink) {
                 let rect = CGRect(x: (size.width - glyphSide) * 0.5, y: (size.height - glyphSide) * 0.5, width: glyphSide, height: glyphSide)
                 UIGraphicsPushContext(context)
@@ -834,14 +841,14 @@ public enum AorusMaxInterface {
             id: "cosmos",
             titleRu: "Космос",
             titleEn: "Cosmos",
-            outgoingTopHex: "6d51ca",
-            outgoingBottomHex: "a152e8",
+            outgoingTopHex: "6852e8",
+            outgoingBottomHex: "b255f5",
             incomingDarkHex: "36384f",
-            outgoingTop: UIColor(rgb: 0x6d51ca),
-            outgoingBottom: UIColor(rgb: 0xa152e8),
+            outgoingTop: UIColor(rgb: 0x6852e8),
+            outgoingBottom: UIColor(rgb: 0xb255f5),
             incomingDark: UIColor(rgb: 0x36384f),
             incomingLight: UIColor(rgb: 0xffffff),
-            wallpaperDark: UIColor(rgb: 0x0c0e18),
+            wallpaperDark: UIColor(rgb: 0x0c0c0f),
             wallpaperLight: UIColor(rgb: 0xdee4f0),
             patternTintDark: UIColor(rgb: 0x3b4466),
             patternTintLight: UIColor(rgb: 0xb6c2d9)
@@ -850,59 +857,73 @@ public enum AorusMaxInterface {
             id: "mint",
             titleRu: "Мята",
             titleEn: "Mint",
-            outgoingTopHex: "2fb995",
-            outgoingBottomHex: "5de0b2",
-            incomingDarkHex: "293b37",
-            outgoingTop: UIColor(rgb: 0x2fb995),
-            outgoingBottom: UIColor(rgb: 0x5de0b2),
-            incomingDark: UIColor(rgb: 0x293b37),
+            outgoingTopHex: "23b58e",
+            outgoingBottomHex: "4adba9",
+            incomingDarkHex: "2e453e",
+            outgoingTop: UIColor(rgb: 0x23b58e),
+            outgoingBottom: UIColor(rgb: 0x4adba9),
+            incomingDark: UIColor(rgb: 0x2e453e),
             incomingLight: UIColor(rgb: 0xffffff),
-            wallpaperDark: UIColor(rgb: 0x0c1614),
-            wallpaperLight: UIColor(rgb: 0xdff2ec),
-            patternTintDark: UIColor(rgb: 0x2d594e),
-            patternTintLight: UIColor(rgb: 0xa7d6c8)
+            wallpaperDark: UIColor(rgb: 0x0c1716),
+            wallpaperLight: UIColor(rgb: 0xdff3ed),
+            patternTintDark: UIColor(rgb: 0x336659),
+            patternTintLight: UIColor(rgb: 0x9ecfc1)
         ),
         ChatThemePreset(
-            id: "sunset",
-            titleRu: "Закат",
-            titleEn: "Sunset",
-            outgoingTopHex: "f25c54",
-            outgoingBottomHex: "ff7d6b",
-            incomingDarkHex: "3d2a30",
-            outgoingTop: UIColor(rgb: 0xf25c54),
-            outgoingBottom: UIColor(rgb: 0xff7d6b),
-            incomingDark: UIColor(rgb: 0x3d2a30),
+            id: "romance",
+            titleRu: "Романтика",
+            titleEn: "Romance",
+            outgoingTopHex: "f2556b",
+            outgoingBottomHex: "ff7448",
+            incomingDarkHex: "4a2d3a",
+            outgoingTop: UIColor(rgb: 0xf2556b),
+            outgoingBottom: UIColor(rgb: 0xff7448),
+            incomingDark: UIColor(rgb: 0x4a2d3a),
             incomingLight: UIColor(rgb: 0xffffff),
-            wallpaperDark: UIColor(rgb: 0x170e11),
-            wallpaperLight: UIColor(rgb: 0xf7e4e2),
-            patternTintDark: UIColor(rgb: 0x5e343c),
-            patternTintLight: UIColor(rgb: 0xe3b8b3)
+            wallpaperDark: UIColor(rgb: 0x1a0d12),
+            wallpaperLight: UIColor(rgb: 0xfae6e8),
+            patternTintDark: UIColor(rgb: 0x6e3745),
+            patternTintLight: UIColor(rgb: 0xe2b3ba)
         ),
         ChatThemePreset(
-            id: "forest",
-            titleRu: "Лес",
-            titleEn: "Forest",
-            outgoingTopHex: "2ea43f",
-            outgoingBottomHex: "4cc252",
-            incomingDarkHex: "263829",
-            outgoingTop: UIColor(rgb: 0x2ea43f),
-            outgoingBottom: UIColor(rgb: 0x4cc252),
-            incomingDark: UIColor(rgb: 0x263829),
+            id: "nature",
+            titleRu: "Природа",
+            titleEn: "Nature",
+            outgoingTopHex: "2db63d",
+            outgoingBottomHex: "4bc946",
+            incomingDarkHex: "2d432e",
+            outgoingTop: UIColor(rgb: 0x2db63d),
+            outgoingBottom: UIColor(rgb: 0x4bc946),
+            incomingDark: UIColor(rgb: 0x2d432e),
             incomingLight: UIColor(rgb: 0xffffff),
-            wallpaperDark: UIColor(rgb: 0x0d160e),
-            wallpaperLight: UIColor(rgb: 0xe1f2e3),
-            patternTintDark: UIColor(rgb: 0x2f5434),
-            patternTintLight: UIColor(rgb: 0xb0d6b4)
+            wallpaperDark: UIColor(rgb: 0x0e170e),
+            wallpaperLight: UIColor(rgb: 0xe3f3e4),
+            patternTintDark: UIColor(rgb: 0x335c35),
+            patternTintLight: UIColor(rgb: 0xaad4ad)
         )
     ]
 
     public static let chatThemeKey = "aorusgram_max_chat_theme"
     public static let chatThemeDidChangeNotification = Notification.Name("AorusMaxChatThemeDidChange")
 
+    private static func normalizedChatThemeId(_ raw: String?) -> String {
+        switch raw {
+        case "sunset":
+            return "romance"
+        case "forest":
+            return "nature"
+        case let value? where !value.isEmpty:
+            return value
+        default:
+            return "cosmos"
+        }
+    }
+
     public static var selectedChatThemeId: String {
-        get { UserDefaults.standard.string(forKey: self.chatThemeKey) ?? "cosmos" }
+        get { self.normalizedChatThemeId(UserDefaults.standard.string(forKey: self.chatThemeKey)) }
         set {
-            UserDefaults.standard.set(newValue, forKey: self.chatThemeKey)
+            let normalized = self.normalizedChatThemeId(newValue)
+            UserDefaults.standard.set(normalized, forKey: self.chatThemeKey)
             // Invalidate AorusPluginAppearanceValues synchronously and trigger global PresentationData refresh.
             NotificationCenter.default.post(name: Notification.Name("aorusgram.pluginAppearanceChanged"), object: nil)
             NotificationCenter.default.post(name: self.chatThemeDidChangeNotification, object: nil)

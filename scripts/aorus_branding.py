@@ -20117,6 +20117,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let rootController = root.withUpdated(tabBar: tabBar, navigationBar: navigationBar, navigationSearchBar: searchBar)
 
     let listBackground = c("list.background")
+    let listPlainBackground = c("list.plainBackground") ?? listBackground
     let listItem = c("list.item")
     let listSeparator = c("list.separator")
     // A switch is its track when on, its track when off and its knob; a check and a filled
@@ -20140,8 +20141,8 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let list = theme.list.withUpdated(
         blocksBackgroundColor: listBackground,
         modalBlocksBackgroundColor: listBackground,
-        plainBackgroundColor: listBackground,
-        modalPlainBackgroundColor: listBackground,
+        plainBackgroundColor: listPlainBackground,
+        modalPlainBackgroundColor: listPlainBackground,
         itemPrimaryTextColor: on(rowFill, "list.text", theme.list.itemPrimaryTextColor),
         itemSecondaryTextColor: on(rowFill, "list.secondaryText", theme.list.itemSecondaryTextColor),
         itemDisabledTextColor: c("list.disabledText"),
@@ -20328,7 +20329,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let keyboardButton = c("keyboard.button")
     let keyboard = theme.chat.inputButtonPanel.withUpdated(panelBackgroundColor: c("keyboard.background"), buttonFillColor: keyboardButton, buttonStrokeColor: c("keyboard.buttonStroke"), buttonHighlightedFillColor: c("keyboard.buttonPressed"), buttonTextColor: on(keyboardButton, "keyboard.buttonText", theme.chat.inputButtonPanel.buttonTextColor))
     let emojiBackground = c("emojiPanel.background")
-    let mediaPanel = theme.chat.inputMediaPanel.withUpdated(panelSeparatorColor: c("emojiPanel.separator"), panelIconColor: c("emojiPanel.icons"), panelHighlightedIconBackgroundColor: c("emojiPanel.selectedBackground"), panelHighlightedIconColor: c("emojiPanel.selectedIcon"), stickersBackgroundColor: emojiBackground, stickersSectionTextColor: c("emojiPanel.sectionText"), gifsBackgroundColor: emojiBackground, backgroundColor: emojiBackground)
+    let mediaPanel = theme.chat.inputMediaPanel.withUpdated(panelSeparatorColor: c("emojiPanel.separator"), panelIconColor: c("emojiPanel.icons"), panelHighlightedIconBackgroundColor: c("emojiPanel.selectedBackground"), panelHighlightedIconColor: c("emojiPanel.selectedIcon"), stickersBackgroundColor: emojiBackground, stickersSectionTextColor: c("emojiPanel.sectionText"), stickersSearchBackgroundColor: c("search.field"), gifsBackgroundColor: emojiBackground, backgroundColor: emojiBackground)
     let history = theme.chat.historyNavigation
     let scrollButton = c("chat.scrollButton")
     let scrollBadge = c("chat.scrollBadge")

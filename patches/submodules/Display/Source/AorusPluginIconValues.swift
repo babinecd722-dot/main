@@ -439,7 +439,7 @@ public enum AorusPluginIconValues {
         ("favorites_24", ["Item List/Icons/SavedMessages", "Item List/Icons/Tag"]),
         ("devices_24", ["Item List/Icons/Devices"]),
         ("battery_and_network_24", ["Item List/Icons/PowerSaving", "Item List/Icons/Wifi"]),
-        ("globe_language_24", ["Item List/Icons/Language", "Item List/Icons/Translation", "Chat/Context Menu/Translate"]),
+        ("globe_language_24", ["Item List/Icons/Language", "Item List/Icons/Translation"]),
         ("customization_24", ["Item List/Icons/Appearance", "Item List/Icons/Brush", "Item List/Icons/Backdrop", "Item List/Icons/Gradient", "Item List/Icons/Icons"]),
         ("memory_24", ["Item List/Icons/Data"]),
         ("mobile_24", ["Item List/Icons/Phone", "Item List/Icons/ChangePhone", "Item List/Icons/Cellular"]),
