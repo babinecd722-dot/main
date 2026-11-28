@@ -1120,42 +1120,6 @@ public enum AorusMaxInterface {
         }
     }
 
-    /// Clean waving flag cloth outline (no flagpole/stick) for MAX's quick-translate side button,
-    /// cached by ARGB color so chat scrolling allocates zero bitmaps per message.
-    public static func translateFlagGlyph(color: UIColor) -> UIImage? {
-        let key = "__translate_flag__|\(color.argb)" as NSString
-        if let cached = AorusMaxInterface.tintedGlyphCache.object(forKey: key) {
-            return cached
-        }
-        let result = generateImage(CGSize(width: 20.0, height: 20.0), rotatedContext: { size, context in
-            context.clear(CGRect(origin: .zero, size: size))
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: 3.0, y: 6.1))
-            path.addCurve(
-                to: CGPoint(x: 17.0, y: 5.2),
-                control1: CGPoint(x: 6.6, y: 3.0),
-                control2: CGPoint(x: 13.2, y: 8.6)
-            )
-            path.addLine(to: CGPoint(x: 17.0, y: 13.9))
-            path.addCurve(
-                to: CGPoint(x: 3.0, y: 14.8),
-                control1: CGPoint(x: 13.2, y: 17.3),
-                control2: CGPoint(x: 6.6, y: 11.7)
-            )
-            path.closeSubpath()
-            context.setStrokeColor(color.cgColor)
-            context.setLineWidth(1.7)
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
-            context.addPath(path)
-            context.strokePath()
-        })?.withRenderingMode(.alwaysOriginal)
-        if let result {
-            AorusMaxInterface.tintedGlyphCache.setObject(result, forKey: key)
-        }
-        return result
-    }
-
     /// Round dark-gray circle with a gray cross (`cross_24`) shown on the right of editable folder
     /// tabs («Новые», «Каналы», custom folders) while MAX selection/edit mode is active.
     public static func tabDeleteBadgeImage(dark: Bool) -> UIImage? {

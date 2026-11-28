@@ -2356,7 +2356,7 @@ def patch_recording(tg: Path) -> None:
         "                    pauseKeypaths = found.isEmpty ? [\"**.Color\"] : found\n"
         "                    self.aorusMaxPauseColorKeypaths = pauseKeypaths\n"
         "                }\n"
-        "                let pauseProvider = ColorValueProvider(theme.chat.inputPanel.panelControlAccentColor.lottieColorValue)\n"
+        "                let pauseProvider = ColorValueProvider(lockColor.lottieColorValue)\n"
         "                for keypath in pauseKeypaths {\n"
         "                    pauseView.setValueProvider(pauseProvider, keypath: AnimationKeypath(keypath: keypath))\n"
         "                }\n"
@@ -2376,6 +2376,12 @@ def patch_recording(tg: Path) -> None:
 
     path = components / "ChatTextInputMediaRecordingButton/Sources/ChatTextInputMediaRecordingButton.swift"
     text = _read(path)
+    text = _edit(text, "let animationTintColor = self.useDarkTheme ? .white", "let animationTintColor = (self.useDarkTheme || (AorusMaxInterface.isEnabled && self.hidesOnLock)) ? .white", "MAX video recording icon")
+    text = _edit(text, "self.pallete = legacyInputMicPalette(from: theme)", "self.pallete = legacyInputMicPalette(from: theme, whiteControls: AorusMaxInterface.isEnabled && (self.hidesOnLock || self.useDarkTheme))", "MAX mic and swipe arrow palette", count=2)
+    text = _edit(text, "                self.setHidesPanelOnLock()", """                self.setHidesPanelOnLock()
+                if AorusMaxInterface.isEnabled {
+                    self.updateTheme(theme: self.theme)
+                }""", "MAX refresh recording palette on video overlay")
     text = _edit(
         text,
         "            let lockView = LockView(frame: CGRect(origin: CGPoint(), size: CGSize(width: 40.0, height: 60.0)), theme: self.theme, useDarkTheme: self.useDarkTheme, pause: self.pause, strings: self.strings)\n",
@@ -2393,6 +2399,13 @@ def patch_recording(tg: Path) -> None:
         "MAX lock panel",
     )
     text = text.rstrip("\n") + "\n" + _MAX_LOCK_PANEL
+    path.write_text(text, encoding="utf-8")
+
+    path = components / "LegacyInstantVideoController/Sources/LegacyInstantVideoController.swift"
+    text = _read(path)
+    text = _edit(text, "func legacyInputMicPalette(from theme: PresentationTheme)", "func legacyInputMicPalette(from theme: PresentationTheme, whiteControls: Bool = false)", "video recording palette option")
+    text = _edit(text, "iconColor: inputPanelTheme.actionControlForegroundColor", "iconColor: whiteControls ? .white : inputPanelTheme.actionControlForegroundColor", "video recording glyph")
+    text = _edit(text, "lock: inputPanelTheme.panelControlAccentColor", "lock: whiteControls ? .white : inputPanelTheme.panelControlAccentColor", "video recording arrow")
     path.write_text(text, encoding="utf-8")
 
     path = components / "Chat/ChatRecordingViewOnceButtonNode/Sources/ChatRecordingViewOnceButtonNode.swift"
@@ -3732,7 +3745,17 @@ def patch_chat_list_geometry(tg: Path) -> None:
     path = tg / "submodules/ChatListUI/Sources/TabBarChatListFilterController.swift"
     text = _read(path)
     signature = "public func chatListFilterItems(context: AccountContext)"
-    text = _edit(text, signature, """func aorusMaxDisplayFilters(_ rawFilters: [ChatListFilter], accountId: Int64, lang: String) -> [ChatListFilter] {
+    text = _edit(text, signature, """private func aorusMaxFolderKey(_ id: Int32, accountId: Int64) -> String {
+    return "aorusgram_max_folder_\\(accountId)_\\(id)"
+}
+
+func aorusMaxSaveFolder(_ folder: ChatListFilter, accountId: Int64) {
+    guard AorusMaxInterface.isLocalFilterId(folder.id), let data = try? JSONEncoder().encode(folder) else { return }
+    UserDefaults.standard.set(data, forKey: aorusMaxFolderKey(folder.id, accountId: accountId))
+    NotificationCenter.default.post(name: AorusMaxInterface.localFiltersDidChangeNotification, object: nil)
+}
+
+func aorusMaxDisplayFilters(_ rawFilters: [ChatListFilter], accountId: Int64, lang: String) -> [ChatListFilter] {
     var filters = rawFilters
     if AorusMaxInterface.isEnabled {
         let hasAll = filters.contains(where: { if case .allChats = $0 { return true }; return false })
@@ -3758,6 +3781,16 @@ def patch_chat_list_geometry(tg: Path) -> None:
             let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)
             let channelsIdx = min(2, filters.count)
             filters.insert(.filter(id: AorusMaxInterface.localChannelsFilterId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData), at: channelsIdx)
+        }
+    }
+    if AorusMaxInterface.isEnabled {
+        for index in filters.indices {
+            let id = filters[index].id
+            if AorusMaxInterface.isLocalFilterId(id),
+               let data = UserDefaults.standard.data(forKey: aorusMaxFolderKey(id, accountId: accountId)),
+               let folder = try? JSONDecoder().decode(ChatListFilter.self, from: data), folder.id == id {
+                filters[index] = folder
+            }
         }
     }
     return filters
@@ -4284,14 +4317,20 @@ def patch_chat_list_geometry(tg: Path) -> None:
                 entries.append(.preset(index: PresetIndex(value: entries.count), title: title, label: "", preset: filter, canBeReordered: false, canBeDeleted: true, isEditing: state.isEditing, isAllChats: false, isDisabled: false, displayTags: false))
                 continue
             }""", "MAX native local folder rows")
-    folder_text = _edit(folder_text, "                if isDisabled {", """                if AorusMaxInterface.isLocalFilterId(preset.id) {
-                    arguments.removePreset(preset.id)
-                } else if isDisabled {""", "MAX folder local actions")
+    folder_text = _edit(folder_text, "currentPreset: preset, updated: { _ in }", """currentPreset: preset, updated: { _ in
+            if AorusMaxInterface.isLocalFilterId(preset.id) {
+                updateState { state in
+                    var state = state
+                    state.aorusLocalFiltersVersion += 1
+                    return state
+                }
+            }
+        }""", "MAX refresh edited local folder")
     folder_text = _edit(folder_text, "    }, removePreset: { id in", """    }, removePreset: { id in
         if AorusMaxInterface.isLocalFilterId(id) {
             let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
             let isRu = strings.baseLanguageCode.lowercased().hasPrefix("ru")
-            presentControllerImpl?(textAlertController(context: context, title: nil, text: isRu ? "Скрыть локальную папку MAX?" : "Hide this local MAX folder?", actions: [
+            presentControllerImpl?(textAlertController(context: context, title: nil, text: isRu ? "Скрыть папку?" : "Hide folder?", actions: [
                 TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: {}),
                 TextAlertAction(type: .defaultAction, title: isRu ? "Скрыть" : "Hide", action: {
                     AorusMaxInterface.hideLocalFilter(id, accountId: context.account.id.int64)
@@ -4305,6 +4344,36 @@ def patch_chat_list_geometry(tg: Path) -> None:
             return
         }""", "MAX folder local hide")
     folder_list.write_text(folder_text, encoding="utf-8")
+
+    editor = folder_list.with_name("ChatListFilterPresetController.swift")
+    text = _read(editor)
+    text = _edit(text, "    if let initialPreset {\n        updatedCurrentPreset =", """    if let initialPreset, AorusMaxInterface.isLocalFilterId(initialPreset.id) {
+        updatedCurrentPreset = .single(initialPreset)
+    } else if let initialPreset {
+        updatedCurrentPreset =""", "MAX local folder editor snapshot")
+    text = _edit(text, "    if let initialPreset {\n        sharedLinks.set", "    if let initialPreset, !AorusMaxInterface.isLocalFilterId(initialPreset.id) {\n        sharedLinks.set", "MAX skip remote folder links")
+    text = _edit(text, "    var hasLinks = false", """    if let currentPreset, AorusMaxInterface.isLocalFilterId(currentPreset.id) {
+        return entries
+    }
+    var hasLinks = false""", "MAX omit remote sharing actions")
+    anchor = "            let _ = (context.engine.peers.updateChatListFiltersInteractively { filters in\n                var filterId = currentPreset?.id ?? -1"
+    text = _edit(text, anchor, """            if let currentPreset, AorusMaxInterface.isLocalFilterId(currentPreset.id), var data = currentPreset.data {
+                data.categories = state.includeCategories
+                data.excludeMuted = state.excludeMuted
+                data.excludeRead = state.excludeRead
+                data.excludeArchived = state.excludeArchived
+                data.includePeers.setPeers(state.additionallyIncludePeers)
+                data.excludePeers = state.additionallyExcludePeers
+                data.color = state.color
+                let folder = ChatListFilter.filter(id: currentPreset.id, title: state.name, emoticon: currentPreset.emoticon, data: data)
+                aorusMaxSaveFolder(folder, accountId: context.account.id.int64)
+                updated([folder])
+                completed()
+                return
+            }
+""" + anchor, "MAX save folder edits on device")
+    editor.write_text(text, encoding="utf-8")
+
 
 
 def patch_privacy_screen(tg: Path) -> None:
@@ -5042,21 +5111,7 @@ def patch_performance_isolation(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
 
-    # Quick Translate side button in MAX: clean outlined waving flag cloth (no flagpole/stick),
-    # cached in AorusMaxInterface.translateFlagGlyph(color:).
-    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageShareButton/Sources/ChatMessageShareButton.swift"
-    text = _read(path)
-    text = _edit(
-        text,
-        "            if aorusIsTranslate {\n"
-        "                updatedIconImage = generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n",
-        "            if aorusIsTranslate {\n"
-        "                let aorusTranslateColor = bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper)\n"
-        "                updatedIconImage = AorusMaxInterface.isEnabled ? AorusMaxInterface.translateFlagGlyph(color: aorusTranslateColor) : generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: aorusTranslateColor)\n",
-        "MAX clean poleless waving flag glyph for quick translate message button",
-    )
-    path.write_text(text, encoding="utf-8")
-    print("MaxInterface: preserved panel/context blurs, fixed opaque emoji panel backdrop, wired flag quick-translate glyph, crisp back_24_ios and inline settings search")
+    print("MaxInterface: updated panel and search appearance")
 
 
 def patch_qr_screens(tg: Path) -> None:
@@ -5883,9 +5938,8 @@ def patch_contacts_screen(tg: Path) -> None:
         "            })),\n"
         "            .action(ContextMenuActionItem(text: isRu ? \"Пригласить по ссылке\" : \"Invite by link\", icon: { theme in\n"
         "                return generateTintedImage(image: AorusMaxInterface.glyph(\"link_24\"), color: theme.contextMenu.primaryColor)\n"
-        "            }, action: { [weak self] _, f in\n"
-        "                f(.default)\n"
-        "                self?.aorusMaxShareInviteLink(sourceView: resolvedSourceView)\n"
+        "            }, action: { [weak self] controller, _ in\n"
+        "                controller?.dismiss(completion: { [weak self] in self?.aorusMaxShareInviteLink() })\n"
         "            })),\n"
         "            .action(ContextMenuActionItem(text: isRu ? \"Найти по номеру\" : \"Find by phone\", icon: { theme in\n"
         "                return generateTintedImage(image: AorusMaxInterface.glyph(\"mobile_24\") ?? AorusMaxInterface.glyph(\"search_24\"), color: theme.contextMenu.primaryColor)\n"
@@ -5897,7 +5951,7 @@ def patch_contacts_screen(tg: Path) -> None:
         "        let contextController = makeContextController(presentationData: presentationData, source: .reference(HeaderContextReferenceContentSource(controller: self, sourceView: resolvedSourceView)), items: .single(ContextController.Items(content: .list(menuItems))), gesture: nil)\n"
         "        self.presentInGlobalOverlay(contextController)\n"
         "    }\n\n"
-        "    private func aorusMaxShareInviteLink(sourceView: UIView) {\n"
+        "    private func aorusMaxShareInviteLink() {\n"
         "        let isRu = self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\")\n"
         "        let _ = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: self.context.account.peerId))\n"
         "        |> deliverOnMainQueue).start(next: { [weak self] peer in\n"
@@ -5917,13 +5971,16 @@ def patch_contacts_screen(tg: Path) -> None:
         "            let text = isRu ? \"Я пользуюсь мессенджером AorusGram. Присоединяйся!\\n\\(link)\" : \"I'm using AorusGram messenger. Join me!\\n\\(link)\"\n"
         "            var items: [Any] = []\n"
         "            if let qrImage = AorusMaxInterface.generateQRCodeImage(text: link, caption: caption) {\n"
-        "                items.append(qrImage)\n"
+        "                items.append(AorusMaxInviteImage(image: qrImage, title: caption))\n"
         "            }\n"
         "            items.append(text)\n"
         "            let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)\n"
-        "            if let popover = activity.popoverPresentationController {\n"
-        "                popover.sourceView = sourceView\n"
-        "                popover.sourceRect = sourceView.bounds\n"
+        "            if self.traitCollection.horizontalSizeClass == .compact {\n"
+        "                activity.modalPresentationStyle = .pageSheet\n"
+        "            } else if let popover = activity.popoverPresentationController {\n"
+        "                popover.sourceView = self.view\n"
+        "                popover.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.maxY - self.view.safeAreaInsets.bottom, width: 1, height: 1)\n"
+        "                popover.permittedArrowDirections = []\n"
         "            }\n"
         "            self.present(activity, animated: true)\n"
         "        })\n"
@@ -5931,6 +5988,30 @@ def patch_contacts_screen(tg: Path) -> None:
         "    func presentSortMenu(sourceView: UIView, gesture: ContextGesture?) {\n",
         "MAX contacts plus menu and QR invite share sheet",
     )
+    text = "import LinkPresentation\n" + text
+    text += """
+private final class AorusMaxInviteImage: NSObject, UIActivityItemSource {
+    let image: UIImage
+    let title: String
+
+    init(image: UIImage, title: String) {
+        self.image = image
+        self.title = title
+    }
+
+    func activityViewControllerPlaceholderItem(_ controller: UIActivityViewController) -> Any { image }
+    func activityViewController(_ controller: UIActivityViewController, itemForActivityType type: UIActivity.ActivityType?) -> Any? { image }
+    @available(iOS 13.0, *)
+    func activityViewControllerLinkMetadata(_ controller: UIActivityViewController) -> LPLinkMetadata? {
+        let metadata = LPLinkMetadata()
+        metadata.title = title
+        let provider = NSItemProvider(object: image)
+        metadata.imageProvider = provider
+        metadata.iconProvider = provider
+        return metadata
+    }
+}
+"""
     path.write_text(text, encoding="utf-8")
 
     # 3. ContactListNameIndexHeader.swift: thin hairline separator above alphabetical letter sections in MAX.
