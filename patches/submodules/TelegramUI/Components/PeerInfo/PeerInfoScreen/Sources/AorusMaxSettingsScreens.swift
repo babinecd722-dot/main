@@ -1495,7 +1495,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
     private var validLayout: ContainerViewLayout?
     private var liveFontSizeOverride: PresentationFontSize?
     private var hasLoadedThemeSettings = false
-    private var pendingSegmentTarget: (index: Int, deadline: CFTimeInterval)?
+    private var pendingSegmentTarget: Int?
     private var lastSegmentPillFrame: CGRect = .zero
     private let selectionFeedback = UISelectionFeedbackGenerator()
 
@@ -1543,7 +1543,6 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         self.presentationDisposable = (context.sharedContext.presentationData |> deliverOnMainQueue).start(next: { [weak self] data in
             guard let self else { return }
-            let appearanceChanged = self.presentationData.theme.overallDarkAppearance != data.theme.overallDarkAppearance
             self.presentationData = data
             if self.liveFontSizeOverride == data.chatFontSize {
                 self.liveFontSizeOverride = nil
@@ -1552,7 +1551,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
                 if self.pendingSegmentTarget == nil {
                     self.selectedSegmentIndex = self.resolvedSegmentIndex(from: self.themeSettings, fallbackDark: data.theme.overallDarkAppearance)
                 }
-                self.applyAppearance(animated: appearanceChanged)
+                self.applyAppearance(animated: false)
             }
         })
 
@@ -1764,13 +1763,8 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
         let derived = self.resolvedSegmentIndex(from: self.themeSettings, fallbackDark: self.presentationData.theme.overallDarkAppearance)
         if let pending = self.pendingSegmentTarget {
-            if derived == pending.index {
-                self.pendingSegmentTarget = nil
-            } else if CACurrentMediaTime() < pending.deadline {
-                return
-            } else {
-                self.pendingSegmentTarget = nil
-            }
+            guard derived == pending else { return }
+            self.pendingSegmentTarget = nil
         }
         if self.selectedSegmentIndex != derived {
             self.selectedSegmentIndex = derived
@@ -2057,8 +2051,8 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
 
             self.themeHeaderLabel.text = isRu ? "ТЕМА" : strings.Appearance_ColorTheme.uppercased()
             self.themeHeaderLabel.textColor = palette.secondaryText
-            self.segmentContainer.backgroundColor = dark ? UIColor(rgb: 0x2c2e33) : UIColor(rgb: 0xe3e6ec)
-            self.segmentSelectedPill.backgroundColor = dark ? UIColor(rgb: 0x1a1c22) : UIColor.white
+            self.segmentContainer.backgroundColor = dark ? palette.card : UIColor(rgb: 0xe3e6ec)
+            self.segmentSelectedPill.backgroundColor = dark ? palette.cardPressed : UIColor.white
             for (i, btn) in self.segmentButtons.enumerated() {
                 btn.setTitleColor(i == self.selectedSegmentIndex ? AorusMaxInterface.accent : (dark ? .white : palette.primaryText), for: .normal)
             }
@@ -2130,7 +2124,7 @@ private final class AorusMaxAppearanceSettingsController: ViewController {
         let index = sender.tag
         guard index != self.selectedSegmentIndex else { return }
         self.selectedSegmentIndex = index
-        self.pendingSegmentTarget = (index, CACurrentMediaTime() + 0.8)
+        self.pendingSegmentTarget = index
         self.selectionFeedback.selectionChanged()
         self.updateSegmentSelectionUI(animated: true)
         let _ = updatePresentationThemeSettingsInteractively(accountManager: self.context.sharedContext.accountManager) { current in

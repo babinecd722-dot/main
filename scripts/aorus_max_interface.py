@@ -3731,6 +3731,39 @@ def patch_chat_list_geometry(tg: Path) -> None:
     # respects per-account hidden local folders with live reload on deletion.
     path = tg / "submodules/ChatListUI/Sources/TabBarChatListFilterController.swift"
     text = _read(path)
+    signature = "public func chatListFilterItems(context: AccountContext)"
+    text = _edit(text, signature, """func aorusMaxDisplayFilters(_ rawFilters: [ChatListFilter], accountId: Int64, lang: String) -> [ChatListFilter] {
+    var filters = rawFilters
+    if AorusMaxInterface.isEnabled {
+        let hasAll = filters.contains(where: { if case .allChats = $0 { return true }; return false })
+        if !hasAll {
+            filters.insert(.allChats, at: 0)
+        }
+        let hasUnread = filters.contains(where: {
+            if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }
+            return false
+        })
+        if !hasUnread && !AorusMaxInterface.isLocalFilterHidden(AorusMaxInterface.localUnreadFilterId, accountId: accountId) {
+            let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"
+            let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)
+            let insertIdx = min(1, filters.count)
+            filters.insert(.filter(id: AorusMaxInterface.localUnreadFilterId, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData), at: insertIdx)
+        }
+        let hasChannels = filters.contains(where: {
+            if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }
+            return false
+        })
+        if !hasChannels && !AorusMaxInterface.isLocalFilterHidden(AorusMaxInterface.localChannelsFilterId, accountId: accountId) {
+            let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"
+            let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)
+            let channelsIdx = min(2, filters.count)
+            filters.insert(.filter(id: AorusMaxInterface.localChannelsFilterId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData), at: channelsIdx)
+        }
+    }
+    return filters
+}
+
+""" + "public func chatListFilterItems(context: AccountContext, includeMaxFolders: Bool = false)", "MAX folders only on opted-in screens")
     text = _edit(
         text,
         "    return context.engine.peers.updatedChatListFilters()\n"
@@ -3749,35 +3782,8 @@ def patch_chat_list_geometry(tg: Path) -> None:
         "    }\n"
         "    return combineLatest(context.engine.peers.updatedChatListFilters() |> distinctUntilChanged, aorusMaxLocalRevision)\n"
         "    |> mapToSignal { rawFilters, _ -> Signal<([ChatListFilter], ChatListFilterBadgeSecretChats), NoError> in\n"
-        "        var filters = rawFilters\n"
-        "        if AorusMaxInterface.isEnabled {\n"
-        "            let accountId = context.account.id.int64\n"
-        "            let lang = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode\n"
-        "            let hasAll = filters.contains(where: { if case .allChats = $0 { return true }; return false })\n"
-        "            if !hasAll {\n"
-        "                filters.insert(.allChats, at: 0)\n"
-        "            }\n"
-        "            let hasUnread = filters.contains(where: {\n"
-        "                if case let .filter(_, _, _, data) = $0 { return data.excludeRead && data.categories == .all }\n"
-        "                return false\n"
-        "            })\n"
-        "            if !hasUnread && !AorusMaxInterface.isLocalFilterHidden(AorusMaxInterface.localUnreadFilterId, accountId: accountId) {\n"
-        '                let unreadTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_UNREAD_NAME", languageCode: lang) ?? "Новые"\n'
-        "                let unreadData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .all, excludeMuted: false, excludeRead: true, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                let insertIdx = min(1, filters.count)\n"
-        "                filters.insert(.filter(id: AorusMaxInterface.localUnreadFilterId, title: ChatFolderTitle(text: unreadTitle, entities: [], enableAnimations: false), emoticon: nil, data: unreadData), at: insertIdx)\n"
-        "            }\n"
-        "            let hasChannels = filters.contains(where: {\n"
-        "                if case let .filter(_, _, _, data) = $0 { return data.categories == .channels && !data.excludeRead }\n"
-        "                return false\n"
-        "            })\n"
-        "            if !hasChannels && !AorusMaxInterface.isLocalFilterHidden(AorusMaxInterface.localChannelsFilterId, accountId: accountId) {\n"
-        '                let channelsTitle = AorusMaxInterface.localizedString("FOLDERS_SETTINGS_TEMPLATES_CHANNELS", languageCode: lang) ?? "Каналы"\n'
-        "                let channelsData = ChatListFilterData(isShared: false, hasSharedLinks: false, categories: .channels, excludeMuted: false, excludeRead: false, excludeArchived: true, includePeers: ChatListFilterIncludePeers(), excludePeers: [], color: nil)\n"
-        "                let channelsIdx = min(2, filters.count)\n"
-        "                filters.insert(.filter(id: AorusMaxInterface.localChannelsFilterId, title: ChatFolderTitle(text: channelsTitle, entities: [], enableAnimations: false), emoticon: nil, data: channelsData), at: channelsIdx)\n"
-        "            }\n"
-        "        }\n",
+        "        let lang = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode\n"
+        "        let filters = includeMaxFolders ? aorusMaxDisplayFilters(rawFilters, accountId: context.account.id.int64, lang: lang) : rawFilters\n",
         "MAX local-only Unread and Channels tabs without server sync",
     )
     path.write_text(text, encoding="utf-8")
@@ -3803,6 +3809,7 @@ def patch_chat_list_geometry(tg: Path) -> None:
     # bar («Прочитать всё» left, «Удалить» right).
     path = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
     text = _read(path)
+    text = _edit(text, "let filterItems = chatListFilterItems(context: self.context)", "let filterItems = chatListFilterItems(context: self.context, includeMaxFolders: AorusMaxInterface.isEnabled)", "MAX folders in chat list")
     text = _edit(
         text,
         "            let filtersLimit = isPremium == false ? limits.maxFoldersCount : nil\n",
@@ -4036,7 +4043,7 @@ def patch_chat_list_geometry(tg: Path) -> None:
     text = _edit(
         text,
         "                search: ChatListNavigationBar.Search(isEnabled: true),\n",
-        "                search: ChatListNavigationBar.Search(isEnabled: true, placeholder: AorusMaxInterface.isEnabled ? (self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Люди, чаты и сообщения\" : \"People, chats and messages\") : nil),\n",
+        "                search: ChatListNavigationBar.Search(isEnabled: true, placeholder: AorusMaxInterface.isEnabled ? (self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Люди, чаты и сообщения\" : \"People, chats and messages\") : nil, alignPlaceholderToLeftWhenInactive: AorusMaxInterface.isEnabled),\n",
         "MAX chats search bar placeholder",
     )
     path.write_text(text, encoding="utf-8")
@@ -4266,6 +4273,37 @@ def patch_chat_list_geometry(tg: Path) -> None:
         "    let signal = combineLatest(queue: .mainQueue(),\n",
         "MAX wire restore local folders callback",
     )
+    # Enrich only display entries. Quotas, editor and reorder transactions keep server filters.
+    loop = "        for (filter, chatCount) in filtersWithAppliedOrder(filters: filters, order: updatedFilterOrder) {"
+    folder_text = _edit(folder_text, "    if !filters.isEmpty || suggestedFilters.isEmpty {", """    let ordered = filtersWithAppliedOrder(filters: filters, order: updatedFilterOrder)
+    let displayFilters = aorusMaxDisplayFilters(ordered.map { $0.0 }, accountId: accountId, lang: presentationData.strings.baseLanguageCode)
+    if !displayFilters.isEmpty || suggestedFilters.isEmpty {""", "MAX folder settings display list")
+    folder_text = _edit(folder_text, loop, """        for filter in displayFilters {
+            let chatCount = ordered.first(where: { $0.0.id == filter.id })?.1 ?? 0
+            if AorusMaxInterface.isLocalFilterId(filter.id), case let .filter(_, title, _, _) = filter {
+                entries.append(.preset(index: PresetIndex(value: entries.count), title: title, label: "", preset: filter, canBeReordered: false, canBeDeleted: true, isEditing: state.isEditing, isAllChats: false, isDisabled: false, displayTags: false))
+                continue
+            }""", "MAX native local folder rows")
+    folder_text = _edit(folder_text, "                if isDisabled {", """                if AorusMaxInterface.isLocalFilterId(preset.id) {
+                    arguments.removePreset(preset.id)
+                } else if isDisabled {""", "MAX folder local actions")
+    folder_text = _edit(folder_text, "    }, removePreset: { id in", """    }, removePreset: { id in
+        if AorusMaxInterface.isLocalFilterId(id) {
+            let strings = context.sharedContext.currentPresentationData.with { $0 }.strings
+            let isRu = strings.baseLanguageCode.lowercased().hasPrefix("ru")
+            presentControllerImpl?(textAlertController(context: context, title: nil, text: isRu ? "Скрыть локальную папку MAX?" : "Hide this local MAX folder?", actions: [
+                TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultAction, title: isRu ? "Скрыть" : "Hide", action: {
+                    AorusMaxInterface.hideLocalFilter(id, accountId: context.account.id.int64)
+                    updateState { state in
+                        var state = state
+                        state.aorusLocalFiltersVersion += 1
+                        return state
+                    }
+                })
+            ]))
+            return
+        }""", "MAX folder local hide")
     folder_list.write_text(folder_text, encoding="utf-8")
 
 
@@ -5810,7 +5848,7 @@ def patch_contacts_screen(tg: Path) -> None:
     text = _edit(
         text,
         "                search: ChatListNavigationBar.Search(isEnabled: true),\n",
-        "                search: ChatListNavigationBar.Search(isEnabled: true, placeholder: AorusMaxInterface.isEnabled ? (self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Имя, фамилия или номер\" : \"Name, surname or phone\") : nil),\n",
+        "                search: ChatListNavigationBar.Search(isEnabled: true, placeholder: AorusMaxInterface.isEnabled ? (self.presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Имя, фамилия или номер\" : \"Name, surname or phone\") : nil, alignPlaceholderToLeftWhenInactive: AorusMaxInterface.isEnabled),\n",
         "MAX contacts search placeholder",
     )
     path.write_text(text, encoding="utf-8")
