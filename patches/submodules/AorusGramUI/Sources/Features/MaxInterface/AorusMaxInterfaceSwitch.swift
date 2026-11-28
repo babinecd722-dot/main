@@ -23,6 +23,9 @@ public enum AorusMaxInterfaceSwitch {
     /// back), the question asked in an alert that shows the icon itself, and then the notice that
     /// the interface changes with the next start.
     public static func switched(context: AccountContext, controller: ViewController?, isOn: Bool) {
+        if isOn && !AorusLicenseAccess.isAllowed {
+            return
+        }
         let bindings = context.sharedContext.applicationBindings
         let currentIcon = bindings.getAlternateIconName()
         let restartNotice = {

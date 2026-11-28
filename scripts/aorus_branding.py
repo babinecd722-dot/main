@@ -19787,9 +19787,17 @@ public enum AorusPluginAppearanceValues {
     private static var cachedRevision = 0
     private static var observer: NSObjectProtocol?
     private static var previewObserver: NSObjectProtocol?
+    private static var licenseLockObserver: NSObjectProtocol?
 
     /// The table in force, and a number that changes whenever the table does.
     public static func snapshot() -> (values: [String: Any], revision: Int) {
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            lock.lock()
+            let rev = cachedRevision
+            cached = nil
+            lock.unlock()
+            return ([:], rev)
+        }
         lock.lock()
         defer {
             lock.unlock()
@@ -19803,12 +19811,12 @@ public enum AorusPluginAppearanceValues {
             previewObserver = NotificationCenter.default.addObserver(forName: previewNotification, object: nil, queue: nil, using: { _ in
                 AorusPluginAppearanceValues.invalidate()
             })
+            licenseLockObserver = NotificationCenter.default.addObserver(forName: Notification.Name("aorusgram.licenseLockChanged"), object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
         }
         if let cached {
             return (cached, cachedRevision)
-        }
-        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
-            return ([:], cachedRevision)
         }
         var values: [String: Any]
         if AorusMaxInterface.isEnabled {
@@ -19863,6 +19871,13 @@ public enum AorusPluginAppearanceValues {
         if AorusMaxInterface.isEnabled {
             return ([:], 0)
         }
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            lock.lock()
+            let rev = glassRevision
+            glassCached = nil
+            lock.unlock()
+            return ([:], rev)
+        }
         lock.lock()
         defer {
             lock.unlock()
@@ -19876,12 +19891,15 @@ public enum AorusPluginAppearanceValues {
             observer = NotificationCenter.default.addObserver(forName: didChangeNotification, object: nil, queue: nil, using: { _ in
                 AorusPluginAppearanceValues.invalidate()
             })
+            previewObserver = NotificationCenter.default.addObserver(forName: previewNotification, object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
+            licenseLockObserver = NotificationCenter.default.addObserver(forName: Notification.Name("aorusgram.licenseLockChanged"), object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
         }
         if let glassCached {
             return (glassCached, glassRevision)
-        }
-        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
-            return ([:], glassRevision)
         }
         var values = (UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]).filter { $0.key.hasPrefix("glass.") }
         if let own = UserDefaults.standard.dictionary(forKey: glassLookKey), !own.isEmpty {
@@ -20832,13 +20850,25 @@ def patch_plugin_icons(tg: Path) -> None:
 
     delegate = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     d = delegate.read_text(encoding="utf-8")
-    if "AorusPluginIconValues.install()" not in d:
-        anchor = "        precondition(!testIsLaunched)\n        testIsLaunched = true\n"
+    anchor = "        precondition(!testIsLaunched)\n        testIsLaunched = true\n"
+    if "AorusGramBootstrap.shared.prepareEntitlements()" not in d:
         if d.count(anchor) != 1:
-            raise RuntimeError("PluginIcons: AppDelegate launch anchor is missing")
-        d = d.replace(anchor, anchor + "        // AorusGram: icons plugins replaced, from the first one drawn.\n        AorusPluginIconValues.install()\n", 1)
+            raise RuntimeError("Entitlements: AppDelegate launch anchor is missing")
+        d = d.replace(
+            anchor,
+            anchor
+            + "        // AorusGram: install the single write-once licence authority before interface flags or icons read it.\n"
+            + "        AorusGramBootstrap.shared.prepareEntitlements()\n",
+            1,
+        )
         delegate.write_text(d, encoding="utf-8")
-    print("PluginIcons: installed at launch")
+    if "AorusPluginIconValues.install()" not in d:
+        icon_anchor = "        AorusGramBootstrap.shared.prepareEntitlements()\n"
+        if d.count(icon_anchor) != 1:
+            raise RuntimeError("PluginIcons: AppDelegate launch anchor is missing")
+        d = d.replace(icon_anchor, icon_anchor + "        // AorusGram: icons plugins replaced, from the first one drawn.\n        AorusPluginIconValues.install()\n", 1)
+        delegate.write_text(d, encoding="utf-8")
+    print("PluginIcons: installed at launch after entitlement bootstrap")
 
     cache_file = tg / "submodules/TelegramPresentationData/Sources/PresentationsResourceCache.swift"
     c = cache_file.read_text(encoding="utf-8")
@@ -26615,16 +26645,20 @@ private enum AorusRuntimeFont {
     private static var didProbeKeychain = false
     private static var maxRunLatched = false
     // The MAXimal interface draws in the system font, as MAX does. Latches true once the
-    // entitlement authority is installed so early launch calls cannot permanently freeze false.
+    // entitlement authority is installed while continuing to check live entitlement so
+    // revocation or forged preferences cannot keep MAX overrides active.
     private static var isMaxRun: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
+            return false
+        }
         choiceLock.lock()
         let latched = maxRunLatched
         choiceLock.unlock()
         if latched {
             return true
         }
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface") {
+        if defaults.bool(forKey: "aorusgram_max_interface") {
             choiceLock.lock()
             maxRunLatched = true
             choiceLock.unlock()

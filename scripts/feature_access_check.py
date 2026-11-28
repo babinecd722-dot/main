@@ -85,6 +85,21 @@ def check_tree(tg: Path) -> None:
         source = tg / "submodules/TelegramCore/Sources" / name
         if source.is_file():
             assert "AorusProtectedAccess" in source.read_text(), f"missing entitlement in {name}"
+    for display_name in ("AorusMaxInterface.swift", "AorusOldInterface.swift", "AorusInterfaceV2Run.swift"):
+        source = tg / "submodules/Display/Source" / display_name
+        if source.is_file():
+            display_text = source.read_text()
+            assert "AorusProtectedAccess" in display_text, f"missing entitlement in Display/{display_name}"
+            assert "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04" not in display_text, f"raw lock key remains in Display/{display_name}"
+    for objc_source in sorted((tg / "submodules").rglob("*.m")) + sorted((tg / "submodules").rglob("*.mm")):
+        objc_path = objc_source.relative_to(tg).as_posix()
+        objc_text = objc_source.read_text(encoding="utf-8", errors="ignore")
+        assert "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04" not in objc_text, f"mutable lock mirror still grants access in ObjC: {objc_path}"
+    app_bundle_m = tg / "submodules/AppBundle/Sources/AppBundle/AppBundle.m"
+    if app_bundle_m.is_file():
+        ab_text = app_bundle_m.read_text(encoding="utf-8")
+        assert "aorusInstallInterfaceEntitlementAuthority" in ab_text, "AppBundle.m missing write-once entitlement authority"
+        assert "aorusVerifyInterfaceEntitlement()" in ab_text, "AppBundle.m missing live entitlement verification"
     print(f"Finished tree entitlement boundaries: OK ({consumers} low-level consumers)")
 
 

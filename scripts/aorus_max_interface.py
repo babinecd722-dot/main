@@ -60,14 +60,17 @@ def check_launch_flag(tg: Path) -> None:
     header = _read(tg / "submodules/AppBundle/PublicHeaders/AppBundle/AppBundle.h")
     source = _read(tg / "submodules/AppBundle/Sources/AppBundle/AppBundle.m")
     for marker, text, where in (
+        ("void aorusInstallInterfaceEntitlementAuthority(", header, "AppBundle.h"),
+        ("void aorusInvalidateInterfaceEntitlementCache(void);", header, "AppBundle.h"),
         ("BOOL aorusMaxInterfaceIsEnabled(void);", header, "AppBundle.h"),
         ("BOOL aorusMaxInterfaceIsEnabled(void) {", source, "AppBundle.m"),
+        ("aorusVerifyInterfaceEntitlement()", source, "AppBundle.m"),
         ("[defaults boolForKey:@\"aorusgram_max_interface\"]", source, "AppBundle.m"),
-        ("|| aorusMaxInterfaceIsEnabled())", source, "AppBundle.m"),
+        ("aorusOldInterfaceRunLatched || aorusMaxInterfaceRunLatched", source, "AppBundle.m"),
     ):
         if marker not in text:
             raise RuntimeError(f"MaxInterface: {where} does not decide the MAX run: {marker}")
-    print("MaxInterface: AppBundle decides the MAX run; the old interface follows it")
+    print("MaxInterface: AppBundle decides the MAX run behind the licence authority; the old interface follows it")
 
 
 # MARK: - Assets
@@ -1850,15 +1853,33 @@ def patch_call_screen(tg: Path) -> None:
 def patch_welcome(tg: Path) -> None:
     """The welcome screen of a MAX run: MAX's icon in the logo slot and MAX's name over the first
     page. The sign-in screens after it are drawn in MAX's palette (`patch_intro_palette`)."""
+    build = tg / "submodules/RMIntro/BUILD"
+    build_text = _read(build)
+    if '"//submodules/AppBundle:AppBundle"' not in build_text:
+        build_text = _edit(
+            build_text,
+            '        "//submodules/LegacyComponents:LegacyComponents",\n',
+            '        "//submodules/AppBundle:AppBundle",\n'
+            '        "//submodules/LegacyComponents:LegacyComponents",\n',
+            "RMIntro AppBundle dep",
+        )
+        build.write_text(build_text, encoding="utf-8")
+
     path = tg / "submodules/RMIntro/Sources/platform/ios/RMIntroViewController.m"
     text = _read(path)
+    if "#import <AppBundle/AppBundle.h>\n" not in text:
+        text = _edit(
+            text,
+            "#import <LegacyComponents/LegacyComponents.h>\n",
+            "#import <AppBundle/AppBundle.h>\n#import <LegacyComponents/LegacyComponents.h>\n",
+            "RMIntro AppBundle import",
+        )
     text = _edit(
         text,
         "            if (aorusLogoData != nil) {\n                aorusIntroLogo.image = [UIImage imageWithData:aorusLogoData scale:3.0];\n            }\n            [_glkView addSubview:aorusIntroLogo];\n",
         "            if (aorusLogoData != nil) {\n                aorusIntroLogo.image = [UIImage imageWithData:aorusLogoData scale:3.0];\n            }\n"
         f"            // {MARK}: MAX's icon in the logo slot.\n"
-        "            NSUserDefaults *aorusMaxDefaults = [NSUserDefaults standardUserDefaults];\n"
-        "            if (![aorusMaxDefaults boolForKey:@\"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"] && [aorusMaxDefaults boolForKey:@\"aorusgram_max_interface\"]) {\n"
+        "            if (aorusMaxInterfaceIsEnabled()) {\n"
         "                UIImage *aorusMaxLogo = [UIImage imageNamed:@\"AorusMaxAppIconPreview\"];\n"
         "                if (aorusMaxLogo != nil) {\n"
         "                    aorusIntroLogo.image = aorusMaxLogo;\n"
@@ -1873,7 +1894,7 @@ def patch_welcome(tg: Path) -> None:
         old,
         old
         + f"        // {MARK}: MAX's name over the first page.\n"
-        "        if (![[NSUserDefaults standardUserDefaults] boolForKey:@\"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"] && [[NSUserDefaults standardUserDefaults] boolForKey:@\"aorusgram_max_interface\"] && _headlines.count > 0) {\n"
+        "        if (aorusMaxInterfaceIsEnabled() && _headlines.count > 0) {\n"
         "            NSMutableArray *aorusMaxHeadlines = [_headlines mutableCopy];\n"
         "            aorusMaxHeadlines[0] = @\"MAX\";\n"
         "            _headlines = aorusMaxHeadlines;\n"
@@ -1881,7 +1902,7 @@ def patch_welcome(tg: Path) -> None:
         "MAX welcome title",
     )
     path.write_text(text, encoding="utf-8")
-    print("MaxInterface: MAX's icon and name on the welcome screen")
+    print("MaxInterface: MAX's icon and name on the welcome screen (behind AppBundle entitlement)")
 
 
 _MAX_INTRO_PALETTE = """
@@ -5931,6 +5952,41 @@ def patch_contacts_screen(tg: Path) -> None:
     print("MaxInterface: Contacts screen with MAX alphabetical hairlines, blue + menu with QR invite, and clean search")
 
 
+def patch_chat_bubble_buttons(tg: Path) -> None:
+    """Voice-to-text (`->A`) transcription buttons on incoming voice messages and round videos
+    draw in crisp white under MAX instead of bright blue `reactionActiveBackground` (#0a7df7)."""
+    path = tg / "submodules/TelegramUI/Components/AudioTranscriptionButtonComponent/Sources/AudioTranscriptionButtonComponent.swift"
+    text = _read(path)
+    text = _edit(
+        text,
+        "            case let .bubble(theme):\n"
+        "                foregroundColor = theme.bubble.withWallpaper.reactionActiveBackground\n"
+        "                backgroundColor = theme.bubble.withWallpaper.reactionInactiveBackground\n",
+        "            case let .bubble(theme):\n"
+        f"                // {MARK}: keep voice-to-text buttons on voice messages crisp white rather than blue.\n"
+        "                if AorusMaxInterface.isEnabled {\n"
+        "                    let isLightIncoming = theme.primaryTextColor.rgb != 0xffffff\n"
+        "                    foregroundColor = UIColor(rgb: 0xffffff)\n"
+        "                    backgroundColor = isLightIncoming ? UIColor(rgb: 0x2c2d2e, alpha: 0.72) : theme.bubble.withWallpaper.reactionInactiveBackground\n"
+        "                } else {\n"
+        "                    foregroundColor = theme.bubble.withWallpaper.reactionActiveBackground\n"
+        "                    backgroundColor = theme.bubble.withWallpaper.reactionInactiveBackground\n"
+        "                }\n",
+        "MAX white voice-to-text bubble button",
+    )
+    text = _edit(
+        text,
+        "            case let .freeform(colorAndBlur, color):\n"
+        "                foregroundColor = color\n",
+        "            case let .freeform(colorAndBlur, color):\n"
+        f"                // {MARK}: keep round-video voice-to-text button pure white.\n"
+        "                foregroundColor = AorusMaxInterface.isEnabled ? UIColor(rgb: 0xffffff) : color\n",
+        "MAX white round-video voice-to-text button",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MaxInterface: voice-to-text transcription buttons rendered white in MAX")
+
+
 def patch_max_interface(tg: Path) -> None:
     check_launch_flag(tg)
     install_assets(tg)
@@ -5958,6 +6014,7 @@ def patch_max_interface(tg: Path) -> None:
     patch_call_buttons(tg)
     patch_chat_header(tg)
     patch_chat_header_buttons(tg)
+    patch_chat_bubble_buttons(tg)
     patch_input_panel(tg)
     patch_camera_input(tg)
     patch_chat_list_geometry(tg)

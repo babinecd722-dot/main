@@ -45,6 +45,9 @@ public enum AorusSettingsArchive {
     /// A save of the same name is replaced. Call it off the main thread; `prepareCapture()` comes
     /// first, on the main thread.
     public static func write(name: String, into directory: URL) throws -> URL {
+        guard AorusLicenseAccess.isAllowed else {
+            throw Failure.io
+        }
         let fm = FileManager.default
         let temporary = fm.temporaryDirectory.appendingPathComponent("aorus-settings-\(UUID().uuidString).\(fileExtension)")
         defer { try? fm.removeItem(at: temporary) }
@@ -296,6 +299,9 @@ public enum AorusSettingsArchive {
     /// failures, which are the ones this can act on.
     @discardableResult
     public static func apply(_ prepared: Prepared) -> Outcome {
+        guard AorusLicenseAccess.isAllowed else {
+            return .rolledBack
+        }
         NotificationCenter.default.post(name: AorusSettingsLifecycle.willImport, object: nil)
 
         var outcome: Outcome = .rolledBack
@@ -304,6 +310,7 @@ public enum AorusSettingsArchive {
             switch replaceKeychain(with: prepared.keychain) {
             case let .placed(keychain):
                 replaceDefaults(UserDefaults.standard, with: prepared.standard, own: isOwnStandardKey)
+                normalizeInterfaceSelection(in: UserDefaults.standard)
                 replaceDefaults(UserDefaults(suiteName: suiteName), with: prepared.suite, own: isOwnSuiteKey)
                 AorusUserVPNStore.shared.importState(prepared.vpn)
                 keychain.commit()
@@ -325,6 +332,19 @@ public enum AorusSettingsArchive {
 
         NotificationCenter.default.post(name: AorusSettingsLifecycle.didImport, object: nil)
         return outcome
+    }
+
+    /// Ensures imported settings never leave mutually exclusive whole interfaces enabled together.
+    /// Priority matches launch resolution: MAX > Old Interface > Interface 2.0.
+    private static func normalizeInterfaceSelection(in defaults: UserDefaults) {
+        let maxOn = defaults.bool(forKey: "aorusgram_max_interface")
+        let oldOn = defaults.bool(forKey: "aorusgram_old_interface")
+        if maxOn {
+            defaults.set(false, forKey: "aorusgram_old_interface")
+            defaults.set(false, forKey: "aorusgram_interface_v2")
+        } else if oldOn {
+            defaults.set(false, forKey: "aorusgram_interface_v2")
+        }
     }
 
     // MARK: - What belongs to the save
@@ -352,6 +372,8 @@ public enum AorusSettingsArchive {
     private static let deviceKeys: Set<String> = [
         "aorusgram_root_path", "aorusgram_login_backup_restore_requested", "aorusgram_local_edit_active_message",
         "aorusgram_appearance_look", "aorusgram_lang_code", "aorusgram_lang", "aorusgram_dmc_last_prune",
+        // Device-local MAX onboarding & previous home-screen icon state.
+        "aorusgram_max_previous_app_icon", "aorusgram_max_tour_shown",
         // The Telegram accounts signed in here.
         "aorusgram_accounts",
         // The VPN servers travel in the clear in an entry of their own, sealed again for the

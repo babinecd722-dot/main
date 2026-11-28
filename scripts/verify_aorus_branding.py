@@ -1350,6 +1350,15 @@ def main() -> None:
     # unauthorized account.  The latter owns the phone/code authorization network,
     # so moving this call below AccountManager would allow a cold-login connection
     # to be created before the fail-closed VLESS requirement is published.
+    prepare_call = "AorusGramBootstrap.shared.prepareEntitlements()"
+    icon_install_call = "AorusPluginIconValues.install()"
+    if prepare_call not in t:
+        err.append("AppDelegate: missing AorusGramBootstrap.shared.prepareEntitlements() before interface flags")
+    elif icon_install_call in t and t.index(prepare_call) > t.index(icon_install_call):
+        err.append("AppDelegate: prepareEntitlements() runs after AorusPluginIconValues.install()")
+    elif "if AorusOldInterface.isEnabled" in t and t.index(prepare_call) > t.index("if AorusOldInterface.isEnabled"):
+        err.append("AppDelegate: prepareEntitlements() runs after AorusOldInterface.isEnabled")
+
     bootstrap_call = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
     encryption_anchor = "let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters"
     account_manager_anchor = "let accountManager: AccountManager<TelegramAccountManagerTypes> = setupAccountManager"
@@ -4123,7 +4132,7 @@ def main() -> None:
     # small round photo. The pass that rewrites the reads refuses leftovers too; this repeats it
     # on the finished tree, after every later pass has had its turn.
     run_switch = tg / "submodules/Display/Source/AorusInterfaceV2Run.swift"
-    if not run_switch.is_file() or "public static let isEnabled: Bool" not in run_switch.read_text(encoding="utf-8"):
+    if not run_switch.is_file() or "public static var isEnabled: Bool" not in run_switch.read_text(encoding="utf-8") or "latchedRunChoice" not in run_switch.read_text(encoding="utf-8"):
         err.append("InterfaceV2: the run's choice (AorusInterfaceV2Run) is missing")
     run_switch_holders = (
         "submodules/Display/Source/AorusInterfaceV2Run.swift",

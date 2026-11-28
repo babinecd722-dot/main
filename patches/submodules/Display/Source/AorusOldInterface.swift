@@ -17,13 +17,16 @@ public enum AorusOldInterface {
     /// The switch the settings write.
     public static let key = "aorusgram_old_interface"
 
-    /// Whether this run of the app draws the old interface. AppBundle reads it once for every
-    /// module — its asset lookup serves 12.0's icons from it — so all of them agree.
-    public static let isEnabled: Bool = aorusOldInterfaceIsEnabled()
+    /// Whether this run of the app draws the old interface. AppBundle latches the launch choice
+    /// once the licence authority is installed and keeps checking live entitlement across modules.
+    public static var isEnabled: Bool {
+        return aorusOldInterfaceIsEnabled()
+    }
 
     /// The choice the next start of the app will follow.
     public static var isRequested: Bool {
-        return UserDefaults.standard.bool(forKey: AorusOldInterface.key)
+        let defaults = UserDefaults.standard
+        return !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_old_interface")
     }
 
     // MARK: Panels

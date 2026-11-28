@@ -359,16 +359,20 @@ public enum AorusPluginIconValues {
     private static var tableWasMaxRun = false
 
     /// Whether this run draws the MAXimal interface (`AorusMaxInterface`). Latches true once
-    /// the entitlement authority is installed so calls during early app launch never freeze false.
+    /// the entitlement authority is installed while continuing to require live entitlement so
+    /// revocation or forged preferences cannot keep MAX icons active.
     private static var isMaxRun: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "__LOCK_KEY__") {
+            return false
+        }
         maxFlagLock.lock()
         let latched = maxRunLatched
         maxFlagLock.unlock()
         if latched {
             return true
         }
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "__LOCK_KEY__") && defaults.bool(forKey: "aorusgram_max_interface") {
+        if defaults.bool(forKey: "aorusgram_max_interface") {
             maxFlagLock.lock()
             maxRunLatched = true
             maxFlagLock.unlock()
@@ -593,6 +597,9 @@ public enum AorusPluginIconValues {
             observer = NotificationCenter.default.addObserver(forName: didChangeNotification, object: nil, queue: nil, using: { _ in
                 AorusPluginIconValues.layersMayHaveChanged()
             })
+            _ = NotificationCenter.default.addObserver(forName: Notification.Name("aorusgram.licenseLockChanged"), object: nil, queue: nil, using: { _ in
+                AorusPluginIconValues.layersMayHaveChanged()
+            })
         }
         let maxNow = isMaxRun
         if let table, tableWasMaxRun == maxNow {
@@ -615,16 +622,18 @@ public enum AorusPluginIconValues {
     }
 
     /// The notification is shared with the appearance; the icons are read again, and drawn
-    /// again, only when their layers are not what they were.
+    /// again, only when their layers or MAX entitlement state are not what they were.
     private static func layersMayHaveChanged() {
+        let maxNow = isMaxRun
         let raw = storedLayers()
         lock.lock()
         defer {
             lock.unlock()
         }
-        if let rawLayers, rawLayers.isEqual(raw) {
+        if tableWasMaxRun == maxNow, let rawLayers, rawLayers.isEqual(raw) {
             return
         }
+        tableWasMaxRun = maxNow
         rawLayers = raw
         table = merge(raw)
         revisionValue += 1

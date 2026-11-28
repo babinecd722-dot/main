@@ -1,28 +1,31 @@
 import Foundation
 import UIKit
+import AppBundle
 import AorusBadge
 import AorusFeatureAccess
 
 // Single entry point called once from AppDelegate before Telegram creates the
 // AccountManager or any authorized/unauthorized network.
 // aorus_branding.py patches AppDelegate.swift to insert:
+//   AorusGramBootstrap.shared.prepareEntitlements() (at launch start, before interface flags)
 //   AorusGramBootstrap.shared.setup(accountPath:)
 public final class AorusGramBootstrap {
     public static let shared = AorusGramBootstrap()
     private init() {}
 
+    private var didPrepareEntitlements = false
     private var didSetup = false
     /// Whether the Siri shortcuts are donated as things stand. Main thread.
     private var siriShortcutsDonated = false
 
-    public func setup(accountPath: String? = nil) {
-        guard !didSetup else { return }
-        didSetup = true
+    /// Installs the single write-once entitlement authority for both Swift (`AorusProtectedAccess`)
+    /// and Objective-C (`AppBundle`) consumers, hardens the runtime environment, and loads the
+    /// verified Keychain license snapshot before any interface or asset lookup runs.
+    public func prepareEntitlements() {
+        guard !didPrepareEntitlements else { return }
+        didPrepareEntitlements = true
         AorusProtectedAccess.installAuthority { AorusLicenseAccess.isAllowed }
-
-        // Call-log export was removed. Clean both locations used by earlier builds
-        // without delaying launch; current builds never recreate these directories.
-        Self.removeLegacyCallLogs()
+        aorusInstallInterfaceEntitlementAuthority { AorusLicenseAccess.isAllowed }
 
         // License-layer hardening. Refuse debugger attach and record a compromised
         // environment so protected services fail closed without an unexplained crash.
@@ -31,6 +34,19 @@ public final class AorusGramBootstrap {
         AorusSessionCounter.shared.retireBundleIdEvidenceOnce()
         AorusEnvGuard.denyDebuggerAttach()
         AorusEnvGuard.enforceAtLaunch()
+
+        LicenseGate.shared.prepareLaunchEntitlements()
+        aorusInvalidateInterfaceEntitlementCache()
+    }
+
+    public func setup(accountPath: String? = nil) {
+        guard !didSetup else { return }
+        didSetup = true
+        prepareEntitlements()
+
+        // Call-log export was removed. Clean both locations used by earlier builds
+        // without delaying launch; current builds never recreate these directories.
+        Self.removeLegacyCallLogs()
 
         // Persist the account-data root so AccountBackupManager can locate the
         // accounts-metadata / account-* directories for backup & restore.

@@ -19,18 +19,36 @@ public enum AorusInterfaceV2Run {
     /// The switch the settings write (`AorusInterfaceV2.key` in AorusGramUI).
     public static let key = "aorusgram_interface_v2"
 
-    /// Whether this run draws Interface 2.0.
-    public static let isEnabled: Bool = {
+    private static let lock = NSLock()
+    private static var latchedRunChoice: Bool?
+
+    /// Whether this run draws Interface 2.0. Latches the launch choice once after the licence
+    /// authority approves access (so flipping switches mid-run never mixes interfaces) while
+    /// re-checking live entitlement so revocation or forged preferences cannot enable Interface 2.0.
+    public static var isEnabled: Bool {
         let defaults = UserDefaults.standard
-        // The opaque licence lock, the same key the old interface's flag is read with.
+        // The opaque licence lock, rewritten by aorus_feature_access to AorusProtectedAccess.isAllowed.
         if defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
             return false
         }
         if AorusOldInterface.isEnabled {
             return false
         }
-        return defaults.bool(forKey: AorusInterfaceV2Run.key)
-    }()
+        lock.lock()
+        if let latched = latchedRunChoice {
+            lock.unlock()
+            return latched
+        }
+        lock.unlock()
+        let chosen = defaults.bool(forKey: "aorusgram_interface_v2")
+        lock.lock()
+        if latchedRunChoice == nil {
+            latchedRunChoice = chosen
+        }
+        let result = latchedRunChoice ?? false
+        lock.unlock()
+        return result
+    }
 }
 
 /// AorusGram: a node the navigation bar shows on its own, with no pane of glass behind it, under

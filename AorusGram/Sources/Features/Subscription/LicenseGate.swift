@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AppBundle
 import Display
 
 // Root-level subscription gate.
@@ -100,6 +101,38 @@ final class LicenseGate {
         if started { refresh() }
     }
 
+    private var launchEntitlementsPrepared = false
+
+    /// Loads and verifies the Keychain license snapshot at the very beginning of launch, before
+    /// `AppDelegate` reads interface flags (`AorusMaxInterface`, `AorusOldInterface`, `AorusInterfaceV2Run`).
+    /// Does not start network traffic, proxy cores, or lock windows yet (`start()` does that later).
+    func prepareLaunchEntitlements() {
+        guard !launchEntitlementsPrepared else { return }
+        launchEntitlementsPrepared = true
+        guard LicenseKeyProvider.isProvisioned,
+              AorusBuildKeyProvider.isProvisioned,
+              AorusEnvGuard.enforceAtGate() else {
+            UserDefaults.standard.set(true, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+            aorusInvalidateInterfaceEntitlementCache()
+            return
+        }
+        LicenseStore.shared.load()
+        if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
+        let initialStatus = LicenseStore.shared.effectiveOfflineStatus()
+        let ud = UserDefaults.standard
+        if initialStatus.allowsAppAccess {
+            ud.set(false, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+            if let backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) {
+                for (k, v) in backup { if let b = v as? Bool { ud.set(b, forKey: k) } }
+                ud.removeObject(forKey: LicenseGate.lockBackupKey)
+            }
+            normalizeRestoredInterfaceFlags(in: ud)
+        } else {
+            ud.set(true, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+        }
+        aorusInvalidateInterfaceEntitlementCache()
+    }
+
     // Entry point — called once from AorusGramBootstrap.setup().
     func start() {
         guard !started else { return }
@@ -122,7 +155,9 @@ final class LicenseGate {
             DispatchQueue.main.async { [weak self] in self?.showConnection() }
             return
         }
-        LicenseStore.shared.load()
+        if !launchEntitlementsPrepared {
+            LicenseStore.shared.load()
+        }
         if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
         let initialStatus = LicenseStore.shared.effectiveOfflineStatus()
         setFeatureAccess(active: initialStatus.allowsAppAccess)
@@ -635,6 +670,7 @@ final class LicenseGate {
         let locked = !active
         let ud = UserDefaults.standard
         ud.set(locked, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+        aorusInvalidateInterfaceEntitlementCache()
 
         if locked {
             startLockSweep()
@@ -661,14 +697,33 @@ final class LicenseGate {
                 for (k, v) in backup { if let b = v as? Bool { ud.set(b, forKey: k) } }
                 ud.removeObject(forKey: LicenseGate.lockBackupKey)
             }
+            normalizeRestoredInterfaceFlags(in: ud)
             AorusRealityManager.shared.startIfAuthorized()
         }
 
-        // In-memory side effects (Anti-Screenshot, cached manager state) can't be
-        // reverted by a raw key write — the manager reacts to this on the main thread.
+        // In-memory side effects (Anti-Screenshot, cached manager state, MAX/plugin theme & icon
+        // caches) can't be reverted by a raw key write — listeners react on the main thread.
+        aorusInvalidateInterfaceEntitlementCache()
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.licenseLockChanged"),
             object: nil, userInfo: ["locked": locked])
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.pluginAppearanceChanged"),
+            object: nil)
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.glassLookChanged"),
+            object: nil)
+    }
+
+    private func normalizeRestoredInterfaceFlags(in ud: UserDefaults) {
+        let maxOn = ud.bool(forKey: "aorusgram_max_interface")
+        let oldOn = ud.bool(forKey: "aorusgram_old_interface")
+        if maxOn {
+            ud.set(false, forKey: "aorusgram_old_interface")
+            ud.set(false, forKey: "aorusgram_interface_v2")
+        } else if oldOn {
+            ud.set(false, forKey: "aorusgram_interface_v2")
+        }
     }
 
     private func aorusBooleanFlags(in ud: UserDefaults) -> [(String, Any)] {
@@ -695,7 +750,8 @@ final class LicenseGate {
         ) { [weak self] _ in
             self?.defaultsChangedSinceSweep = true
         }
-        lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+        lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
             let ud = UserDefaults.standard
             guard !AorusLicenseAccess.canUnlock else { return }
             // A view inspector may hide a window without changing entitlement.
@@ -707,19 +763,25 @@ final class LicenseGate {
             }
             guard self.defaultsChangedSinceSweep else { return }
             self.defaultsChangedSinceSweep = false
-            var backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) ?? [:]
-            var changed = false
+            var tampered = false
+            if !ud.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
+                ud.set(true, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
+                tampered = true
+            }
+            // Never record values written while locked into lockBackupKey — an attacker editing
+            // UserDefaults while locked must not seed forged feature/interface flags for restore.
             for (key, _) in self.aorusBooleanFlags(in: ud) {
-                if backup[key] == nil {
-                    backup[key] = ud.bool(forKey: key)
-                    changed = true
-                }
                 // Written only when it is not already off: a write every second of every
                 // flag posted a defaults change each time, and everything listening for
                 // settings redrew once a second for as long as the lock lasted.
-                if ud.bool(forKey: key) { ud.set(false, forKey: key) }
+                if ud.bool(forKey: key) {
+                    ud.set(false, forKey: key)
+                    tampered = true
+                }
             }
-            if changed { ud.set(backup, forKey: LicenseGate.lockBackupKey) }
+            if tampered {
+                aorusInvalidateInterfaceEntitlementCache()
+            }
         }
     }
 

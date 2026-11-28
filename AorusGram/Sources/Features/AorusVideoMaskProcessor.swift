@@ -284,7 +284,7 @@ public final class AorusVideoMaskProcessor: NSObject {
                 }
                 self.callRenderLock.lock()
                 if generation == self.callRenderGeneration,
-                   !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"),
+                   AorusLicenseAccess.isAllowed,
                    UserDefaults.standard.bool(forKey: Self.enabledKey) {
                     self.latestCallFrame = output
                 }

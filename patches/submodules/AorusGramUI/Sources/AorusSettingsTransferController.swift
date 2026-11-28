@@ -106,6 +106,8 @@ enum AorusSettingsTransfer {
         "AorusGramPhoneSpoofChanged",
         "AorusGramFakeStarsChanged",
         "AorusGramFakeGiftsChanged",
+        "AorusMaxChatThemeDidChange",
+        "AorusMaxLocalFiltersDidChange",
     ]
 
     /// The settings a running app reads once, as it starts.

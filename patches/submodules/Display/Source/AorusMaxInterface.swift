@@ -31,17 +31,18 @@ public enum AorusMaxInterface {
     /// The home-screen icon the switch offers (`patches/alticons/MaxIcon.alticon`).
     public static let alternateIconName = "MaxIcon"
 
-    /// Whether this run draws the MAX interface. AppBundle reads it once for every module.
-    public static let isEnabled: Bool = aorusMaxInterfaceIsEnabled()
+    /// Whether this run draws the MAX interface. AppBundle latches the launch choice once the
+    /// licence authority is installed and keeps verifying live entitlement so revocation/expiry
+    /// takes effect immediately and forged preferences never enable MAX.
+    public static var isEnabled: Bool {
+        return aorusMaxInterfaceIsEnabled()
+    }
 
     /// The choice the switch shows and the next start follows, whatever this run draws.
     public static var isRequested: Bool {
         let defaults = UserDefaults.standard
-        return !defaults.bool(forKey: AorusMaxInterface.lockKey) && defaults.bool(forKey: AorusMaxInterface.key)
+        return !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface")
     }
-
-    /// The opaque licence lock, the same key the old interface's flag is read with.
-    private static let lockKey = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
 
     // MARK: - Palette
 
@@ -110,6 +111,9 @@ public enum AorusMaxInterface {
     /// a key with `@dark` or `@light` applies to that appearance. Laid in place of every other
     /// look while this run draws MAX.
     public static var appearance: [String: Any] {
+        guard AorusMaxInterface.isEnabled else {
+            return [:]
+        }
         let preset = AorusMaxInterface.selectedChatTheme
         AorusMaxInterface.appearanceCacheLock.lock()
         if let cached = AorusMaxInterface.cachedAppearance, cached.presetId == preset.id {
@@ -228,7 +232,7 @@ public enum AorusMaxInterface {
         pair("bubble.incoming.text", "ffffff", "000000")
         pair("bubble.incoming.secondaryText", "9799af", "818c99")
         pair("bubble.incoming.link", "71aaeb", "0a7df7")
-        pair("bubble.incoming.accent", "8fbcff", "0a7df7")
+        pair("bubble.incoming.accent", "ffffff", "0a7df7")
         pair("bubble.incoming.mediaControl", "ffffff", "0a7df7")
         pair("bubble.incoming.fileTitle", "ffffff", "000000")
         pair("bubble.incoming.fileDescription", "9799af", "818c99")
@@ -236,7 +240,7 @@ public enum AorusMaxInterface {
         pair("bubble.incoming.reactionText", "ffffff", "000000")
         both("bubble.incoming.reactionSelected", "0a7df7")
         both("bubble.incoming.reactionSelectedText", "ffffff")
-        pair("bubble.incoming.pollBar", "8fbcff", "0a7df7")
+        pair("bubble.incoming.pollBar", "ffffff", "0a7df7")
         pair("bubble.incoming.selection", "0a7df755", "0a7df744")
         both("bubble.outgoing.fill", [preset.outgoingTopHex, preset.outgoingBottomHex])
         both("bubble.outgoing.highlight", preset.outgoingTopHex)
@@ -777,16 +781,25 @@ public enum AorusMaxInterface {
     }
 
     public static func isLocalFilterHidden(_ id: Int32, accountId: Int64) -> Bool {
+        guard AorusMaxInterface.isEnabled else {
+            return false
+        }
         let hidden = (UserDefaults.standard.array(forKey: self.hiddenLocalFiltersKey(accountId: accountId)) as? [Int]) ?? []
         return hidden.contains(Int(id))
     }
 
     public static func hasHiddenLocalFilters(accountId: Int64) -> Bool {
+        guard AorusMaxInterface.isEnabled else {
+            return false
+        }
         let hidden = (UserDefaults.standard.array(forKey: self.hiddenLocalFiltersKey(accountId: accountId)) as? [Int]) ?? []
         return hidden.contains(Int(self.localUnreadFilterId)) || hidden.contains(Int(self.localChannelsFilterId))
     }
 
     public static func hideLocalFilter(_ id: Int32, accountId: Int64) {
+        guard AorusMaxInterface.isEnabled else {
+            return
+        }
         let key = self.hiddenLocalFiltersKey(accountId: accountId)
         var hidden = (UserDefaults.standard.array(forKey: key) as? [Int]) ?? []
         if !hidden.contains(Int(id)) {
@@ -797,6 +810,9 @@ public enum AorusMaxInterface {
     }
 
     public static func restoreLocalFilter(_ id: Int32, accountId: Int64) {
+        guard AorusMaxInterface.isEnabled else {
+            return
+        }
         let key = self.hiddenLocalFiltersKey(accountId: accountId)
         var hidden = (UserDefaults.standard.array(forKey: key) as? [Int]) ?? []
         hidden.removeAll(where: { $0 == Int(id) })
@@ -809,6 +825,9 @@ public enum AorusMaxInterface {
     }
 
     public static func restoreAllLocalFilters(accountId: Int64) {
+        guard AorusMaxInterface.isEnabled else {
+            return
+        }
         UserDefaults.standard.removeObject(forKey: self.hiddenLocalFiltersKey(accountId: accountId))
         NotificationCenter.default.post(name: self.localFiltersDidChangeNotification, object: nil)
     }
@@ -817,14 +836,34 @@ public enum AorusMaxInterface {
 
     public static let sendByEnterKey = "aorusgram_max_send_by_enter"
     public static var sendByEnterEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: self.sendByEnterKey) }
-        set { UserDefaults.standard.set(newValue, forKey: self.sendByEnterKey) }
+        get {
+            guard AorusMaxInterface.isEnabled else {
+                return false
+            }
+            return UserDefaults.standard.bool(forKey: "aorusgram_max_send_by_enter")
+        }
+        set {
+            guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
+                return
+            }
+            UserDefaults.standard.set(newValue, forKey: self.sendByEnterKey)
+        }
     }
 
     public static let quickReactionEnabledKey = "aorusgram_max_quick_reaction_enabled"
     public static var quickReactionEnabled: Bool {
-        get { (UserDefaults.standard.object(forKey: self.quickReactionEnabledKey) as? Bool) ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: self.quickReactionEnabledKey) }
+        get {
+            guard AorusMaxInterface.isEnabled else {
+                return false
+            }
+            return (UserDefaults.standard.object(forKey: "aorusgram_max_quick_reaction_enabled") as? Bool) ?? true
+        }
+        set {
+            guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
+                return
+            }
+            UserDefaults.standard.set(newValue, forKey: self.quickReactionEnabledKey)
+        }
     }
 
     public struct ChatThemePreset: Equatable {
@@ -932,8 +971,16 @@ public enum AorusMaxInterface {
     }
 
     public static var selectedChatThemeId: String {
-        get { self.normalizedChatThemeId(UserDefaults.standard.string(forKey: self.chatThemeKey)) }
+        get {
+            guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
+                return "cosmos"
+            }
+            return self.normalizedChatThemeId(UserDefaults.standard.string(forKey: self.chatThemeKey))
+        }
         set {
+            guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
+                return
+            }
             let normalized = self.normalizedChatThemeId(newValue)
             UserDefaults.standard.set(normalized, forKey: self.chatThemeKey)
             // Invalidate AorusPluginAppearanceValues synchronously and trigger global PresentationData refresh.

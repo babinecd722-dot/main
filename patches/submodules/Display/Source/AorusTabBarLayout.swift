@@ -100,16 +100,19 @@ public enum AorusTabBarSettings {
     private static var cached = AorusTabBarLayout()
     private static var maxRunLatched = false
     /// Whether this run draws the MAXimal interface: latches true once the entitlement authority
-    /// is installed so early launch reads cannot permanently freeze false.
+    /// is installed while continuing to require live entitlement so revocation takes effect immediately.
     private static var isMaxRun: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
+            return false
+        }
         lock.lock()
         let latched = maxRunLatched
         lock.unlock()
         if latched {
             return true
         }
-        let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && defaults.bool(forKey: "aorusgram_max_interface") {
+        if defaults.bool(forKey: "aorusgram_max_interface") {
             lock.lock()
             maxRunLatched = true
             lock.unlock()
